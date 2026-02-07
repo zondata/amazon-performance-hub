@@ -1,0 +1,8 @@
+# Local data & secrets
+data/
+.env
+node_modules/
+.DS_Store
+
+# logs
+*.log
