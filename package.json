@@ -18,6 +18,8 @@
     "ingest:sp:placement:date": "ts-node src/cli/ingestSpPlacementDate.ts",
     "ingest:sp:targeting": "ts-node src/cli/ingestSpTargeting.ts",
     "ingest:sp:targeting:date": "ts-node src/cli/ingestSpTargetingDate.ts",
+    "ingest:sp:stis": "ts-node src/cli/ingestSpStis.ts",
+    "ingest:sp:stis:date": "ts-node src/cli/ingestSpStisDate.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

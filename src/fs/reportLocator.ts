@@ -71,3 +71,11 @@ export function getSpTargetingXlsx(dateFolder: string): string {
   }
   return filePath;
 }
+
+export function getSpStisCsv(dateFolder: string): string {
+  const filePath = path.join(dateFolder, "Sponsored_Products_Search_Term_Impression_Share_report.csv");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing Sponsored Products Search Term Impression Share report: ${filePath}`);
+  }
+  return filePath;
+}

@@ -141,6 +141,10 @@ SP Targeting raw ingestion:
 - `npm run ingest:sp:targeting -- --account-id <id> <xlsx> [--exported-at ISO]`
 - date-folder wrapper: `npm run ingest:sp:targeting:date -- --account-id <id> <YYYY-MM-DD or folder>`
 
+SP STIS raw ingestion:
+- `npm run ingest:sp:stis -- --account-id <id> <csv> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:sp:stis:date -- --account-id <id> <YYYY-MM-DD or folder>`
+
 Supabase views (migrations):
 - `sp_campaign_hourly_latest`: latest-wins by (account_id, date, start_time, campaign_name_norm) with max(exported_at)
 
