@@ -133,7 +133,15 @@ Notes:
 - coverageStart/coverageEnd are derived from file content; folder date is NOT trusted due to Amazon delay.
 - re-run is allowed when an upload exists but had inserted 0 rows (safe retry).
 
-Supabase view (manual, created in SQL editor):
+SP Placement raw ingestion:
+- `npm run ingest:sp:placement -- --account-id <id> <xlsx> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:sp:placement:date -- --account-id <id> <YYYY-MM-DD or folder>`
+
+SP Targeting raw ingestion:
+- `npm run ingest:sp:targeting -- --account-id <id> <xlsx> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:sp:targeting:date -- --account-id <id> <YYYY-MM-DD or folder>`
+
+Supabase views (migrations):
 - `sp_campaign_hourly_latest`: latest-wins by (account_id, date, start_time, campaign_name_norm) with max(exported_at)
 
 ## Git / Safety

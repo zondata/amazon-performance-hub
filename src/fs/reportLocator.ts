@@ -55,3 +55,19 @@ export function getSpCampaignCsv(dateFolder: string): string {
   }
   return filePath;
 }
+
+export function getSpPlacementXlsx(dateFolder: string): string {
+  const filePath = path.join(dateFolder, "Sponsored_Products_Placement_report.xlsx");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing Sponsored Products Placement report: ${filePath}`);
+  }
+  return filePath;
+}
+
+export function getSpTargetingXlsx(dateFolder: string): string {
+  const filePath = path.join(dateFolder, "Sponsored_Products_Targeting_report.xlsx");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing Sponsored Products Targeting report: ${filePath}`);
+  }
+  return filePath;
+}

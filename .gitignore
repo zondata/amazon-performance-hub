@@ -12,3 +12,7 @@ out/
 # Ignore generated test artifacts
 *.xlsx
 test/tmp/
+
+# Windows/Dropbox metadata
+*:Zone.Identifier
+*.dropbox.attrs

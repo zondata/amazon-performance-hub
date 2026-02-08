@@ -14,6 +14,10 @@
     "ingest:sp:campaign": "ts-node src/cli/ingestSpCampaign.ts",
     "ingest:bulk:date": "ts-node src/cli/ingestBulkDate.ts",
     "ingest:sp:campaign:date": "ts-node src/cli/ingestSpCampaignDate.ts",
+    "ingest:sp:placement": "ts-node src/cli/ingestSpPlacement.ts",
+    "ingest:sp:placement:date": "ts-node src/cli/ingestSpPlacementDate.ts",
+    "ingest:sp:targeting": "ts-node src/cli/ingestSpTargeting.ts",
+    "ingest:sp:targeting:date": "ts-node src/cli/ingestSpTargetingDate.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
