@@ -8,3 +8,7 @@ node_modules/
 *.log
 .env.local
 out/
+
+# Ignore generated test artifacts
+*.xlsx
+test/tmp/
