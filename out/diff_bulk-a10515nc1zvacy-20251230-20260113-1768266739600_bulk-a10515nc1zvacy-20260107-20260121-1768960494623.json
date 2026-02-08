@@ -1,0 +1,704 @@
+{
+  "campaignRenames": [
+    {
+      "campaignId": "45701802223417",
+      "fromNameRaw": "Retired | B0B2K57W5R | SPM | SK | retirement gifts for men | Exact - TOS dn 13.10 ROS dn 30.12 Bid dn 04.01",
+      "toNameRaw": "Retired | B0B2K57W5R | SPM | SK | retirement gifts for men | Exact - TOS dn 13.10 ROS up 20.01 Bid up 21.01",
+      "fromNameNorm": "retired | b0b2k57w5r | spm | sk | retirement gifts for men | exact - tos dn 13.10 ros dn 30.12 bid dn 04.01",
+      "toNameNorm": "retired | b0b2k57w5r | spm | sk | retirement gifts for men | exact - tos dn 13.10 ros up 20.01 bid up 21.01"
+    },
+    {
+      "campaignId": "337850533145171",
+      "fromNameRaw": "Retired | B0B2K57W5R | SPM | SK | retirement men | Broad/M - TOS 0 30.08 ROS down 09.12 Bid dn 08.09",
+      "toNameRaw": "Retired | B0B2K57W5R | SPM | SK | retirement men | Broad/M - TOS 0 30.08 ROS down 09.12 Bid dn 17.01",
+      "fromNameNorm": "retired | b0b2k57w5r | spm | sk | retirement men | broad/m - tos 0 30.08 ros down 09.12 bid dn 08.09",
+      "toNameNorm": "retired | b0b2k57w5r | spm | sk | retirement men | broad/m - tos 0 30.08 ros down 09.12 bid dn 17.01"
+    },
+    {
+      "campaignId": "441500568234573",
+      "fromNameRaw": "Memorial | B0FYPRWPN1 | SPM | Phrase | Sympathy Gifter",
+      "toNameRaw": "Memorial | B0FYPRWPN1 | SPM | Phrase | Sympathy Gifter - FB TOS 0 20.01",
+      "fromNameNorm": "memorial | b0fyprwpn1 | spm | phrase | sympathy gifter",
+      "toNameNorm": "memorial | b0fyprwpn1 | spm | phrase | sympathy gifter - fb tos 0 20.01"
+    },
+    {
+      "campaignId": "346391629813049",
+      "fromNameRaw": "Memorial | B0FYPRWPN1 | SK | dog memorial gifts for loss of dog | Exact",
+      "toNameRaw": "Memorial | B0FYPRWPN1 | SK | dog memorial gifts for loss of dog | Exact - FB",
+      "fromNameNorm": "memorial | b0fyprwpn1 | sk | dog memorial gifts for loss of dog | exact",
+      "toNameNorm": "memorial | b0fyprwpn1 | sk | dog memorial gifts for loss of dog | exact - fb"
+    },
+    {
+      "campaignId": "524607896640240",
+      "fromNameRaw": "Memorial | B0FYPRWPN1 | SK | pet memorial gifts for dogs | Exact",
+      "toNameRaw": "Memorial | B0FYPRWPN1 | SK | pet memorial gifts for dogs | Exact - FB",
+      "fromNameNorm": "memorial | b0fyprwpn1 | sk | pet memorial gifts for dogs | exact",
+      "toNameNorm": "memorial | b0fyprwpn1 | sk | pet memorial gifts for dogs | exact - fb"
+    },
+    {
+      "campaignId": "325335532334427",
+      "fromNameRaw": "Memorial | B0FYPRWPN1 | SK | loss of dog sympathy gift | Exact",
+      "toNameRaw": "Memorial | B0FYPRWPN1 | SK | loss of dog sympathy gift | Exact - FB",
+      "fromNameNorm": "memorial | b0fyprwpn1 | sk | loss of dog sympathy gift | exact",
+      "toNameNorm": "memorial | b0fyprwpn1 | sk | loss of dog sympathy gift | exact - fb"
+    },
+    {
+      "campaignId": "442615952095163",
+      "fromNameRaw": "SP -  - Profit -  - auto - m19 - S00RcFKmOjEWtana",
+      "toNameRaw": "SP -  - Profit -  - auto - m19 - S00RcFKmOjE1jP2h",
+      "fromNameNorm": "sp - - profit - - auto - m19 - s00rcfkmojewtana",
+      "toNameNorm": "sp - - profit - - auto - m19 - s00rcfkmoje1jp2h"
+    }
+  ],
+  "adGroupRenames": [],
+  "campaignBudgetChanges": [
+    {
+      "campaignId": "441500568234573",
+      "fromDailyBudget": 30,
+      "toDailyBudget": 25
+    },
+    {
+      "campaignId": "442615952095163",
+      "fromDailyBudget": 124,
+      "toDailyBudget": 144
+    }
+  ],
+  "campaignBiddingStrategyChanges": [
+    {
+      "campaignId": "441500568234573",
+      "fromStrategy": "Dynamic bids - down only",
+      "toStrategy": "Fixed bid"
+    },
+    {
+      "campaignId": "346391629813049",
+      "fromStrategy": "Dynamic bids - down only",
+      "toStrategy": "Fixed bid"
+    },
+    {
+      "campaignId": "524607896640240",
+      "fromStrategy": "Dynamic bids - down only",
+      "toStrategy": "Fixed bid"
+    },
+    {
+      "campaignId": "325335532334427",
+      "fromStrategy": "Dynamic bids - down only",
+      "toStrategy": "Fixed bid"
+    }
+  ],
+  "placementChanges": [
+    {
+      "campaignId": "45701802223417",
+      "placement": "Placement Rest Of Search",
+      "fromPercentage": 3,
+      "toPercentage": 10
+    },
+    {
+      "campaignId": "346391629813049",
+      "placement": "Placement Rest Of Search",
+      "fromPercentage": 10,
+      "toPercentage": 0
+    },
+    {
+      "campaignId": "524607896640240",
+      "placement": "Placement Rest Of Search",
+      "fromPercentage": 10,
+      "toPercentage": 0
+    },
+    {
+      "campaignId": "325335532334427",
+      "placement": "Placement Rest Of Search",
+      "fromPercentage": 10,
+      "toPercentage": 0
+    }
+  ],
+  "targetBidChanges": [
+    {
+      "targetId": "212484547255009",
+      "campaignId": "45701802223417",
+      "adGroupId": "239993029041688",
+      "fromBid": 1.43,
+      "toBid": 1.55
+    },
+    {
+      "targetId": "289465087700342",
+      "campaignId": "337850533145171",
+      "adGroupId": "393686803144571",
+      "fromBid": 0.9,
+      "toBid": 0.8
+    },
+    {
+      "targetId": "497772650843476",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.71,
+      "toBid": 1
+    },
+    {
+      "targetId": "544666011440306",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.68,
+      "toBid": 1
+    },
+    {
+      "targetId": "416420012325373",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.68,
+      "toBid": 1
+    },
+    {
+      "targetId": "452308232870831",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.61,
+      "toBid": 1
+    },
+    {
+      "targetId": "446369432055453",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.65,
+      "toBid": 1
+    },
+    {
+      "targetId": "403686355109988",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.7,
+      "toBid": 1
+    },
+    {
+      "targetId": "480635488201801",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.66,
+      "toBid": 1
+    },
+    {
+      "targetId": "523668268689374",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.63,
+      "toBid": 1
+    },
+    {
+      "targetId": "363684172341417",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.86,
+      "toBid": 1
+    },
+    {
+      "targetId": "496623132167748",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.7,
+      "toBid": 1
+    },
+    {
+      "targetId": "507296523693134",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 1.18,
+      "toBid": 1
+    },
+    {
+      "targetId": "525813385002214",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.7,
+      "toBid": 1
+    },
+    {
+      "targetId": "283322395645875",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.69,
+      "toBid": 1
+    },
+    {
+      "targetId": "375928686918771",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.71,
+      "toBid": 1
+    },
+    {
+      "targetId": "347228662351480",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.66,
+      "toBid": 1
+    },
+    {
+      "targetId": "547954453467929",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.67,
+      "toBid": 1
+    },
+    {
+      "targetId": "408542223819340",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.63,
+      "toBid": 1
+    },
+    {
+      "targetId": "330284990906860",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.71,
+      "toBid": 1
+    },
+    {
+      "targetId": "493206753874075",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.65,
+      "toBid": 1
+    },
+    {
+      "targetId": "436952799197917",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.7,
+      "toBid": 1
+    },
+    {
+      "targetId": "528973442380940",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.7,
+      "toBid": 1
+    },
+    {
+      "targetId": "477225345081204",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.69,
+      "toBid": 1
+    },
+    {
+      "targetId": "409186179618180",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.54,
+      "toBid": 1
+    },
+    {
+      "targetId": "473960031518437",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.71,
+      "toBid": 1
+    },
+    {
+      "targetId": "318609448229102",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.5,
+      "toBid": 1
+    },
+    {
+      "targetId": "394683212494863",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.64,
+      "toBid": 1
+    },
+    {
+      "targetId": "492454782540362",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.7,
+      "toBid": 1
+    },
+    {
+      "targetId": "478413076416778",
+      "campaignId": "517678179295188",
+      "adGroupId": "300985502667382",
+      "fromBid": 0.61,
+      "toBid": 1
+    },
+    {
+      "targetId": "321899410667703",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.71,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "533835556344136",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.67,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "561324580418975",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.72,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "295944112444762",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.68,
+      "toBid": 1.5
+    },
+    {
+      "targetId": "395917574577814",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.67,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "556127332523907",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.72,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "465082499247697",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.68,
+      "toBid": 1.5
+    },
+    {
+      "targetId": "554026561720368",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.7,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "365633497434675",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.62,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "525632607189389",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.67,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "349972988623709",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.68,
+      "toBid": 1.5
+    },
+    {
+      "targetId": "465608259966759",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.7,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "404458176140425",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.71,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "448999700721075",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.74,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "304323314149438",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.57,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "401396599767987",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.63,
+      "toBid": 1.5
+    },
+    {
+      "targetId": "404660668457289",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.65,
+      "toBid": 1.5
+    },
+    {
+      "targetId": "390876676164881",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.89,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "384314504728897",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.72,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "530136769215886",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.73,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "421318405876754",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.71,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "300109977893428",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.68,
+      "toBid": 1.5
+    },
+    {
+      "targetId": "375387502176932",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.74,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "316219883148714",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.57,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "419097597175277",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.75,
+      "toBid": 1.5
+    },
+    {
+      "targetId": "544985787165803",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.52,
+      "toBid": 1.5
+    },
+    {
+      "targetId": "288212976868957",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.72,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "337004750902911",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromBid": 0.67,
+      "toBid": 1.35
+    },
+    {
+      "targetId": "322879555873506",
+      "campaignId": "488652962206609",
+      "adGroupId": "467836366824901",
+      "fromBid": 0.45,
+      "toBid": 0.7
+    },
+    {
+      "targetId": "394002508400117",
+      "campaignId": "346391629813049",
+      "adGroupId": "347558160483602",
+      "fromBid": 0.8,
+      "toBid": 2
+    },
+    {
+      "targetId": "334167216169427",
+      "campaignId": "524607896640240",
+      "adGroupId": "483852403715088",
+      "fromBid": 1.06,
+      "toBid": 1.5
+    },
+    {
+      "targetId": "499610647560934",
+      "campaignId": "325335532334427",
+      "adGroupId": "326241283302501",
+      "fromBid": 0.83,
+      "toBid": 1.5
+    },
+    {
+      "targetId": "355647170687694",
+      "campaignId": "538484933776389",
+      "adGroupId": "464074393483956",
+      "fromBid": 0.45,
+      "toBid": 0.55
+    },
+    {
+      "targetId": "488195480794223",
+      "campaignId": "385315738089144",
+      "adGroupId": "499495188924781",
+      "fromBid": 0.45,
+      "toBid": 0.47
+    }
+  ],
+  "targetStateChanges": [
+    {
+      "targetId": "295944112444762",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromState": "enabled",
+      "toState": "paused"
+    },
+    {
+      "targetId": "465082499247697",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromState": "enabled",
+      "toState": "paused"
+    },
+    {
+      "targetId": "349972988623709",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromState": "enabled",
+      "toState": "paused"
+    },
+    {
+      "targetId": "401396599767987",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromState": "enabled",
+      "toState": "paused"
+    },
+    {
+      "targetId": "404660668457289",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromState": "enabled",
+      "toState": "paused"
+    },
+    {
+      "targetId": "300109977893428",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromState": "enabled",
+      "toState": "paused"
+    },
+    {
+      "targetId": "419097597175277",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromState": "enabled",
+      "toState": "paused"
+    },
+    {
+      "targetId": "544985787165803",
+      "campaignId": "441500568234573",
+      "adGroupId": "479565879815920",
+      "fromState": "enabled",
+      "toState": "paused"
+    }
+  ],
+  "added": {
+    "campaigns": [
+      "219258333045365",
+      "62678022892021",
+      "172741282313068"
+    ],
+    "adGroups": [
+      "557809379101578",
+      "368261525870199",
+      "472163933540491"
+    ],
+    "targets": [
+      "510457468315032",
+      "336645728577833",
+      "429337174324354",
+      "391002451160638",
+      "410738445039588",
+      "433597740764113",
+      "378679608702315",
+      "550161687989729",
+      "541792373219870",
+      "548932321220995",
+      "431539143887744",
+      "419230950913516",
+      "393463600463670",
+      "365017448289821",
+      "483949067892602",
+      "281957546688784",
+      "322270867089680",
+      "450224924813095",
+      "516751334861892",
+      "324886116492022",
+      "460963963087119",
+      "530689971111704",
+      "343685400026958",
+      "289764007559612",
+      "413977314215238",
+      "384990399060641",
+      "298796518623260",
+      "386809536054510",
+      "525923807305674",
+      "484387678621530",
+      "444350850488431",
+      "439526500642420",
+      "522846768175687",
+      "387018242398749",
+      "283885741180733",
+      "304116353371505",
+      "323552379236530",
+      "300754360637350",
+      "423006880377834",
+      "312899757150826",
+      "357811301977811",
+      "446160485927845",
+      "403251691528402",
+      "548118820689618",
+      "500023431143974",
+      "554035668392600",
+      "293570059051636",
+      "315295156229086",
+      "526974720970313",
+      "469108641472053",
+      "294695949056293",
+      "328249832266769",
+      "366829818522764",
+      "490620822433708",
+      "372227281938561",
+      "325142247445368",
+      "383270352570444",
+      "308761811953380",
+      "369480909434711",
+      "554808254645895",
+      "323564238578178",
+      "524300421443881",
+      "438124479958319"
+    ]
+  },
+  "removed": {
+    "campaigns": [],
+    "adGroups": [],
+    "targets": []
+  }
+}

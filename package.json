@@ -9,6 +9,7 @@
     "bulk:parse": "ts-node src/cli/bulkParse.ts",
     "bulk:diff": "ts-node src/cli/bulkDiff.ts",
     "bulk:history": "ts-node src/cli/bulkHistory.ts",
+    "bulk:pick": "ts-node src/cli/bulkPick.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
