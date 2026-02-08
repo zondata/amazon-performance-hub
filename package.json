@@ -10,10 +10,16 @@
     "bulk:diff": "ts-node src/cli/bulkDiff.ts",
     "bulk:history": "ts-node src/cli/bulkHistory.ts",
     "bulk:pick": "ts-node src/cli/bulkPick.ts",
+    "ingest:bulk": "ts-node src/cli/ingestBulk.ts",
+    "ingest:sp:campaign": "ts-node src/cli/ingestSpCampaign.ts",
+    "ingest:bulk:date": "ts-node src/cli/ingestBulkDate.ts",
+    "ingest:sp:campaign:date": "ts-node src/cli/ingestSpCampaignDate.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.95.3",
+    "dotenv": "^17.2.4",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

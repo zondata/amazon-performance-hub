@@ -1,0 +1,41 @@
+import fs from "node:fs";
+import path from "node:path";
+import { describe, it, expect } from "vitest";
+import { findBulkXlsx, getSpCampaignCsv } from "../src/fs/reportLocator";
+
+function touch(filePath: string, mtimeMs: number) {
+  fs.writeFileSync(filePath, "test");
+  fs.utimesSync(filePath, mtimeMs / 1000, mtimeMs / 1000);
+}
+
+describe("reportLocator", () => {
+  it("returns the only bulk file", () => {
+    const tmpDir = path.resolve(__dirname, "tmp", `bulk-one-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const filePath = path.join(tmpDir, "bulk-single.xlsx");
+    fs.writeFileSync(filePath, "test");
+
+    const found = findBulkXlsx(tmpDir);
+    expect(found).toBe(filePath);
+  });
+
+  it("picks the newest bulk file by mtime", () => {
+    const tmpDir = path.resolve(__dirname, "tmp", `bulk-multi-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const oldFile = path.join(tmpDir, "bulk-old.xlsx");
+    const newFile = path.join(tmpDir, "bulk-new.xlsx");
+    const baseTime = Date.now();
+    touch(oldFile, baseTime - 10000);
+    touch(newFile, baseTime + 10000);
+
+    const found = findBulkXlsx(tmpDir);
+    expect(found).toBe(newFile);
+  });
+
+  it("throws when fixed campaign csv is missing", () => {
+    const tmpDir = path.resolve(__dirname, "tmp", `fixed-missing-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    expect(() => getSpCampaignCsv(tmpDir)).toThrow(/Missing Sponsored Products Campaign report/);
+  });
+});
