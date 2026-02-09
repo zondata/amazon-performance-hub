@@ -25,6 +25,7 @@
     "map:sp:targeting": "ts-node src/cli/mapSpTargeting.ts",
     "map:sp:stis": "ts-node src/cli/mapSpStis.ts",
     "map:sp:all:date": "ts-node src/cli/mapSpAllDate.ts",
+    "pipeline:backfill:ads": "ts-node src/cli/backfillAds.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

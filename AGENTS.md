@@ -155,6 +155,7 @@ New migrations:
 - `011_sp_mapping_core.sql` (mapping issues + manual overrides)
 - `012_sp_mapping_facts.sql` (fact tables + latest views)
 - `013_sp_stis_rollup.sql` (STIS rollup support for targeting_norm="*")
+- `014_latest_tiebreak.sql` (deterministic latest views + upload_stats expansion)
 
 New commands:
 - `npm run map:sp:campaign -- --upload-id <id>`
@@ -170,7 +171,7 @@ Mapping rules:
 - Overrides (`sp_manual_name_overrides`) take priority over snapshot, then name history.
 - If mapping is ambiguous, log to `sp_mapping_issues` and skip insert.
 - If missing snapshot, log `missing_bulk_snapshot` and skip insert.
-- Latest views for facts use max(exported_at) partitioned by stable IDs.
+- Latest views for facts use max(exported_at) partitioned by stable IDs, with tie-breaks on uploads.ingested_at then upload_id.
 
 Inspecting issues:
 - `select * from sp_mapping_issues where upload_id = '<id>';`
@@ -179,6 +180,7 @@ Inspecting issues:
 Commands (example):
 - `npm run map:sp:all:date -- --account-id US 2026-01-21`
 - Inspect issues in `sp_mapping_issues`, add overrides in `sp_manual_name_overrides`, re-run mapping.
+- `npm run pipeline:backfill:ads -- --account-id US --root /mnt/c/Users/User/Dropbox/AmazonReports --from 2025-01-01 --to 2025-03-31`
 
 What we learned / common mapping issues & fixes:
 - Campaign + Placement issue: report campaign_name_norm not found in chosen bulk snapshot/history (rename lag or suffix mismatch).
