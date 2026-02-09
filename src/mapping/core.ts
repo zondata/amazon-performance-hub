@@ -219,7 +219,7 @@ export function resolveAdGroupId(params: {
     }
     return overrideResult;
   }
-  if (overrideResult && overrideResult.status !== "ok") return overrideResult;
+  if (overrideResult) return overrideResult;
 
   const key = `${campaignId}::${adGroupNameNorm}`;
   const snapshotCandidates = (lookup.adGroupByCampaignName.get(key) ?? []).map((row) => ({
@@ -263,15 +263,28 @@ export function resolveTargetId(params: {
     }
     return overrideResult;
   }
-  if (overrideResult && overrideResult.status !== "ok") return overrideResult;
+  if (overrideResult) return overrideResult;
 
   const effectiveMatchType = normalizeTargetMatchType(matchTypeNorm, matchTypeRaw);
-  const key = buildTargetKey(adGroupId, expressionNorm, effectiveMatchType, isNegative);
-  const snapshotCandidates = (lookup.targetByAdGroupKey.get(key) ?? []).map((row) => ({
-    entity_id: row.target_id,
-    source: "snapshot" as const,
-  }));
-  const snapshotResult = resolveFromCandidates(snapshotCandidates);
+  const matchTypesToTry = new Set<string>([effectiveMatchType]);
+  const normExpr = expressionNorm.trim().toLowerCase();
+  const autoClauses = new Set(["close-match", "loose-match", "substitutes", "complements"]);
+  if (autoClauses.has(normExpr)) {
+    matchTypesToTry.add("TARGETING_EXPRESSION");
+  }
+  if (effectiveMatchType === "UNKNOWN" && normExpr.startsWith("asin=")) {
+    matchTypesToTry.add("TARGETING_EXPRESSION");
+  }
+
+  const candidates: CandidateInfo[] = [];
+  for (const matchTypeToTry of matchTypesToTry) {
+    const key = buildTargetKey(adGroupId, expressionNorm, matchTypeToTry, isNegative);
+    const rows = lookup.targetByAdGroupKey.get(key) ?? [];
+    for (const row of rows) {
+      candidates.push({ entity_id: row.target_id, source: "snapshot" });
+    }
+  }
+  const snapshotResult = resolveFromCandidates(candidates);
   if (snapshotResult) return snapshotResult;
 
   return { status: "unmapped" };

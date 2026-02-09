@@ -129,7 +129,8 @@ export type SpStisFactRow = SpStisRawRow & {
   account_id: string;
   campaign_id: string;
   ad_group_id: string;
-  target_id: string;
+  target_id: string | null;
+  target_key: string;
   exported_at: string;
 };
 
@@ -417,30 +418,35 @@ export function mapSpStisRows(params: {
       continue;
     }
 
-    const targetResult = resolveTargetId({
-      adGroupId: adGroupResult.id,
-      expressionNorm: row.targeting_norm,
-      matchTypeNorm: row.match_type_norm,
-      matchTypeRaw: row.match_type_raw,
-      isNegative: inferIsNegative(row.match_type_raw),
-      referenceDate,
-      lookup,
-    });
-
-    if (targetResult.status !== "ok") {
-      collector.addIssue({
-        entity_level: "target",
-        issue_type: targetResult.status === "ambiguous" ? "ambiguous" : "unmapped",
-        key_json: {
-          ...issueKeyBase(row),
-          ad_group_name_norm: row.ad_group_name_norm,
-          targeting_norm: row.targeting_norm,
-          match_type_norm: row.match_type_norm,
-          is_negative: inferIsNegative(row.match_type_raw),
-        },
-        candidates_json: targetResult.status === "ambiguous" ? targetResult.candidates : null,
+    const targetingNorm = row.targeting_norm.trim();
+    let targetId: string | null = null;
+    if (targetingNorm !== "*") {
+      const targetResult = resolveTargetId({
+        adGroupId: adGroupResult.id,
+        expressionNorm: row.targeting_norm,
+        matchTypeNorm: row.match_type_norm,
+        matchTypeRaw: row.match_type_raw,
+        isNegative: inferIsNegative(row.match_type_raw),
+        referenceDate,
+        lookup,
       });
-      continue;
+
+      if (targetResult.status !== "ok") {
+        collector.addIssue({
+          entity_level: "target",
+          issue_type: targetResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+          key_json: {
+            ...issueKeyBase(row),
+            ad_group_name_norm: row.ad_group_name_norm,
+            targeting_norm: row.targeting_norm,
+            match_type_norm: row.match_type_norm,
+            is_negative: inferIsNegative(row.match_type_raw),
+          },
+          candidates_json: targetResult.status === "ambiguous" ? targetResult.candidates : null,
+        });
+        continue;
+      }
+      targetId = targetResult.id;
     }
 
     facts.push({
@@ -474,7 +480,8 @@ export function mapSpStisRows(params: {
       conversion_rate: row.conversion_rate,
       campaign_id: campaignResult.id,
       ad_group_id: adGroupResult.id,
-      target_id: targetResult.id,
+      target_id: targetId,
+      target_key: targetId ?? "__ROLLUP__",
       exported_at: exportedAt,
     });
   }

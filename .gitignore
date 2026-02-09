@@ -16,3 +16,6 @@ test/tmp/
 # Windows/Dropbox metadata
 *:Zone.Identifier
 *.dropbox.attrs
+
+# local bundles
+pro_mapping_bundle.zip
