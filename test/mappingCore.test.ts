@@ -21,6 +21,7 @@ function emptyLookup(): BulkLookup {
     campaignHistoryByName: new Map(),
     adGroupHistoryByName: new Map(),
     overridesByName: new Map(),
+    categoryIdByNameNorm: new Map(),
   };
 }
 
@@ -176,8 +177,8 @@ describe("resolveTargetId", () => {
     const result = resolveTargetId({
       adGroupId,
       expressionNorm,
-      matchTypeNorm: "UNKNOWN",
-      matchTypeRaw: null,
+      matchTypeNorm: "TARGETING_EXPRESSION",
+      matchTypeRaw: "TARGETING_EXPRESSION",
       isNegative: false,
       referenceDate: "2025-01-10",
       lookup,
@@ -208,6 +209,33 @@ describe("resolveTargetId", () => {
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") expect(result.id).toBe("t2");
+  });
+
+  it("maps category name to category id before lookup", () => {
+    const lookup = emptyLookup();
+    const adGroupId = "ag3";
+    const categoryName = "tumblers & water glasses";
+    const categoryId = "13218451";
+    lookup.categoryIdByNameNorm.set(categoryName, categoryId);
+
+    const expressionNorm = `category=\"${categoryName}\"`;
+    const key = buildTargetKey(adGroupId, `category=\"${categoryId}\"`, "TARGETING_EXPRESSION", false);
+    lookup.targetByAdGroupKey.set(key, [
+      { target_id: "t3", ad_group_id: adGroupId, match_type_norm: "TARGETING_EXPRESSION", is_negative: false },
+    ]);
+
+    const result = resolveTargetId({
+      adGroupId,
+      expressionNorm,
+      matchTypeNorm: "TARGETING_EXPRESSION",
+      matchTypeRaw: "TARGETING_EXPRESSION",
+      isNegative: false,
+      referenceDate: "2025-01-10",
+      lookup,
+    });
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") expect(result.id).toBe("t3");
   });
 });
 

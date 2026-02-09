@@ -81,7 +81,7 @@ export async function pickBulkSnapshotForExport(accountId: string, exportedAtDat
 }
 
 export async function loadBulkLookup(accountId: string, snapshotDate: string): Promise<BulkLookup> {
-  const [campaigns, adGroups, targets, portfolios, overrides] = await Promise.all([
+  const [campaigns, adGroups, targets, portfolios, overrides, categoryMap] = await Promise.all([
     fetchAllRows<{
       campaign_id: string;
       campaign_name_norm: string;
@@ -122,6 +122,12 @@ export async function loadBulkLookup(accountId: string, snapshotDate: string): P
       valid_from: string | null;
       valid_to: string | null;
     }>("sp_manual_name_overrides", "entity_level,entity_id,name_norm,valid_from,valid_to", {
+      account_id: accountId,
+    }),
+    fetchAllRows<{
+      category_name_norm: string;
+      category_id: string;
+    }>("sp_category_id_map", "category_name_norm,category_id", {
       account_id: accountId,
     }),
   ]);
@@ -189,6 +195,13 @@ export async function loadBulkLookup(accountId: string, snapshotDate: string): P
     });
   }
 
+  const categoryIdByNameNorm = new Map<string, string>();
+  for (const row of categoryMap) {
+    if (!categoryIdByNameNorm.has(row.category_name_norm)) {
+      categoryIdByNameNorm.set(row.category_name_norm, row.category_id);
+    }
+  }
+
   const campaignHistoryByName = new Map<string, NameHistoryRow[]>();
   if (await tableExists("campaign_name_history")) {
     const historyRows = await fetchAllRows<{
@@ -245,6 +258,7 @@ export async function loadBulkLookup(accountId: string, snapshotDate: string): P
     campaignHistoryByName,
     adGroupHistoryByName,
     overridesByName,
+    categoryIdByNameNorm,
   } satisfies BulkLookup;
 }
 

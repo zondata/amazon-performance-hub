@@ -53,6 +53,7 @@ export type BulkLookup = {
   campaignHistoryByName: Map<string, NameHistoryRow[]>;
   adGroupHistoryByName: Map<string, NameHistoryRow[]>;
   overridesByName: Map<string, ManualOverrideRow[]>;
+  categoryIdByNameNorm: Map<string, string>;
 };
 
 export type MappingIssue = {
@@ -254,7 +255,8 @@ export function resolveTargetId(params: {
   lookup: BulkLookup;
 }): ResolvedId {
   const { adGroupId, expressionNorm, matchTypeNorm, matchTypeRaw, isNegative, referenceDate, lookup } = params;
-  const overrideKey = `target::${expressionNorm}`;
+  const effectiveExpressionNorm = normalizeCategoryExpression(expressionNorm, lookup);
+  const overrideKey = `target::${effectiveExpressionNorm}`;
   const overrideResult = resolveByOverrides(lookup.overridesByName.get(overrideKey), referenceDate);
   if (overrideResult?.status === "ok") {
     const candidate = lookup.targetById.get(overrideResult.id);
@@ -267,7 +269,7 @@ export function resolveTargetId(params: {
 
   const effectiveMatchType = normalizeTargetMatchType(matchTypeNorm, matchTypeRaw);
   const matchTypesToTry = new Set<string>([effectiveMatchType]);
-  const normExpr = expressionNorm.trim().toLowerCase();
+  const normExpr = effectiveExpressionNorm.trim().toLowerCase();
   const autoClauses = new Set(["close-match", "loose-match", "substitutes", "complements"]);
   if (autoClauses.has(normExpr)) {
     matchTypesToTry.add("TARGETING_EXPRESSION");
@@ -278,7 +280,7 @@ export function resolveTargetId(params: {
 
   const candidates: CandidateInfo[] = [];
   for (const matchTypeToTry of matchTypesToTry) {
-    const key = buildTargetKey(adGroupId, expressionNorm, matchTypeToTry, isNegative);
+    const key = buildTargetKey(adGroupId, effectiveExpressionNorm, matchTypeToTry, isNegative);
     const rows = lookup.targetByAdGroupKey.get(key) ?? [];
     for (const row of rows) {
       candidates.push({ entity_id: row.target_id, source: "snapshot" });
@@ -318,4 +320,15 @@ export function createIssueCollector() {
   }
 
   return { addIssue, list };
+}
+
+export function normalizeCategoryExpression(expressionNorm: string, lookup: BulkLookup): string {
+  const trimmed = expressionNorm.trim();
+  const match = trimmed.match(/^category=\"(.+)\"$/i);
+  if (!match) return trimmed;
+  const rawValue = match[1] ?? "";
+  if (/^\d+$/.test(rawValue)) return trimmed;
+  const mapped = lookup.categoryIdByNameNorm.get(rawValue);
+  if (!mapped) return trimmed;
+  return `category=\"${mapped}\"`;
 }
