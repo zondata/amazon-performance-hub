@@ -154,6 +154,7 @@ Goal: map name-based raw rows into deterministic ID-based facts using bulk snaps
 New migrations:
 - `011_sp_mapping_core.sql` (mapping issues + manual overrides)
 - `012_sp_mapping_facts.sql` (fact tables + latest views)
+- `013_sp_stis_rollup.sql` (STIS rollup support for targeting_norm="*")
 
 New commands:
 - `npm run map:sp:campaign -- --upload-id <id>`
@@ -174,6 +175,20 @@ Mapping rules:
 Inspecting issues:
 - `select * from sp_mapping_issues where upload_id = '<id>';`
 - `select * from sp_mapping_issues where issue_type != 'missing_bulk_snapshot';`
+
+Commands (example):
+- `npm run map:sp:all:date -- --account-id US 2026-01-21`
+- Inspect issues in `sp_mapping_issues`, add overrides in `sp_manual_name_overrides`, re-run mapping.
+
+What we learned / common mapping issues & fixes:
+- Campaign + Placement issue: report campaign_name_norm not found in chosen bulk snapshot/history (rename lag or suffix mismatch).
+- Campaign + Placement fix: insert into `sp_manual_name_overrides` (campaign) using name_norm -> campaign_id; rerun mapping; issues drop to 0.
+- Targeting issue: report match type often blank/“—” (normalized to UNKNOWN) for auto targeting clauses and product targeting.
+- Targeting fix: resolver tries bulk match_type `TARGETING_EXPRESSION` for auto clauses (close-match, loose-match, substitutes, complements) and asin="..." expressions when match type is unknown/blank.
+- Targeting result: target issues drop to 0; do not guess if ambiguous.
+- STIS issue: targeting_norm="*" rows are roll-ups (“all targets”), not a real target_id.
+- STIS fix: store them in `sp_stis_daily_fact` with target_id NULL (roll-up) via migration `013_sp_stis_rollup.sql`; do not log as mapping issues.
+- STIS result: issues drop to 0 and factRows increase.
 
 Example flow for a date folder:
 1. `npm run ingest:bulk:date -- --account-id <id> <date>`
