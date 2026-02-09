@@ -20,6 +20,11 @@
     "ingest:sp:targeting:date": "ts-node src/cli/ingestSpTargetingDate.ts",
     "ingest:sp:stis": "ts-node src/cli/ingestSpStis.ts",
     "ingest:sp:stis:date": "ts-node src/cli/ingestSpStisDate.ts",
+    "map:sp:campaign": "ts-node src/cli/mapSpCampaign.ts",
+    "map:sp:placement": "ts-node src/cli/mapSpPlacement.ts",
+    "map:sp:targeting": "ts-node src/cli/mapSpTargeting.ts",
+    "map:sp:stis": "ts-node src/cli/mapSpStis.ts",
+    "map:sp:all:date": "ts-node src/cli/mapSpAllDate.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

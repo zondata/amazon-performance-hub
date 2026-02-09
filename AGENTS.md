@@ -148,6 +148,42 @@ SP STIS raw ingestion:
 Supabase views (migrations):
 - `sp_campaign_hourly_latest`: latest-wins by (account_id, date, start_time, campaign_name_norm) with max(exported_at)
 
+### Milestone 7 — SP Mapping Layer (raw → stable IDs)
+Goal: map name-based raw rows into deterministic ID-based facts using bulk snapshots.
+
+New migrations:
+- `011_sp_mapping_core.sql` (mapping issues + manual overrides)
+- `012_sp_mapping_facts.sql` (fact tables + latest views)
+
+New commands:
+- `npm run map:sp:campaign -- --upload-id <id>`
+- `npm run map:sp:placement -- --upload-id <id>`
+- `npm run map:sp:targeting -- --upload-id <id>`
+- `npm run map:sp:stis -- --upload-id <id>`
+- `npm run map:sp:all:date -- --account-id <id> <YYYY-MM-DD or folder>`
+
+Mapping rules:
+- Choose bulk snapshot by exported_at date:
+  - prefer max(snapshot_date <= exported_at_date)
+  - fallback min(snapshot_date > exported_at_date) within 7 days
+- Overrides (`sp_manual_name_overrides`) take priority over snapshot, then name history.
+- If mapping is ambiguous, log to `sp_mapping_issues` and skip insert.
+- If missing snapshot, log `missing_bulk_snapshot` and skip insert.
+- Latest views for facts use max(exported_at) partitioned by stable IDs.
+
+Inspecting issues:
+- `select * from sp_mapping_issues where upload_id = '<id>';`
+- `select * from sp_mapping_issues where issue_type != 'missing_bulk_snapshot';`
+
+Example flow for a date folder:
+1. `npm run ingest:bulk:date -- --account-id <id> <date>`
+2. `npm run ingest:sp:campaign:date -- --account-id <id> <date>`
+3. `npm run ingest:sp:placement:date -- --account-id <id> <date>`
+4. `npm run ingest:sp:targeting:date -- --account-id <id> <date>`
+5. `npm run ingest:sp:stis:date -- --account-id <id> <date>`
+6. `npm run map:sp:all:date -- --account-id <id> <date>`
+7. Inspect `sp_mapping_issues`, add overrides if needed, then re-run mapping.
+
 ## Git / Safety
 - `.env.local` must be gitignored.
 - Never commit real Dropbox files.
