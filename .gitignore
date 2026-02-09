@@ -19,3 +19,6 @@ test/tmp/
 
 # local bundles
 pro_mapping_bundle.zip
+
+# supabase temp
+supabase/.temp/
