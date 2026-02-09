@@ -1,5 +1,18 @@
 -- Ensure deterministic latest views by breaking exported_at ties with uploads.ingested_at and upload_id.
 
+-- Drop latest views first to avoid CREATE OR REPLACE column shape conflicts
+drop view if exists
+  sp_campaign_hourly_latest,
+  sp_placement_daily_latest,
+  sp_targeting_daily_latest,
+  sp_stis_daily_latest,
+  sp_campaign_hourly_fact_latest,
+  sp_placement_daily_fact_latest,
+  sp_targeting_daily_fact_latest,
+  sp_stis_daily_fact_latest
+cascade;
+
+
 create or replace view sp_campaign_hourly_latest as
 select
   upload_id,
