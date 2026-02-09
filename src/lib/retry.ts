@@ -9,15 +9,17 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type Awaitable<T> = PromiseLike<T>;
+
 export async function retryAsync<T>(
-  fn: () => Promise<T>,
+  fn: () => Awaitable<T>,
   options: RetryOptions
 ): Promise<T> {
   const { retries, delaysMs, shouldRetry, onRetry } = options;
   let attempt = 0;
   while (true) {
     try {
-      return await fn();
+      return await Promise.resolve(fn());
     } catch (err) {
       attempt += 1;
       const canRetry = attempt <= retries && shouldRetry(err);
