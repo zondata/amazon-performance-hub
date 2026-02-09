@@ -277,6 +277,8 @@ export function resolveTargetId(params: {
   if (effectiveMatchType === "UNKNOWN" && normExpr.startsWith("asin=")) {
     matchTypesToTry.add("TARGETING_EXPRESSION");
   }
+  const categoryMatchType = normalizeCategoryMatchType(effectiveMatchType, effectiveExpressionNorm);
+  matchTypesToTry.add(categoryMatchType);
 
   const candidates: CandidateInfo[] = [];
   for (const matchTypeToTry of matchTypesToTry) {
@@ -331,4 +333,14 @@ export function normalizeCategoryExpression(expressionNorm: string, lookup: Bulk
   const mapped = lookup.categoryIdByNameNorm.get(rawValue);
   if (!mapped) return trimmed;
   return `category=\"${mapped}\"`;
+}
+
+export function normalizeCategoryMatchType(matchTypeNorm: string, expressionNorm: string): string {
+  const normalized = String(matchTypeNorm ?? "").trim();
+  if (!normalized || normalized === "UNKNOWN") {
+    if (/^category=\".*\"$/i.test(expressionNorm.trim())) {
+      return "TARGETING_EXPRESSION";
+    }
+  }
+  return matchTypeNorm;
 }

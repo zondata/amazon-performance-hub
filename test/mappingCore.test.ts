@@ -177,8 +177,8 @@ describe("resolveTargetId", () => {
     const result = resolveTargetId({
       adGroupId,
       expressionNorm,
-      matchTypeNorm: "TARGETING_EXPRESSION",
-      matchTypeRaw: "TARGETING_EXPRESSION",
+      matchTypeNorm: "UNKNOWN",
+      matchTypeRaw: null,
       isNegative: false,
       referenceDate: "2025-01-10",
       lookup,
