@@ -6,6 +6,7 @@ import { inferSnapshotDate } from "../cli/snapshotDate";
 import { getSupabaseClient } from "../db/supabaseClient";
 import { chunkArray, hashFileSha256 } from "./utils";
 import { planNameHistoryUpdates } from "./nameHistoryUtils";
+import { retryAsync, isTransientSupabaseError, formatRetryError } from "../lib/retry";
 
 type IngestResult = {
   status: "ok" | "already ingested";
@@ -71,12 +72,25 @@ export async function ingestBulk(
     ? new Date(exportTimestampMs).toISOString()
     : stats.mtime.toISOString();
 
-  const { data: existingUpload, error: existingError } = await client
-    .from("uploads")
-    .select("upload_id")
-    .eq("account_id", accountId)
-    .eq("file_hash_sha256", fileHash)
-    .maybeSingle();
+  const { data: existingUpload, error: existingError } = await retryAsync(
+    () =>
+      client
+        .from("uploads")
+        .select("upload_id")
+        .eq("account_id", accountId)
+        .eq("file_hash_sha256", fileHash)
+        .maybeSingle(),
+    {
+      retries: 3,
+      delaysMs: [1000, 3000, 7000],
+      shouldRetry: isTransientSupabaseError,
+      onRetry: ({ attempt, error, delayMs }) => {
+        console.warn(
+          `Retrying upload lookup (attempt ${attempt}/3, ${delayMs}ms): ${formatRetryError(error)}`
+        );
+      },
+    }
+  );
 
   if (existingError) {
     throw new Error(`Failed to check existing upload: ${existingError.message}`);
