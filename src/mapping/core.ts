@@ -1,6 +1,6 @@
 export type CandidateInfo = {
   entity_id: string;
-  source: "override" | "snapshot" | "history";
+  source: "override" | "snapshot" | "history" | "history_lag" | "history_lag_future";
   valid_from?: string | null;
   valid_to?: string | null;
 };
@@ -102,15 +102,25 @@ export function pickBulkSnapshotFromList(exportedAtDate: string, snapshotDates: 
   if (!snapshotDates.length) return null;
   const sorted = [...new Set(snapshotDates)].sort();
   const beforeOrEqual = sorted.filter((d) => d <= exportedAtDate);
-  if (beforeOrEqual.length) return beforeOrEqual[beforeOrEqual.length - 1] ?? null;
-
   const exportedMs = dateToUtcMs(exportedAtDate);
+  const chosenBefore = beforeOrEqual.length ? beforeOrEqual[beforeOrEqual.length - 1] ?? null : null;
   const after = sorted
     .map((d) => ({ d, diff: dateToUtcMs(d) - exportedMs }))
     .filter((row) => row.diff > 0 && row.diff <= 7 * 24 * 60 * 60 * 1000)
     .sort((a, b) => a.diff - b.diff);
-  return after[0]?.d ?? null;
+  const chosenAfter = after[0]?.d ?? null;
+
+  if (chosenBefore && chosenAfter) {
+    const beforeDiff = exportedMs - dateToUtcMs(chosenBefore);
+    const afterDiff = dateToUtcMs(chosenAfter) - exportedMs;
+    if (afterDiff < beforeDiff) return chosenAfter;
+    return chosenBefore;
+  }
+  return chosenBefore ?? chosenAfter;
 }
+// Examples:
+// pickBulkSnapshotFromList("2026-02-04", ["2026-01-31", "2026-02-05"]) -> "2026-02-05"
+// pickBulkSnapshotFromList("2025-09-30", ["2025-09-04", "2025-09-30"]) -> "2025-09-30"
 
 function resolveByOverrides(
   overrides: ManualOverrideRow[] | undefined,
@@ -151,6 +161,82 @@ function resolveByHistory(
       candidates: matches.map((row) => ({
         entity_id: row.entity_id,
         source: "history",
+        valid_from: row.valid_from,
+        valid_to: row.valid_to,
+      })),
+    };
+  }
+  return null;
+}
+
+function resolveByHistoryLag(
+  historyRows: NameHistoryRow[] | undefined,
+  referenceDate: string,
+  maxLagDays: number
+): ResolvedId | null {
+  if (!historyRows || !historyRows.length) return null;
+  const referenceMs = dateToUtcMs(referenceDate);
+  const maxLagMs = maxLagDays * 24 * 60 * 60 * 1000;
+  const eligible = historyRows
+    .filter((row) => row.valid_to)
+    .map((row) => ({
+      row,
+      validToMs: dateToUtcMs(row.valid_to as string),
+    }))
+    .filter((item) => item.validToMs < referenceMs && referenceMs - item.validToMs <= maxLagMs);
+  if (!eligible.length) return null;
+
+  const nearestValidToMs = Math.max(...eligible.map((item) => item.validToMs));
+  const nearest = eligible.filter((item) => item.validToMs === nearestValidToMs).map((item) => item.row);
+  const uniqueIds = [...new Set(nearest.map((row) => row.entity_id))].sort();
+  if (uniqueIds.length === 1) {
+    return { status: "ok", id: uniqueIds[0] };
+  }
+  if (uniqueIds.length > 1) {
+    return {
+      status: "ambiguous",
+      candidates: nearest.map((row) => ({
+        entity_id: row.entity_id,
+        source: "history_lag",
+        valid_from: row.valid_from,
+        valid_to: row.valid_to,
+      })),
+    };
+  }
+  return null;
+}
+
+function resolveByHistoryLagFuture(
+  historyRows: NameHistoryRow[] | undefined,
+  referenceDate: string,
+  maxLagDays: number
+): ResolvedId | null {
+  if (!historyRows || !historyRows.length) return null;
+  const referenceMs = dateToUtcMs(referenceDate);
+  const maxLagMs = maxLagDays * 24 * 60 * 60 * 1000;
+  const eligible = historyRows
+    .filter((row) => row.valid_from)
+    .map((row) => ({
+      row,
+      validFromMs: dateToUtcMs(row.valid_from),
+    }))
+    .filter((item) => item.validFromMs > referenceMs && item.validFromMs - referenceMs <= maxLagMs);
+  if (!eligible.length) return null;
+
+  const nearestValidFromMs = Math.min(...eligible.map((item) => item.validFromMs));
+  const nearest = eligible
+    .filter((item) => item.validFromMs === nearestValidFromMs)
+    .map((item) => item.row);
+  const uniqueIds = [...new Set(nearest.map((row) => row.entity_id))].sort();
+  if (uniqueIds.length === 1) {
+    return { status: "ok", id: uniqueIds[0] };
+  }
+  if (uniqueIds.length > 1) {
+    return {
+      status: "ambiguous",
+      candidates: nearest.map((row) => ({
+        entity_id: row.entity_id,
+        source: "history_lag_future",
         valid_from: row.valid_from,
         valid_to: row.valid_to,
       })),
@@ -200,6 +286,20 @@ export function resolveCampaignId(params: {
     referenceDate
   );
   if (historyResult) return historyResult;
+
+  const historyLagResult = resolveByHistoryLag(
+    lookup.campaignHistoryByName.get(campaignNameNorm),
+    referenceDate,
+    90
+  );
+  if (historyLagResult) return historyLagResult;
+
+  const historyLagFutureResult = resolveByHistoryLagFuture(
+    lookup.campaignHistoryByName.get(campaignNameNorm),
+    referenceDate,
+    7
+  );
+  if (historyLagFutureResult) return historyLagFutureResult;
 
   return { status: "unmapped" };
 }
