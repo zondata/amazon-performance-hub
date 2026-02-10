@@ -245,6 +245,16 @@ function normalizeTargetMatchType(matchTypeNorm: string | null, matchTypeRaw: st
   return "UNKNOWN";
 }
 
+function isTargetingExpression(expressionNorm: string): boolean {
+  const norm = expressionNorm.trim().toLowerCase();
+  const autoClauses = new Set(["close-match", "loose-match", "substitutes", "complements"]);
+  if (autoClauses.has(norm)) return true;
+  if (norm.startsWith("asin=")) return true;
+  if (norm.startsWith("asin-expanded=")) return true;
+  if (/^category=\".*\"$/i.test(expressionNorm.trim())) return true;
+  return false;
+}
+
 export function resolveTargetId(params: {
   adGroupId: string;
   expressionNorm: string;
@@ -274,7 +284,7 @@ export function resolveTargetId(params: {
   if (autoClauses.has(normExpr)) {
     matchTypesToTry.add("TARGETING_EXPRESSION");
   }
-  if (effectiveMatchType === "UNKNOWN" && normExpr.startsWith("asin=")) {
+  if (effectiveMatchType === "UNKNOWN" && isTargetingExpression(effectiveExpressionNorm)) {
     matchTypesToTry.add("TARGETING_EXPRESSION");
   }
   const categoryMatchType = normalizeCategoryMatchType(effectiveMatchType, effectiveExpressionNorm);
