@@ -197,6 +197,23 @@ What we learned / common mapping issues & fixes:
 - STIS issue: targeting_norm="*" rows are roll-ups (“all targets”), not a real target_id.
 - STIS fix: store them in `sp_stis_daily_fact` with target_id NULL (roll-up) via migration `013_sp_stis_rollup.sql`; do not log as mapping issues.
 - STIS result: issues drop to 0 and factRows increase.
+- STIS search-term rows:
+  - If `customer_search_term_norm` is non-empty, target_id may be NULL and this is NOT an error.
+  - Do NOT log mapping issues for target_id on STIS search-term rows.
+  - When target_id is NULL, `target_key` must be deterministic (targeting signature). Do NOT use a constant like `"__ROLLUP__"` or it can violate `sp_stis_daily_fact_uq`.
+
+Official Health Check:
+```sql
+-- STIS: target_id is only required when there is NO search term
+select
+  count(*) filter (where campaign_id is null) as missing_campaign_id,
+  count(*) filter (where ad_group_id is null) as missing_ad_group_id,
+  count(*) filter (
+    where (customer_search_term_norm is null or customer_search_term_norm = '')
+      and target_id is null
+  ) as missing_target_id_when_required
+from public.sp_stis_daily_fact;
+```
 
 Example flow for a date folder:
 1. `npm run ingest:bulk:date -- --account-id <id> <date>`

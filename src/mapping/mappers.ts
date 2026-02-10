@@ -124,15 +124,17 @@ export type SpStisRawRow = {
   conversion_rate: number | null;
 };
 
-export type SpStisFactRow = SpStisRawRow & {
+export type SpStisDailyFactRow = SpStisRawRow & {
   upload_id: string;
   account_id: string;
   campaign_id: string;
   ad_group_id: string;
+  // target_id may be null when customer_search_term_norm is present (search-term rows).
   target_id: string | null;
   target_key: string;
   exported_at: string;
 };
+export type SpStisFactRow = SpStisDailyFactRow;
 
 function issueKeyBase(row: { campaign_name_norm: string; portfolio_name_norm?: string | null }) {
   return {
@@ -140,6 +142,8 @@ function issueKeyBase(row: { campaign_name_norm: string; portfolio_name_norm?: s
     portfolio_name_norm: row.portfolio_name_norm ?? null,
   };
 }
+
+type PendingIssue = Omit<MappingIssue, "row_count"> & { row_count?: number };
 
 export function mapSpCampaignRows(params: {
   rows: SpCampaignRawRow[];
@@ -152,8 +156,11 @@ export function mapSpCampaignRows(params: {
   const { rows, lookup, uploadId, accountId, exportedAt, referenceDate } = params;
   const facts: SpCampaignFactRow[] = [];
   const collector = createIssueCollector();
+  const resolvedCampaignKeys = new Set<string>();
+  const pendingCampaignIssues: { key: string; issue: PendingIssue }[] = [];
 
   for (const row of rows) {
+    const campaignKey = JSON.stringify(issueKeyBase(row));
     const campaignResult = resolveCampaignId({
       campaignNameNorm: row.campaign_name_norm,
       portfolioNameNorm: row.portfolio_name_norm,
@@ -162,15 +169,19 @@ export function mapSpCampaignRows(params: {
     });
 
     if (campaignResult.status !== "ok") {
-      collector.addIssue({
-        entity_level: "campaign",
-        issue_type: campaignResult.status === "ambiguous" ? "ambiguous" : "unmapped",
-        key_json: issueKeyBase(row),
-        candidates_json: campaignResult.status === "ambiguous" ? campaignResult.candidates : null,
+      pendingCampaignIssues.push({
+        key: campaignKey,
+        issue: {
+          entity_level: "campaign",
+          issue_type: campaignResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+          key_json: issueKeyBase(row),
+          candidates_json: campaignResult.status === "ambiguous" ? campaignResult.candidates : null,
+        },
       });
       continue;
     }
 
+    resolvedCampaignKeys.add(campaignKey);
     const campaignInfo = lookup.campaignById.get(campaignResult.id) ?? null;
     facts.push({
       upload_id: uploadId,
@@ -193,6 +204,11 @@ export function mapSpCampaignRows(params: {
     });
   }
 
+  for (const pending of pendingCampaignIssues) {
+    if (resolvedCampaignKeys.has(pending.key)) continue;
+    collector.addIssue(pending.issue);
+  }
+
   return { facts, issues: collector.list() };
 }
 
@@ -207,8 +223,11 @@ export function mapSpPlacementRows(params: {
   const { rows, lookup, uploadId, accountId, exportedAt, referenceDate } = params;
   const facts: SpPlacementFactRow[] = [];
   const collector = createIssueCollector();
+  const resolvedCampaignKeys = new Set<string>();
+  const pendingCampaignIssues: { key: string; issue: PendingIssue }[] = [];
 
   for (const row of rows) {
+    const campaignKey = JSON.stringify(issueKeyBase(row));
     const campaignResult = resolveCampaignId({
       campaignNameNorm: row.campaign_name_norm,
       portfolioNameNorm: row.portfolio_name_norm,
@@ -217,15 +236,19 @@ export function mapSpPlacementRows(params: {
     });
 
     if (campaignResult.status !== "ok") {
-      collector.addIssue({
-        entity_level: "campaign",
-        issue_type: campaignResult.status === "ambiguous" ? "ambiguous" : "unmapped",
-        key_json: issueKeyBase(row),
-        candidates_json: campaignResult.status === "ambiguous" ? campaignResult.candidates : null,
+      pendingCampaignIssues.push({
+        key: campaignKey,
+        issue: {
+          entity_level: "campaign",
+          issue_type: campaignResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+          key_json: issueKeyBase(row),
+          candidates_json: campaignResult.status === "ambiguous" ? campaignResult.candidates : null,
+        },
       });
       continue;
     }
 
+    resolvedCampaignKeys.add(campaignKey);
     facts.push({
       upload_id: uploadId,
       account_id: accountId,
@@ -253,6 +276,11 @@ export function mapSpPlacementRows(params: {
     });
   }
 
+  for (const pending of pendingCampaignIssues) {
+    if (resolvedCampaignKeys.has(pending.key)) continue;
+    collector.addIssue(pending.issue);
+  }
+
   return { facts, issues: collector.list() };
 }
 
@@ -267,8 +295,15 @@ export function mapSpTargetingRows(params: {
   const { rows, lookup, uploadId, accountId, exportedAt, referenceDate } = params;
   const facts: SpTargetingFactRow[] = [];
   const collector = createIssueCollector();
+  const resolvedCampaignKeys = new Set<string>();
+  const resolvedAdGroupKeys = new Set<string>();
+  const resolvedTargetKeys = new Set<string>();
+  const pendingCampaignIssues: { key: string; issue: PendingIssue }[] = [];
+  const pendingAdGroupIssues: { key: string; issue: PendingIssue }[] = [];
+  const pendingTargetIssues: { key: string; issue: PendingIssue }[] = [];
 
   for (const row of rows) {
+    const campaignKey = JSON.stringify(issueKeyBase(row));
     const campaignResult = resolveCampaignId({
       campaignNameNorm: row.campaign_name_norm,
       portfolioNameNorm: row.portfolio_name_norm,
@@ -277,15 +312,24 @@ export function mapSpTargetingRows(params: {
     });
 
     if (campaignResult.status !== "ok") {
-      collector.addIssue({
-        entity_level: "campaign",
-        issue_type: campaignResult.status === "ambiguous" ? "ambiguous" : "unmapped",
-        key_json: issueKeyBase(row),
-        candidates_json: campaignResult.status === "ambiguous" ? campaignResult.candidates : null,
+      pendingCampaignIssues.push({
+        key: campaignKey,
+        issue: {
+          entity_level: "campaign",
+          issue_type: campaignResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+          key_json: issueKeyBase(row),
+          candidates_json: campaignResult.status === "ambiguous" ? campaignResult.candidates : null,
+        },
       });
       continue;
     }
 
+    resolvedCampaignKeys.add(campaignKey);
+    const adGroupKeyObj = {
+      ...issueKeyBase(row),
+      ad_group_name_norm: row.ad_group_name_norm,
+    };
+    const adGroupKey = JSON.stringify(adGroupKeyObj);
     const adGroupResult = resolveAdGroupId({
       campaignId: campaignResult.id,
       adGroupNameNorm: row.ad_group_name_norm,
@@ -294,18 +338,19 @@ export function mapSpTargetingRows(params: {
     });
 
     if (adGroupResult.status !== "ok") {
-      collector.addIssue({
-        entity_level: "ad_group",
-        issue_type: adGroupResult.status === "ambiguous" ? "ambiguous" : "unmapped",
-        key_json: {
-          ...issueKeyBase(row),
-          ad_group_name_norm: row.ad_group_name_norm,
+      pendingAdGroupIssues.push({
+        key: adGroupKey,
+        issue: {
+          entity_level: "ad_group",
+          issue_type: adGroupResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+          key_json: adGroupKeyObj,
+          candidates_json: adGroupResult.status === "ambiguous" ? adGroupResult.candidates : null,
         },
-        candidates_json: adGroupResult.status === "ambiguous" ? adGroupResult.candidates : null,
       });
       continue;
     }
 
+    resolvedAdGroupKeys.add(adGroupKey);
     const targetResult = resolveTargetId({
       adGroupId: adGroupResult.id,
       expressionNorm: row.targeting_norm,
@@ -317,21 +362,34 @@ export function mapSpTargetingRows(params: {
     });
 
     if (targetResult.status !== "ok") {
-      collector.addIssue({
-        entity_level: "target",
-        issue_type: targetResult.status === "ambiguous" ? "ambiguous" : "unmapped",
-        key_json: {
-          ...issueKeyBase(row),
-          ad_group_name_norm: row.ad_group_name_norm,
-          targeting_norm: row.targeting_norm,
-          match_type_norm: row.match_type_norm,
-          is_negative: inferIsNegative(row.match_type_raw),
+      const targetKeyObj = {
+        ...issueKeyBase(row),
+        ad_group_name_norm: row.ad_group_name_norm,
+        targeting_norm: row.targeting_norm,
+        match_type_norm: row.match_type_norm,
+        is_negative: inferIsNegative(row.match_type_raw),
+      };
+      const targetKey = JSON.stringify(targetKeyObj);
+      pendingTargetIssues.push({
+        key: targetKey,
+        issue: {
+          entity_level: "target",
+          issue_type: targetResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+          key_json: targetKeyObj,
+          candidates_json: targetResult.status === "ambiguous" ? targetResult.candidates : null,
         },
-        candidates_json: targetResult.status === "ambiguous" ? targetResult.candidates : null,
       });
       continue;
     }
 
+    const targetKey = JSON.stringify({
+      ...issueKeyBase(row),
+      ad_group_name_norm: row.ad_group_name_norm,
+      targeting_norm: row.targeting_norm,
+      match_type_norm: row.match_type_norm,
+      is_negative: inferIsNegative(row.match_type_raw),
+    });
+    resolvedTargetKeys.add(targetKey);
     facts.push({
       upload_id: uploadId,
       account_id: accountId,
@@ -365,6 +423,19 @@ export function mapSpTargetingRows(params: {
     });
   }
 
+  for (const pending of pendingCampaignIssues) {
+    if (resolvedCampaignKeys.has(pending.key)) continue;
+    collector.addIssue(pending.issue);
+  }
+  for (const pending of pendingAdGroupIssues) {
+    if (resolvedAdGroupKeys.has(pending.key)) continue;
+    collector.addIssue(pending.issue);
+  }
+  for (const pending of pendingTargetIssues) {
+    if (resolvedTargetKeys.has(pending.key)) continue;
+    collector.addIssue(pending.issue);
+  }
+
   return { facts, issues: collector.list() };
 }
 
@@ -379,8 +450,15 @@ export function mapSpStisRows(params: {
   const { rows, lookup, uploadId, accountId, exportedAt, referenceDate } = params;
   const facts: SpStisFactRow[] = [];
   const collector = createIssueCollector();
+  const resolvedCampaignKeys = new Set<string>();
+  const resolvedAdGroupKeys = new Set<string>();
+  const resolvedTargetKeys = new Set<string>();
+  const pendingCampaignIssues: { key: string; issue: PendingIssue }[] = [];
+  const pendingAdGroupIssues: { key: string; issue: PendingIssue }[] = [];
+  const pendingTargetIssues: { key: string; issue: PendingIssue }[] = [];
 
   for (const row of rows) {
+    const campaignKey = JSON.stringify(issueKeyBase(row));
     const campaignResult = resolveCampaignId({
       campaignNameNorm: row.campaign_name_norm,
       portfolioNameNorm: row.portfolio_name_norm,
@@ -389,15 +467,24 @@ export function mapSpStisRows(params: {
     });
 
     if (campaignResult.status !== "ok") {
-      collector.addIssue({
-        entity_level: "campaign",
-        issue_type: campaignResult.status === "ambiguous" ? "ambiguous" : "unmapped",
-        key_json: issueKeyBase(row),
-        candidates_json: campaignResult.status === "ambiguous" ? campaignResult.candidates : null,
+      pendingCampaignIssues.push({
+        key: campaignKey,
+        issue: {
+          entity_level: "campaign",
+          issue_type: campaignResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+          key_json: issueKeyBase(row),
+          candidates_json: campaignResult.status === "ambiguous" ? campaignResult.candidates : null,
+        },
       });
       continue;
     }
 
+    resolvedCampaignKeys.add(campaignKey);
+    const adGroupKeyObj = {
+      ...issueKeyBase(row),
+      ad_group_name_norm: row.ad_group_name_norm,
+    };
+    const adGroupKey = JSON.stringify(adGroupKeyObj);
     const adGroupResult = resolveAdGroupId({
       campaignId: campaignResult.id,
       adGroupNameNorm: row.ad_group_name_norm,
@@ -406,21 +493,34 @@ export function mapSpStisRows(params: {
     });
 
     if (adGroupResult.status !== "ok") {
-      collector.addIssue({
-        entity_level: "ad_group",
-        issue_type: adGroupResult.status === "ambiguous" ? "ambiguous" : "unmapped",
-        key_json: {
-          ...issueKeyBase(row),
-          ad_group_name_norm: row.ad_group_name_norm,
+      pendingAdGroupIssues.push({
+        key: adGroupKey,
+        issue: {
+          entity_level: "ad_group",
+          issue_type: adGroupResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+          key_json: adGroupKeyObj,
+          candidates_json: adGroupResult.status === "ambiguous" ? adGroupResult.candidates : null,
         },
-        candidates_json: adGroupResult.status === "ambiguous" ? adGroupResult.candidates : null,
       });
       continue;
     }
 
+    resolvedAdGroupKeys.add(adGroupKey);
     const targetingNorm = row.targeting_norm.trim();
+    const isSearchTermRow =
+      !!row.customer_search_term_norm && row.customer_search_term_norm.trim() !== "";
+    const targetKeySignature = JSON.stringify({
+      ...issueKeyBase(row),
+      ad_group_name_norm: row.ad_group_name_norm,
+      targeting_norm: row.targeting_norm,
+      match_type_norm: row.match_type_norm,
+      is_negative: inferIsNegative(row.match_type_raw),
+    });
     let targetId: string | null = null;
-    if (targetingNorm !== "*") {
+    if (isSearchTermRow) {
+      // Search-term rows don't have a target_id; avoid logging target issues.
+      targetId = null;
+    } else if (targetingNorm !== "*") {
       const targetResult = resolveTargetId({
         adGroupId: adGroupResult.id,
         expressionNorm: row.targeting_norm,
@@ -432,21 +532,34 @@ export function mapSpStisRows(params: {
       });
 
       if (targetResult.status !== "ok") {
-        collector.addIssue({
-          entity_level: "target",
-          issue_type: targetResult.status === "ambiguous" ? "ambiguous" : "unmapped",
-          key_json: {
-            ...issueKeyBase(row),
-            ad_group_name_norm: row.ad_group_name_norm,
-            targeting_norm: row.targeting_norm,
-            match_type_norm: row.match_type_norm,
-            is_negative: inferIsNegative(row.match_type_raw),
+        const targetKeyObj = {
+          ...issueKeyBase(row),
+          ad_group_name_norm: row.ad_group_name_norm,
+          targeting_norm: row.targeting_norm,
+          match_type_norm: row.match_type_norm,
+          is_negative: inferIsNegative(row.match_type_raw),
+        };
+        const targetKey = JSON.stringify(targetKeyObj);
+        pendingTargetIssues.push({
+          key: targetKey,
+          issue: {
+            entity_level: "target",
+            issue_type: targetResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+            key_json: targetKeyObj,
+            candidates_json: targetResult.status === "ambiguous" ? targetResult.candidates : null,
           },
-          candidates_json: targetResult.status === "ambiguous" ? targetResult.candidates : null,
         });
         continue;
       }
       targetId = targetResult.id;
+      const targetKey = JSON.stringify({
+        ...issueKeyBase(row),
+        ad_group_name_norm: row.ad_group_name_norm,
+        targeting_norm: row.targeting_norm,
+        match_type_norm: row.match_type_norm,
+        is_negative: inferIsNegative(row.match_type_raw),
+      });
+      resolvedTargetKeys.add(targetKey);
     }
 
     facts.push({
@@ -481,9 +594,22 @@ export function mapSpStisRows(params: {
       campaign_id: campaignResult.id,
       ad_group_id: adGroupResult.id,
       target_id: targetId,
-      target_key: targetId ?? "__ROLLUP__",
+      target_key: targetId ?? targetKeySignature,
       exported_at: exportedAt,
     });
+  }
+
+  for (const pending of pendingCampaignIssues) {
+    if (resolvedCampaignKeys.has(pending.key)) continue;
+    collector.addIssue(pending.issue);
+  }
+  for (const pending of pendingAdGroupIssues) {
+    if (resolvedAdGroupKeys.has(pending.key)) continue;
+    collector.addIssue(pending.issue);
+  }
+  for (const pending of pendingTargetIssues) {
+    if (resolvedTargetKeys.has(pending.key)) continue;
+    collector.addIssue(pending.issue);
   }
 
   return { facts, issues: collector.list() };
