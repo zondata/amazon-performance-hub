@@ -20,6 +20,12 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 4) Don’t build the web UI yet; keep ingestion as CLI and Supabase as read-only source for the UI later.
 5) Never commit real Amazon reports/bulksheets to Git. Never commit Supabase keys.
 
+## Schema discipline (required for SQL correctness)
+- Do not guess table/column names.
+- Before writing/debugging any SQL, request the latest `docs/schema_snapshot.md`.
+- If not provided, instruct the user to run `npm run schema:snapshot` and upload the file.
+- Only use table/column names that exist in the snapshot.
+
 ## Data locations (Dropbox)
 ### Current folder structure (date folders)
 Windows:
@@ -200,6 +206,30 @@ Example flow for a date folder:
 5. `npm run ingest:sp:stis:date -- --account-id <id> <date>`
 6. `npm run map:sp:all:date -- --account-id <id> <date>`
 7. Inspect `sp_mapping_issues`, add overrides if needed, then re-run mapping.
+
+## Recent changes / Changelog
+### 2026-02-10
+- Target resolver fix (expression targets with UNKNOWN match type)
+  - Root cause: SP reports sometimes emit `match_type_norm="UNKNOWN"` for expression-based targets (asin-expanded, category, auto clauses), while `bulk_targets` stores them as `match_type="TARGETING_EXPRESSION"` with `expression_norm`.
+  - Fix in `src/mapping/core.ts`:
+    - `isTargetingExpression()` recognizes auto clauses + `asin=` + `asin-expanded=` + `category="..."`.
+    - When `effectiveMatchType` is `UNKNOWN` and expression is expression-based, try match_type `TARGETING_EXPRESSION`.
+  - Result: for 2026-02-10 folder, `sp_targeting` issueRows 45->0 and `sp_stis` 18->0.
+- Bulk snapshot picker fix
+  - Root cause: `pickBulkSnapshotFromList` always returned max(snapshot<=exportedAt) and never considered snapshots after exported_at within the allowed 7-day window.
+  - Fix in `src/mapping/core.ts`: compare nearest-before vs nearest-after (within 7 days) and pick the closer (tie -> before).
+  - Confirmed: `pickBulkSnapshotFromList('2026-02-04',['2026-01-31','2026-02-05'])` now returns `2026-02-05`.
+- Manual overrides for rename drift
+  - Added rows to `sp_manual_name_overrides` for remaining unmapped `campaign_name_norm` variants (rename drift / bulksheet gaps) for 2026-02-04.
+  - After inserting overrides and rerunning mapping, 2026-02-04 maps clean (0 issues across campaign/placement/targeting/stis).
+- Verification commands used
+  - `npm run ingest:bulk:date -- --account-id US 2026-02-10`
+  - `npm run ingest:sp:*:date` for 2026-02-10
+  - `npm run map:sp:all:date -- --account-id US 2026-02-10` (0 issues)
+  - `npm run map:sp:all:date -- --account-id US 2026-02-04` (0 issues after overrides)
+- Git
+  - `60fdc52` Fix UNKNOWN expression targets by resolving as TARGETING_EXPRESSION
+  - `9e8abc7` Pick closest bulk snapshot within +7d window
 
 ## Git / Safety
 - `.env.local` must be gitignored.

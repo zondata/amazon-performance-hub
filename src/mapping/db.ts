@@ -65,6 +65,11 @@ async function fetchAllRows<T>(table: string, select: string, filters: Record<st
   return rows;
 }
 
+function dateToUtcMs(dateIso: string): number {
+  const [y, m, d] = dateIso.split("-").map(Number);
+  return Date.UTC(y, m - 1, d);
+}
+
 export async function pickBulkSnapshotForExport(accountId: string, exportedAtDate: string) {
   const client = getSupabaseClient();
   const { data, error } = await client
@@ -78,6 +83,120 @@ export async function pickBulkSnapshotForExport(accountId: string, exportedAtDat
     .map((row) => row.snapshot_date as string)
     .filter(Boolean);
   return pickBulkSnapshotFromList(exportedAtDate, snapshotDates);
+}
+
+function getRawTableForReportType(reportType: "sp_campaign" | "sp_placement" | "sp_targeting" | "sp_stis") {
+  if (reportType === "sp_campaign") return "sp_campaign_daily_raw";
+  if (reportType === "sp_placement") return "sp_placement_daily_raw";
+  if (reportType === "sp_targeting") return "sp_targeting_daily_raw";
+  return "sp_stis_daily_raw";
+}
+
+async function fetchDistinctCampaignNameNorms(
+  reportType: "sp_campaign" | "sp_placement" | "sp_targeting" | "sp_stis",
+  uploadId: string
+): Promise<string[]> {
+  const table = getRawTableForReportType(reportType);
+  const rows = await fetchAllRows<{ campaign_name_norm: string }>(
+    table,
+    "campaign_name_norm",
+    { upload_id: uploadId }
+  );
+  const set = new Set<string>();
+  for (const row of rows) {
+    const norm = row.campaign_name_norm?.trim();
+    if (norm) set.add(norm);
+  }
+  return [...set];
+}
+
+async function fetchCandidateSnapshotDates(accountId: string, exportedAtDate: string): Promise<string[]> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from("uploads")
+    .select("snapshot_date")
+    .eq("account_id", accountId)
+    .eq("source_type", "bulk")
+    .not("snapshot_date", "is", null);
+  if (error) throw new Error(`Failed fetching bulk uploads: ${error.message}`);
+  const snapshotDates = (data ?? [])
+    .map((row) => row.snapshot_date as string)
+    .filter(Boolean);
+
+  const exportedMs = dateToUtcMs(exportedAtDate);
+  const maxAfterMs = 7 * 24 * 60 * 60 * 1000;
+  return snapshotDates.filter((date) => {
+    if (date <= exportedAtDate) return true;
+    const diff = dateToUtcMs(date) - exportedMs;
+    return diff > 0 && diff <= maxAfterMs;
+  });
+}
+
+async function countBulkCampaignNameMatches(
+  accountId: string,
+  snapshotDate: string,
+  campaignNameNorms: string[]
+): Promise<number> {
+  if (!campaignNameNorms.length) return 0;
+  const client = getSupabaseClient();
+  const matched = new Set<string>();
+  for (const chunk of chunkArray(campaignNameNorms, 500)) {
+    const { data, error } = await client
+      .from("bulk_campaigns")
+      .select("campaign_name_norm")
+      .eq("account_id", accountId)
+      .eq("snapshot_date", snapshotDate)
+      .in("campaign_name_norm", chunk);
+    if (error) throw new Error(`Failed fetching bulk_campaigns matches: ${error.message}`);
+    for (const row of data ?? []) {
+      const norm = (row as { campaign_name_norm: string }).campaign_name_norm;
+      if (norm) matched.add(norm);
+    }
+  }
+  return matched.size;
+}
+
+async function pickBestBulkSnapshotForUpload(params: {
+  accountId: string;
+  uploadId: string;
+  reportType: "sp_campaign" | "sp_placement" | "sp_targeting" | "sp_stis";
+  exportedAtDate: string;
+}): Promise<string | null> {
+  const { accountId, uploadId, reportType, exportedAtDate } = params;
+  const campaignNames = await fetchDistinctCampaignNameNorms(reportType, uploadId);
+  if (!campaignNames.length) {
+    return pickBulkSnapshotForExport(accountId, exportedAtDate);
+  }
+
+  const candidateDates = await fetchCandidateSnapshotDates(accountId, exportedAtDate);
+  if (!candidateDates.length) return null;
+
+  const exportedMs = dateToUtcMs(exportedAtDate);
+  let best: { snapshotDate: string; score: number; diffMs: number; isBefore: boolean } | null = null;
+  for (const snapshotDate of candidateDates) {
+    const score = await countBulkCampaignNameMatches(accountId, snapshotDate, campaignNames);
+    const snapshotMs = dateToUtcMs(snapshotDate);
+    const diffMs = Math.abs(snapshotMs - exportedMs);
+    const isBefore = snapshotDate <= exportedAtDate;
+    if (!best) {
+      best = { snapshotDate, score, diffMs, isBefore };
+      continue;
+    }
+    if (score > best.score) {
+      best = { snapshotDate, score, diffMs, isBefore };
+      continue;
+    }
+    if (score === best.score) {
+      if (diffMs < best.diffMs) {
+        best = { snapshotDate, score, diffMs, isBefore };
+        continue;
+      }
+      if (diffMs === best.diffMs && isBefore && !best.isBefore) {
+        best = { snapshotDate, score, diffMs, isBefore };
+      }
+    }
+  }
+  return best?.snapshotDate ?? null;
 }
 
 export async function loadBulkLookup(accountId: string, snapshotDate: string): Promise<BulkLookup> {
@@ -331,7 +450,13 @@ export async function mapUpload(uploadId: string, reportType: "sp_campaign" | "s
     : reportType === "sp_targeting" ? "sp_targeting_daily_fact"
     : "sp_stis_daily_fact");
 
-  const snapshotDate = await pickBulkSnapshotForExport(upload.account_id, exportedAtDate);
+  const snapshotDate =
+    (await pickBestBulkSnapshotForUpload({
+      accountId: upload.account_id,
+      uploadId,
+      reportType,
+      exportedAtDate,
+    })) ?? (await pickBulkSnapshotForExport(upload.account_id, exportedAtDate));
   if (!snapshotDate) {
     await insertIssues(upload.account_id, uploadId, reportType, [
       {
