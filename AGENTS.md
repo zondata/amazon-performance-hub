@@ -19,6 +19,7 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 3) Rolling export overlap is expected (weekly 30-day exports). When overlapping, always prefer the *latest export* (“data finalizes late”).
 4) Don’t build the web UI yet; keep ingestion as CLI and Supabase as read-only source for the UI later.
 5) Never commit real Amazon reports/bulksheets to Git. Never commit Supabase keys.
+6) Canonical SOPs live in `docs/sop/`.
 
 ## Schema discipline (required for SQL correctness)
 - Do not guess table/column names.
@@ -224,7 +225,39 @@ Example flow for a date folder:
 6. `npm run map:sp:all:date -- --account-id <id> <date>`
 7. Inspect `sp_mapping_issues`, add overrides if needed, then re-run mapping.
 
+### Milestone 8 — Product Profile Module (Catalog) + Keyword Strategy Library
+What was added (high-level):
+- `products` (ASIN-level) + `product_skus` (SKU-level) supports multiple SKUs under one ASIN.
+- `product_cost_history` (SKU cost history) + safe insert behavior (close previous current row; skip identical).
+- `product_profile` (profile_json context).
+- Cost helper views: `v_product_sku_base`, `v_product_sku_cost_current` (CURRENT_DATE; base-SKU fallback).
+- Keyword grouping tables + exclusivity trigger (strategy-only; no Amazon status mirroring).
+
+Scripts:
+- `scripts/product_seed.ts` (`npm run product:seed`)
+- `scripts/import_keyword_groups_from_csv.ts` (`npm run keywords:import`)
+- `scripts/cleanup_test_skus.ts` (`npm run product:cleanup-test-skus`)
+
+Migrations:
+- `20260211100000_remote_placeholder.sql` (history alignment placeholder)
+- `20260211144000_create_product_profile_v1.sql`
+- `20260211145248_product_profile_cost_views.sql`
+- `20260211154552_keyword_grouping_v1.sql`
+
+Verification:
+- Cost fallback verified.
+- Keyword CSV imported into 12 groups with 299 keywords/memberships, 0 failures.
+- Cleanup removed test SKUs, leaving only real SKU.
+
 ## Recent changes / Changelog
+### 2026-02-11
+- Product Profile module: products, SKUs, cost history, profile JSON, and cost views (base SKU + current cost).
+- Safe cost insert behavior: close previous current row; skip identical.
+- Keyword grouping tables + exclusivity trigger (strategy library; no status mirroring).
+- Scripts: `product:seed`, `keywords:import`, `product:cleanup-test-skus`.
+- Migrations: product profile v1, cost views, keyword grouping, remote placeholder.
+- Verified: cost fallback, keyword CSV import (12 groups, 299 keywords/memberships, 0 failures), cleanup removed test SKUs.
+
 ### 2026-02-10
 - Target resolver fix (expression targets with UNKNOWN match type)
   - Root cause: SP reports sometimes emit `match_type_norm="UNKNOWN"` for expression-based targets (asin-expanded, category, auto clauses), while `bulk_targets` stores them as `match_type="TARGETING_EXPRESSION"` with `expression_norm`.

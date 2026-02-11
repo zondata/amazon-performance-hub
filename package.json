@@ -26,20 +26,23 @@
     "map:sp:stis": "ts-node src/cli/mapSpStis.ts",
     "map:sp:all:date": "ts-node src/cli/mapSpAllDate.ts",
     "pipeline:backfill:ads": "ts-node src/cli/backfillAds.ts",
-    "schema:snapshot": "ts-node scripts/schema_snapshot.ts",
+    "schema:snapshot": "node -r dotenv/config ./node_modules/.bin/ts-node scripts/schema_snapshot.ts dotenv_config_path=.env.local",
+    "keywords:import": "ts-node scripts/import_keyword_groups_from_csv.ts",
+    "product:seed": "ts-node scripts/product_seed.ts",
+    "product:cleanup-test-skus": "ts-node scripts/cleanup_test_skus.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
-    "dotenv": "^17.2.4",
     "pg": "^8.18.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
     "@types/pg": "^8.16.0",
-    "supabase": "^2.76.5",
+    "dotenv": "^17.2.4",
+    "supabase": "^2.76.7",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3",
     "vitest": "^2.1.9"

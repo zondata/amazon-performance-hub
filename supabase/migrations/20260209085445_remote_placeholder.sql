@@ -1,0 +1,4 @@
+-- Placeholder migration file.
+-- This migration was applied on the remote database but the original file
+-- is not present locally (likely due to prior naming mismatch / missing file).
+-- No-op by design.
