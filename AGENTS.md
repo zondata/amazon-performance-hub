@@ -40,6 +40,11 @@ Known report filenames (stable):
 - `Sponsored_Products_Placement_report.xlsx`
 - `Sponsored_Products_Search_Term_Impression_Share_report.csv`
 - `Sponsored_Products_Targeting_report.xlsx`
+- `Sponsored_Display_Campaign_report.xlsx`
+- `Sponsored_Display_Advertised_product_report.xlsx`
+- `Sponsored_Display_Targeting_report.xlsx`
+- `Sponsored_Display_Matched_target_report.xlsx`
+- `Sponsored_Display_Purchased_product_report.xlsx`
 
 Bulksheet filename (varies):
 - `bulk-*.xlsx`
@@ -182,6 +187,21 @@ Notes:
 - Ignore `Sponsored_Brands_Keyword_Placement_report.xlsx` (often empty) and `Sponsored_Brands_Category_benchmark_report.csv` in this module.
 - SB bulk snapshot ingest must parse BOTH sheets: `Sponsored Brands Campaigns` and `SB Multi Ad Group Campaigns`.
 
+SD raw ingestion (daily):
+- `npm run ingest:sd:campaign -- --account-id <id> <xlsx> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:sd:campaign:date -- --account-id <id> <YYYY-MM-DD or folder>`
+- `npm run ingest:sd:advertised -- --account-id <id> <xlsx> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:sd:advertised:date -- --account-id <id> <YYYY-MM-DD or folder>`
+- `npm run ingest:sd:targeting -- --account-id <id> <xlsx> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:sd:targeting:date -- --account-id <id> <YYYY-MM-DD or folder>`
+- `npm run ingest:sd:matched -- --account-id <id> <xlsx> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:sd:matched:date -- --account-id <id> <YYYY-MM-DD or folder>`
+- `npm run ingest:sd:purchased -- --account-id <id> <xlsx> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:sd:purchased:date -- --account-id <id> <YYYY-MM-DD or folder>`
+Notes:
+- SD date-folder wrappers default `exported_at` to the folder date at `T00:00:00Z`.
+- Stable SD report filenames are required (see `src/fs/reportLocator.ts`).
+
 Supabase views (migrations):
 - `sp_campaign_hourly_latest`: latest-wins by (account_id, date, start_time, campaign_name_norm) with max(exported_at)
 
@@ -281,6 +301,34 @@ SB STIS rules:
 - If `customer_search_term_norm` is non-empty, target_id may be NULL and this is NOT an error.
 - Do NOT log mapping issues for target_id on SB STIS search-term rows.
 - When target_id is NULL, `target_key` must be deterministic (targeting signature). Do NOT use a constant.
+
+### Milestone 10 — SD Mapping Layer (raw → stable IDs)
+Goal: map SD raw rows into deterministic ID-based facts using SD bulk snapshots.
+
+New migrations:
+- `20260213132000_sd_mapping.sql` (SD mapping issues, overrides, facts, latest views)
+
+New commands:
+- `npm run map:sd:campaign -- --upload-id <id>`
+- `npm run map:sd:advertised -- --upload-id <id>`
+- `npm run map:sd:targeting -- --upload-id <id>`
+- `npm run map:sd:matched -- --upload-id <id>`
+- `npm run map:sd:purchased -- --upload-id <id>`
+- `npm run map:sd:all:date -- --account-id <id> <YYYY-MM-DD or folder>`
+- `npm run pipeline:backfill:sd -- --account-id <id> --root <path> --from YYYY-MM-DD --to YYYY-MM-DD [--concurrency N] [--dry-run] [--continue-on-error]`
+
+Mapping rules:
+- Choose bulk snapshot by exported_at date:
+  - prefer max(snapshot_date <= exported_at_date)
+  - fallback min(snapshot_date > exported_at_date) within 7 days
+- Overrides (`sd_manual_name_overrides`) take priority over snapshot, then name history.
+- If mapping is ambiguous, log to `sd_mapping_issues`.
+- If missing snapshot, log `missing_bulk_snapshot` and skip insert.
+- Latest views for facts use max(exported_at) partitioned by stable IDs, with tie-breaks on uploads.ingested_at then upload_id.
+
+SD targeting/ad rules:
+- Missing target_id or ad_id should NOT block inserts; store deterministic `target_key` / `ad_key` signatures.
+- Do not use constant keys; include targeting/ad signature fields for determinism.
 
 ### Milestone 8 — Product Profile Module (Catalog) + Keyword Strategy Library
 What was added (high-level):

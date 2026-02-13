@@ -1,5 +1,5 @@
 # Supabase Schema Snapshot
-Generated: 2026-02-13T08:31:30.521Z
+Generated: 2026-02-13T09:54:50.565Z
 
 ## accounts (BASE TABLE)
 | column | type | nullable |
@@ -113,6 +113,60 @@ Generated: 2026-02-13T08:31:30.521Z
 | is_negative | boolean | NO |
 | state | text | YES |
 | bid | numeric | YES |
+
+## bulk_sd_ad_groups (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | NO |
+| snapshot_date | date | NO |
+| ad_group_id | text | NO |
+| campaign_id | text | NO |
+| ad_group_name_raw | text | NO |
+| ad_group_name_norm | text | NO |
+| state | text | YES |
+| default_bid | numeric | YES |
+
+## bulk_sd_campaigns (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | NO |
+| snapshot_date | date | NO |
+| campaign_id | text | NO |
+| campaign_name_raw | text | NO |
+| campaign_name_norm | text | NO |
+| portfolio_id | text | YES |
+| state | text | YES |
+| budget | numeric | YES |
+| tactic | text | YES |
+| cost_type | text | YES |
+| bid_optimization | text | YES |
+
+## bulk_sd_product_ads (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | NO |
+| snapshot_date | date | NO |
+| ad_id | text | NO |
+| ad_group_id | text | NO |
+| campaign_id | text | NO |
+| sku_raw | text | YES |
+| asin_raw | text | YES |
+
+## bulk_sd_targets (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | NO |
+| snapshot_date | date | NO |
+| targeting_id | text | NO |
+| ad_group_id | text | NO |
+| campaign_id | text | NO |
+| target_type | text | NO |
+| expression_raw | text | NO |
+| expression_norm | text | NO |
+| bid | numeric | YES |
+| bid_optimization | text | YES |
+| cost_type | text | YES |
+| state | text | YES |
 
 ## bulk_targets (BASE TABLE)
 | column | type | nullable |
@@ -499,6 +553,171 @@ Generated: 2026-02-13T08:31:30.521Z
 | customer_search_term_norm | text | NO |
 | search_term_impression_rank | integer | YES |
 | search_term_impression_share | numeric | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| cpc | numeric | YES |
+| ctr | numeric | YES |
+| acos | numeric | YES |
+| roas | numeric | YES |
+| conversion_rate | numeric | YES |
+| exported_at | timestamp with time zone | NO |
+
+## sd_ad_group_name_history (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | NO |
+| ad_group_id | text | NO |
+| campaign_id | text | NO |
+| name_raw | text | NO |
+| name_norm | text | NO |
+| valid_from | date | NO |
+| valid_to | date | YES |
+
+## sd_advertised_product_daily_raw (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | NO |
+| account_id | text | NO |
+| date | date | NO |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | NO |
+| campaign_name_norm | text | NO |
+| ad_group_name_raw | text | NO |
+| ad_group_name_norm | text | NO |
+| advertised_sku_raw | text | YES |
+| advertised_sku_norm | text | YES |
+| advertised_asin_raw | text | YES |
+| advertised_asin_norm | text | YES |
+| cost_type | text | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| cpc | numeric | YES |
+| ctr | numeric | YES |
+| acos | numeric | YES |
+| roas | numeric | YES |
+| conversion_rate | numeric | YES |
+| exported_at | timestamp with time zone | NO |
+
+## sd_campaign_daily_raw (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | NO |
+| account_id | text | NO |
+| date | date | NO |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | NO |
+| campaign_name_norm | text | NO |
+| cost_type | text | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| cpc | numeric | YES |
+| ctr | numeric | YES |
+| acos | numeric | YES |
+| roas | numeric | YES |
+| conversion_rate | numeric | YES |
+| exported_at | timestamp with time zone | NO |
+
+## sd_campaign_name_history (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | NO |
+| campaign_id | text | NO |
+| name_raw | text | NO |
+| name_norm | text | NO |
+| valid_from | date | NO |
+| valid_to | date | YES |
+
+## sd_matched_target_daily_raw (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | NO |
+| account_id | text | NO |
+| date | date | NO |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | NO |
+| campaign_name_norm | text | NO |
+| ad_group_name_raw | text | NO |
+| ad_group_name_norm | text | NO |
+| targeting_raw | text | NO |
+| targeting_norm | text | NO |
+| matched_target_raw | text | NO |
+| matched_target_norm | text | NO |
+| cost_type | text | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| cpc | numeric | YES |
+| ctr | numeric | YES |
+| acos | numeric | YES |
+| roas | numeric | YES |
+| conversion_rate | numeric | YES |
+| exported_at | timestamp with time zone | NO |
+
+## sd_purchased_product_daily_raw (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | NO |
+| account_id | text | NO |
+| date | date | NO |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | NO |
+| campaign_name_norm | text | NO |
+| ad_group_name_raw | text | NO |
+| ad_group_name_norm | text | NO |
+| purchased_sku_raw | text | YES |
+| purchased_sku_norm | text | YES |
+| purchased_asin_raw | text | YES |
+| purchased_asin_norm | text | YES |
+| cost_type | text | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| cpc | numeric | YES |
+| ctr | numeric | YES |
+| acos | numeric | YES |
+| roas | numeric | YES |
+| conversion_rate | numeric | YES |
+| exported_at | timestamp with time zone | NO |
+
+## sd_targeting_daily_raw (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | NO |
+| account_id | text | NO |
+| date | date | NO |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | NO |
+| campaign_name_norm | text | NO |
+| ad_group_name_raw | text | NO |
+| ad_group_name_norm | text | NO |
+| targeting_raw | text | NO |
+| targeting_norm | text | NO |
+| match_type_raw | text | YES |
+| match_type_norm | text | YES |
+| cost_type | text | YES |
 | impressions | integer | YES |
 | clicks | integer | YES |
 | spend | numeric | YES |
@@ -1038,6 +1257,150 @@ Generated: 2026-02-13T08:31:30.521Z
 | exported_at | timestamp with time zone | YES |
 | ingested_at | timestamp with time zone | YES |
 | rn | bigint | YES |
+
+## sd_advertised_product_daily_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| date | date | YES |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| ad_group_name_raw | text | YES |
+| ad_group_name_norm | text | YES |
+| advertised_sku_raw | text | YES |
+| advertised_sku_norm | text | YES |
+| advertised_asin_raw | text | YES |
+| advertised_asin_norm | text | YES |
+| cost_type | text | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| cpc | numeric | YES |
+| ctr | numeric | YES |
+| acos | numeric | YES |
+| roas | numeric | YES |
+| conversion_rate | numeric | YES |
+| exported_at | timestamp with time zone | YES |
+
+## sd_campaign_daily_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| date | date | YES |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| cost_type | text | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| cpc | numeric | YES |
+| ctr | numeric | YES |
+| acos | numeric | YES |
+| roas | numeric | YES |
+| conversion_rate | numeric | YES |
+| exported_at | timestamp with time zone | YES |
+
+## sd_matched_target_daily_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| date | date | YES |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| ad_group_name_raw | text | YES |
+| ad_group_name_norm | text | YES |
+| targeting_raw | text | YES |
+| targeting_norm | text | YES |
+| matched_target_raw | text | YES |
+| matched_target_norm | text | YES |
+| cost_type | text | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| cpc | numeric | YES |
+| ctr | numeric | YES |
+| acos | numeric | YES |
+| roas | numeric | YES |
+| conversion_rate | numeric | YES |
+| exported_at | timestamp with time zone | YES |
+
+## sd_purchased_product_daily_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| date | date | YES |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| ad_group_name_raw | text | YES |
+| ad_group_name_norm | text | YES |
+| purchased_sku_raw | text | YES |
+| purchased_sku_norm | text | YES |
+| purchased_asin_raw | text | YES |
+| purchased_asin_norm | text | YES |
+| cost_type | text | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| cpc | numeric | YES |
+| ctr | numeric | YES |
+| acos | numeric | YES |
+| roas | numeric | YES |
+| conversion_rate | numeric | YES |
+| exported_at | timestamp with time zone | YES |
+
+## sd_targeting_daily_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| date | date | YES |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| ad_group_name_raw | text | YES |
+| ad_group_name_norm | text | YES |
+| targeting_raw | text | YES |
+| targeting_norm | text | YES |
+| match_type_raw | text | YES |
+| match_type_norm | text | YES |
+| cost_type | text | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| cpc | numeric | YES |
+| ctr | numeric | YES |
+| acos | numeric | YES |
+| roas | numeric | YES |
+| conversion_rate | numeric | YES |
+| exported_at | timestamp with time zone | YES |
 
 ## sp_campaign_hourly_fact_latest (VIEW)
 | column | type | nullable |

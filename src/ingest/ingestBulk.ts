@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseSponsoredProductsBulk } from "../bulk/parseSponsoredProductsBulk";
 import { parseSponsoredBrandsBulk } from "../bulk/parseSponsoredBrandsBulk";
+import { parseSponsoredDisplayBulk } from "../bulk/parseSponsoredDisplayBulk";
 import { parseBulkFilenameMeta } from "../bulk/bulkFileMeta";
 import { inferSnapshotDate } from "../cli/snapshotDate";
 import { getSupabaseClient } from "../db/supabaseClient";
@@ -41,6 +42,56 @@ type BulkSbPlacementRow = {
   placement_raw_norm: string;
   placement_code: string;
   percentage: number;
+};
+
+type BulkSdCampaignRow = {
+  account_id: string;
+  snapshot_date: string;
+  campaign_id: string;
+  campaign_name_raw: string;
+  campaign_name_norm: string;
+  portfolio_id: string | null;
+  state: string | null;
+  budget: number | null;
+  tactic: string | null;
+  cost_type: string | null;
+  bid_optimization: string | null;
+};
+
+type BulkSdAdGroupRow = {
+  account_id: string;
+  snapshot_date: string;
+  ad_group_id: string;
+  campaign_id: string;
+  ad_group_name_raw: string;
+  ad_group_name_norm: string;
+  state: string | null;
+  default_bid: number | null;
+};
+
+type BulkSdProductAdRow = {
+  account_id: string;
+  snapshot_date: string;
+  ad_id: string;
+  ad_group_id: string;
+  campaign_id: string;
+  sku_raw: string | null;
+  asin_raw: string | null;
+};
+
+type BulkSdTargetRow = {
+  account_id: string;
+  snapshot_date: string;
+  targeting_id: string;
+  ad_group_id: string;
+  campaign_id: string;
+  target_type: string;
+  expression_raw: string;
+  expression_norm: string;
+  bid: number | null;
+  bid_optimization: string | null;
+  cost_type: string | null;
+  state: string | null;
 };
 
 function normalizePlacementCode(raw: string): string {
@@ -157,6 +208,7 @@ export async function ingestBulk(
   }
 
   const sbSnapshot = await parseSponsoredBrandsBulk(xlsxPath, snapshotDate);
+  const sdSnapshot = await parseSponsoredDisplayBulk(xlsxPath, snapshotDate);
 
   let bulkPortfolios: Record<string, unknown>[] = [];
   let bulkCampaigns: Record<string, unknown>[] = [];
@@ -332,6 +384,85 @@ export async function ingestBulk(
     "account_id,snapshot_date,campaign_id,placement_code,placement_raw_norm"
   );
 
+  const sdCampaigns: BulkSdCampaignRow[] = sdSnapshot.campaigns
+    .filter((row) => row.campaignId)
+    .map((row) => ({
+      account_id: accountId,
+      snapshot_date: snapshotDate,
+      campaign_id: row.campaignId as string,
+      campaign_name_raw: row.campaignNameRaw,
+      campaign_name_norm: row.campaignNameNorm,
+      portfolio_id: row.portfolioId,
+      state: row.state || null,
+      budget: row.budget,
+      tactic: row.tactic || null,
+      cost_type: row.costType || null,
+      bid_optimization: row.bidOptimization || null,
+    }));
+
+  const sdAdGroups: BulkSdAdGroupRow[] = sdSnapshot.adGroups
+    .filter((row) => row.adGroupId && row.campaignId)
+    .map((row) => ({
+      account_id: accountId,
+      snapshot_date: snapshotDate,
+      ad_group_id: row.adGroupId as string,
+      campaign_id: row.campaignId as string,
+      ad_group_name_raw: row.adGroupNameRaw,
+      ad_group_name_norm: row.adGroupNameNorm,
+      state: row.state || null,
+      default_bid: row.defaultBid,
+    }));
+
+  const sdProductAds: BulkSdProductAdRow[] = sdSnapshot.productAds
+    .filter((row) => row.adId && row.adGroupId && row.campaignId)
+    .map((row) => ({
+      account_id: accountId,
+      snapshot_date: snapshotDate,
+      ad_id: row.adId as string,
+      ad_group_id: row.adGroupId as string,
+      campaign_id: row.campaignId as string,
+      sku_raw: row.skuRaw || null,
+      asin_raw: row.asinRaw || null,
+    }));
+
+  const sdTargets: BulkSdTargetRow[] = sdSnapshot.targets
+    .filter((row) => row.targetingId && row.adGroupId && row.campaignId)
+    .map((row) => ({
+      account_id: accountId,
+      snapshot_date: snapshotDate,
+      targeting_id: row.targetingId as string,
+      ad_group_id: row.adGroupId as string,
+      campaign_id: row.campaignId as string,
+      target_type: row.targetType,
+      expression_raw: row.expressionRaw,
+      expression_norm: row.expressionNorm,
+      bid: row.bid,
+      bid_optimization: row.bidOptimization || null,
+      cost_type: row.costType || null,
+      state: row.state || null,
+    }));
+
+  await upsertChunked(
+    "bulk_sd_campaigns",
+    sdCampaigns,
+    "account_id,snapshot_date,campaign_id"
+  );
+  await upsertChunked(
+    "bulk_sd_ad_groups",
+    sdAdGroups,
+    "account_id,snapshot_date,ad_group_id"
+  );
+  await upsertChunked(
+    "bulk_sd_product_ads",
+    sdProductAds,
+    "account_id,snapshot_date,ad_id"
+  );
+  await upsertChunked(
+    "bulk_sd_targets",
+    sdTargets,
+    "account_id,snapshot_date,targeting_id"
+  );
+
   if (snapshot) {
     const { data: previousSnap, error: prevError } = await client
       .from("bulk_campaigns")
@@ -494,6 +625,31 @@ export async function ingestBulk(
     "sb_ad_group_name_history",
     "ad_group_id",
     sbSnapshot.adGroups
+      .filter((row) => row.adGroupId)
+      .map((row) => ({
+        id: row.adGroupId as string,
+        nameRaw: row.adGroupNameRaw,
+        nameNorm: row.adGroupNameNorm,
+        extra: { campaign_id: row.campaignId },
+      }))
+  );
+
+  await updateNameHistory(
+    "sd_campaign_name_history",
+    "campaign_id",
+    sdSnapshot.campaigns
+      .filter((row) => row.campaignId)
+      .map((row) => ({
+        id: row.campaignId as string,
+        nameRaw: row.campaignNameRaw,
+        nameNorm: row.campaignNameNorm,
+      }))
+  );
+
+  await updateNameHistory(
+    "sd_ad_group_name_history",
+    "ad_group_id",
+    sdSnapshot.adGroups
       .filter((row) => row.adGroupId)
       .map((row) => ({
         id: row.adGroupId as string,

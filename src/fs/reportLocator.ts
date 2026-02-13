@@ -111,3 +111,43 @@ export function getSbStisCsv(dateFolder: string): string {
   }
   return filePath;
 }
+
+export function getSdCampaignXlsx(dateFolder: string): string {
+  const filePath = path.join(dateFolder, "Sponsored_Display_Campaign_report.xlsx");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing Sponsored Display Campaign report: ${filePath}`);
+  }
+  return filePath;
+}
+
+export function getSdAdvertisedProductXlsx(dateFolder: string): string {
+  const filePath = path.join(dateFolder, "Sponsored_Display_Advertised_product_report.xlsx");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing Sponsored Display Advertised Product report: ${filePath}`);
+  }
+  return filePath;
+}
+
+export function getSdTargetingXlsx(dateFolder: string): string {
+  const filePath = path.join(dateFolder, "Sponsored_Display_Targeting_report.xlsx");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing Sponsored Display Targeting report: ${filePath}`);
+  }
+  return filePath;
+}
+
+export function getSdMatchedTargetXlsx(dateFolder: string): string {
+  const filePath = path.join(dateFolder, "Sponsored_Display_Matched_target_report.xlsx");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing Sponsored Display Matched Target report: ${filePath}`);
+  }
+  return filePath;
+}
+
+export function getSdPurchasedProductXlsx(dateFolder: string): string {
+  const filePath = path.join(dateFolder, "Sponsored_Display_Purchased_product_report.xlsx");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing Sponsored Display Purchased Product report: ${filePath}`);
+  }
+  return filePath;
+}
