@@ -37,6 +37,7 @@
     "map:sb:campaign:placement": "ts-node src/cli/mapSbCampaignPlacement.ts",
     "map:sb:keyword": "ts-node src/cli/mapSbKeyword.ts",
     "map:sb:stis": "ts-node src/cli/mapSbStis.ts",
+    "map:sb:stis:date": "ts-node src/cli/mapSbStisDate.ts",
     "map:sb:all:date": "ts-node src/cli/mapSbAllDate.ts",
     "pipeline:backfill:ads": "ts-node src/cli/backfillAds.ts",
     "pipeline:backfill:sb": "ts-node src/cli/backfillSb.ts",

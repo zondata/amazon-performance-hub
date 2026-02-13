@@ -179,7 +179,8 @@ SB raw ingestion (daily):
 Notes:
 - SB date-folder wrappers default `exported_at` to the folder date at `T00:00:00Z`.
 - Stable SB report filenames are required (see `src/fs/reportLocator.ts`).
-- Ignore `Sponsored_Brands_Keyword_Placement_report.xlsx` and `Sponsored_Brands_Category_benchmark_report.csv` in this module.
+- Ignore `Sponsored_Brands_Keyword_Placement_report.xlsx` (often empty) and `Sponsored_Brands_Category_benchmark_report.csv` in this module.
+- SB bulk snapshot ingest must parse BOTH sheets: `Sponsored Brands Campaigns` and `SB Multi Ad Group Campaigns`.
 
 Supabase views (migrations):
 - `sp_campaign_hourly_latest`: latest-wins by (account_id, date, start_time, campaign_name_norm) with max(exported_at)
@@ -265,6 +266,7 @@ New commands:
 - `npm run map:sb:campaign:placement -- --upload-id <id>`
 - `npm run map:sb:keyword -- --upload-id <id>`
 - `npm run map:sb:stis -- --upload-id <id>`
+- `npm run map:sb:stis:date -- --account-id <id> <YYYY-MM-DD or folder>`
 - `npm run map:sb:all:date -- --account-id <id> <YYYY-MM-DD or folder>`
 - `npm run pipeline:backfill:sb -- --account-id <id> --root <path> --from YYYY-MM-DD --to YYYY-MM-DD [--concurrency N] [--dry-run] [--continue-on-error]`
 
