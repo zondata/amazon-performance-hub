@@ -45,6 +45,7 @@ Known report filenames (stable):
 - `Sponsored_Display_Targeting_report.xlsx`
 - `Sponsored_Display_Matched_target_report.xlsx`
 - `Sponsored_Display_Purchased_product_report.xlsx`
+- Scale Insights SalesTrend CSVs (renamed to start with ASIN, filename includes `SalesTrend`)
 
 Bulksheet filename (varies):
 - `bulk-*.xlsx`
@@ -201,6 +202,14 @@ SD raw ingestion (daily):
 Notes:
 - SD date-folder wrappers default `exported_at` to the folder date at `T00:00:00Z`.
 - Stable SD report filenames are required (see `src/fs/reportLocator.ts`).
+
+Scale Insights SalesTrend raw ingestion (daily):
+- `npm run ingest:sales:si -- --account-id <id> --marketplace <marketplace> <csv> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:sales:si:date -- --account-id <id> --marketplace <marketplace> <YYYY-MM-DD or folder>`
+Notes:
+- CSV filename must start with the ASIN followed by a space (e.g. `B0B2K57W5R SalesTrend - Name.csv`); ASIN is parsed from the filename only.
+- Date-folder wrapper scans for any `.csv` containing `SalesTrend` (case-insensitive) and uses folder date at `T00:00:00Z`.
+- Prefer immutable exports per folder date (no master file edits or overwrites).
 
 Supabase views (migrations):
 - `sp_campaign_hourly_latest`: latest-wins by (account_id, date, start_time, campaign_name_norm) with max(exported_at)

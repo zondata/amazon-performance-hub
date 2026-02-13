@@ -1,7 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
-import { findBulkXlsx, getSpCampaignCsv, getSbCampaignXlsx, getSdCampaignXlsx } from "../src/fs/reportLocator";
+import {
+  findBulkXlsx,
+  getSpCampaignCsv,
+  getSbCampaignXlsx,
+  getSdCampaignXlsx,
+  getScaleInsightsSalesTrendCsvFiles,
+} from "../src/fs/reportLocator";
 
 function touch(filePath: string, mtimeMs: number) {
   fs.writeFileSync(filePath, "test");
@@ -51,5 +57,17 @@ describe("reportLocator", () => {
     fs.mkdirSync(tmpDir, { recursive: true });
 
     expect(() => getSdCampaignXlsx(tmpDir)).toThrow(/Missing Sponsored Display Campaign report/);
+  });
+
+  it("finds Scale Insights SalesTrend csv files", () => {
+    const tmpDir = path.resolve(__dirname, "tmp", `si-sales-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const fileA = path.join(tmpDir, "B0B2K57W5R SalesTrend - Retirement.csv");
+    const fileB = path.join(tmpDir, "B0FYPRWPN1 salestrend.csv");
+    fs.writeFileSync(fileA, "test");
+    fs.writeFileSync(fileB, "test");
+
+    const found = getScaleInsightsSalesTrendCsvFiles(tmpDir);
+    expect(found).toEqual([fileA, fileB]);
   });
 });

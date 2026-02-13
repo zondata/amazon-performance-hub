@@ -151,3 +151,20 @@ export function getSdPurchasedProductXlsx(dateFolder: string): string {
   }
   return filePath;
 }
+
+export function getScaleInsightsSalesTrendCsvFiles(dateFolder: string): string[] {
+  if (!fs.existsSync(dateFolder)) {
+    throw new Error(`Folder not found: ${dateFolder}`);
+  }
+  const entries = fs.readdirSync(dateFolder, { withFileTypes: true });
+  const matches = entries
+    .filter((entry) => entry.isFile() && /salestrend/i.test(entry.name) && entry.name.toLowerCase().endsWith(".csv"))
+    .map((entry) => path.join(dateFolder, entry.name));
+
+  if (!matches.length) {
+    throw new Error(`No Scale Insights SalesTrend .csv found in ${dateFolder}`);
+  }
+
+  matches.sort();
+  return matches;
+}

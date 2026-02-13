@@ -38,6 +38,8 @@
     "ingest:sd:matched:date": "ts-node src/cli/ingestSdMatchedTargetDate.ts",
     "ingest:sd:purchased": "ts-node src/cli/ingestSdPurchasedProduct.ts",
     "ingest:sd:purchased:date": "ts-node src/cli/ingestSdPurchasedProductDate.ts",
+    "ingest:sales:si": "ts-node src/cli/ingestScaleInsightsSalesTrend.ts",
+    "ingest:sales:si:date": "ts-node src/cli/ingestScaleInsightsSalesTrendDate.ts",
     "map:sp:campaign": "ts-node src/cli/mapSpCampaign.ts",
     "map:sp:placement": "ts-node src/cli/mapSpPlacement.ts",
     "map:sp:targeting": "ts-node src/cli/mapSpTargeting.ts",
