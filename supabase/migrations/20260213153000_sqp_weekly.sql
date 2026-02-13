@@ -18,7 +18,8 @@ alter table uploads add constraint uploads_source_type_chk check (source_type in
   'sd_matched_target',
   'sd_purchased_product',
   'si_sales_trend',
-  'sqp'
+  'sqp',
+  'h10_keyword_tracker'
 ));
 
 create table if not exists sqp_weekly_raw (

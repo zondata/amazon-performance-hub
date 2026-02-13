@@ -17,7 +17,9 @@ alter table uploads add constraint uploads_source_type_chk check (source_type in
   'sd_targeting',
   'sd_matched_target',
   'sd_purchased_product',
-  'si_sales_trend'
+  'si_sales_trend',
+  'sqp',
+  'h10_keyword_tracker'
 ));
 
 create table if not exists si_sales_trend_daily_raw (
