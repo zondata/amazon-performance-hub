@@ -1,5 +1,5 @@
 # Supabase Schema Snapshot
-Generated: 2026-02-13T11:59:53.473Z
+Generated: 2026-02-13T14:06:21.845Z
 
 ## accounts (BASE TABLE)
 | column | type | nullable |
@@ -1230,6 +1230,53 @@ Generated: 2026-02-13T11:59:53.473Z
 | top_of_search_impression_share | numeric | YES |
 | exported_at | timestamp with time zone | NO |
 
+## sqp_weekly_raw (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| scope_type | text | NO |
+| scope_value | text | NO |
+| week_start | date | NO |
+| week_end | date | NO |
+| reporting_date | date | NO |
+| search_query_raw | text | NO |
+| search_query_norm | text | NO |
+| search_query_score | integer | YES |
+| search_query_volume | integer | YES |
+| impressions_total | integer | YES |
+| impressions_self | integer | YES |
+| impressions_self_share | numeric | YES |
+| clicks_total | integer | YES |
+| clicks_rate_per_query | numeric | YES |
+| clicks_self | integer | YES |
+| clicks_self_share | numeric | YES |
+| clicks_price_median_total | numeric | YES |
+| clicks_price_median_self | numeric | YES |
+| clicks_same_day_ship | integer | YES |
+| clicks_1d_ship | integer | YES |
+| clicks_2d_ship | integer | YES |
+| cart_adds_total | integer | YES |
+| cart_add_rate_per_query | numeric | YES |
+| cart_adds_self | integer | YES |
+| cart_adds_self_share | numeric | YES |
+| cart_adds_price_median_total | numeric | YES |
+| cart_adds_price_median_self | numeric | YES |
+| cart_adds_same_day_ship | integer | YES |
+| cart_adds_1d_ship | integer | YES |
+| cart_adds_2d_ship | integer | YES |
+| purchases_total | integer | YES |
+| purchases_rate_per_query | numeric | YES |
+| purchases_self | integer | YES |
+| purchases_self_share | numeric | YES |
+| purchases_price_median_total | numeric | YES |
+| purchases_price_median_self | numeric | YES |
+| purchases_same_day_ship | integer | YES |
+| purchases_1d_ship | integer | YES |
+| purchases_2d_ship | integer | YES |
+| exported_at | timestamp with time zone | NO |
+
 ## uploads (BASE TABLE)
 | column | type | nullable |
 |---|---|---|
@@ -2096,6 +2143,317 @@ Generated: 2026-02-13T11:59:53.473Z
 | exported_at | timestamp with time zone | YES |
 | ingested_at | timestamp with time zone | YES |
 | rn | bigint | YES |
+
+## sqp_focus_keywords_2026_02_07 (VIEW)
+| column | type | nullable |
+|---|---|---|
+| marketplace | text | YES |
+| search_query_norm | text | YES |
+
+## sqp_focus_keywords_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| scope_type | text | YES |
+| scope_value | text | YES |
+| week_start | date | YES |
+| week_end | date | YES |
+| reporting_date | date | YES |
+| search_query_raw | text | YES |
+| search_query_norm | text | YES |
+| search_query_score | integer | YES |
+| search_query_volume | integer | YES |
+| impressions_total | integer | YES |
+| impressions_self | integer | YES |
+| impressions_self_share | numeric | YES |
+| clicks_total | integer | YES |
+| clicks_rate_per_query | numeric | YES |
+| clicks_self | integer | YES |
+| clicks_self_share | numeric | YES |
+| clicks_price_median_total | numeric | YES |
+| clicks_price_median_self | numeric | YES |
+| clicks_same_day_ship | integer | YES |
+| clicks_1d_ship | integer | YES |
+| clicks_2d_ship | integer | YES |
+| cart_adds_total | integer | YES |
+| cart_add_rate_per_query | numeric | YES |
+| cart_adds_self | integer | YES |
+| cart_adds_self_share | numeric | YES |
+| cart_adds_price_median_total | numeric | YES |
+| cart_adds_price_median_self | numeric | YES |
+| cart_adds_same_day_ship | integer | YES |
+| cart_adds_1d_ship | integer | YES |
+| cart_adds_2d_ship | integer | YES |
+| purchases_total | integer | YES |
+| purchases_rate_per_query | numeric | YES |
+| purchases_self | integer | YES |
+| purchases_self_share | numeric | YES |
+| purchases_price_median_total | numeric | YES |
+| purchases_price_median_self | numeric | YES |
+| purchases_same_day_ship | integer | YES |
+| purchases_1d_ship | integer | YES |
+| purchases_2d_ship | integer | YES |
+| exported_at | timestamp with time zone | YES |
+| market_ctr | numeric | YES |
+| self_ctr | numeric | YES |
+| market_cvr | numeric | YES |
+| self_cvr | numeric | YES |
+| self_impression_share_calc | numeric | YES |
+| self_click_share_calc | numeric | YES |
+| self_purchase_share_calc | numeric | YES |
+| self_ctr_index | numeric | YES |
+| self_cvr_index | numeric | YES |
+| cart_add_rate_from_clicks_market | numeric | YES |
+| cart_add_rate_from_clicks_self | numeric | YES |
+
+## sqp_weekly_brand_agg_from_asin_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| scope_type | text | YES |
+| scope_value | text | YES |
+| week_start | date | YES |
+| week_end | date | YES |
+| reporting_date | date | YES |
+| search_query_raw | text | YES |
+| search_query_norm | text | YES |
+| search_query_score | integer | YES |
+| search_query_volume | integer | YES |
+| impressions_total | integer | YES |
+| impressions_self | bigint | YES |
+| impressions_self_share | numeric | YES |
+| clicks_total | integer | YES |
+| clicks_rate_per_query | numeric | YES |
+| clicks_self | bigint | YES |
+| clicks_self_share | numeric | YES |
+| clicks_price_median_total | numeric | YES |
+| clicks_price_median_self | numeric | YES |
+| clicks_same_day_ship | integer | YES |
+| clicks_1d_ship | integer | YES |
+| clicks_2d_ship | integer | YES |
+| cart_adds_total | integer | YES |
+| cart_add_rate_per_query | numeric | YES |
+| cart_adds_self | bigint | YES |
+| cart_adds_self_share | numeric | YES |
+| cart_adds_price_median_total | numeric | YES |
+| cart_adds_price_median_self | numeric | YES |
+| cart_adds_same_day_ship | integer | YES |
+| cart_adds_1d_ship | integer | YES |
+| cart_adds_2d_ship | integer | YES |
+| purchases_total | integer | YES |
+| purchases_rate_per_query | numeric | YES |
+| purchases_self | bigint | YES |
+| purchases_self_share | numeric | YES |
+| purchases_price_median_total | numeric | YES |
+| purchases_price_median_self | numeric | YES |
+| purchases_same_day_ship | integer | YES |
+| purchases_1d_ship | integer | YES |
+| purchases_2d_ship | integer | YES |
+| exported_at | timestamp with time zone | YES |
+
+## sqp_weekly_brand_continuous_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| scope_type | text | YES |
+| scope_value | text | YES |
+| week_start | date | YES |
+| week_end | date | YES |
+| reporting_date | date | YES |
+| search_query_raw | text | YES |
+| search_query_norm | text | YES |
+| search_query_score | integer | YES |
+| search_query_volume | integer | YES |
+| impressions_total | integer | YES |
+| impressions_self | bigint | YES |
+| impressions_self_share | numeric | YES |
+| clicks_total | integer | YES |
+| clicks_rate_per_query | numeric | YES |
+| clicks_self | bigint | YES |
+| clicks_self_share | numeric | YES |
+| clicks_price_median_total | numeric | YES |
+| clicks_price_median_self | numeric | YES |
+| clicks_same_day_ship | integer | YES |
+| clicks_1d_ship | integer | YES |
+| clicks_2d_ship | integer | YES |
+| cart_adds_total | integer | YES |
+| cart_add_rate_per_query | numeric | YES |
+| cart_adds_self | bigint | YES |
+| cart_adds_self_share | numeric | YES |
+| cart_adds_price_median_total | numeric | YES |
+| cart_adds_price_median_self | numeric | YES |
+| cart_adds_same_day_ship | integer | YES |
+| cart_adds_1d_ship | integer | YES |
+| cart_adds_2d_ship | integer | YES |
+| purchases_total | integer | YES |
+| purchases_rate_per_query | numeric | YES |
+| purchases_self | bigint | YES |
+| purchases_self_share | numeric | YES |
+| purchases_price_median_total | numeric | YES |
+| purchases_price_median_self | numeric | YES |
+| purchases_same_day_ship | integer | YES |
+| purchases_1d_ship | integer | YES |
+| purchases_2d_ship | integer | YES |
+| exported_at | timestamp with time zone | YES |
+
+## sqp_weekly_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| scope_type | text | YES |
+| scope_value | text | YES |
+| week_start | date | YES |
+| week_end | date | YES |
+| reporting_date | date | YES |
+| search_query_raw | text | YES |
+| search_query_norm | text | YES |
+| search_query_score | integer | YES |
+| search_query_volume | integer | YES |
+| impressions_total | integer | YES |
+| impressions_self | integer | YES |
+| impressions_self_share | numeric | YES |
+| clicks_total | integer | YES |
+| clicks_rate_per_query | numeric | YES |
+| clicks_self | integer | YES |
+| clicks_self_share | numeric | YES |
+| clicks_price_median_total | numeric | YES |
+| clicks_price_median_self | numeric | YES |
+| clicks_same_day_ship | integer | YES |
+| clicks_1d_ship | integer | YES |
+| clicks_2d_ship | integer | YES |
+| cart_adds_total | integer | YES |
+| cart_add_rate_per_query | numeric | YES |
+| cart_adds_self | integer | YES |
+| cart_adds_self_share | numeric | YES |
+| cart_adds_price_median_total | numeric | YES |
+| cart_adds_price_median_self | numeric | YES |
+| cart_adds_same_day_ship | integer | YES |
+| cart_adds_1d_ship | integer | YES |
+| cart_adds_2d_ship | integer | YES |
+| purchases_total | integer | YES |
+| purchases_rate_per_query | numeric | YES |
+| purchases_self | integer | YES |
+| purchases_self_share | numeric | YES |
+| purchases_price_median_total | numeric | YES |
+| purchases_price_median_self | numeric | YES |
+| purchases_same_day_ship | integer | YES |
+| purchases_1d_ship | integer | YES |
+| purchases_2d_ship | integer | YES |
+| exported_at | timestamp with time zone | YES |
+
+## sqp_weekly_latest_enriched (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| scope_type | text | YES |
+| scope_value | text | YES |
+| week_start | date | YES |
+| week_end | date | YES |
+| reporting_date | date | YES |
+| search_query_raw | text | YES |
+| search_query_norm | text | YES |
+| search_query_score | integer | YES |
+| search_query_volume | integer | YES |
+| impressions_total | integer | YES |
+| impressions_self | integer | YES |
+| impressions_self_share | numeric | YES |
+| clicks_total | integer | YES |
+| clicks_rate_per_query | numeric | YES |
+| clicks_self | integer | YES |
+| clicks_self_share | numeric | YES |
+| clicks_price_median_total | numeric | YES |
+| clicks_price_median_self | numeric | YES |
+| clicks_same_day_ship | integer | YES |
+| clicks_1d_ship | integer | YES |
+| clicks_2d_ship | integer | YES |
+| cart_adds_total | integer | YES |
+| cart_add_rate_per_query | numeric | YES |
+| cart_adds_self | integer | YES |
+| cart_adds_self_share | numeric | YES |
+| cart_adds_price_median_total | numeric | YES |
+| cart_adds_price_median_self | numeric | YES |
+| cart_adds_same_day_ship | integer | YES |
+| cart_adds_1d_ship | integer | YES |
+| cart_adds_2d_ship | integer | YES |
+| purchases_total | integer | YES |
+| purchases_rate_per_query | numeric | YES |
+| purchases_self | integer | YES |
+| purchases_self_share | numeric | YES |
+| purchases_price_median_total | numeric | YES |
+| purchases_price_median_self | numeric | YES |
+| purchases_same_day_ship | integer | YES |
+| purchases_1d_ship | integer | YES |
+| purchases_2d_ship | integer | YES |
+| exported_at | timestamp with time zone | YES |
+| market_ctr | numeric | YES |
+| self_ctr | numeric | YES |
+| market_cvr | numeric | YES |
+| self_cvr | numeric | YES |
+| self_impression_share_calc | numeric | YES |
+| self_click_share_calc | numeric | YES |
+| self_purchase_share_calc | numeric | YES |
+| self_ctr_index | numeric | YES |
+| self_cvr_index | numeric | YES |
+| cart_add_rate_from_clicks_market | numeric | YES |
+| cart_add_rate_from_clicks_self | numeric | YES |
+
+## sqp_weekly_latest_known_keywords (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| scope_type | text | YES |
+| scope_value | text | YES |
+| week_start | date | YES |
+| week_end | date | YES |
+| reporting_date | date | YES |
+| search_query_raw | text | YES |
+| search_query_norm | text | YES |
+| search_query_score | integer | YES |
+| search_query_volume | integer | YES |
+| impressions_total | integer | YES |
+| impressions_self | integer | YES |
+| impressions_self_share | numeric | YES |
+| clicks_total | integer | YES |
+| clicks_rate_per_query | numeric | YES |
+| clicks_self | integer | YES |
+| clicks_self_share | numeric | YES |
+| clicks_price_median_total | numeric | YES |
+| clicks_price_median_self | numeric | YES |
+| clicks_same_day_ship | integer | YES |
+| clicks_1d_ship | integer | YES |
+| clicks_2d_ship | integer | YES |
+| cart_adds_total | integer | YES |
+| cart_add_rate_per_query | numeric | YES |
+| cart_adds_self | integer | YES |
+| cart_adds_self_share | numeric | YES |
+| cart_adds_price_median_total | numeric | YES |
+| cart_adds_price_median_self | numeric | YES |
+| cart_adds_same_day_ship | integer | YES |
+| cart_adds_1d_ship | integer | YES |
+| cart_adds_2d_ship | integer | YES |
+| purchases_total | integer | YES |
+| purchases_rate_per_query | numeric | YES |
+| purchases_self | integer | YES |
+| purchases_self_share | numeric | YES |
+| purchases_price_median_total | numeric | YES |
+| purchases_price_median_self | numeric | YES |
+| purchases_same_day_ship | integer | YES |
+| purchases_1d_ship | integer | YES |
+| purchases_2d_ship | integer | YES |
+| exported_at | timestamp with time zone | YES |
+| keyword_id | uuid | YES |
 
 ## upload_stats (VIEW)
 | column | type | nullable |
