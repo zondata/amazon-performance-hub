@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
-import { findBulkXlsx, getSpCampaignCsv } from "../src/fs/reportLocator";
+import { findBulkXlsx, getSpCampaignCsv, getSbCampaignXlsx } from "../src/fs/reportLocator";
 
 function touch(filePath: string, mtimeMs: number) {
   fs.writeFileSync(filePath, "test");
@@ -37,5 +37,12 @@ describe("reportLocator", () => {
     fs.mkdirSync(tmpDir, { recursive: true });
 
     expect(() => getSpCampaignCsv(tmpDir)).toThrow(/Missing Sponsored Products Campaign report/);
+  });
+
+  it("throws when SB campaign xlsx is missing", () => {
+    const tmpDir = path.resolve(__dirname, "tmp", `sb-campaign-missing-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    expect(() => getSbCampaignXlsx(tmpDir)).toThrow(/Missing Sponsored Brands Campaign report/);
   });
 });

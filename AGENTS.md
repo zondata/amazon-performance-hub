@@ -89,6 +89,21 @@ Outputs arrays:
 - placements: campaignId, placementRaw/Code, percentage
 - portfolios: portfolioId, portfolioNameRaw, portfolioNameNorm
 
+### Sponsored Brands — Bulk Snapshot (SB)
+Bulk parser reads (if present):
+- `Sponsored Brands Campaigns`
+- `SB Multi Ad Group Campaigns`
+
+SB tables (separate from SP):
+- `bulk_sb_campaigns`, `bulk_sb_ad_groups`, `bulk_sb_targets`, `bulk_sb_placements`
+- `sb_campaign_name_history`, `sb_ad_group_name_history`
+
+SB snapshot behavior:
+- Campaigns: campaign ID/name, portfolio ID, state, daily budget, bidding strategy (bid optimization if present).
+- Ad groups: from SB Multi sheet `Ad Group` rows; legacy single-ad-group campaigns synthesize name `Ad group` when only target rows contain an ad group ID.
+- Targets: keyword, negative keyword, product targeting (`match_type=TARGETING_EXPRESSION`).
+- Placements: from SB Multi sheet `Bidding Adjustment by Placement` rows; normalize placement code and keep `placement_raw_norm`.
+
 ### Milestone 2 — Snapshot Diff Engine
 Command:
 - `npm run bulk:diff -- <old.xlsx> <new.xlsx>`
@@ -151,6 +166,20 @@ SP Targeting raw ingestion:
 SP STIS raw ingestion:
 - `npm run ingest:sp:stis -- --account-id <id> <csv> [--exported-at ISO]`
 - date-folder wrapper: `npm run ingest:sp:stis:date -- --account-id <id> <YYYY-MM-DD or folder>`
+
+SB raw ingestion (daily):
+- `npm run ingest:sb:campaign -- --account-id <id> <xlsx> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:sb:campaign:date -- --account-id <id> <YYYY-MM-DD or folder>`
+- `npm run ingest:sb:campaign:placement -- --account-id <id> <xlsx> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:sb:campaign:placement:date -- --account-id <id> <YYYY-MM-DD or folder>`
+- `npm run ingest:sb:keyword -- --account-id <id> <xlsx> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:sb:keyword:date -- --account-id <id> <YYYY-MM-DD or folder>`
+- `npm run ingest:sb:stis -- --account-id <id> <csv> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:sb:stis:date -- --account-id <id> <YYYY-MM-DD or folder>`
+Notes:
+- SB date-folder wrappers default `exported_at` to the folder date at `T00:00:00Z`.
+- Stable SB report filenames are required (see `src/fs/reportLocator.ts`).
+- Ignore `Sponsored_Brands_Keyword_Placement_report.xlsx` and `Sponsored_Brands_Category_benchmark_report.csv` in this module.
 
 Supabase views (migrations):
 - `sp_campaign_hourly_latest`: latest-wins by (account_id, date, start_time, campaign_name_norm) with max(exported_at)
@@ -225,6 +254,32 @@ Example flow for a date folder:
 6. `npm run map:sp:all:date -- --account-id <id> <date>`
 7. Inspect `sp_mapping_issues`, add overrides if needed, then re-run mapping.
 
+### Milestone 9 — SB Mapping Layer (raw → stable IDs)
+Goal: map SB raw rows into deterministic ID-based facts using SB bulk snapshots.
+
+New migrations:
+- `20260213120000_sb_mapping.sql` (SB mapping issues, overrides, facts, latest views)
+
+New commands:
+- `npm run map:sb:campaign -- --upload-id <id>`
+- `npm run map:sb:campaign:placement -- --upload-id <id>`
+- `npm run map:sb:keyword -- --upload-id <id>`
+- `npm run map:sb:stis -- --upload-id <id>`
+- `npm run map:sb:all:date -- --account-id <id> <YYYY-MM-DD or folder>`
+- `npm run pipeline:backfill:sb -- --account-id <id> --root <path> --from YYYY-MM-DD --to YYYY-MM-DD [--concurrency N] [--dry-run] [--continue-on-error]`
+
+Mapping rules:
+- Choose bulk snapshot by exported_at date (same closest-before/after within 7 days logic as SP).
+- Overrides (`sb_manual_name_overrides`) take priority over snapshot, then name history.
+- If mapping is ambiguous, log to `sb_mapping_issues` and skip insert.
+- If missing snapshot, log `missing_bulk_snapshot` and skip insert.
+- Latest views for facts use max(exported_at) partitioned by stable IDs, with tie-breaks on uploads.ingested_at then upload_id.
+
+SB STIS rules:
+- If `customer_search_term_norm` is non-empty, target_id may be NULL and this is NOT an error.
+- Do NOT log mapping issues for target_id on SB STIS search-term rows.
+- When target_id is NULL, `target_key` must be deterministic (targeting signature). Do NOT use a constant.
+
 ### Milestone 8 — Product Profile Module (Catalog) + Keyword Strategy Library
 What was added (high-level):
 - `products` (ASIN-level) + `product_skus` (SKU-level) supports multiple SKUs under one ASIN.
@@ -250,6 +305,16 @@ Verification:
 - Cleanup removed test SKUs, leaving only real SKU.
 
 ## Recent changes / Changelog
+### 2026-02-13
+- Added Sponsored Brands raw ingestion (campaign, campaign placement, keyword, STIS) with latest-wins views and upload_stats counts.
+- SB parsers + CLIs + date-folder wrappers (exported_at defaults to folder date at T00:00:00Z).
+- Added Sponsored Brands mapping layer: SB mapping issues/overrides, fact tables + latest views, SB mapping CLIs, and SB backfill pipeline.
+
+### 2026-02-12
+- Added Sponsored Brands bulk snapshot support (SB) with separate tables and name history.
+- New parser for SB sheets and SB ingest upserts (no SP table changes).
+- SB bulk snapshot tests with synthetic XLSX.
+
 ### 2026-02-11
 - Product Profile module: products, SKUs, cost history, profile JSON, and cost views (base SKU + current cost).
 - Safe cost insert behavior: close previous current row; skip identical.

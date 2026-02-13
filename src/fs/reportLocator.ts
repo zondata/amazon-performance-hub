@@ -79,3 +79,35 @@ export function getSpStisCsv(dateFolder: string): string {
   }
   return filePath;
 }
+
+export function getSbCampaignXlsx(dateFolder: string): string {
+  const filePath = path.join(dateFolder, "Sponsored_Brands_Campaign_report.xlsx");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing Sponsored Brands Campaign report: ${filePath}`);
+  }
+  return filePath;
+}
+
+export function getSbCampaignPlacementXlsx(dateFolder: string): string {
+  const filePath = path.join(dateFolder, "Sponsored_Brands_Campaign_placement_report.xlsx");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing Sponsored Brands Campaign Placement report: ${filePath}`);
+  }
+  return filePath;
+}
+
+export function getSbKeywordXlsx(dateFolder: string): string {
+  const filePath = path.join(dateFolder, "Sponsored_Brands_Keyword_report.xlsx");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing Sponsored Brands Keyword report: ${filePath}`);
+  }
+  return filePath;
+}
+
+export function getSbStisCsv(dateFolder: string): string {
+  const filePath = path.join(dateFolder, "Sponsored_Brands_Search_Term_Impression_Share_report.csv");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing Sponsored Brands Search Term Impression Share report: ${filePath}`);
+  }
+  return filePath;
+}

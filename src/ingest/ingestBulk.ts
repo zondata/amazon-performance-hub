@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseSponsoredProductsBulk } from "../bulk/parseSponsoredProductsBulk";
+import { parseSponsoredBrandsBulk } from "../bulk/parseSponsoredBrandsBulk";
 import { parseBulkFilenameMeta } from "../bulk/bulkFileMeta";
 import { inferSnapshotDate } from "../cli/snapshotDate";
 import { getSupabaseClient } from "../db/supabaseClient";
@@ -28,6 +29,16 @@ type BulkPlacementRow = {
   snapshot_date: string;
   campaign_id: string;
   placement_raw: string;
+  placement_code: string;
+  percentage: number;
+};
+
+type BulkSbPlacementRow = {
+  account_id: string;
+  snapshot_date: string;
+  campaign_id: string;
+  placement_raw: string;
+  placement_raw_norm: string;
   placement_code: string;
   percentage: number;
 };
@@ -64,19 +75,14 @@ export async function ingestBulk(
   const filename = path.basename(xlsxPath);
 
   const { coverageStart, coverageEnd, exportTimestampMs } = inferCoverage(filename);
-  const snapshotDate =
+  const snapshotDateFromFile =
     snapshotDateOverride ?? inferSnapshotDate(xlsxPath, coverageEnd ?? undefined);
-
-  const stats = fs.statSync(xlsxPath);
-  const exportedAt = exportTimestampMs
-    ? new Date(exportTimestampMs).toISOString()
-    : stats.mtime.toISOString();
 
   const { data: existingUpload, error: existingError } = await retryAsync(
     () =>
       client
         .from("uploads")
-        .select("upload_id")
+        .select("upload_id,snapshot_date")
         .eq("account_id", accountId)
         .eq("file_hash_sha256", fileHash)
         .maybeSingle(),
@@ -96,9 +102,7 @@ export async function ingestBulk(
     throw new Error(`Failed to check existing upload: ${existingError.message}`);
   }
 
-  if (existingUpload?.upload_id) {
-    return { status: "already ingested" };
-  }
+  const snapshotDate = existingUpload?.snapshot_date ?? snapshotDateFromFile;
 
   const accountRow: { account_id: string; marketplace?: string } = { account_id: accountId };
   if (marketplace) accountRow.marketplace = marketplace;
@@ -109,39 +113,150 @@ export async function ingestBulk(
     throw new Error(`Failed to upsert account: ${accountError.message}`);
   }
 
-  const uploadPayload = {
-    account_id: accountId,
-    source_type: "bulk",
-    original_filename: filename,
-    file_hash_sha256: fileHash,
-    exported_at: exportedAt,
-    coverage_start: coverageStart,
-    coverage_end: coverageEnd,
-    snapshot_date: snapshotDate,
-  };
+  let uploadId: string | undefined = existingUpload?.upload_id ?? undefined;
+  if (!existingUpload?.upload_id) {
+    const stats = fs.statSync(xlsxPath);
+    const exportedAt = exportTimestampMs
+      ? new Date(exportTimestampMs).toISOString()
+      : stats.mtime.toISOString();
+    const uploadPayload = {
+      account_id: accountId,
+      source_type: "bulk",
+      original_filename: filename,
+      file_hash_sha256: fileHash,
+      exported_at: exportedAt,
+      coverage_start: coverageStart,
+      coverage_end: coverageEnd,
+      snapshot_date: snapshotDate,
+    };
 
-  const { data: uploadRow, error: uploadError } = await client
-    .from("uploads")
-    .insert(uploadPayload)
-    .select("upload_id")
-    .single();
-  if (uploadError) {
-    throw new Error(`Failed to insert upload: ${uploadError.message}`);
+    const { data: uploadRow, error: uploadError } = await client
+      .from("uploads")
+      .insert(uploadPayload)
+      .select("upload_id")
+      .single();
+    if (uploadError) {
+      throw new Error(`Failed to insert upload: ${uploadError.message}`);
+    }
+    uploadId = uploadRow.upload_id;
   }
 
-  const snapshot = await parseSponsoredProductsBulk(xlsxPath, snapshotDate);
+  async function upsertChunked(table: string, rows: Record<string, unknown>[], onConflict: string) {
+    if (!rows.length) return;
+    for (const chunk of chunkArray(rows, 500)) {
+      const { error } = await client.from(table).upsert(chunk, { onConflict });
+      if (error) throw new Error(`Failed upserting ${table}: ${error.message}`);
+    }
+  }
 
-  const bulkPortfolios = snapshot.portfolios
-    .filter((row) => row.portfolioId)
-    .map((row) => ({
-      account_id: accountId,
-      snapshot_date: snapshotDate,
-      portfolio_id: row.portfolioId,
-      portfolio_name_raw: row.portfolioNameRaw,
-      portfolio_name_norm: row.portfolioNameNorm,
-    }));
+  let snapshot:
+    | Awaited<ReturnType<typeof parseSponsoredProductsBulk>>
+    | null = null;
+  if (!existingUpload?.upload_id) {
+    snapshot = await parseSponsoredProductsBulk(xlsxPath, snapshotDate);
+  }
 
-  const bulkCampaigns = snapshot.campaigns
+  const sbSnapshot = await parseSponsoredBrandsBulk(xlsxPath, snapshotDate);
+
+  let bulkPortfolios: Record<string, unknown>[] = [];
+  let bulkCampaigns: Record<string, unknown>[] = [];
+  let bulkAdGroups: Record<string, unknown>[] = [];
+  let bulkTargets: Record<string, unknown>[] = [];
+  let bulkPlacements: BulkPlacementRow[] = [];
+
+  if (snapshot) {
+    bulkPortfolios = snapshot.portfolios
+      .filter((row) => row.portfolioId)
+      .map((row) => ({
+        account_id: accountId,
+        snapshot_date: snapshotDate,
+        portfolio_id: row.portfolioId,
+        portfolio_name_raw: row.portfolioNameRaw,
+        portfolio_name_norm: row.portfolioNameNorm,
+      }));
+
+    bulkCampaigns = snapshot.campaigns
+      .filter((row) => row.campaignId)
+      .map((row) => ({
+        account_id: accountId,
+        snapshot_date: snapshotDate,
+        campaign_id: row.campaignId,
+        campaign_name_raw: row.campaignNameRaw,
+        campaign_name_norm: row.campaignNameNorm,
+        portfolio_id: row.portfolioId,
+        state: row.state || null,
+        daily_budget: row.dailyBudget,
+        bidding_strategy: row.biddingStrategy || null,
+      }));
+
+    bulkAdGroups = snapshot.adGroups
+      .filter((row) => row.adGroupId && row.campaignId)
+      .map((row) => ({
+        account_id: accountId,
+        snapshot_date: snapshotDate,
+        ad_group_id: row.adGroupId,
+        campaign_id: row.campaignId,
+        ad_group_name_raw: row.adGroupNameRaw,
+        ad_group_name_norm: row.adGroupNameNorm,
+        state: row.state || null,
+        default_bid: row.defaultBid,
+      }));
+
+    bulkTargets = snapshot.targets
+      .filter((row) => row.targetId && row.adGroupId && row.campaignId)
+      .map((row) => ({
+        account_id: accountId,
+        snapshot_date: snapshotDate,
+        target_id: row.targetId,
+        ad_group_id: row.adGroupId,
+        campaign_id: row.campaignId,
+        expression_raw: row.expressionRaw,
+        expression_norm: row.expressionNorm,
+        match_type: row.matchType,
+        is_negative: row.isNegative,
+        state: row.state || null,
+        bid: row.bid,
+      }));
+
+    bulkPlacements = snapshot.placements
+      .filter((row) => row.campaignId)
+      .map((row) => ({
+        account_id: accountId,
+        snapshot_date: snapshotDate,
+        campaign_id: row.campaignId as string,
+        placement_raw: row.placement,
+        placement_code: normalizePlacementCode(row.placement),
+        percentage: row.percentage ?? 0,
+      }));
+
+    await upsertChunked(
+      "bulk_portfolios",
+      bulkPortfolios,
+      "account_id,snapshot_date,portfolio_id"
+    );
+    await upsertChunked(
+      "bulk_campaigns",
+      bulkCampaigns,
+      "account_id,snapshot_date,campaign_id"
+    );
+    await upsertChunked(
+      "bulk_ad_groups",
+      bulkAdGroups,
+      "account_id,snapshot_date,ad_group_id"
+    );
+    await upsertChunked(
+      "bulk_targets",
+      bulkTargets,
+      "account_id,snapshot_date,target_id"
+    );
+    await upsertChunked(
+      "bulk_placements",
+      bulkPlacements,
+      "account_id,snapshot_date,campaign_id,placement_code"
+    );
+  }
+
+  const sbCampaigns = sbSnapshot.campaigns
     .filter((row) => row.campaignId)
     .map((row) => ({
       account_id: accountId,
@@ -155,7 +270,7 @@ export async function ingestBulk(
       bidding_strategy: row.biddingStrategy || null,
     }));
 
-  const bulkAdGroups = snapshot.adGroups
+  const sbAdGroups = sbSnapshot.adGroups
     .filter((row) => row.adGroupId && row.campaignId)
     .map((row) => ({
       account_id: accountId,
@@ -168,7 +283,7 @@ export async function ingestBulk(
       default_bid: row.defaultBid,
     }));
 
-  const bulkTargets = snapshot.targets
+  const sbTargets = sbSnapshot.targets
     .filter((row) => row.targetId && row.adGroupId && row.campaignId)
     .map((row) => ({
       account_id: accountId,
@@ -184,79 +299,70 @@ export async function ingestBulk(
       bid: row.bid,
     }));
 
-  const bulkPlacements: BulkPlacementRow[] = snapshot.placements
+  const sbPlacements: BulkSbPlacementRow[] = sbSnapshot.placements
     .filter((row) => row.campaignId)
     .map((row) => ({
       account_id: accountId,
       snapshot_date: snapshotDate,
       campaign_id: row.campaignId as string,
-      placement_raw: row.placement,
-      placement_code: normalizePlacementCode(row.placement),
+      placement_raw: row.placementRaw,
+      placement_raw_norm: row.placementRawNorm,
+      placement_code: row.placementCode,
       percentage: row.percentage ?? 0,
     }));
 
-  async function upsertChunked(table: string, rows: Record<string, unknown>[], onConflict: string) {
-    for (const chunk of chunkArray(rows, 500)) {
-      const { error } = await client.from(table).upsert(chunk, { onConflict });
-      if (error) throw new Error(`Failed upserting ${table}: ${error.message}`);
-    }
-  }
-
   await upsertChunked(
-    "bulk_portfolios",
-    bulkPortfolios,
-    "account_id,snapshot_date,portfolio_id"
-  );
-  await upsertChunked(
-    "bulk_campaigns",
-    bulkCampaigns,
+    "bulk_sb_campaigns",
+    sbCampaigns,
     "account_id,snapshot_date,campaign_id"
   );
   await upsertChunked(
-    "bulk_ad_groups",
-    bulkAdGroups,
+    "bulk_sb_ad_groups",
+    sbAdGroups,
     "account_id,snapshot_date,ad_group_id"
   );
   await upsertChunked(
-    "bulk_targets",
-    bulkTargets,
+    "bulk_sb_targets",
+    sbTargets,
     "account_id,snapshot_date,target_id"
   );
   await upsertChunked(
-    "bulk_placements",
-    bulkPlacements,
-    "account_id,snapshot_date,campaign_id,placement_code"
+    "bulk_sb_placements",
+    sbPlacements,
+    "account_id,snapshot_date,campaign_id,placement_code,placement_raw_norm"
   );
 
-  const { data: previousSnap, error: prevError } = await client
-    .from("bulk_campaigns")
-    .select("snapshot_date")
-    .eq("account_id", accountId)
-    .lt("snapshot_date", snapshotDate)
-    .order("snapshot_date", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (prevError) {
-    throw new Error(`Failed fetching previous snapshot: ${prevError.message}`);
-  }
-
-  if (previousSnap?.snapshot_date) {
-    const previousDate = previousSnap.snapshot_date;
-    await client
+  if (snapshot) {
+    const { data: previousSnap, error: prevError } = await client
       .from("bulk_campaigns")
-      .select("campaign_id,campaign_name_raw,campaign_name_norm")
+      .select("snapshot_date")
       .eq("account_id", accountId)
-      .eq("snapshot_date", previousDate);
-    await client
-      .from("bulk_ad_groups")
-      .select("ad_group_id,ad_group_name_raw,ad_group_name_norm")
-      .eq("account_id", accountId)
-      .eq("snapshot_date", previousDate);
-    await client
-      .from("bulk_portfolios")
-      .select("portfolio_id,portfolio_name_raw,portfolio_name_norm")
-      .eq("account_id", accountId)
-      .eq("snapshot_date", previousDate);
+      .lt("snapshot_date", snapshotDate)
+      .order("snapshot_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (prevError) {
+      throw new Error(`Failed fetching previous snapshot: ${prevError.message}`);
+    }
+
+    if (previousSnap?.snapshot_date) {
+      const previousDate = previousSnap.snapshot_date;
+      await client
+        .from("bulk_campaigns")
+        .select("campaign_id,campaign_name_raw,campaign_name_norm")
+        .eq("account_id", accountId)
+        .eq("snapshot_date", previousDate);
+      await client
+        .from("bulk_ad_groups")
+        .select("ad_group_id,ad_group_name_raw,ad_group_name_norm")
+        .eq("account_id", accountId)
+        .eq("snapshot_date", previousDate);
+      await client
+        .from("bulk_portfolios")
+        .select("portfolio_id,portfolio_name_raw,portfolio_name_norm")
+        .eq("account_id", accountId)
+        .eq("snapshot_date", previousDate);
+    }
   }
 
   let nameHistoryInserted = 0;
@@ -333,10 +439,49 @@ export async function ingestBulk(
     }
   }
 
+  if (snapshot) {
+    await updateNameHistory(
+      "campaign_name_history",
+      "campaign_id",
+      snapshot.campaigns
+        .filter((row) => row.campaignId)
+        .map((row) => ({
+          id: row.campaignId as string,
+          nameRaw: row.campaignNameRaw,
+          nameNorm: row.campaignNameNorm,
+        }))
+    );
+
+    await updateNameHistory(
+      "ad_group_name_history",
+      "ad_group_id",
+      snapshot.adGroups
+        .filter((row) => row.adGroupId)
+        .map((row) => ({
+          id: row.adGroupId as string,
+          nameRaw: row.adGroupNameRaw,
+          nameNorm: row.adGroupNameNorm,
+          extra: { campaign_id: row.campaignId },
+        }))
+    );
+
+    await updateNameHistory(
+      "portfolio_name_history",
+      "portfolio_id",
+      snapshot.portfolios
+        .filter((row) => row.portfolioId)
+        .map((row) => ({
+          id: row.portfolioId as string,
+          nameRaw: row.portfolioNameRaw,
+          nameNorm: row.portfolioNameNorm,
+        }))
+    );
+  }
+
   await updateNameHistory(
-    "campaign_name_history",
+    "sb_campaign_name_history",
     "campaign_id",
-    snapshot.campaigns
+    sbSnapshot.campaigns
       .filter((row) => row.campaignId)
       .map((row) => ({
         id: row.campaignId as string,
@@ -346,9 +491,9 @@ export async function ingestBulk(
   );
 
   await updateNameHistory(
-    "ad_group_name_history",
+    "sb_ad_group_name_history",
     "ad_group_id",
-    snapshot.adGroups
+    sbSnapshot.adGroups
       .filter((row) => row.adGroupId)
       .map((row) => ({
         id: row.adGroupId as string,
@@ -358,21 +503,13 @@ export async function ingestBulk(
       }))
   );
 
-  await updateNameHistory(
-    "portfolio_name_history",
-    "portfolio_id",
-    snapshot.portfolios
-      .filter((row) => row.portfolioId)
-      .map((row) => ({
-        id: row.portfolioId as string,
-        nameRaw: row.portfolioNameRaw,
-        nameNorm: row.portfolioNameNorm,
-      }))
-  );
+  if (existingUpload?.upload_id) {
+    return { status: "already ingested" };
+  }
 
   return {
     status: "ok",
-    uploadId: uploadRow.upload_id,
+    uploadId,
     snapshotDate,
     counts: {
       portfolios: bulkPortfolios.length,

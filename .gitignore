@@ -22,3 +22,6 @@ pro_mapping_bundle.zip
 
 # supabase temp
 supabase/.temp/
+
+# build output
+dist/

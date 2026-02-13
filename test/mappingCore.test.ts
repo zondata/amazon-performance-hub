@@ -288,6 +288,14 @@ describe("mapSpStisRows", () => {
     expect(issues.length).toBe(0);
     expect(facts.length).toBe(1);
     expect(facts[0]?.target_id).toBeNull();
-    expect(facts[0]?.target_key).toBe("__ROLLUP__");
+    const expectedKey = JSON.stringify({
+      campaign_name_norm: "camp",
+      portfolio_name_norm: null,
+      ad_group_name_norm: "ag",
+      targeting_norm: "*",
+      match_type_norm: null,
+      is_negative: false,
+    });
+    expect(facts[0]?.target_key).toBe(expectedKey);
   });
 });
