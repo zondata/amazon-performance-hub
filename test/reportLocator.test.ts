@@ -7,6 +7,7 @@ import {
   getSbCampaignXlsx,
   getSdCampaignXlsx,
   getScaleInsightsSalesTrendCsvFiles,
+  getSqpCsvFiles,
 } from "../src/fs/reportLocator";
 
 function touch(filePath: string, mtimeMs: number) {
@@ -68,6 +69,18 @@ describe("reportLocator", () => {
     fs.writeFileSync(fileB, "test");
 
     const found = getScaleInsightsSalesTrendCsvFiles(tmpDir);
+    expect(found).toEqual([fileA, fileB]);
+  });
+
+  it("finds SQP weekly csv files", () => {
+    const tmpDir = path.resolve(__dirname, "tmp", `sqp-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const fileA = path.join(tmpDir, "US_Search_Query_Performance_ASIN_View_Simple_Week_2026_02_07.csv");
+    const fileB = path.join(tmpDir, "US_Search_Query_Performance_Brand_View_Simple_Week_2026_02_07.csv");
+    fs.writeFileSync(fileA, "test");
+    fs.writeFileSync(fileB, "test");
+
+    const found = getSqpCsvFiles(tmpDir);
     expect(found).toEqual([fileA, fileB]);
   });
 });

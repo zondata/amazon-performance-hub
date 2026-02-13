@@ -211,6 +211,21 @@ Notes:
 - Date-folder wrapper scans for any `.csv` containing `SalesTrend` (case-insensitive) and uses folder date at `T00:00:00Z`.
 - Prefer immutable exports per folder date (no master file edits or overwrites).
 
+Amazon Brand Analytics Search Query Performance (SQP) weekly raw ingestion:
+- `npm run ingest:sqp:weekly -- --account-id <id> --marketplace <marketplace> <csv> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:sqp:weekly:date -- --account-id <id> --marketplace <marketplace> <YYYY-MM-DD or folder>`
+- backfill pipeline: `npm run pipeline:backfill:sqp -- --account-id <id> --marketplace <marketplace> --root <path> --from YYYY-MM-DD --to YYYY-MM-DD [--dry-run] [--continue-on-error]`
+Notes:
+- Supports both Brand View and ASIN View files in the same module (`source_type='sqp'`, with scope in raw rows).
+- CSV layout is fixed: row 1 metadata, row 2 header, row 3+ data.
+- Metadata parsing extracts scope and week range; fallback uses filename (`Brand_View`/`ASIN_View` and `_YYYY_MM_DD` week-end suffix).
+- Date-folder wrapper scans for `.csv` files containing `Search_Query_Performance` and uses folder date at `T00:00:00Z`.
+- `sqp_weekly_latest_enriched` derives safe-divide metrics (market/self CTR/CVR, share calcs, index metrics, click-to-cart rates).
+- Continuity support:
+  - `sqp_weekly_brand_agg_from_asin_latest` outputs synthetic brand rows with `scope_value='__AGG_FROM_ASIN__'` by aggregating ASIN-scope rows.
+  - `sqp_weekly_brand_continuous_latest` prefers true brand rows when present, else uses the aggregated ASIN row.
+- Keyword linkage helper: `sqp_weekly_latest_known_keywords` left-joins `dim_keyword` by `search_query_norm`.
+
 Supabase views (migrations):
 - `sp_campaign_hourly_latest`: latest-wins by (account_id, date, start_time, campaign_name_norm) with max(exported_at)
 
@@ -339,6 +354,30 @@ SD targeting/ad rules:
 - Missing target_id or ad_id should NOT block inserts; store deterministic `target_key` / `ad_key` signatures.
 - Do not use constant keys; include targeting/ad signature fields for determinism.
 
+### Milestone 11 — SQP Weekly Module (Amazon Brand Analytics)
+Goal: ingest weekly SQP CSVs for both Brand View and ASIN View without ads-ID mapping.
+
+Added migration:
+- `20260213153000_sqp_weekly.sql`
+  - expands `uploads.source_type` with `sqp`
+  - creates `sqp_weekly_raw`
+  - creates deterministic latest view `sqp_weekly_latest`
+  - creates enriched metrics view `sqp_weekly_latest_enriched`
+  - creates continuity views `sqp_weekly_brand_agg_from_asin_latest` and `sqp_weekly_brand_continuous_latest`
+  - creates keyword helper view `sqp_weekly_latest_known_keywords`
+  - extends `upload_stats` row_count for `source_type='sqp'`
+
+New commands:
+- `npm run ingest:sqp:weekly -- --account-id <id> --marketplace <marketplace> <csv> [--exported-at ISO]`
+- `npm run ingest:sqp:weekly:date -- --account-id <id> --marketplace <marketplace> <YYYY-MM-DD or folder>`
+- `npm run pipeline:backfill:sqp -- --account-id <id> --marketplace <marketplace> --root <path> --from YYYY-MM-DD --to YYYY-MM-DD [--dry-run] [--continue-on-error]`
+
+Parsing rules:
+- SQP CSV row 1 is metadata, row 2 is header, row 3+ is data.
+- Supports scope metadata keys `Brand`, `ASIN`, or `Product`.
+- Week range parsed from metadata `Select week`; fallback is filename `_YYYY_MM_DD` week-end (week-start = week-end - 6 days).
+- Percent strings are interpreted as percentages and divided by 100 (e.g. `0.72` -> `0.0072`).
+
 ### Milestone 8 — Product Profile Module (Catalog) + Keyword Strategy Library
 What was added (high-level):
 - `products` (ASIN-level) + `product_skus` (SKU-level) supports multiple SKUs under one ASIN.
@@ -368,6 +407,7 @@ Verification:
 - Added Sponsored Brands raw ingestion (campaign, campaign placement, keyword, STIS) with latest-wins views and upload_stats counts.
 - SB parsers + CLIs + date-folder wrappers (exported_at defaults to folder date at T00:00:00Z).
 - Added Sponsored Brands mapping layer: SB mapping issues/overrides, fact tables + latest views, SB mapping CLIs, and SB backfill pipeline.
+- Added SQP weekly ingestion (Brand View + ASIN View), parser with metadata/header-row handling, raw/latest/enriched/continuity views, keyword-link helper view, and SQP backfill pipeline.
 
 ### 2026-02-12
 - Added Sponsored Brands bulk snapshot support (SB) with separate tables and name history.
