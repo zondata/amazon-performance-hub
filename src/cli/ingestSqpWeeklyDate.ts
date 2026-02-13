@@ -1,5 +1,10 @@
+import fs from "node:fs";
 import { ingestSqpWeeklyRaw } from "../ingest/ingestSqpWeeklyRaw";
 import { resolveDateFolder, getSqpCsvFiles } from "../fs/reportLocator";
+
+const SQP_DATE_USAGE_EXAMPLES =
+  "npm run ingest:sqp:weekly:date -- --account-id US --marketplace US /mnt/c/Users/User/Dropbox/AmazonReports/2026-02-11\n" +
+  "npm run ingest:sqp:weekly:date -- --account-id US --marketplace US 2026-02-11";
 
 function usage() {
   console.log(
@@ -34,13 +39,48 @@ function exportedAtFromFolder(dateFolder: string): string | null {
   return `${match[1]}T00:00:00Z`;
 }
 
+function isPlaceholderDateInput(input: string): boolean {
+  const upper = input.toUpperCase();
+  return (
+    upper.includes("YYYY-MM-DD") ||
+    upper.includes("YYYY") ||
+    upper.includes("MM") ||
+    upper.includes("DD")
+  );
+}
+
+function buildPlaceholderInputError(input: string): string {
+  return `Invalid date-folder input: "${input}" looks like a placeholder path (for example using YYYY/MM/DD tokens) instead of a real date folder; use one of these examples:\n${SQP_DATE_USAGE_EXAMPLES}\nUse a real date folder or full path; the CLI will resolve date folders via reportLocator.`;
+}
+
+function buildMissingFolderError(dateFolder: string): string {
+  return `Folder not found: ${dateFolder}. Use a real existing date folder path (for example: npm run ingest:sqp:weekly:date -- --account-id US --marketplace US /mnt/c/Users/User/Dropbox/AmazonReports/2026-02-11).`;
+}
+
 export async function ingestSqpWeeklyDateFolder(
   accountId: string,
   marketplace: string,
   dateInput: string
 ) {
+  if (isPlaceholderDateInput(dateInput)) {
+    throw new Error(buildPlaceholderInputError(dateInput));
+  }
+
   const dateFolder = resolveDateFolder(dateInput);
-  const csvFiles = getSqpCsvFiles(dateFolder);
+  if (!fs.existsSync(dateFolder)) {
+    throw new Error(buildMissingFolderError(dateFolder));
+  }
+
+  let csvFiles: string[];
+  try {
+    csvFiles = getSqpCsvFiles(dateFolder);
+  } catch (err) {
+    const message = (err as Error).message ?? "";
+    if (message.includes("Folder not found")) {
+      throw new Error(buildMissingFolderError(dateFolder));
+    }
+    throw err;
+  }
   const exportedAt = exportedAtFromFolder(dateFolder);
 
   if (!exportedAt) {
