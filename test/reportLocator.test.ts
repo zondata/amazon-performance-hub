@@ -8,6 +8,7 @@ import {
   getSdCampaignXlsx,
   getScaleInsightsSalesTrendCsvFiles,
   getSqpCsvFiles,
+  getHelium10KeywordTrackerCsvFiles,
 } from "../src/fs/reportLocator";
 
 function touch(filePath: string, mtimeMs: number) {
@@ -81,6 +82,18 @@ describe("reportLocator", () => {
     fs.writeFileSync(fileB, "test");
 
     const found = getSqpCsvFiles(tmpDir);
+    expect(found).toEqual([fileA, fileB]);
+  });
+
+  it("finds Helium10 Keyword Tracker csv files", () => {
+    const tmpDir = path.resolve(__dirname, "tmp", `h10-kt-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const fileA = path.join(tmpDir, "helium10-kt-B0B2K57W5R-2026-02-11.csv");
+    const fileB = path.join(tmpDir, "helium10-kt-B0FYPRWPN1-2026-02-11.csv");
+    fs.writeFileSync(fileA, "test");
+    fs.writeFileSync(fileB, "test");
+
+    const found = getHelium10KeywordTrackerCsvFiles(tmpDir);
     expect(found).toEqual([fileA, fileB]);
   });
 });

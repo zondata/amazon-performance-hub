@@ -25,3 +25,11 @@ supabase/.temp/
 
 # build output
 dist/
+
+# Local docs / temp files
+*.docx
+~
+
+# Local blueprint doc
+blueprint.docx
+~.docx

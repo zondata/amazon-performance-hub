@@ -211,6 +211,16 @@ Notes:
 - Date-folder wrapper scans for any `.csv` containing `SalesTrend` (case-insensitive) and uses folder date at `T00:00:00Z`.
 - Prefer immutable exports per folder date (no master file edits or overwrites).
 
+Helium 10 Keyword Tracker ranking ingestion (historical observations):
+- `npm run ingest:rank:h10 -- --account-id <id> --marketplace <marketplace> <csv> [--exported-at ISO]`
+- date-folder wrapper: `npm run ingest:rank:h10:date -- --account-id <id> --marketplace <marketplace> <YYYY-MM-DD or folder>`
+- backfill pipeline: `npm run pipeline:backfill:rank:h10 -- --account-id <id> --marketplace <marketplace> --root <path> --from YYYY-MM-DD --to YYYY-MM-DD [--dry-run] [--continue-on-error]`
+Notes:
+- Date-folder wrapper scans for `helium10-kt-*.csv` files.
+- `Date Added` in CSV is the observation timestamp (`observed_at`) and supports multiple historical rows per keyword.
+- Rank fields accept exact (`54`), lower-bound (`>306`/`>96`), or missing (`-`) and are stored as raw text + normalized kind/value.
+- Recommended storage is the same immutable date-folder pattern used by other report modules.
+
 Amazon Brand Analytics Search Query Performance (SQP) weekly raw ingestion:
 - `npm run ingest:sqp:weekly -- --account-id <id> --marketplace <marketplace> <csv> [--exported-at ISO]`
 - date-folder wrapper: `npm run ingest:sqp:weekly:date -- --account-id <id> --marketplace <marketplace> <YYYY-MM-DD or folder>`
@@ -378,6 +388,31 @@ Parsing rules:
 - Week range parsed from metadata `Select week`; fallback is filename `_YYYY_MM_DD` week-end (week-start = week-end - 6 days).
 - Percent strings are interpreted as percentages and divided by 100 (e.g. `0.72` -> `0.0072`).
 
+### Milestone 12 — Helium 10 Keyword Tracker Rankings
+Goal: ingest keyword ranking observations from Helium 10 CSV exports with deterministic latest/daily views.
+
+Added migration:
+- `20260213210000_h10_keyword_tracker.sql`
+  - expands `uploads.source_type` with `h10_keyword_tracker`
+  - creates `h10_keyword_tracker_raw`
+  - creates deterministic latest view `h10_keyword_tracker_latest`
+  - creates per-day latest view `h10_keyword_rank_daily_latest`
+  - creates helper view `h10_keyword_rank_daily_with_dims` (left joins to `products` and `dim_keyword`)
+  - extends `upload_stats` row_count for `source_type='h10_keyword_tracker'`
+
+New commands:
+- `npm run ingest:rank:h10 -- --account-id <id> --marketplace <marketplace> <csv> [--exported-at ISO]`
+- `npm run ingest:rank:h10:date -- --account-id <id> --marketplace <marketplace> <YYYY-MM-DD or folder>`
+- `npm run pipeline:backfill:rank:h10 -- --account-id <id> --marketplace <marketplace> --root <path> --from YYYY-MM-DD --to YYYY-MM-DD [--dry-run] [--continue-on-error]`
+
+Parsing rules:
+- CSV columns include `Date Added` (observation timestamp) and may contain many historical observations per keyword.
+- `Organic Rank` / `Sponsored Position` parse as:
+  - exact numeric (`54`) -> kind=`exact`, value=54
+  - lower-bound (`>306`, `>96`) -> kind=`gte`, value parsed from suffix
+  - missing (`-` or blank) -> kind=`missing`, value=NULL
+- Mixed ASIN rows in a single file are rejected (one ASIN per file required).
+
 ### Milestone 8 — Product Profile Module (Catalog) + Keyword Strategy Library
 What was added (high-level):
 - `products` (ASIN-level) + `product_skus` (SKU-level) supports multiple SKUs under one ASIN.
@@ -408,6 +443,7 @@ Verification:
 - SB parsers + CLIs + date-folder wrappers (exported_at defaults to folder date at T00:00:00Z).
 - Added Sponsored Brands mapping layer: SB mapping issues/overrides, fact tables + latest views, SB mapping CLIs, and SB backfill pipeline.
 - Added SQP weekly ingestion (Brand View + ASIN View), parser with metadata/header-row handling, raw/latest/enriched/continuity views, keyword-link helper view, and SQP backfill pipeline.
+- Added Helium 10 Keyword Tracker ingestion (raw/latest/daily ranking views), rank parser for exact/gte/missing values, date-folder wrapper for `helium10-kt-*.csv`, and dim-link helper view.
 
 ### 2026-02-12
 - Added Sponsored Brands bulk snapshot support (SB) with separate tables and name history.
