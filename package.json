@@ -44,6 +44,8 @@
     "ingest:rank:h10:date": "ts-node src/cli/ingestHelium10KeywordTrackerDate.ts",
     "ingest:sqp:weekly": "ts-node src/cli/ingestSqpWeekly.ts",
     "ingest:sqp:weekly:date": "ts-node src/cli/ingestSqpWeeklyDate.ts",
+    "log:experiment:create": "ts-node src/cli/logCreateExperiment.ts",
+    "log:change:create": "ts-node src/cli/logCreateChange.ts",
     "map:sp:campaign": "ts-node src/cli/mapSpCampaign.ts",
     "map:sp:placement": "ts-node src/cli/mapSpPlacement.ts",
     "map:sp:targeting": "ts-node src/cli/mapSpTargeting.ts",

@@ -419,6 +419,52 @@ Parsing rules:
   - missing (`-` or blank) -> kind=`missing`, value=NULL
 - Mixed ASIN rows in a single file are rejected (one ASIN per file required).
 
+### Milestone 13 — Logbook (Experiments + Changes)
+Goal: log experiments and operational changes (no UI yet).
+
+Tables:
+- `log_experiments`: experiment metadata (objective, hypothesis, evaluation windows, metrics).
+- `log_changes`: change events with `occurred_at` (defaults to now) and `source` (defaults to `manual`).
+- `log_change_entities`: links changes to entities (campaigns, targets, products, keywords, etc.).
+- `log_experiment_changes`: optional join between experiments and changes.
+- `log_evaluations`: optional experiment evaluation snapshots.
+
+Commands:
+- `npm run log:experiment:create -- --account-id US --marketplace US --file ./experiment.json`
+- `npm run log:change:create -- --account-id US --marketplace US --file ./change.json`
+
+Sample JSON:
+```json
+{
+  "name": "SP budget test week 6",
+  "objective": "Improve ROAS without lowering volume",
+  "hypothesis": "Higher budgets unlock extra top-of-search volume",
+  "evaluation_lag_days": 2,
+  "evaluation_window_days": 7,
+  "primary_metrics": { "roas": "sp_campaign_hourly_latest" },
+  "guardrails": { "acos": "<= 0.30" },
+  "scope": { "channels": ["sp"], "campaigns": ["Brand - Core"] }
+}
+```
+
+```json
+{
+  "occurred_at": "2026-02-04T00:00:00Z",
+  "channel": "sp",
+  "change_type": "budget_update",
+  "summary": "Raised daily budget to $200",
+  "why": "Avoiding budget cap during peak hours",
+  "before_json": { "daily_budget": 120 },
+  "after_json": { "daily_budget": 200 },
+  "source": "manual",
+  "source_upload_id": null,
+  "entities": [
+    { "entity_type": "campaign", "campaign_id": "1234567890", "note": "main campaign" },
+    { "entity_type": "product", "product_id": "9a0e6a9c-1c7a-4c0f-9a6f-3a2c119bb2b1" }
+  ]
+}
+```
+
 ### Milestone 8 — Product Profile Module (Catalog) + Keyword Strategy Library
 What was added (high-level):
 - `products` (ASIN-level) + `product_skus` (SKU-level) supports multiple SKUs under one ASIN.
