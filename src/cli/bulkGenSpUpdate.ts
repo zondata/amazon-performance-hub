@@ -80,6 +80,13 @@ function requiredHeadersForActions(actions: SpUpdateAction[]): string[] {
       required.add("State");
       continue;
     }
+    if (action.type === "update_ad_group_default_bid") {
+      required.add("Product");
+      required.add("Campaign ID");
+      required.add("Ad Group ID");
+      required.add("Default bid");
+      continue;
+    }
     const neverAction: never = action;
     throw new Error(`Unsupported action: ${JSON.stringify(neverAction)}`);
   }

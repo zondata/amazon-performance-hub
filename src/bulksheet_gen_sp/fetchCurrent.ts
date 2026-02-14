@@ -135,6 +135,10 @@ function collectActionIds(actions: SpUpdateAction[]) {
       adGroupIds.add(action.ad_group_id);
       continue;
     }
+    if (action.type === "update_ad_group_default_bid") {
+      adGroupIds.add(action.ad_group_id);
+      continue;
+    }
     if (action.type === "update_placement_modifier") {
       placementCampaignIds.add(action.campaign_id);
       placementCodes.add(action.placement_code);

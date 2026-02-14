@@ -49,6 +49,7 @@ describe("bulkgen sp update", () => {
       "Daily Budget",
       "Bidding Strategy",
       "Bid",
+      "Default bid",
       "Placement",
       "Percentage",
       "Portfolio ID",
@@ -61,6 +62,7 @@ describe("bulkgen sp update", () => {
       { type: "update_campaign_budget", campaign_id: "C1", new_budget: 50 },
       { type: "update_campaign_state", campaign_id: "C1", new_state: "paused" },
       { type: "update_ad_group_state", ad_group_id: "AG1", new_state: "paused" },
+      { type: "update_ad_group_default_bid", ad_group_id: "AG2", new_bid: 1.25 },
       { type: "update_target_bid", target_id: "T1", new_bid: 1.5 },
       {
         type: "update_placement_modifier",
@@ -94,6 +96,16 @@ describe("bulkgen sp update", () => {
             ad_group_name_raw: "Ad Group 1",
             state: "enabled",
             default_bid: 0.8,
+          },
+        ],
+        [
+          "AG2",
+          {
+            ad_group_id: "AG2",
+            campaign_id: "C1",
+            ad_group_name_raw: "Ad Group 2",
+            state: "enabled",
+            default_bid: 0.5,
           },
         ],
       ]),
@@ -158,7 +170,7 @@ describe("bulkgen sp update", () => {
       defval: "",
     });
 
-    expect(uploadRows.length).toBe(1 + 4);
+    expect(uploadRows.length).toBe(1 + 5);
     expect(uploadRows[0]).toEqual(headers);
 
     const uploadHeader = uploadRows[0] as string[];
@@ -190,5 +202,11 @@ describe("bulkgen sp update", () => {
     expect(adGroupRow?.["Campaign ID"]).toBe("C1");
     expect(adGroupRow?.["Ad Group ID"]).toBe("AG1");
     expect(String(adGroupRow?.State)).toBe("paused");
+
+    const adGroupBidRow = reviewRowObjects.find((row) => row["Ad Group ID"] === "AG2");
+    expect(Number(adGroupBidRow?.["Default bid"])).toBe(1.25);
+    expect(Number(adGroupBidRow?.current_value)).toBe(0.5);
+    expect(Number(adGroupBidRow?.new_value)).toBe(1.25);
+    expect(Number(adGroupBidRow?.delta)).toBe(0.75);
   });
 });

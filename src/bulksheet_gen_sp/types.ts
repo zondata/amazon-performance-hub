@@ -28,6 +28,12 @@ export type UpdateAdGroupStateAction = {
   new_state: string;
 };
 
+export type UpdateAdGroupDefaultBidAction = {
+  type: "update_ad_group_default_bid";
+  ad_group_id: string;
+  new_bid: number;
+};
+
 export type UpdatePlacementModifierAction = {
   type: "update_placement_modifier";
   campaign_id: string;
@@ -41,6 +47,7 @@ export type SpUpdateAction =
   | UpdateCampaignStateAction
   | UpdateTargetStateAction
   | UpdateAdGroupStateAction
+  | UpdateAdGroupDefaultBidAction
   | UpdatePlacementModifierAction;
 
 export type SpUpdateChangesFile = {

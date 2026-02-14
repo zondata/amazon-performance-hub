@@ -276,6 +276,29 @@ export function buildUploadRows(params: {
       continue;
     }
 
+    if (action.type === "update_ad_group_default_bid") {
+      const adGroup = current.adGroupsById.get(action.ad_group_id);
+      if (!adGroup) throw new Error(`Ad group not found: ${action.ad_group_id}`);
+      const campaign = current.campaignsById.get(adGroup.campaign_id);
+      const newBid = parseNonNegativeNumber(action.new_bid, "new_bid");
+      const cells = {
+        ...buildAdGroupBaseCells({ adGroup, campaign }),
+        "Default bid": newBid,
+      };
+      rows.push({
+        sheetName: SP_SHEET_NAME,
+        cells,
+        review: {
+          action_type: action.type,
+          notes: notes ?? "",
+          current_value: adGroup.default_bid ?? null,
+          new_value: newBid,
+          delta: adGroup.default_bid !== null ? newBid - adGroup.default_bid : null,
+        },
+      });
+      continue;
+    }
+
     if (action.type === "update_placement_modifier") {
       const key = getPlacementKey(action.campaign_id, action.placement_code);
       const placement = current.placementsByKey.get(key);

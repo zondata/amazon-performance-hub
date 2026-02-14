@@ -58,6 +58,7 @@ describe("fetchCurrentSpData", () => {
 
     const actions: SpUpdateAction[] = [
       { type: "update_ad_group_state", ad_group_id: "AG1", new_state: "paused" },
+      { type: "update_ad_group_default_bid", ad_group_id: "AG1", new_bid: 1.1 },
     ];
 
     const result = await fetchCurrentSpData("US", actions);
