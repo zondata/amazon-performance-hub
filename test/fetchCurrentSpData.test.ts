@@ -64,4 +64,29 @@ describe("fetchCurrentSpData", () => {
     const result = await fetchCurrentSpData("US", actions);
     expect(result.adGroupsById.has("AG1")).toBe(true);
   });
+
+  it("includes campaigns for update_campaign_bidding_strategy actions", async () => {
+    dataByTable.uploads = [{ snapshot_date: "2026-02-14" }];
+    dataByTable.bulk_campaigns = [
+      {
+        campaign_id: "C99",
+        campaign_name_raw: "Campaign 99",
+        state: "enabled",
+        daily_budget: null,
+        bidding_strategy: "Legacy",
+        portfolio_id: null,
+      },
+    ];
+
+    const actions: SpUpdateAction[] = [
+      {
+        type: "update_campaign_bidding_strategy",
+        campaign_id: "C99",
+        new_strategy: "Dynamic bids - down only",
+      },
+    ];
+
+    const result = await fetchCurrentSpData("US", actions);
+    expect(result.campaignsById.has("C99")).toBe(true);
+  });
 });

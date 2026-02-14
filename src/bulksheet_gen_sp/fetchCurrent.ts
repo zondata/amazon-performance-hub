@@ -123,7 +123,11 @@ function collectActionIds(actions: SpUpdateAction[]) {
   const placementCodes = new Set<string>();
 
   for (const action of actions) {
-    if (action.type === "update_campaign_budget" || action.type === "update_campaign_state") {
+    if (
+      action.type === "update_campaign_budget" ||
+      action.type === "update_campaign_state" ||
+      action.type === "update_campaign_bidding_strategy"
+    ) {
       campaignIds.add(action.campaign_id);
       continue;
     }
