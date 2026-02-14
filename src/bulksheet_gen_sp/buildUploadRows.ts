@@ -283,7 +283,7 @@ export function buildUploadRows(params: {
       const newBid = parseNonNegativeNumber(action.new_bid, "new_bid");
       const cells = {
         ...buildAdGroupBaseCells({ adGroup, campaign }),
-        "Default bid": newBid,
+        "Ad Group Default Bid": newBid,
       };
       rows.push({
         sheetName: SP_SHEET_NAME,

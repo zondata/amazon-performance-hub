@@ -84,7 +84,7 @@ function requiredHeadersForActions(actions: SpUpdateAction[]): string[] {
       required.add("Product");
       required.add("Campaign ID");
       required.add("Ad Group ID");
-      required.add("Default bid");
+      required.add("Ad Group Default Bid");
       continue;
     }
     const neverAction: never = action;

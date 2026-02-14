@@ -49,7 +49,7 @@ describe("bulkgen sp update", () => {
       "Daily Budget",
       "Bidding Strategy",
       "Bid",
-      "Default bid",
+      "Ad Group Default Bid",
       "Placement",
       "Percentage",
       "Portfolio ID",
@@ -204,7 +204,7 @@ describe("bulkgen sp update", () => {
     expect(String(adGroupRow?.State)).toBe("paused");
 
     const adGroupBidRow = reviewRowObjects.find((row) => row["Ad Group ID"] === "AG2");
-    expect(Number(adGroupBidRow?.["Default bid"])).toBe(1.25);
+    expect(Number(adGroupBidRow?.["Ad Group Default Bid"])).toBe(1.25);
     expect(Number(adGroupBidRow?.current_value)).toBe(0.5);
     expect(Number(adGroupBidRow?.new_value)).toBe(1.25);
     expect(Number(adGroupBidRow?.delta)).toBe(0.75);
