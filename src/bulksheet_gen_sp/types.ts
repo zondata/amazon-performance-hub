@@ -16,6 +16,12 @@ export type UpdateCampaignStateAction = {
   new_state: string;
 };
 
+export type UpdateCampaignBiddingStrategyAction = {
+  type: "update_campaign_bidding_strategy";
+  campaign_id: string;
+  new_strategy: string;
+};
+
 export type UpdateTargetStateAction = {
   type: "update_target_state";
   target_id: string;
@@ -45,6 +51,7 @@ export type SpUpdateAction =
   | UpdateTargetBidAction
   | UpdateCampaignBudgetAction
   | UpdateCampaignStateAction
+  | UpdateCampaignBiddingStrategyAction
   | UpdateTargetStateAction
   | UpdateAdGroupStateAction
   | UpdateAdGroupDefaultBidAction

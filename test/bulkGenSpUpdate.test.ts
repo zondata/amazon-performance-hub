@@ -61,6 +61,11 @@ describe("bulkgen sp update", () => {
     const actions: SpUpdateAction[] = [
       { type: "update_campaign_budget", campaign_id: "C1", new_budget: 50 },
       { type: "update_campaign_state", campaign_id: "C1", new_state: "paused" },
+      {
+        type: "update_campaign_bidding_strategy",
+        campaign_id: "C1",
+        new_strategy: "Dynamic bids - down only",
+      },
       { type: "update_ad_group_state", ad_group_id: "AG1", new_state: "paused" },
       { type: "update_ad_group_default_bid", ad_group_id: "AG2", new_bid: 1.25 },
       { type: "update_target_bid", target_id: "T1", new_bid: 1.5 },
@@ -82,7 +87,7 @@ describe("bulkgen sp update", () => {
             campaign_name_raw: "Camp 1",
             state: "enabled",
             daily_budget: 20,
-            bidding_strategy: "",
+            bidding_strategy: "Dynamic bids - down only",
             portfolio_id: null,
           },
         ],
@@ -194,7 +199,10 @@ describe("bulkgen sp update", () => {
     const campaignRow = reviewRowObjects.find((row) => row.Entity === "Campaign");
     expect(Number(campaignRow?.["Daily Budget"])).toBe(50);
     expect(String(campaignRow?.State)).toBe("paused");
-    expect(campaignRow?.action_type).toBe("update_campaign_budget+update_campaign_state");
+    expect(String(campaignRow?.["Bidding Strategy"])).toBe("Dynamic bids - down only");
+    expect(campaignRow?.action_type).toBe(
+      "update_campaign_budget+update_campaign_state+update_campaign_bidding_strategy"
+    );
 
     const adGroupRow = reviewRowObjects.find((row) => row.Entity === "Ad Group");
     expect(adGroupRow?.Product).toBe("Sponsored Products");

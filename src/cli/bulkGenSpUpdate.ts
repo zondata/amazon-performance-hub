@@ -45,6 +45,12 @@ function requiredHeadersForActions(actions: SpUpdateAction[]): string[] {
       required.add("State");
       continue;
     }
+    if (action.type === "update_campaign_bidding_strategy") {
+      required.add("Product");
+      required.add("Campaign ID");
+      required.add("Bidding Strategy");
+      continue;
+    }
     if (action.type === "update_target_bid") {
       required.add("Campaign ID");
       required.add("Ad Group ID");

@@ -192,6 +192,29 @@ export function buildUploadRows(params: {
       continue;
     }
 
+    if (action.type === "update_campaign_bidding_strategy") {
+      const campaign = current.campaignsById.get(action.campaign_id);
+      if (!campaign) throw new Error(`Campaign not found: ${action.campaign_id}`);
+      const newStrategy = String(action.new_strategy ?? "").trim();
+      if (!newStrategy) throw new Error("Invalid new_strategy: must be non-empty.");
+      const cells = {
+        ...buildCampaignBaseCells(campaign),
+        "Bidding Strategy": newStrategy,
+      };
+      rows.push({
+        sheetName: SP_SHEET_NAME,
+        cells,
+        review: {
+          action_type: action.type,
+          notes: notes ?? "",
+          current_value: campaign.bidding_strategy ?? null,
+          new_value: newStrategy,
+          delta: null,
+        },
+      });
+      continue;
+    }
+
     if (action.type === "update_target_bid") {
       const target = current.targetsById.get(action.target_id);
       if (!target) throw new Error(`Target not found: ${action.target_id}`);
