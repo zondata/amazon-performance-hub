@@ -7,7 +7,7 @@ Reporting Date,Search Query,Search Query Score,Search Query Volume,Impressions: 
 2026-02-07,retinol serum,280,9000,850,120,14.12,54,0.60,10,18.52
 `;
 
-const ASIN_CSV = `ASIN=["B0B2K57W5R"],Reporting Range=["Weekly"],Select week=["Week 6 | 2026-02-01 - 2026-02-07 2026"]
+const ASIN_OR_PRODUCT_CSV = `ASIN or Product=["B0B2K57W5R"],Reporting Range=["Weekly"],Select week=["Week 6 | 2026-02-01 - 2026-02-07 2026"]
 Reporting Date,Search Query,Search Query Score,Search Query Volume,Impressions: Total Count,Impressions: ASIN Count,Impressions: ASIN Share,Clicks: Total Count,Click Rate %,Clicks: ASIN Count,Clicks: ASIN Share
 2026-02-07,hair growth serum,250,8000,600,90,15,48,0.72,8,16.67
 `;
@@ -28,9 +28,9 @@ describe("parseSqpReport", () => {
     expect(result.rows[0].clicks_total).toBe(72);
   });
 
-  it("parses ASIN View SQP metadata and self columns", () => {
+  it("parses ASIN-or-Product SQP metadata and self columns", () => {
     const result = parseSqpReport(
-      ASIN_CSV,
+      ASIN_OR_PRODUCT_CSV,
       "US_Search_Query_Performance_ASIN_View_Simple_Week_2026_02_07.csv"
     );
 

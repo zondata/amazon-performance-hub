@@ -1,5 +1,5 @@
 # Supabase Schema Snapshot
-Generated: 2026-02-13T14:06:21.845Z
+Generated: 2026-02-14T02:18:08.052Z
 
 ## accounts (BASE TABLE)
 | column | type | nullable |
@@ -201,6 +201,29 @@ Generated: 2026-02-13T14:06:21.845Z
 | keyword_raw | text | NO |
 | keyword_norm | text | NO |
 | created_at | timestamp with time zone | NO |
+
+## h10_keyword_tracker_raw (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| marketplace_domain_raw | text | YES |
+| asin | text | NO |
+| title | text | YES |
+| keyword_raw | text | NO |
+| keyword_norm | text | NO |
+| keyword_sales | integer | YES |
+| search_volume | integer | YES |
+| organic_rank_raw | text | YES |
+| organic_rank_value | integer | YES |
+| organic_rank_kind | text | NO |
+| sponsored_pos_raw | text | YES |
+| sponsored_pos_value | integer | YES |
+| sponsored_pos_kind | text | NO |
+| observed_at | timestamp without time zone | NO |
+| observed_date | date | NO |
+| exported_at | timestamp with time zone | NO |
 
 ## keyword_group_members (BASE TABLE)
 | column | type | nullable |
@@ -1308,6 +1331,85 @@ Generated: 2026-02-13T14:06:21.845Z
 | is_negative | boolean | YES |
 | state | text | YES |
 | bid | numeric | YES |
+
+## h10_keyword_rank_daily_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| marketplace_domain_raw | text | YES |
+| asin | text | YES |
+| title | text | YES |
+| keyword_raw | text | YES |
+| keyword_norm | text | YES |
+| keyword_sales | integer | YES |
+| search_volume | integer | YES |
+| organic_rank_raw | text | YES |
+| organic_rank_value | integer | YES |
+| organic_rank_kind | text | YES |
+| sponsored_pos_raw | text | YES |
+| sponsored_pos_value | integer | YES |
+| sponsored_pos_kind | text | YES |
+| observed_at | timestamp without time zone | YES |
+| observed_date | date | YES |
+| exported_at | timestamp with time zone | YES |
+| ingested_at | timestamp with time zone | YES |
+| rn | bigint | YES |
+| rn_daily | bigint | YES |
+
+## h10_keyword_rank_daily_with_dims (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| marketplace_domain_raw | text | YES |
+| asin | text | YES |
+| title | text | YES |
+| keyword_raw | text | YES |
+| keyword_norm | text | YES |
+| keyword_sales | integer | YES |
+| search_volume | integer | YES |
+| organic_rank_raw | text | YES |
+| organic_rank_value | integer | YES |
+| organic_rank_kind | text | YES |
+| sponsored_pos_raw | text | YES |
+| sponsored_pos_value | integer | YES |
+| sponsored_pos_kind | text | YES |
+| observed_at | timestamp without time zone | YES |
+| observed_date | date | YES |
+| exported_at | timestamp with time zone | YES |
+| ingested_at | timestamp with time zone | YES |
+| rn | bigint | YES |
+| rn_daily | bigint | YES |
+| product_id | uuid | YES |
+| keyword_id | uuid | YES |
+
+## h10_keyword_tracker_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| marketplace_domain_raw | text | YES |
+| asin | text | YES |
+| title | text | YES |
+| keyword_raw | text | YES |
+| keyword_norm | text | YES |
+| keyword_sales | integer | YES |
+| search_volume | integer | YES |
+| organic_rank_raw | text | YES |
+| organic_rank_value | integer | YES |
+| organic_rank_kind | text | YES |
+| sponsored_pos_raw | text | YES |
+| sponsored_pos_value | integer | YES |
+| sponsored_pos_kind | text | YES |
+| observed_at | timestamp without time zone | YES |
+| observed_date | date | YES |
+| exported_at | timestamp with time zone | YES |
+| ingested_at | timestamp with time zone | YES |
+| rn | bigint | YES |
 
 ## sb_campaign_daily_fact_latest (VIEW)
 | column | type | nullable |

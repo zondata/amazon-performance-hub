@@ -212,6 +212,12 @@ function parseDate(value: string): string | null {
   return `${year}-${month}-${day}`;
 }
 
+function normalizeMetadataKey(rawKey: string): string {
+  const normalized = normalizeHeader(rawKey);
+  if (normalized === "asin or product") return "asin";
+  return normalized;
+}
+
 function parseMetadataRow(row: string[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const cell of row) {
@@ -219,7 +225,7 @@ function parseMetadataRow(row: string[]): Record<string, string> {
     if (!text) continue;
     const match = text.match(/^([^=]+)=\[(.*)\]$/);
     if (!match) continue;
-    const key = normalizeHeader(match[1]);
+    const key = normalizeMetadataKey(match[1]);
     let value = match[2].trim();
     if (value.startsWith('"') && value.endsWith('"')) {
       value = value.slice(1, -1);

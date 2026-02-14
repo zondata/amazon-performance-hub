@@ -228,6 +228,9 @@ Amazon Brand Analytics Search Query Performance (SQP) weekly raw ingestion:
 Notes:
 - Supports both Brand View and ASIN View files in the same module (`source_type='sqp'`, with scope in raw rows).
 - CSV layout is fixed: row 1 metadata, row 2 header, row 3+ data.
+- SQP scope is stored on `sqp_weekly_raw` as `scope_type` and `scope_value`.
+- Brand View scope: metadata includes `Brand=["..."]` and yields `scope_type='brand'`, `scope_value=<brand>`.
+- ASIN View scope: metadata includes `ASIN or Product=["..."]` (or `ASIN=["..."]`) and yields `scope_type='asin'`, `scope_value=<asin>`.
 - Metadata parsing extracts scope and week range; fallback uses filename (`Brand_View`/`ASIN_View` and `_YYYY_MM_DD` week-end suffix).
 - Date-folder wrapper scans for `.csv` files containing `Search_Query_Performance` and uses folder date at `T00:00:00Z`.
 - `sqp_weekly_latest_enriched` derives safe-divide metrics (market/self CTR/CVR, share calcs, index metrics, click-to-cart rates).
@@ -235,6 +238,7 @@ Notes:
   - `sqp_weekly_brand_agg_from_asin_latest` outputs synthetic brand rows with `scope_value='__AGG_FROM_ASIN__'` by aggregating ASIN-scope rows.
   - `sqp_weekly_brand_continuous_latest` prefers true brand rows when present, else uses the aggregated ASIN row.
 - Keyword linkage helper: `sqp_weekly_latest_known_keywords` left-joins `dim_keyword` by `search_query_norm`.
+- ASIN View exports are per ASIN; to analyze multiple ASINs, download and ingest each ASIN's SQP export separately (can use `ingest:sqp:weekly:date`).
 
 Supabase views (migrations):
 - `sp_campaign_hourly_latest`: latest-wins by (account_id, date, start_time, campaign_name_norm) with max(exported_at)
@@ -384,7 +388,9 @@ New commands:
 
 Parsing rules:
 - SQP CSV row 1 is metadata, row 2 is header, row 3+ is data.
-- Supports scope metadata keys `Brand`, `ASIN`, or `Product`.
+- Supports scope metadata keys `Brand`, `ASIN`, `Product`, or `ASIN or Product`.
+- Brand View: `Brand=["..."]` -> `scope_type='brand'`, `scope_value=<brand>`.
+- ASIN View: `ASIN or Product=["..."]` or `ASIN=["..."]` -> `scope_type='asin'`, `scope_value=<asin>`.
 - Week range parsed from metadata `Select week`; fallback is filename `_YYYY_MM_DD` week-end (week-start = week-end - 6 days).
 - Percent strings are interpreted as percentages and divided by 100 (e.g. `0.72` -> `0.0072`).
 
