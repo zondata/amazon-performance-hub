@@ -118,6 +118,7 @@ async function fetchPlacements(params: {
 function collectActionIds(actions: SpUpdateAction[]) {
   const campaignIds = new Set<string>();
   const targetIds = new Set<string>();
+  const adGroupIds = new Set<string>();
   const placementCampaignIds = new Set<string>();
   const placementCodes = new Set<string>();
 
@@ -130,6 +131,10 @@ function collectActionIds(actions: SpUpdateAction[]) {
       targetIds.add(action.target_id);
       continue;
     }
+    if (action.type === "update_ad_group_state") {
+      adGroupIds.add(action.ad_group_id);
+      continue;
+    }
     if (action.type === "update_placement_modifier") {
       placementCampaignIds.add(action.campaign_id);
       placementCodes.add(action.placement_code);
@@ -139,6 +144,7 @@ function collectActionIds(actions: SpUpdateAction[]) {
   return {
     campaignIds: [...campaignIds],
     targetIds: [...targetIds],
+    adGroupIds: [...adGroupIds],
     placementCampaignIds: [...placementCampaignIds],
     placementCodes: [...placementCodes],
   };
@@ -153,7 +159,8 @@ export async function fetchCurrentSpData(
   actions: SpUpdateAction[]
 ): Promise<FetchCurrentResult> {
   const snapshotDate = await fetchLatestBulkSnapshotDate(accountId);
-  const { campaignIds, targetIds, placementCampaignIds } = collectActionIds(actions);
+  const { campaignIds, targetIds, placementCampaignIds, adGroupIds: actionAdGroupIds } =
+    collectActionIds(actions);
 
   const targets = await fetchRowsByIds<CurrentTarget>({
     table: "bulk_targets",
@@ -166,13 +173,32 @@ export async function fetchCurrentSpData(
   });
 
   const campaignsFromTargets = new Set<string>();
-  const adGroupIds = new Set<string>();
+  const adGroupIds = new Set<string>(actionAdGroupIds);
   for (const target of targets) {
     if (target.campaign_id) campaignsFromTargets.add(target.campaign_id);
     if (target.ad_group_id) adGroupIds.add(target.ad_group_id);
   }
 
-  const allCampaignIds = new Set<string>([...campaignIds, ...campaignsFromTargets, ...placementCampaignIds]);
+  const adGroups = await fetchRowsByIds<CurrentAdGroup>({
+    table: "bulk_ad_groups",
+    select: "ad_group_id,campaign_id,ad_group_name_raw,state,default_bid",
+    accountId,
+    snapshotDate,
+    idColumn: "ad_group_id",
+    ids: [...adGroupIds],
+  });
+
+  const campaignsFromAdGroups = new Set<string>();
+  for (const adGroup of adGroups) {
+    if (adGroup.campaign_id) campaignsFromAdGroups.add(adGroup.campaign_id);
+  }
+
+  const allCampaignIds = new Set<string>([
+    ...campaignIds,
+    ...campaignsFromTargets,
+    ...placementCampaignIds,
+    ...campaignsFromAdGroups,
+  ]);
 
   const campaigns = await fetchRowsByIds<CurrentCampaign>({
     table: "bulk_campaigns",
@@ -182,15 +208,6 @@ export async function fetchCurrentSpData(
     snapshotDate,
     idColumn: "campaign_id",
     ids: [...allCampaignIds],
-  });
-
-  const adGroups = await fetchRowsByIds<CurrentAdGroup>({
-    table: "bulk_ad_groups",
-    select: "ad_group_id,campaign_id,ad_group_name_raw,state,default_bid",
-    accountId,
-    snapshotDate,
-    idColumn: "ad_group_id",
-    ids: [...adGroupIds],
   });
 
   const placements = await fetchPlacements({
