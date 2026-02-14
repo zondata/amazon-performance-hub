@@ -425,13 +425,16 @@ Goal: log experiments and operational changes (no UI yet).
 Tables:
 - `log_experiments`: experiment metadata (objective, hypothesis, evaluation windows, metrics).
 - `log_changes`: change events with `occurred_at` (defaults to now) and `source` (defaults to `manual`).
-- `log_change_entities`: links changes to entities (campaigns, targets, products, keywords, etc.).
+- `log_change_entities`: links changes to entities (campaigns, targets, products, keywords, etc.). `product_id` is stored as text (ASIN).
 - `log_experiment_changes`: optional join between experiments and changes.
 - `log_evaluations`: optional experiment evaluation snapshots.
 
 Commands:
-- `npm run log:experiment:create -- --account-id US --marketplace US --file ./experiment.json`
-- `npm run log:change:create -- --account-id US --marketplace US --file ./change.json`
+- `npm run log:experiment:create -- --account-id US --marketplace US --file examples/logbook/experiment.ads.template.json`
+- `npm run log:change:create -- --account-id US --marketplace US --file examples/logbook/change.ads.template.json`
+- `npm run log:experiment:link-change -- --account-id US --marketplace US --experiment-id <uuid> --change-id <uuid>`
+- `npm run log:change:list -- --account-id US --marketplace US --limit 5`
+- `npm run log:experiment:list -- --account-id US --marketplace US --limit 5`
 
 Sample JSON:
 ```json

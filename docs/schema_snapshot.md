@@ -1,5 +1,5 @@
 # Supabase Schema Snapshot
-Generated: 2026-02-14T02:18:08.052Z
+Generated: 2026-02-14T07:54:22.890Z
 
 ## accounts (BASE TABLE)
 | column | type | nullable |
@@ -253,6 +253,76 @@ Generated: 2026-02-14T02:18:08.052Z
 | group_set_id | uuid | NO |
 | name | text | NO |
 | notes | text | YES |
+| created_at | timestamp with time zone | NO |
+
+## log_change_entities (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| change_entity_id | uuid | NO |
+| change_id | uuid | NO |
+| entity_type | text | NO |
+| product_id | text | YES |
+| campaign_id | text | YES |
+| ad_group_id | text | YES |
+| target_id | text | YES |
+| keyword_id | uuid | YES |
+| note | text | YES |
+| extra | jsonb | YES |
+| created_at | timestamp with time zone | NO |
+
+## log_changes (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| change_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| occurred_at | timestamp with time zone | NO |
+| channel | text | NO |
+| change_type | text | NO |
+| summary | text | NO |
+| why | text | YES |
+| before_json | jsonb | YES |
+| after_json | jsonb | YES |
+| source | text | NO |
+| source_upload_id | text | YES |
+| created_at | timestamp with time zone | NO |
+
+## log_evaluations (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| evaluation_id | uuid | NO |
+| experiment_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| evaluated_at | timestamp with time zone | NO |
+| window_start | date | YES |
+| window_end | date | YES |
+| metrics_json | jsonb | YES |
+| notes | text | YES |
+| created_at | timestamp with time zone | NO |
+
+## log_experiment_changes (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| experiment_change_id | uuid | NO |
+| experiment_id | uuid | NO |
+| change_id | uuid | NO |
+| created_at | timestamp with time zone | NO |
+
+## log_experiments (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| experiment_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| name | text | NO |
+| objective | text | NO |
+| hypothesis | text | YES |
+| evaluation_lag_days | integer | YES |
+| evaluation_window_days | integer | YES |
+| primary_metrics | jsonb | YES |
+| guardrails | jsonb | YES |
+| scope | jsonb | YES |
 | created_at | timestamp with time zone | NO |
 
 ## portfolio_name_history (BASE TABLE)
