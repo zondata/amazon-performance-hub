@@ -75,3 +75,24 @@ export async function insertLogChangeEntities(params: {
   const { error } = await client.from("log_change_entities").insert(rows);
   if (error) throw new Error(`Failed inserting log_change_entities: ${error.message}`);
 }
+
+export async function linkExperimentChange(params: {
+  experimentId: string;
+  changeId: string;
+}): Promise<{ status: "linked" | "already linked" }> {
+  const client = getSupabaseClient();
+  const payload = {
+    experiment_id: params.experimentId,
+    change_id: params.changeId,
+  };
+
+  const { data, error } = await client
+    .from("log_experiment_changes")
+    .upsert(payload, { onConflict: "experiment_id,change_id", ignoreDuplicates: true })
+    .select("experiment_id")
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed linking experiment + change: ${error.message}`);
+  if (!data) return { status: "already linked" };
+  return { status: "linked" };
+}

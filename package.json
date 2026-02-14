@@ -45,6 +45,7 @@
     "ingest:sqp:weekly": "ts-node src/cli/ingestSqpWeekly.ts",
     "ingest:sqp:weekly:date": "ts-node src/cli/ingestSqpWeeklyDate.ts",
     "log:experiment:create": "ts-node src/cli/logCreateExperiment.ts",
+    "log:experiment:link-change": "ts-node src/cli/logLinkExperimentChange.ts",
     "log:change:create": "ts-node src/cli/logCreateChange.ts",
     "map:sp:campaign": "ts-node src/cli/mapSpCampaign.ts",
     "map:sp:placement": "ts-node src/cli/mapSpPlacement.ts",
