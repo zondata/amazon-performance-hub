@@ -121,6 +121,22 @@ function buildPlacementBaseCells(
   };
 }
 
+function buildAdGroupBaseCells(params: {
+  adGroup: CurrentAdGroup;
+  campaign?: CurrentCampaign;
+}): Record<string, string | number | boolean | null> {
+  const { adGroup, campaign } = params;
+  return {
+    Product: "Sponsored Products",
+    Entity: "Ad Group",
+    Operation: "Update",
+    "Campaign ID": adGroup.campaign_id,
+    "Campaign Name": campaignNameFromMap(campaign),
+    "Ad Group ID": adGroup.ad_group_id,
+    "Ad Group Name": adGroup.ad_group_name_raw ?? "",
+  };
+}
+
 export function buildUploadRows(params: {
   actions: SpUpdateAction[];
   current: FetchCurrentResult;
@@ -230,6 +246,29 @@ export function buildUploadRows(params: {
           action_type: action.type,
           notes: notes ?? "",
           current_value: target.state ?? null,
+          new_value: newState,
+          delta: null,
+        },
+      });
+      continue;
+    }
+
+    if (action.type === "update_ad_group_state") {
+      const adGroup = current.adGroupsById.get(action.ad_group_id);
+      if (!adGroup) throw new Error(`Ad group not found: ${action.ad_group_id}`);
+      const campaign = current.campaignsById.get(adGroup.campaign_id);
+      const newState = normalizeState(action.new_state, adGroup.state);
+      const cells = {
+        ...buildAdGroupBaseCells({ adGroup, campaign }),
+        State: newState,
+      };
+      rows.push({
+        sheetName: SP_SHEET_NAME,
+        cells,
+        review: {
+          action_type: action.type,
+          notes: notes ?? "",
+          current_value: adGroup.state ?? null,
           new_value: newState,
           delta: null,
         },

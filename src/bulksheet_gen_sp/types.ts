@@ -22,6 +22,12 @@ export type UpdateTargetStateAction = {
   new_state: string;
 };
 
+export type UpdateAdGroupStateAction = {
+  type: "update_ad_group_state";
+  ad_group_id: string;
+  new_state: string;
+};
+
 export type UpdatePlacementModifierAction = {
   type: "update_placement_modifier";
   campaign_id: string;
@@ -34,6 +40,7 @@ export type SpUpdateAction =
   | UpdateCampaignBudgetAction
   | UpdateCampaignStateAction
   | UpdateTargetStateAction
+  | UpdateAdGroupStateAction
   | UpdatePlacementModifierAction;
 
 export type SpUpdateChangesFile = {

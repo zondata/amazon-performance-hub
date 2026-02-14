@@ -33,6 +33,7 @@ describe("bulkgen sp update", () => {
     const outDir = path.join(tmpDir, `out-${Date.now()}`);
 
     const headers = [
+      "Product",
       "Entity",
       "Operation",
       "Campaign ID",
@@ -59,6 +60,7 @@ describe("bulkgen sp update", () => {
     const actions: SpUpdateAction[] = [
       { type: "update_campaign_budget", campaign_id: "C1", new_budget: 50 },
       { type: "update_campaign_state", campaign_id: "C1", new_state: "paused" },
+      { type: "update_ad_group_state", ad_group_id: "AG1", new_state: "paused" },
       { type: "update_target_bid", target_id: "T1", new_bid: 1.5 },
       {
         type: "update_placement_modifier",
@@ -156,7 +158,7 @@ describe("bulkgen sp update", () => {
       defval: "",
     });
 
-    expect(uploadRows.length).toBe(1 + 3);
+    expect(uploadRows.length).toBe(1 + 4);
     expect(uploadRows[0]).toEqual(headers);
 
     const uploadHeader = uploadRows[0] as string[];
@@ -181,5 +183,12 @@ describe("bulkgen sp update", () => {
     expect(Number(campaignRow?.["Daily Budget"])).toBe(50);
     expect(String(campaignRow?.State)).toBe("paused");
     expect(campaignRow?.action_type).toBe("update_campaign_budget+update_campaign_state");
+
+    const adGroupRow = reviewRowObjects.find((row) => row.Entity === "Ad Group");
+    expect(adGroupRow?.Product).toBe("Sponsored Products");
+    expect(adGroupRow?.Operation).toBe("Update");
+    expect(adGroupRow?.["Campaign ID"]).toBe("C1");
+    expect(adGroupRow?.["Ad Group ID"]).toBe("AG1");
+    expect(String(adGroupRow?.State)).toBe("paused");
   });
 });

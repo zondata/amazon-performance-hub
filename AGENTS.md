@@ -482,6 +482,16 @@ Notes:
 - Template headers are read from `--template` and preserved exactly.
 - Fails fast if required columns or sheets are missing, or if any referenced IDs are not found.
 - Generator merges duplicate entity rows by key (single row per entity for upload safety).
+- Supported actions: update_campaign_budget, update_campaign_state, update_ad_group_state, update_target_bid, update_target_state, update_placement_modifier.
+- Example changes.json snippet:
+```json
+{
+  "exported_at": "2026-02-14T00:00:00Z",
+  "actions": [
+    { "type": "update_ad_group_state", "ad_group_id": "123456", "new_state": "paused" }
+  ]
+}
+```
 
 ### Milestone 8 — Product Profile Module (Catalog) + Keyword Strategy Library
 What was added (high-level):
