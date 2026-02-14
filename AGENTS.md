@@ -481,6 +481,7 @@ Notes:
 - Always writes two files: `upload_strict.xlsx` (template headers only) + `review.xlsx` (adds helper columns).
 - Template headers are read from `--template` and preserved exactly.
 - Fails fast if required columns or sheets are missing, or if any referenced IDs are not found.
+- Generator merges duplicate entity rows by key (single row per entity for upload safety).
 
 ### Milestone 8 — Product Profile Module (Catalog) + Keyword Strategy Library
 What was added (high-level):

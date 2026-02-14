@@ -72,6 +72,7 @@ function adGroupNameFromMap(adGroup: CurrentAdGroup | undefined): string {
 
 function buildCampaignBaseCells(campaign: CurrentCampaign): Record<string, string | number | boolean | null> {
   return {
+    Product: "Sponsored Products",
     Entity: "Campaign",
     Operation: "Update",
     "Campaign ID": campaign.campaign_id,
@@ -91,6 +92,7 @@ function buildTargetBaseCells(params: {
   const matchType = entity.isKeyword ? target.match_type : "TARGETING_EXPRESSION";
 
   return {
+    Product: "Sponsored Products",
     Entity: entity.entity,
     Operation: "Update",
     "Campaign ID": ensure(target.campaign_id, "target.campaign_id"),
@@ -110,6 +112,7 @@ function buildPlacementBaseCells(
   campaign?: CurrentCampaign
 ): Record<string, string | number | boolean | null> {
   return {
+    Product: "Sponsored Products",
     Entity: "Bidding Adjustment",
     Operation: "Update",
     "Campaign ID": placement.campaign_id,
@@ -266,5 +269,69 @@ export function buildUploadRows(params: {
     throw new Error(`Unsupported action: ${JSON.stringify(neverAction)}`);
   }
 
-  return rows;
+  return mergeUploadRows(rows);
+}
+
+function mergeKeyForRow(row: UploadRow): string {
+  const cells = row.cells;
+  const entity = String(cells["Entity"] ?? "");
+  const campaignId = String(cells["Campaign ID"] ?? "");
+  const adGroupId = String(cells["Ad Group ID"] ?? "");
+  const keywordId = String(cells["Keyword ID"] ?? "");
+  const productTargetId = String(cells["Product Targeting ID"] ?? "");
+  const placement = String(cells["Placement"] ?? "");
+  return [
+    row.sheetName,
+    entity,
+    campaignId,
+    adGroupId,
+    keywordId,
+    productTargetId,
+    placement,
+  ].join("||");
+}
+
+export function mergeUploadRows(rows: UploadRow[]): UploadRow[] {
+  const merged: UploadRow[] = [];
+  const indexByKey = new Map<string, number>();
+
+  for (const row of rows) {
+    const key = mergeKeyForRow(row);
+    const existingIndex = indexByKey.get(key);
+    if (existingIndex === undefined) {
+      merged.push({ ...row, cells: { ...row.cells }, review: { ...row.review } });
+      indexByKey.set(key, merged.length - 1);
+      continue;
+    }
+
+    const existing = merged[existingIndex];
+    const mergedCells = { ...existing.cells, ...row.cells };
+
+    const actionTypeParts = [existing.review.action_type, row.review.action_type]
+      .map((value) => String(value ?? "").trim())
+      .filter((value) => value.length > 0);
+    const mergedActionType = actionTypeParts.join("+");
+
+    const mergedNotes = (() => {
+      const first = String(existing.review.notes ?? "").trim();
+      if (first) return first;
+      const next = String(row.review.notes ?? "").trim();
+      return next;
+    })();
+
+    merged[existingIndex] = {
+      sheetName: existing.sheetName,
+      cells: mergedCells,
+      review: {
+        ...existing.review,
+        action_type: mergedActionType,
+        notes: mergedNotes,
+        current_value: null,
+        new_value: null,
+        delta: null,
+      },
+    };
+  }
+
+  return merged;
 }

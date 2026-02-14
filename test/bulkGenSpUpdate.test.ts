@@ -58,6 +58,7 @@ describe("bulkgen sp update", () => {
 
     const actions: SpUpdateAction[] = [
       { type: "update_campaign_budget", campaign_id: "C1", new_budget: 50 },
+      { type: "update_campaign_state", campaign_id: "C1", new_state: "paused" },
       { type: "update_target_bid", target_id: "T1", new_bid: 1.5 },
       {
         type: "update_placement_modifier",
@@ -155,7 +156,7 @@ describe("bulkgen sp update", () => {
       defval: "",
     });
 
-    expect(uploadRows.length).toBe(1 + actions.length);
+    expect(uploadRows.length).toBe(1 + 3);
     expect(uploadRows[0]).toEqual(headers);
 
     const uploadHeader = uploadRows[0] as string[];
@@ -176,9 +177,9 @@ describe("bulkgen sp update", () => {
     expect(reviewHeader).toEqual([...headers, ...REVIEW_HELPER_COLUMNS]);
 
     const reviewRowObjects = reviewRows.slice(1).map((row) => rowToObject(reviewHeader, row));
-    const campaignRow = reviewRowObjects.find((row) => row.action_type === "update_campaign_budget");
-    expect(Number(campaignRow?.current_value)).toBe(20);
-    expect(Number(campaignRow?.new_value)).toBe(50);
-    expect(Number(campaignRow?.delta)).toBe(30);
+    const campaignRow = reviewRowObjects.find((row) => row.Entity === "Campaign");
+    expect(Number(campaignRow?.["Daily Budget"])).toBe(50);
+    expect(String(campaignRow?.State)).toBe("paused");
+    expect(campaignRow?.action_type).toBe("update_campaign_budget+update_campaign_state");
   });
 });
