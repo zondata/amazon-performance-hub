@@ -1,0 +1,29 @@
+{
+  "occurred_at": "2026-02-14T00:00:00Z",
+  "channel": "ads",
+  "change_type": "bid_update",
+  "summary": "Lowered bids on high-spend non-profitable search terms",
+  "why": "Reduce AdSpend while keeping Orders stable",
+  "before_json": {},
+  "after_json": {},
+  "source": "manual",
+  "source_upload_id": null,
+  "entities": [
+    {
+      "entity_type": "campaign",
+      "campaign_id": "CAMP123",
+      "ad_group_id": null,
+      "target_id": null,
+      "keyword_id": null,
+      "product_id": null,
+      "note": "Optional: campaign name here",
+      "extra": { "placement": "TOS", "old_bid": 1.2, "new_bid": 1.0 }
+    },
+    {
+      "entity_type": "product",
+      "product_id": "B000TEST123",
+      "note": "ASIN affected",
+      "extra": {}
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "Reduce AdSpend without losing Orders",
+  "objective": "Lower AdSpend while keeping Orders stable over the next 14 days",
+  "hypothesis": "Reducing bids on high-spend, low-converting terms will cut AdSpend with minimal impact on Orders",
+  "evaluation_lag_days": 2,
+  "evaluation_window_days": 14,
+  "primary_metrics": ["AdSpend", "Orders"],
+  "guardrails": ["Sales", "CPC"],
+  "scope": { "account_id": "US", "marketplace": "US", "channel": "ads" }
+}
