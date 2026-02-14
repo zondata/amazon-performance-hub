@@ -134,3 +134,47 @@ export async function listLogChanges(params: {
     created_at: (row as { created_at: string }).created_at,
   }));
 }
+
+export type LogExperimentListRow = {
+  id: string;
+  name: string;
+  objective: string;
+  hypothesis: string | null;
+  evaluation_lag_days: number | null;
+  evaluation_window_days: number | null;
+  primary_metrics: unknown;
+  guardrails: unknown;
+  scope: unknown;
+  created_at: string;
+};
+
+export async function listLogExperiments(params: {
+  accountId: string;
+  marketplace: string;
+  limit: number;
+}): Promise<LogExperimentListRow[]> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from("log_experiments")
+    .select(
+      "experiment_id, name, objective, hypothesis, evaluation_lag_days, evaluation_window_days, primary_metrics, guardrails, scope, created_at"
+    )
+    .eq("account_id", params.accountId)
+    .eq("marketplace", params.marketplace)
+    .order("created_at", { ascending: false })
+    .limit(params.limit);
+
+  if (error) throw new Error(`Failed listing log_experiments: ${error.message}`);
+  return (data ?? []).map((row) => ({
+    id: (row as { experiment_id: string }).experiment_id,
+    name: (row as { name: string }).name,
+    objective: (row as { objective: string }).objective,
+    hypothesis: (row as { hypothesis: string | null }).hypothesis,
+    evaluation_lag_days: (row as { evaluation_lag_days: number | null }).evaluation_lag_days,
+    evaluation_window_days: (row as { evaluation_window_days: number | null }).evaluation_window_days,
+    primary_metrics: (row as { primary_metrics: unknown }).primary_metrics,
+    guardrails: (row as { guardrails: unknown }).guardrails,
+    scope: (row as { scope: unknown }).scope,
+    created_at: (row as { created_at: string }).created_at,
+  }));
+}
