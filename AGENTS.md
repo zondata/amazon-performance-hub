@@ -468,6 +468,20 @@ Sample JSON:
 }
 ```
 
+### Milestone 14 — Bulksheet Generator (SP Update, deterministic)
+Goal: generate safe-to-upload SP bulksheet updates from stable IDs with strict headers.
+
+Module:
+- `src/bulksheet_gen_sp/` (types, current fetch, row builder, XLSX writer)
+
+Commands:
+- `npm run bulkgen:sp:update -- --account-id US --marketplace US --template <xlsx> --out-dir <dir> --file <changes.json>`
+
+Notes:
+- Always writes two files: `upload_strict.xlsx` (template headers only) + `review.xlsx` (adds helper columns).
+- Template headers are read from `--template` and preserved exactly.
+- Fails fast if required columns or sheets are missing, or if any referenced IDs are not found.
+
 ### Milestone 8 — Product Profile Module (Catalog) + Keyword Strategy Library
 What was added (high-level):
 - `products` (ASIN-level) + `product_skus` (SKU-level) supports multiple SKUs under one ASIN.

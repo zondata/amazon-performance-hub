@@ -66,6 +66,7 @@
     "map:sd:matched": "ts-node src/cli/mapSdMatchedTarget.ts",
     "map:sd:purchased": "ts-node src/cli/mapSdPurchasedProduct.ts",
     "map:sd:all:date": "ts-node src/cli/mapSdAllDate.ts",
+    "bulkgen:sp:update": "ts-node src/cli/bulkGenSpUpdate.ts",
     "pipeline:backfill:ads": "ts-node src/cli/backfillAds.ts",
     "pipeline:backfill:sb": "ts-node src/cli/backfillSb.ts",
     "pipeline:backfill:sd": "ts-node src/cli/backfillSd.ts",
