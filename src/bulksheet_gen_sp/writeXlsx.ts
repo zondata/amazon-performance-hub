@@ -97,9 +97,9 @@ export function writeSpBulkUpdateXlsx(params: {
     ensureRequiredHeaders(templateSheet.headers, requiredHeaders, sheetName);
     ensureNoHeaderCollisions(templateSheet.headers, REVIEW_HELPER_COLUMNS, sheetName);
 
-    const uploadRows = [templateSheet.headers];
+    const uploadRows: (string | number | boolean)[][] = [templateSheet.headers as (string | number | boolean)[]];
     const reviewHeaders = [...templateSheet.headers, ...REVIEW_HELPER_COLUMNS];
-    const reviewRows = [reviewHeaders];
+    const reviewRows: (string | number | boolean)[][] = [reviewHeaders as (string | number | boolean)[]];
 
     for (const row of sheetRows) {
       uploadRows.push(buildRowArray(templateSheet.headers, row.cells));
