@@ -53,7 +53,10 @@ function ensureNoHeaderCollisions(headers: string[], extra: string[], sheetName:
   }
 }
 
-function buildRowArray(headers: string[], cells: Record<string, string | number | boolean | null>) {
+function buildRowArray(
+  headers: string[],
+  cells: Record<string, string | number | boolean | null>,
+): (string | number | boolean)[] {
   return headers.map((header) => {
     const value = cells[header];
     if (value === null || value === undefined) return "";
