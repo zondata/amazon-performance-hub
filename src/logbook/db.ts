@@ -96,3 +96,41 @@ export async function linkExperimentChange(params: {
   if (!data) return { status: "already linked" };
   return { status: "linked" };
 }
+
+export type LogChangeListRow = {
+  id: string;
+  occurred_at: string;
+  channel: string;
+  change_type: string;
+  summary: string;
+  why: string | null;
+  source: string;
+  created_at: string;
+};
+
+export async function listLogChanges(params: {
+  accountId: string;
+  marketplace: string;
+  limit: number;
+}): Promise<LogChangeListRow[]> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from("log_changes")
+    .select("change_id, occurred_at, channel, change_type, summary, why, source, created_at")
+    .eq("account_id", params.accountId)
+    .eq("marketplace", params.marketplace)
+    .order("occurred_at", { ascending: false })
+    .limit(params.limit);
+
+  if (error) throw new Error(`Failed listing log_changes: ${error.message}`);
+  return (data ?? []).map((row) => ({
+    id: (row as { change_id: string }).change_id,
+    occurred_at: (row as { occurred_at: string }).occurred_at,
+    channel: (row as { channel: string }).channel,
+    change_type: (row as { change_type: string }).change_type,
+    summary: (row as { summary: string }).summary,
+    why: (row as { why: string | null }).why,
+    source: (row as { source: string }).source,
+    created_at: (row as { created_at: string }).created_at,
+  }));
+}
