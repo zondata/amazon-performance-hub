@@ -35,6 +35,7 @@ export type LogChangeInput = {
   why?: string;
   before_json?: unknown;
   after_json?: unknown;
+  dedupe_key?: string;
   source?: string;
   source_upload_id?: string;
   entities: LogChangeEntityInput[];
@@ -45,4 +46,5 @@ export type LogChangeRow = LogChangeInput & {
   account_id: string;
   marketplace: string;
   created_at: string;
+  dedupe_key?: string;
 };

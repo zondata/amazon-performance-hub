@@ -4,10 +4,11 @@ import { fetchCurrentSpData } from "../bulksheet_gen_sp/fetchCurrent";
 import { buildUploadRows, SP_SHEET_NAME } from "../bulksheet_gen_sp/buildUploadRows";
 import { writeSpBulkUpdateXlsx } from "../bulksheet_gen_sp/writeXlsx";
 import { SpUpdateAction, SpUpdateChangesFile } from "../bulksheet_gen_sp/types";
+import { buildSpBulkgenLogEntries, writeBulkgenLogs } from "../logbook/bulkgen";
 
 function usage() {
   console.log(
-    "Usage: npm run bulkgen:sp:update -- --account-id <id> --marketplace <marketplace> --template <xlsx> --out-dir <dir> --file <changes.json>"
+    "Usage: npm run bulkgen:sp:update -- --account-id <id> --marketplace <marketplace> --template <xlsx> --out-dir <dir> --file <changes.json> [--log] [--experiment-id <uuid>] [--run-id <id>]"
   );
 }
 
@@ -15,6 +16,16 @@ function getArg(flag: string): string | undefined {
   const idx = process.argv.indexOf(flag);
   if (idx === -1) return undefined;
   return process.argv[idx + 1];
+}
+
+function hasFlag(flag: string): boolean {
+  return process.argv.includes(flag);
+}
+
+function generateRunId(): string {
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `${ts}-${rand}`;
 }
 
 function parseChangesFile(filePath: string): SpUpdateChangesFile {
@@ -105,6 +116,9 @@ async function main() {
   const templatePath = getArg("--template");
   const outDir = getArg("--out-dir");
   const filePath = getArg("--file");
+  const shouldLog = hasFlag("--log");
+  const experimentId = getArg("--experiment-id");
+  const runId = getArg("--run-id") ?? (shouldLog ? generateRunId() : undefined);
 
   if (!accountId || !marketplace || !templatePath || !outDir || !filePath) {
     usage();
@@ -132,6 +146,23 @@ async function main() {
     rows,
     requiredHeadersBySheet: new Map([[SP_SHEET_NAME, requiredHeaders]]),
   });
+
+  if (shouldLog && runId) {
+    const entries = buildSpBulkgenLogEntries({
+      rows,
+      current,
+      runId,
+      generator: "bulkgen:sp:update",
+      outputPaths: { uploadPath, reviewPath },
+    });
+    const { created, skipped } = await writeBulkgenLogs({
+      accountId,
+      marketplace,
+      entries,
+      experimentId,
+    });
+    console.log({ log_changes_created: created, log_changes_skipped: skipped, runId });
+  }
 
   console.log("Bulk update files written.");
   console.log({

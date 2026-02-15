@@ -8,10 +8,11 @@ import {
 import { writeSbBulkUpdateXlsx } from "../bulksheet_gen_sb/writeXlsx";
 import { SbUpdateAction, SbUpdateChangesFile } from "../bulksheet_gen_sb/types";
 import * as XLSX from "xlsx";
+import { buildSbBulkgenLogEntries, writeBulkgenLogs } from "../logbook/bulkgen";
 
 function usage() {
   console.log(
-    "Usage: npm run bulkgen:sb:update -- --account-id <id> --marketplace <marketplace> --template <xlsx> --out-dir <dir> --file <changes.json> [--sheet \"SB Multi Ad Group Campaigns\"]"
+    "Usage: npm run bulkgen:sb:update -- --account-id <id> --marketplace <marketplace> --template <xlsx> --out-dir <dir> --file <changes.json> [--sheet \"SB Multi Ad Group Campaigns\"] [--log] [--experiment-id <uuid>] [--run-id <id>]"
   );
 }
 
@@ -19,6 +20,16 @@ function getArg(flag: string): string | undefined {
   const idx = process.argv.indexOf(flag);
   if (idx === -1) return undefined;
   return process.argv[idx + 1];
+}
+
+function hasFlag(flag: string): boolean {
+  return process.argv.includes(flag);
+}
+
+function generateRunId(): string {
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `${ts}-${rand}`;
 }
 
 function parseChangesFile(filePath: string): SbUpdateChangesFile {
@@ -144,6 +155,9 @@ async function main() {
   const outDir = getArg("--out-dir");
   const filePath = getArg("--file");
   const sheetName = getArg("--sheet") ?? SB_DEFAULT_SHEET_NAME;
+  const shouldLog = hasFlag("--log");
+  const experimentId = getArg("--experiment-id");
+  const runId = getArg("--run-id") ?? (shouldLog ? generateRunId() : undefined);
 
   if (!accountId || !marketplace || !templatePath || !outDir || !filePath) {
     usage();
@@ -183,6 +197,23 @@ async function main() {
     rows,
     requiredHeadersBySheet: new Map([[sheetName, requiredHeaders]]),
   });
+
+  if (shouldLog && runId) {
+    const entries = buildSbBulkgenLogEntries({
+      rows,
+      current,
+      runId,
+      generator: "bulkgen:sb:update",
+      outputPaths: { uploadPath, reviewPath },
+    });
+    const { created, skipped } = await writeBulkgenLogs({
+      accountId,
+      marketplace,
+      entries,
+      experimentId,
+    });
+    console.log({ log_changes_created: created, log_changes_skipped: skipped, runId });
+  }
 
   console.log("Bulk update files written.");
   console.log({

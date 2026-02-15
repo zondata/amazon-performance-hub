@@ -498,6 +498,10 @@ Notes:
   ]
 }
 ```
+Logging (optional):
+- Add `--log` to write `log_changes` + `log_change_entities` for each merged upload row.
+- Optional `--experiment-id <uuid>` to link all changes to an experiment.
+- Optional `--run-id <string>` to force a stable run ID (defaults to timestamp+random when `--log` is present).
 
 ### Milestone 15 — SB Bulksheet Generator (Update-only)
 Goal: generate safe-to-upload SB bulksheet updates from stable IDs with strict headers.
@@ -516,6 +520,16 @@ Notes:
 - Default target sheet is `SB Multi Ad Group Campaigns` (override with `--sheet`).
 - Safe output folder pattern: `out/bulkgen/sb/<YYYY-MM-DD>/`.
 - SB templates may use `Budget` instead of `Daily Budget` for campaign updates; the generator accepts either and writes into the header found (prefers `Daily Budget` if both exist).
+Logging (optional):
+- Add `--log` to write `log_changes` + `log_change_entities` for each merged upload row.
+- Optional `--experiment-id <uuid>` to link all changes to an experiment.
+- Optional `--run-id <string>` to force a stable run ID (defaults to timestamp+random when `--log` is present).
+
+Recommended workflow:
+1. `npm run log:experiment:create -- --account-id <id> --marketplace <mkt> --file <experiment.json>`
+2. Generate bulksheet with `--log --experiment-id <uuid>`
+3. Upload bulksheet to Amazon
+4. Later evaluate with logbook views/evaluations
 
 ### Milestone 8 — Product Profile Module (Catalog) + Keyword Strategy Library
 What was added (high-level):

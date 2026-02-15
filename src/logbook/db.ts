@@ -36,6 +36,7 @@ export async function insertLogChange(params: {
     why: params.input.why ?? null,
     before_json: params.input.before_json ?? null,
     after_json: params.input.after_json ?? null,
+    dedupe_key: params.input.dedupe_key ?? null,
     source: params.input.source ?? "manual",
     source_upload_id: params.input.source_upload_id ?? null,
   };
@@ -52,6 +53,60 @@ export async function insertLogChange(params: {
 
   if (error) throw new Error(`Failed inserting log_changes: ${error.message}`);
   return data as LogChangeRow;
+}
+
+export async function upsertLogChangeWithDedupe(params: {
+  accountId: string;
+  marketplace: string;
+  input: LogChangeInput;
+}): Promise<LogChangeRow> {
+  if (!params.input.dedupe_key) {
+    throw new Error("upsertLogChangeWithDedupe requires input.dedupe_key");
+  }
+  const client = getSupabaseClient();
+  const payload: Record<string, unknown> = {
+    account_id: params.accountId,
+    marketplace: params.marketplace,
+    channel: params.input.channel,
+    change_type: params.input.change_type,
+    summary: params.input.summary,
+    why: params.input.why ?? null,
+    before_json: params.input.before_json ?? null,
+    after_json: params.input.after_json ?? null,
+    dedupe_key: params.input.dedupe_key,
+    source: params.input.source ?? "manual",
+    source_upload_id: params.input.source_upload_id ?? null,
+  };
+
+  if (params.input.occurred_at) {
+    payload.occurred_at = params.input.occurred_at;
+  }
+
+  const { data, error } = await client
+    .from("log_changes")
+    .upsert(payload, { onConflict: "account_id,dedupe_key" })
+    .select("*")
+    .single();
+
+  if (error) throw new Error(`Failed upserting log_changes: ${error.message}`);
+  return data as LogChangeRow;
+}
+
+export async function findLogChangeByDedupeKey(params: {
+  accountId: string;
+  dedupeKey: string;
+}): Promise<LogChangeRow | null> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from("log_changes")
+    .select("*")
+    .eq("account_id", params.accountId)
+    .eq("dedupe_key", params.dedupeKey)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed fetching log_changes by dedupe_key: ${error.message}`);
+  return (data as LogChangeRow | null) ?? null;
 }
 
 export async function insertLogChangeEntities(params: {
