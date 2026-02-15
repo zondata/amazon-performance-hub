@@ -515,6 +515,7 @@ Notes:
 - Generator merges duplicate entity rows by key (single row per entity for upload safety).
 - Default target sheet is `SB Multi Ad Group Campaigns` (override with `--sheet`).
 - Safe output folder pattern: `out/bulkgen/sb/<YYYY-MM-DD>/`.
+- SB templates may use `Budget` instead of `Daily Budget` for campaign updates; the generator accepts either and writes into the header found (prefers `Daily Budget` if both exist).
 
 ### Milestone 8 — Product Profile Module (Catalog) + Keyword Strategy Library
 What was added (high-level):

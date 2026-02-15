@@ -253,8 +253,9 @@ export function buildUploadRows(params: {
   current: FetchCurrentSbResult;
   notes?: string;
   sheetName?: string;
+  budgetColumn?: string;
 }): UploadRow[] {
-  const { actions, current, notes, sheetName } = params;
+  const { actions, current, notes, sheetName, budgetColumn } = params;
   const rows: UploadRow[] = [];
   const targetSheet = sheetName ?? SB_DEFAULT_SHEET_NAME;
 
@@ -264,10 +265,11 @@ export function buildUploadRows(params: {
       if (!campaign) throw new Error(`Campaign not found: ${action.campaign_id}`);
       const newBudget = parseNonNegativeNumber(action.new_budget, "new_budget");
       const currentBudget = campaign.daily_budget ?? null;
+      const budgetHeader = budgetColumn ?? "Daily Budget";
 
       const cells = {
         ...buildCampaignBaseCells(campaign),
-        "Daily Budget": newBudget,
+        [budgetHeader]: newBudget,
       };
       rows.push({
         sheetName: targetSheet,

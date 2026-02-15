@@ -7,6 +7,7 @@ import {
 } from "../bulksheet_gen_sb/buildUploadRows";
 import { writeSbBulkUpdateXlsx } from "../bulksheet_gen_sb/writeXlsx";
 import { SbUpdateAction, SbUpdateChangesFile } from "../bulksheet_gen_sb/types";
+import * as XLSX from "xlsx";
 
 function usage() {
   console.log(
@@ -35,15 +36,46 @@ function parseChangesFile(filePath: string): SbUpdateChangesFile {
   return data;
 }
 
+function readTemplateHeaders(templatePath: string, sheetName: string): string[] {
+  const workbook = XLSX.readFile(templatePath, { dense: true });
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) {
+    throw new Error(`Template sheet missing: ${sheetName}`);
+  }
+  const rows = XLSX.utils.sheet_to_json<(string | number | boolean | null)[]>(sheet, {
+    header: 1,
+    raw: false,
+    defval: "",
+  });
+  const headerRow = rows[0] ?? [];
+  const headers = headerRow.map((cell) => String(cell ?? "").trim());
+  if (!headers.length || headers.every((h) => !h)) {
+    throw new Error(`Template sheet ${sheetName} has no header row.`);
+  }
+  return headers;
+}
+
+function resolveBudgetHeader(headers: string[]): string | null {
+  if (headers.includes("Daily Budget")) return "Daily Budget";
+  if (headers.includes("Budget")) return "Budget";
+  return null;
+}
+
 function requiredHeadersForActions(
   actions: SbUpdateAction[],
   currentTargetsById: Map<string, { match_type: string }>,
+  budgetHeader?: string | null,
 ): string[] {
   const required = new Set<string>(["Entity", "Operation"]);
   for (const action of actions) {
     if (action.type === "update_campaign_budget") {
       required.add("Campaign ID");
-      required.add("Daily Budget");
+      if (!budgetHeader) {
+        throw new Error(
+          "Template missing required budget column: expected 'Daily Budget' or 'Budget'."
+        );
+      }
+      required.add(budgetHeader);
       continue;
     }
     if (action.type === "update_campaign_state") {
@@ -125,16 +157,24 @@ async function main() {
   const changes = parseChangesFile(filePath);
 
   const current = await fetchCurrentSbData(accountId, changes.actions);
+  const templateHeaders = readTemplateHeaders(templatePath, sheetName);
+  const hasBudgetAction = changes.actions.some(
+    (action) => action.type === "update_campaign_budget"
+  );
+  const budgetHeader = hasBudgetAction ? resolveBudgetHeader(templateHeaders) : null;
+
   const rows = buildUploadRows({
     actions: changes.actions,
     current,
     notes: changes.notes,
     sheetName,
+    budgetColumn: budgetHeader ?? undefined,
   });
 
   const requiredHeaders = requiredHeadersForActions(
     changes.actions,
-    current.targetsById
+    current.targetsById,
+    budgetHeader
   );
 
   const { uploadPath, reviewPath } = writeSbBulkUpdateXlsx({

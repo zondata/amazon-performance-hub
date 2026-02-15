@@ -100,6 +100,68 @@ describe("bulkgen sb update", () => {
     expect(uploadRows[0]).toEqual(headers);
   });
 
+  it("supports Budget header alias for campaign budgets", () => {
+    const tmpDir = path.resolve(__dirname, "tmp");
+    const templatePath = path.join(tmpDir, `template-sb-budget-${Date.now()}.xlsx`);
+    const outDir = path.join(tmpDir, `out-sb-budget-${Date.now()}`);
+
+    const headers = [
+      "Product",
+      "Entity",
+      "Operation",
+      "Campaign ID",
+      "Campaign Name",
+      "Budget",
+      "State",
+    ];
+
+    makeTemplate(templatePath, headers);
+
+    const actions: SbUpdateAction[] = [
+      { type: "update_campaign_budget", campaign_id: "C1", new_budget: 55 },
+    ];
+
+    const current: FetchCurrentSbResult = {
+      snapshotDate: "2026-02-14",
+      campaignsById: new Map([
+        [
+          "C1",
+          {
+            campaign_id: "C1",
+            campaign_name_raw: "SB Camp",
+            state: "enabled",
+            daily_budget: 20,
+            bidding_strategy: "Legacy",
+            portfolio_id: null,
+          },
+        ],
+      ]),
+      adGroupsById: new Map(),
+      targetsById: new Map(),
+      placementsByKey: new Map(),
+    };
+
+    const rows = buildUploadRows({ actions, current, budgetColumn: "Budget" });
+    const { uploadPath } = writeSbBulkUpdateXlsx({
+      templatePath,
+      outDir,
+      rows,
+      requiredHeadersBySheet: new Map([
+        [SB_DEFAULT_SHEET_NAME, ["Entity", "Operation", "Campaign ID", "Budget"]],
+      ]),
+    });
+
+    const uploadWorkbook = XLSX.readFile(uploadPath);
+    const uploadSheet = uploadWorkbook.Sheets[SB_DEFAULT_SHEET_NAME];
+    const uploadRows = XLSX.utils.sheet_to_json<unknown[]>(uploadSheet, {
+      header: 1,
+      raw: false,
+      defval: "",
+    });
+    const rowObj = rowToObject(uploadRows[0] as string[], uploadRows[1] as unknown[]);
+    expect(Number(rowObj.Budget)).toBe(55);
+  });
+
   it("writes review output with helper columns appended", () => {
     const tmpDir = path.resolve(__dirname, "tmp");
     const templatePath = path.join(tmpDir, `template-sb-review-${Date.now()}.xlsx`);
