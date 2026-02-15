@@ -503,6 +503,24 @@ Logging (optional):
 - Optional `--experiment-id <uuid>` to link all changes to an experiment.
 - Optional `--run-id <string>` to force a stable run ID (defaults to timestamp+random when `--log` is present).
 
+### Milestone 16 — SP Bulksheet Generator (Create, minimal)
+Goal: generate safe-to-upload SP bulksheet create files with strict headers, defaults, caps, and a manifest.
+
+Commands:
+- `npm run bulkgen:sp:create -- --account-id US --marketplace US --template <xlsx> --out-dir <dir> --file <changes.json> [--confirm-create] [--allow-enabled] [--max-budget 50] [--max-bid 2] [--log] [--experiment-id <uuid>] [--run-id <id>]`
+- `npm run sp:create:reconcile -- --account-id US --snapshot-date YYYY-MM-DD --manifest <json>`
+
+Notes:
+- Always writes `review.xlsx` + `creation_manifest.json`.
+- `upload_strict.xlsx` is only written when `--confirm-create` is provided (dry-run otherwise).
+- Default state is `Paused` unless `--allow-enabled` is passed.
+- Caps default to `--max-budget 50` and `--max-bid 2` (fail fast if exceeded).
+- Manifest is used for read-only reconciliation after upload.
+
+Logging (optional):
+- Add `--log` to write `log_changes` for each merged create row.
+- Optional `--experiment-id <uuid>` to link all changes to an experiment.
+
 ### Milestone 15 — SB Bulksheet Generator (Update-only)
 Goal: generate safe-to-upload SB bulksheet updates from stable IDs with strict headers.
 

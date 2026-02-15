@@ -3,6 +3,7 @@ import { UploadRow as SpUploadRow } from "../bulksheet_gen_sp/buildUploadRows";
 import { UploadRow as SbUploadRow } from "../bulksheet_gen_sb/buildUploadRows";
 import { FetchCurrentResult } from "../bulksheet_gen_sp/fetchCurrent";
 import { FetchCurrentSbResult, CurrentSbPlacement } from "../bulksheet_gen_sb/fetchCurrent";
+import { SpCreateManifest } from "../bulksheet_gen_sp_create/manifest";
 import { LogChangeEntityInput, LogChangeInput } from "./types";
 import {
   findLogChangeByDedupeKey,
@@ -45,6 +46,30 @@ function buildDedupeKey(params: {
     params.adGroupId,
     params.targetId,
     placementNorm,
+  ].join("::");
+}
+
+function buildCreateDedupeKey(params: {
+  runId: string;
+  generator: string;
+  entity: string;
+  campaignName: string;
+  adGroupName: string;
+  keywordText: string;
+  matchType: string;
+  sku: string;
+  asin: string;
+}): string {
+  return [
+    params.runId,
+    params.generator,
+    params.entity,
+    normText(params.campaignName),
+    normText(params.adGroupName),
+    normText(params.keywordText),
+    normText(params.matchType),
+    normText(params.sku),
+    normText(params.asin),
   ].join("::");
 }
 
@@ -433,6 +458,168 @@ export function buildSbBulkgenLogEntries(params: {
     };
 
     entries.push({ dedupeKey, change });
+  }
+
+  return entries;
+}
+
+export function buildSpBulkgenCreateLogEntries(params: {
+  manifest: SpCreateManifest;
+  runId: string;
+  generator: string;
+  outputPaths: BulkgenOutputPaths;
+}): BulkgenLogEntry[] {
+  const entries: BulkgenLogEntry[] = [];
+  const channelLabel = "SP";
+
+  for (const campaign of params.manifest.campaigns) {
+    const dedupeKey = buildCreateDedupeKey({
+      runId: params.runId,
+      generator: params.generator,
+      entity: "Campaign",
+      campaignName: campaign.name,
+      adGroupName: "",
+      keywordText: "",
+      matchType: "",
+      sku: "",
+      asin: "",
+    });
+    const after = buildAfterJson({
+      runId: params.runId,
+      generator: params.generator,
+      outputPaths: params.outputPaths,
+      fields: { campaign_name: campaign.name },
+      dedupeKey,
+    });
+    entries.push({
+      dedupeKey,
+      change: {
+        channel: "ads",
+        change_type: "bulk_create_campaign",
+        summary: `${channelLabel} campaign create: campaign_name=${campaign.name}`,
+        before_json: null,
+        after_json: after,
+        source: "bulkgen",
+        dedupe_key: dedupeKey,
+        entities: [],
+      },
+    });
+  }
+
+  for (const adGroup of params.manifest.ad_groups) {
+    const dedupeKey = buildCreateDedupeKey({
+      runId: params.runId,
+      generator: params.generator,
+      entity: "Ad Group",
+      campaignName: adGroup.campaign_name,
+      adGroupName: adGroup.ad_group_name,
+      keywordText: "",
+      matchType: "",
+      sku: "",
+      asin: "",
+    });
+    const after = buildAfterJson({
+      runId: params.runId,
+      generator: params.generator,
+      outputPaths: params.outputPaths,
+      fields: {
+        campaign_name: adGroup.campaign_name,
+        ad_group_name: adGroup.ad_group_name,
+      },
+      dedupeKey,
+    });
+    entries.push({
+      dedupeKey,
+      change: {
+        channel: "ads",
+        change_type: "bulk_create_ad_group",
+        summary: `${channelLabel} ad group create: ad_group_name=${adGroup.ad_group_name}`,
+        before_json: null,
+        after_json: after,
+        source: "bulkgen",
+        dedupe_key: dedupeKey,
+        entities: [],
+      },
+    });
+  }
+
+  for (const productAd of params.manifest.product_ads) {
+    const dedupeKey = buildCreateDedupeKey({
+      runId: params.runId,
+      generator: params.generator,
+      entity: "Product Ad",
+      campaignName: productAd.campaign_name,
+      adGroupName: productAd.ad_group_name,
+      keywordText: "",
+      matchType: "",
+      sku: productAd.sku ?? "",
+      asin: productAd.asin ?? "",
+    });
+    const after = buildAfterJson({
+      runId: params.runId,
+      generator: params.generator,
+      outputPaths: params.outputPaths,
+      fields: {
+        campaign_name: productAd.campaign_name,
+        ad_group_name: productAd.ad_group_name,
+        sku: productAd.sku ?? null,
+        asin: productAd.asin ?? null,
+      },
+      dedupeKey,
+    });
+    entries.push({
+      dedupeKey,
+      change: {
+        channel: "ads",
+        change_type: "bulk_create_product_ad",
+        summary: `${channelLabel} product ad create: ad_group_name=${productAd.ad_group_name}`,
+        before_json: null,
+        after_json: after,
+        source: "bulkgen",
+        dedupe_key: dedupeKey,
+        entities: [],
+      },
+    });
+  }
+
+  for (const keyword of params.manifest.keywords) {
+    const dedupeKey = buildCreateDedupeKey({
+      runId: params.runId,
+      generator: params.generator,
+      entity: "Keyword",
+      campaignName: keyword.campaign_name,
+      adGroupName: keyword.ad_group_name,
+      keywordText: keyword.keyword_text,
+      matchType: keyword.match_type,
+      sku: "",
+      asin: "",
+    });
+    const after = buildAfterJson({
+      runId: params.runId,
+      generator: params.generator,
+      outputPaths: params.outputPaths,
+      fields: {
+        campaign_name: keyword.campaign_name,
+        ad_group_name: keyword.ad_group_name,
+        keyword_text: keyword.keyword_text,
+        match_type: keyword.match_type,
+        bid: keyword.bid,
+      },
+      dedupeKey,
+    });
+    entries.push({
+      dedupeKey,
+      change: {
+        channel: "ads",
+        change_type: "bulk_create_keyword",
+        summary: `${channelLabel} keyword create: keyword_text=${keyword.keyword_text}`,
+        before_json: null,
+        after_json: after,
+        source: "bulkgen",
+        dedupe_key: dedupeKey,
+        entities: [],
+      },
+    });
   }
 
   return entries;
