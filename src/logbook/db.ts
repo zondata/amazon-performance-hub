@@ -84,7 +84,7 @@ export async function upsertLogChangeWithDedupe(params: {
 
   const { data, error } = await client
     .from("log_changes")
-    .upsert(payload, { onConflict: "account_id,dedupe_key" })
+    .upsert(payload, { onConflict: "account_id,dedupe_key", ignoreDuplicates: false })
     .select("*")
     .single();
 

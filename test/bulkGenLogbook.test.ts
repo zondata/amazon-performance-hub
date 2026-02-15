@@ -128,6 +128,9 @@ describe("bulkgen logbook integration", () => {
       experimentId: "exp-1",
     });
 
+    expect(mockFind).toHaveBeenCalledWith(
+      expect.objectContaining({ accountId: "US", dedupeKey: entries[0].dedupeKey })
+    );
     expect(mockUpsert).toHaveBeenCalledTimes(1);
     expect(mockInsertEntities).toHaveBeenCalledTimes(1);
     expect(mockLinkExperiment).toHaveBeenCalledTimes(1);
