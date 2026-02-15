@@ -5,10 +5,11 @@ import { buildCreateManifest } from "../bulksheet_gen_sp_create/manifest";
 import { writeSpBulkCreateXlsx } from "../bulksheet_gen_sp_create/writeXlsx";
 import { SpCreateChangesFile, SpCreateAction } from "../bulksheet_gen_sp_create/types";
 import { buildSpBulkgenCreateLogEntries, writeBulkgenLogs } from "../logbook/bulkgen";
+import * as XLSX from "xlsx";
 
 function usage() {
   console.log(
-    "Usage: npm run bulkgen:sp:create -- --account-id <id> --marketplace <marketplace> --template <xlsx> --out-dir <dir> --file <changes.json> [--confirm-create] [--allow-enabled] [--max-budget 50] [--max-bid 2] [--log] [--experiment-id <uuid>] [--run-id <id>]"
+    "Usage: npm run bulkgen:sp:create -- --account-id <id> --marketplace <marketplace> --template <xlsx> --out-dir <dir> --file <changes.json> [--confirm-create] [--allow-enabled] [--max-budget 50] [--max-bid 2] [--portfolio-id <id>] [--log] [--experiment-id <uuid>] [--run-id <id>]"
   );
 }
 
@@ -47,36 +48,64 @@ function parseChangesFile(filePath: string): SpCreateChangesFile {
   return data;
 }
 
+function readTemplateHeaders(templatePath: string, sheetName: string): string[] {
+  const workbook = XLSX.readFile(templatePath, { dense: true });
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) {
+    throw new Error(`Template sheet missing: ${sheetName}`);
+  }
+  const rows = XLSX.utils.sheet_to_json<(string | number | boolean | null)[]>(sheet, {
+    header: 1,
+    raw: false,
+    defval: "",
+  });
+  const headerRow = rows[0] ?? [];
+  const headers = headerRow.map((cell) => String(cell ?? "").trim());
+  if (!headers.length || headers.every((h) => !h)) {
+    throw new Error(`Template sheet ${sheetName} has no header row.`);
+  }
+  return headers;
+}
+
 function requiredHeadersForActions(actions: SpCreateAction[]): string[] {
   const required = new Set<string>(["Entity", "Operation", "Product"]);
   for (const action of actions) {
     if (action.type === "create_campaign") {
+      required.add("Campaign ID");
       required.add("Campaign Name");
       required.add("Daily Budget");
       required.add("State");
+      required.add("Targeting Type");
       if (action.bidding_strategy) {
         required.add("Bidding Strategy");
       }
       continue;
     }
     if (action.type === "create_ad_group") {
+      required.add("Campaign ID");
       required.add("Campaign Name");
+      required.add("Ad Group ID");
       required.add("Ad Group Name");
       required.add("State");
       if (action.default_bid !== undefined && action.default_bid !== null) {
-        required.add("Bid");
+        required.add("Ad Group Default Bid");
       }
       continue;
     }
     if (action.type === "create_product_ad") {
+      required.add("Campaign ID");
       required.add("Campaign Name");
+      required.add("Ad Group ID");
       required.add("Ad Group Name");
+      required.add("State");
       if (action.sku) required.add("SKU");
       if (action.asin) required.add("ASIN");
       continue;
     }
     if (action.type === "create_keyword") {
+      required.add("Campaign ID");
       required.add("Campaign Name");
+      required.add("Ad Group ID");
       required.add("Ad Group Name");
       required.add("Keyword Text");
       required.add("Match Type");
@@ -100,9 +129,10 @@ async function main() {
   const allowEnabled = hasFlag("--allow-enabled");
   const maxBudget = parseNumberArg(getArg("--max-budget"), 50, "max-budget");
   const maxBid = parseNumberArg(getArg("--max-bid"), 2, "max-bid");
+  const portfolioId = getArg("--portfolio-id");
   const shouldLog = hasFlag("--log");
   const experimentId = getArg("--experiment-id");
-  const runId = getArg("--run-id") ?? generateRunId();
+  const runIdArg = getArg("--run-id");
 
   if (!accountId || !marketplace || !templatePath || !outDir || !filePath) {
     usage();
@@ -114,17 +144,26 @@ async function main() {
   }
 
   const changes = parseChangesFile(filePath);
-  const refs = resolveCreateRefs(changes.actions);
+  const runId = changes.run_id ?? runIdArg ?? generateRunId();
+  const templateHeaders = readTemplateHeaders(templatePath, SP_CREATE_SHEET_NAME);
+  const availableHeaders = new Set(templateHeaders);
+  const refs = resolveCreateRefs(changes.actions, runId);
   const rows = buildUploadRows({
     actions: changes.actions,
     refs,
     allowEnabled,
     maxBudget,
     maxBid,
+    portfolioId: portfolioId ?? undefined,
+    availableHeaders,
+    runId,
     notes: changes.notes,
   });
 
   const requiredHeaders = requiredHeadersForActions(changes.actions);
+  if (portfolioId && !availableHeaders.has("Portfolio ID")) {
+    throw new Error("Template missing required column for --portfolio-id: Portfolio ID");
+  }
   const { uploadPath, reviewPath } = writeSpBulkCreateXlsx({
     templatePath,
     outDir: path.resolve(outDir),
@@ -138,6 +177,7 @@ async function main() {
     refs,
     runId,
     generator: "bulkgen:sp:create",
+    portfolioId: portfolioId ?? undefined,
   });
   const manifestPath = path.join(path.resolve(outDir), "creation_manifest.json");
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf-8");

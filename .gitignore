@@ -33,3 +33,6 @@ dist/
 # Local blueprint doc
 blueprint.docx
 ~.docx
+
+# local artifacts
+/tmp/

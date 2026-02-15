@@ -507,19 +507,36 @@ Logging (optional):
 Goal: generate safe-to-upload SP bulksheet create files with strict headers, defaults, caps, and a manifest.
 
 Commands:
-- `npm run bulkgen:sp:create -- --account-id US --marketplace US --template <xlsx> --out-dir <dir> --file <changes.json> [--confirm-create] [--allow-enabled] [--max-budget 50] [--max-bid 2] [--log] [--experiment-id <uuid>] [--run-id <id>]`
+- `npm run bulkgen:sp:create -- --account-id US --marketplace US --template <xlsx> --out-dir <dir> --file <changes.json> [--confirm-create] [--portfolio-id <id>]`
 - `npm run sp:create:reconcile -- --account-id US --snapshot-date YYYY-MM-DD --manifest <json>`
+- `npm run sp:create:reconcile:pending -- --account-id US --snapshot-date YYYY-MM-DD --pending-dir <path> [--dry-run] [--max-manifests N] [--verbose]`
 
 Notes:
-- Always writes `review.xlsx` + `creation_manifest.json`.
+- Always writes `review.xlsx` + `creation_manifest.json` (includes `run_id` and temp IDs used).
 - `upload_strict.xlsx` is only written when `--confirm-create` is provided (dry-run otherwise).
-- Default state is `Paused` unless `--allow-enabled` is passed.
-- Caps default to `--max-budget 50` and `--max-bid 2` (fail fast if exceeded).
+- Required create fields: campaign `targeting_type` (Auto/Manual).
+- Optional: `--portfolio-id` writes `Portfolio ID` on campaign rows (template must include column).
+- Temp linking IDs: Campaign ID + Ad Group ID are generated and used for child rows.
+- Product Ad `State` is always set (Paused default).
 - Manifest is used for read-only reconciliation after upload.
 
 Logging (optional):
 - Add `--log` to write `log_changes` for each merged create row.
 - Optional `--experiment-id <uuid>` to link all changes to an experiment.
+
+Pending reconcile (file-based queue):
+- Folder convention:
+  - `<base>/_PENDING_RECONCILE` (manifests)
+  - `<base>/_RECONCILED` (manifest + `.reconcile_result.json`)
+  - `<base>/_FAILED` (manifest + `.fail.json`)
+- `sp:create:reconcile:pending` processes manifests in order; successful matches move to `_RECONCILED`, malformed manifests move to `_FAILED`, partial matches stay in `_PENDING_RECONCILE`.
+
+Recommended flow:
+- Generate create package with `bulkgen:sp:create`.
+- Upload `upload_strict.xlsx`.
+- Copy `creation_manifest.json` into `_PENDING_RECONCILE`.
+- Download latest bulksheet snapshot (may lag).
+- Run `sp:create:reconcile:pending` until files move to `_RECONCILED`.
 
 ### Milestone 15 — SB Bulksheet Generator (Update-only)
 Goal: generate safe-to-upload SB bulksheet updates from stable IDs with strict headers.

@@ -3,6 +3,7 @@ export type CreateCampaignAction = {
   name: string;
   daily_budget: number;
   bidding_strategy?: string;
+  targeting_type: string;
   state?: string;
   temp_id?: string;
 };
@@ -25,6 +26,7 @@ export type CreateProductAdAction = {
   ad_group_temp_id?: string;
   sku?: string;
   asin?: string;
+  state?: string;
 };
 
 export type CreateKeywordAction = {
@@ -47,11 +49,14 @@ export type SpCreateAction =
 
 export type SpCreateChangesFile = {
   exported_at?: string;
+  run_id?: string;
   notes?: string;
   actions: SpCreateAction[];
 };
 
 export type SpCreateResolvedRefs = {
   campaignsByTempId: Map<string, string>;
+  campaignsByName: Map<string, string>;
   adGroupsByTempId: Map<string, { campaignName: string; adGroupName: string }>;
+  adGroupsByKey: Map<string, string>;
 };

@@ -1,4 +1,5 @@
 import { normText } from "../bulk/parseSponsoredProductsBulk";
+import crypto from "node:crypto";
 import {
   CreateAdGroupAction,
   CreateCampaignAction,
@@ -58,6 +59,19 @@ function resolveCampaignName(
   throw new Error("Missing campaign_name or campaign_temp_id");
 }
 
+function resolveCampaignTempId(
+  action: { campaign_name?: string; campaign_temp_id?: string; name?: string },
+  refs: SpCreateResolvedRefs
+): string {
+  if (action.campaign_temp_id) return action.campaign_temp_id;
+  const name = action.name ? action.name.trim() : resolveCampaignName(action, refs);
+  const tempId = refs.campaignsByName.get(normText(name));
+  if (!tempId) {
+    throw new Error(`Missing temp campaign ID for campaign_name: ${name}`);
+  }
+  return tempId;
+}
+
 function resolveAdGroupName(
   action: { ad_group_name?: string; ad_group_temp_id?: string },
   refs: SpCreateResolvedRefs
@@ -71,6 +85,21 @@ function resolveAdGroupName(
     return ref.adGroupName;
   }
   throw new Error("Missing ad_group_name or ad_group_temp_id");
+}
+
+function resolveAdGroupTempId(
+  action: { ad_group_name?: string; ad_group_temp_id?: string; campaign_name?: string; campaign_temp_id?: string },
+  refs: SpCreateResolvedRefs
+): string {
+  if (action.ad_group_temp_id) return action.ad_group_temp_id;
+  const campaignName = resolveCampaignName(action, refs);
+  const adGroupName = resolveAdGroupName(action, refs);
+  const key = `${normText(campaignName)}::${normText(adGroupName)}`;
+  const tempId = refs.adGroupsByKey.get(key);
+  if (!tempId) {
+    throw new Error(`Missing temp ad group ID for ${campaignName} / ${adGroupName}`);
+  }
+  return tempId;
 }
 
 function resolveAdGroupCampaignName(
@@ -89,8 +118,23 @@ function resolveAdGroupCampaignName(
 
 function buildCampaignRow(
   action: CreateCampaignAction,
-  params: { allowEnabled: boolean; maxBudget: number; notes?: string }
+  params: {
+    allowEnabled: boolean;
+    maxBudget: number;
+    notes?: string;
+    portfolioId?: string;
+    availableHeaders?: Set<string>;
+    campaignTempId: string;
+  }
 ): UploadRow {
+  const targetingType = (() => {
+    const raw = String(action.targeting_type ?? "").trim();
+    if (!raw) throw new Error("Missing targeting_type for create_campaign");
+    const lower = raw.toLowerCase();
+    if (lower === "auto") return "Auto";
+    if (lower === "manual") return "Manual";
+    throw new Error(`Invalid targeting_type: ${raw}. Allowed: auto, manual.`);
+  })();
   const name = ensureNonEmpty(action.name, "campaign name");
   const dailyBudget = parseNonNegativeNumber(action.daily_budget, "daily_budget");
   if (dailyBudget > params.maxBudget) {
@@ -103,12 +147,20 @@ function buildCampaignRow(
     Product: "Sponsored Products",
     Entity: "Campaign",
     Operation: "Create",
+    "Campaign ID": params.campaignTempId,
     "Campaign Name": name,
     "Daily Budget": dailyBudget,
     State: state,
+    "Targeting Type": targetingType,
   };
   if (biddingStrategy) {
     cells["Bidding Strategy"] = biddingStrategy;
+  }
+  if (params.portfolioId) {
+    if (!params.availableHeaders?.has("Portfolio ID")) {
+      throw new Error("Template missing required column for --portfolio-id: Portfolio ID");
+    }
+    cells["Portfolio ID"] = params.portfolioId;
   }
 
   return {
@@ -126,7 +178,14 @@ function buildCampaignRow(
 
 function buildAdGroupRow(
   action: CreateAdGroupAction,
-  params: { refs: SpCreateResolvedRefs; allowEnabled: boolean; maxBid: number; notes?: string }
+  params: {
+    refs: SpCreateResolvedRefs;
+    allowEnabled: boolean;
+    maxBid: number;
+    notes?: string;
+    campaignTempId: string;
+    adGroupTempId: string;
+  }
 ): UploadRow {
   const campaignName = resolveCampaignName(action, params.refs);
   const adGroupName = ensureNonEmpty(action.ad_group_name, "ad group name");
@@ -136,7 +195,9 @@ function buildAdGroupRow(
     Product: "Sponsored Products",
     Entity: "Ad Group",
     Operation: "Create",
+    "Campaign ID": params.campaignTempId,
     "Campaign Name": campaignName,
+    "Ad Group ID": params.adGroupTempId,
     "Ad Group Name": adGroupName,
     State: state,
   };
@@ -146,7 +207,7 @@ function buildAdGroupRow(
     if (bid > params.maxBid) {
       throw new Error(`default_bid exceeds max bid cap (${params.maxBid})`);
     }
-    cells.Bid = bid;
+    cells["Ad Group Default Bid"] = bid;
   }
 
   return {
@@ -164,7 +225,13 @@ function buildAdGroupRow(
 
 function buildProductAdRow(
   action: CreateProductAdAction,
-  params: { refs: SpCreateResolvedRefs; notes?: string }
+  params: {
+    refs: SpCreateResolvedRefs;
+    notes?: string;
+    allowEnabled: boolean;
+    campaignTempId: string;
+    adGroupTempId: string;
+  }
 ): UploadRow {
   const campaignName = resolveCampaignName(action, params.refs);
   const adGroupName = resolveAdGroupName(action, params.refs);
@@ -173,13 +240,17 @@ function buildProductAdRow(
   if (!sku && !asin) {
     throw new Error("create_product_ad requires sku or asin");
   }
+  const state = normalizeStateForCreate(action.state, params.allowEnabled);
 
   const cells: Record<string, string | number | boolean | null> = {
     Product: "Sponsored Products",
     Entity: "Product Ad",
     Operation: "Create",
+    "Campaign ID": params.campaignTempId,
     "Campaign Name": campaignName,
+    "Ad Group ID": params.adGroupTempId,
     "Ad Group Name": adGroupName,
+    State: state,
   };
   if (sku) cells.SKU = sku;
   if (asin) cells.ASIN = asin;
@@ -199,7 +270,14 @@ function buildProductAdRow(
 
 function buildKeywordRow(
   action: CreateKeywordAction,
-  params: { refs: SpCreateResolvedRefs; allowEnabled: boolean; maxBid: number; notes?: string }
+  params: {
+    refs: SpCreateResolvedRefs;
+    allowEnabled: boolean;
+    maxBid: number;
+    notes?: string;
+    campaignTempId: string;
+    adGroupTempId: string;
+  }
 ): UploadRow {
   const campaignName = resolveCampaignName(action, params.refs);
   const adGroupName = resolveAdGroupName(action, params.refs);
@@ -215,7 +293,9 @@ function buildKeywordRow(
     Product: "Sponsored Products",
     Entity: "Keyword",
     Operation: "Create",
+    "Campaign ID": params.campaignTempId,
     "Campaign Name": campaignName,
+    "Ad Group ID": params.adGroupTempId,
     "Ad Group Name": adGroupName,
     "Keyword Text": keywordText,
     "Match Type": matchType,
@@ -310,9 +390,34 @@ function sortRows(rows: UploadRow[]): UploadRow[] {
   });
 }
 
-export function resolveCreateRefs(actions: SpCreateAction[]): SpCreateResolvedRefs {
+function shortHash(input: string): string {
+  return crypto.createHash("sha1").update(input).digest("hex").slice(0, 8);
+}
+
+function generateCampaignTempId(runId: string, campaignName: string): string {
+  const hash = shortHash(`${runId}::campaign::${normText(campaignName)}`);
+  return `TMP-CAMP-${hash}`;
+}
+
+function generateAdGroupTempId(
+  runId: string,
+  campaignName: string,
+  adGroupName: string
+): string {
+  const hash = shortHash(
+    `${runId}::adgroup::${normText(campaignName)}::${normText(adGroupName)}`
+  );
+  return `TMP-AG-${hash}`;
+}
+
+export function resolveCreateRefs(
+  actions: SpCreateAction[],
+  runId: string
+): SpCreateResolvedRefs {
   const campaignsByTempId = new Map<string, string>();
+  const campaignsByName = new Map<string, string>();
   const adGroupsByTempId = new Map<string, { campaignName: string; adGroupName: string }>();
+  const adGroupsByKey = new Map<string, string>();
 
   for (const action of actions) {
     if (action.type === "create_campaign" && action.temp_id) {
@@ -324,11 +429,31 @@ export function resolveCreateRefs(actions: SpCreateAction[]): SpCreateResolvedRe
   }
 
   for (const action of actions) {
+    if (action.type === "create_campaign") {
+      const name = action.name.trim();
+      const nameKey = normText(name);
+      if (campaignsByName.has(nameKey)) continue;
+      const tempId = action.temp_id ?? generateCampaignTempId(runId, name);
+      campaignsByName.set(nameKey, tempId);
+      if (!campaignsByTempId.has(tempId)) {
+        campaignsByTempId.set(tempId, name);
+      }
+    }
+  }
+
+  const refs: SpCreateResolvedRefs = {
+    campaignsByTempId,
+    campaignsByName,
+    adGroupsByTempId,
+    adGroupsByKey,
+  };
+
+  for (const action of actions) {
     if (action.type === "create_ad_group" && action.temp_id) {
       if (adGroupsByTempId.has(action.temp_id)) {
         throw new Error(`Duplicate ad_group temp_id: ${action.temp_id}`);
       }
-      const campaignName = resolveCampaignName(action, { campaignsByTempId, adGroupsByTempId });
+      const campaignName = resolveCampaignName(action, refs);
       adGroupsByTempId.set(action.temp_id, {
         campaignName,
         adGroupName: action.ad_group_name.trim(),
@@ -336,7 +461,21 @@ export function resolveCreateRefs(actions: SpCreateAction[]): SpCreateResolvedRe
     }
   }
 
-  return { campaignsByTempId, adGroupsByTempId };
+  for (const action of actions) {
+    if (action.type === "create_ad_group") {
+      const campaignName = resolveCampaignName(action, refs);
+      const adGroupName = action.ad_group_name.trim();
+      const key = `${normText(campaignName)}::${normText(adGroupName)}`;
+      if (adGroupsByKey.has(key)) continue;
+      const tempId = action.temp_id ?? generateAdGroupTempId(runId, campaignName, adGroupName);
+      adGroupsByKey.set(key, tempId);
+      if (!adGroupsByTempId.has(tempId)) {
+        adGroupsByTempId.set(tempId, { campaignName, adGroupName });
+      }
+    }
+  }
+
+  return { campaignsByTempId, campaignsByName, adGroupsByTempId, adGroupsByKey };
 }
 
 export function buildUploadRows(params: {
@@ -345,18 +484,38 @@ export function buildUploadRows(params: {
   allowEnabled: boolean;
   maxBudget: number;
   maxBid: number;
+  portfolioId?: string;
+  availableHeaders?: Set<string>;
+  runId: string;
   notes?: string;
 }): UploadRow[] {
   const rows: UploadRow[] = [];
   const { refs } = params;
 
+  const hasAutoCampaign = params.actions.some(
+    (action) =>
+      action.type === "create_campaign" &&
+      String((action as CreateCampaignAction).targeting_type ?? "")
+        .trim()
+        .toLowerCase() === "auto"
+  );
+  const hasKeyword = params.actions.some((action) => action.type === "create_keyword");
+  if (hasAutoCampaign && hasKeyword) {
+    throw new Error(
+      "Auto targeting campaigns cannot include create_keyword actions. Use Manual targeting."
+    );
+  }
+
   for (const action of params.actions) {
     if (action.type === "create_campaign") {
-      rows.push(buildCampaignRow(action, params));
+      const campaignTempId = resolveCampaignTempId(action, refs);
+      rows.push(buildCampaignRow(action, { ...params, campaignTempId }));
       continue;
     }
     if (action.type === "create_ad_group") {
-      rows.push(buildAdGroupRow(action, { ...params, refs }));
+      const campaignTempId = resolveCampaignTempId(action, refs);
+      const adGroupTempId = action.temp_id ?? resolveAdGroupTempId(action, refs);
+      rows.push(buildAdGroupRow(action, { ...params, refs, campaignTempId, adGroupTempId }));
       continue;
     }
     if (action.type === "create_product_ad") {
@@ -369,12 +528,23 @@ export function buildUploadRows(params: {
           );
         }
       }
-      const adGroupName = resolveAdGroupName(action, refs);
-      rows.push(buildProductAdRow(action, { refs, notes: params.notes }));
+      const campaignTempId = resolveCampaignTempId(action, refs);
+      const adGroupTempId = resolveAdGroupTempId(action, refs);
+      rows.push(
+        buildProductAdRow(action, {
+          refs,
+          notes: params.notes,
+          allowEnabled: params.allowEnabled,
+          campaignTempId,
+          adGroupTempId,
+        })
+      );
       continue;
     }
     if (action.type === "create_keyword") {
-      rows.push(buildKeywordRow(action, { ...params, refs }));
+      const campaignTempId = resolveCampaignTempId(action, refs);
+      const adGroupTempId = resolveAdGroupTempId(action, refs);
+      rows.push(buildKeywordRow(action, { ...params, refs, campaignTempId, adGroupTempId }));
       continue;
     }
     const neverAction: never = action;

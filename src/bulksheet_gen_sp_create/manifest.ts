@@ -1,4 +1,5 @@
 import { SpCreateAction, SpCreateResolvedRefs } from "./types";
+import { normText } from "../bulk/parseSponsoredProductsBulk";
 
 export type SpCreateManifest = {
   run_id: string;
@@ -7,11 +8,14 @@ export type SpCreateManifest = {
   campaigns: {
     name: string;
     temp_id?: string;
+    portfolio_id?: string;
+    campaign_id: string;
   }[];
   ad_groups: {
     campaign_name: string;
     ad_group_name: string;
     temp_id?: string;
+    ad_group_id: string;
   }[];
   product_ads: {
     campaign_name: string;
@@ -59,6 +63,7 @@ export function buildCreateManifest(params: {
   refs: SpCreateResolvedRefs;
   runId: string;
   generator: string;
+  portfolioId?: string;
 }): SpCreateManifest {
   const campaigns: SpCreateManifest["campaigns"] = [];
   const adGroups: SpCreateManifest["ad_groups"] = [];
@@ -67,17 +72,25 @@ export function buildCreateManifest(params: {
 
   for (const action of params.actions) {
     if (action.type === "create_campaign") {
+      const campaignId =
+        action.temp_id ?? params.refs.campaignsByName.get(normText(action.name.trim())) ?? "";
       campaigns.push({
         name: action.name.trim(),
         temp_id: action.temp_id,
+        portfolio_id: params.portfolioId,
+        campaign_id: campaignId,
       });
       continue;
     }
     if (action.type === "create_ad_group") {
+      const campaignName = resolveCampaignName(action, params.refs);
+      const key = `${normText(campaignName)}::${normText(action.ad_group_name.trim())}`;
+      const adGroupId = action.temp_id ?? params.refs.adGroupsByKey.get(key) ?? "";
       adGroups.push({
-        campaign_name: resolveCampaignName(action, params.refs),
+        campaign_name: campaignName,
         ad_group_name: action.ad_group_name.trim(),
         temp_id: action.temp_id,
+        ad_group_id: adGroupId,
       });
       continue;
     }
