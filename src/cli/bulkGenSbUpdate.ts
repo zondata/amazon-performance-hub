@@ -1,0 +1,158 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fetchCurrentSbData } from "../bulksheet_gen_sb/fetchCurrent";
+import {
+  buildUploadRows,
+  SB_DEFAULT_SHEET_NAME,
+} from "../bulksheet_gen_sb/buildUploadRows";
+import { writeSbBulkUpdateXlsx } from "../bulksheet_gen_sb/writeXlsx";
+import { SbUpdateAction, SbUpdateChangesFile } from "../bulksheet_gen_sb/types";
+
+function usage() {
+  console.log(
+    "Usage: npm run bulkgen:sb:update -- --account-id <id> --marketplace <marketplace> --template <xlsx> --out-dir <dir> --file <changes.json> [--sheet \"SB Multi Ad Group Campaigns\"]"
+  );
+}
+
+function getArg(flag: string): string | undefined {
+  const idx = process.argv.indexOf(flag);
+  if (idx === -1) return undefined;
+  return process.argv[idx + 1];
+}
+
+function parseChangesFile(filePath: string): SbUpdateChangesFile {
+  const raw = fs.readFileSync(filePath, "utf-8");
+  const data = JSON.parse(raw) as SbUpdateChangesFile;
+  if (!data || typeof data !== "object") {
+    throw new Error("Invalid changes file: expected JSON object.");
+  }
+  if (!data.exported_at || typeof data.exported_at !== "string") {
+    throw new Error("Invalid changes file: exported_at is required.");
+  }
+  if (!Array.isArray(data.actions) || data.actions.length === 0) {
+    throw new Error("Invalid changes file: actions must be a non-empty array.");
+  }
+  return data;
+}
+
+function requiredHeadersForActions(
+  actions: SbUpdateAction[],
+  currentTargetsById: Map<string, { match_type: string }>,
+): string[] {
+  const required = new Set<string>(["Entity", "Operation"]);
+  for (const action of actions) {
+    if (action.type === "update_campaign_budget") {
+      required.add("Campaign ID");
+      required.add("Daily Budget");
+      continue;
+    }
+    if (action.type === "update_campaign_state") {
+      required.add("Campaign ID");
+      required.add("State");
+      continue;
+    }
+    if (action.type === "update_campaign_bidding_strategy") {
+      required.add("Product");
+      required.add("Campaign ID");
+      required.add("Bidding Strategy");
+      continue;
+    }
+    if (action.type === "update_ad_group_state") {
+      required.add("Product");
+      required.add("Campaign ID");
+      required.add("Ad Group ID");
+      required.add("State");
+      continue;
+    }
+    if (action.type === "update_ad_group_default_bid") {
+      required.add("Product");
+      required.add("Campaign ID");
+      required.add("Ad Group ID");
+      required.add("Ad Group Default Bid");
+      continue;
+    }
+    if (action.type === "update_target_bid" || action.type === "update_target_state") {
+      const target = currentTargetsById.get(action.target_id);
+      if (!target) {
+        throw new Error(`Target not found: ${action.target_id}`);
+      }
+      required.add("Campaign ID");
+      required.add("Ad Group ID");
+      required.add("Match Type");
+      if (target.match_type === "TARGETING_EXPRESSION") {
+        required.add("Product Targeting ID");
+        required.add("Product Targeting Expression");
+      } else {
+        required.add("Keyword ID");
+        required.add("Keyword Text");
+      }
+      if (action.type === "update_target_bid") {
+        required.add("Bid");
+      } else {
+        required.add("State");
+      }
+      continue;
+    }
+    if (action.type === "update_placement_modifier") {
+      required.add("Campaign ID");
+      required.add("Placement");
+      required.add("Percentage");
+      continue;
+    }
+    const neverAction: never = action;
+    throw new Error(`Unsupported action: ${JSON.stringify(neverAction)}`);
+  }
+  return [...required];
+}
+
+async function main() {
+  const accountId = getArg("--account-id");
+  const marketplace = getArg("--marketplace");
+  const templatePath = getArg("--template");
+  const outDir = getArg("--out-dir");
+  const filePath = getArg("--file");
+  const sheetName = getArg("--sheet") ?? SB_DEFAULT_SHEET_NAME;
+
+  if (!accountId || !marketplace || !templatePath || !outDir || !filePath) {
+    usage();
+    process.exit(1);
+  }
+
+  if (!fs.existsSync(templatePath)) {
+    throw new Error(`Template not found: ${templatePath}`);
+  }
+
+  const changes = parseChangesFile(filePath);
+
+  const current = await fetchCurrentSbData(accountId, changes.actions);
+  const rows = buildUploadRows({
+    actions: changes.actions,
+    current,
+    notes: changes.notes,
+    sheetName,
+  });
+
+  const requiredHeaders = requiredHeadersForActions(
+    changes.actions,
+    current.targetsById
+  );
+
+  const { uploadPath, reviewPath } = writeSbBulkUpdateXlsx({
+    templatePath,
+    outDir: path.resolve(outDir),
+    rows,
+    requiredHeadersBySheet: new Map([[sheetName, requiredHeaders]]),
+  });
+
+  console.log("Bulk update files written.");
+  console.log({
+    snapshotDate: current.snapshotDate,
+    uploadPath,
+    reviewPath,
+  });
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
