@@ -20,6 +20,7 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Security: Supabase service role is server-only; never expose it in client components. Server client lives in `apps/web/src/lib/supabaseAdmin.ts`.
 - Default page: `/dashboard` (primary UI). Uses `si_sales_trend_daily_latest` for sales KPIs.
 - URL filters: `start=YYYY-MM-DD`, `end=YYYY-MM-DD`, `asin=<ASIN|all>` (shareable dashboard state).
+- Products UI: `/products` list and `/products/[asin]` detail with tabs (overview/sales/logbook/costs) using the same URL filters.
 - Imports & Health page: `/imports-health` (data heartbeat).
 - Optional flags:
   - `ENABLE_SPEND_RECONCILIATION` (default `0`) toggles spend reconciliation query.
