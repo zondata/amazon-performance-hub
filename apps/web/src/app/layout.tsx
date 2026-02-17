@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { Geist, Geist_Mono } from 'next/font/google';
 
+import SidebarNav from '@/components/SidebarNav';
 import { env } from '@/lib/env';
 import './globals.css';
 
@@ -22,24 +22,6 @@ export const metadata: Metadata = {
 
 export const dynamic = 'force-dynamic';
 
-const navItems = [
-  'Dashboard',
-  'Sales',
-  'Products',
-  'Ads',
-  'SQP',
-  'Ranking',
-  'Logbook',
-  'Bulksheet Ops',
-  'Imports & Health',
-  'Settings',
-];
-
-const navHref = (label: string) => {
-  if (label === 'Imports & Health') return '/imports-health';
-  return '#';
-};
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -58,36 +40,17 @@ export default function RootLayout({
               </div>
               <div className="text-xl font-semibold">Operations</div>
             </div>
-            <nav className="space-y-2 text-sm">
-              {navItems.map((label) => (
-                <Link
-                  key={label}
-                  href={navHref(label)}
-                  className={`flex items-center justify-between rounded-lg px-3 py-2 transition ${
-                    label === 'Imports & Health'
-                      ? 'bg-slate-900 text-white'
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <span>{label}</span>
-                  {label === 'Imports & Health' ? (
-                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] uppercase tracking-wide text-white">
-                      Live
-                    </span>
-                  ) : null}
-                </Link>
-              ))}
-            </nav>
+            <SidebarNav />
           </aside>
 
           <div className="flex min-h-screen flex-1 flex-col">
             <header className="flex items-center justify-between border-b border-slate-200/70 bg-white/70 px-8 py-4 backdrop-blur">
               <div>
                 <div className="text-xs uppercase tracking-[0.35em] text-slate-400">
-                  Imports & Data Health
+                  Amazon Performance Hub
                 </div>
                 <div className="text-lg font-semibold text-slate-900">
-                  System heartbeat overview
+                  Operational overview
                 </div>
               </div>
               <div className="flex items-center gap-3 text-sm">
