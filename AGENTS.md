@@ -21,6 +21,7 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Default page: `/dashboard` (primary UI). Uses `si_sales_trend_daily_latest` for sales KPIs.
 - URL filters: `start=YYYY-MM-DD`, `end=YYYY-MM-DD`, `asin=<ASIN|all>` (shareable dashboard state).
 - Products UI: `/products` list and `/products/[asin]` detail with tabs (overview/sales/logbook/costs) using the same URL filters.
+- Ads UI: `/ads/performance` with URL params `start`, `end`, `asin` (carried but ignored), `channel=sp|sb|sd`, `level=campaigns|adgroups|targets|placements|searchterms`. Campaigns table is implemented for SP/SB/SD; other levels are placeholders.
 - Imports & Health page: `/imports-health` (data heartbeat).
 - Optional flags:
   - `ENABLE_SPEND_RECONCILIATION` (default `0`) toggles spend reconciliation query.
