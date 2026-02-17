@@ -13,7 +13,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard' },
   { label: 'Sales', href: '#' },
   { label: 'Products', href: '/products' },
-  { label: 'Ads', href: '#' },
+  { label: 'Ads', href: '/ads/performance' },
   { label: 'SQP', href: '#' },
   { label: 'Ranking', href: '#' },
   { label: 'Logbook', href: '#' },
