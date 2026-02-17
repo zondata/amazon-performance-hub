@@ -81,7 +81,10 @@
     "product:seed": "ts-node scripts/product_seed.ts",
     "product:cleanup-test-skus": "ts-node scripts/cleanup_test_skus.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "web:dev": "npm --prefix apps/web run dev",
+    "web:build": "npm --prefix apps/web run build",
+    "web:lint": "npm --prefix apps/web run lint"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",

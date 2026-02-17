@@ -13,6 +13,16 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Tests: `vitest` (must remain green)
 - Supabase: Postgres schema + ingestion CLIs (service role key in `.env.local`, never committed)
 
+## UI (apps/web)
+- Next.js App Router UI scaffold (read-only from Supabase).
+- Run from repo root: `npm run web:dev`, `npm run web:build`, `npm run web:lint`.
+- Env: copy `apps/web/.env.local.example` to `apps/web/.env.local`. Required vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APP_ACCOUNT_ID`, `APP_MARKETPLACE`.
+- Security: Supabase service role is server-only; never expose it in client components. Server client lives in `apps/web/src/lib/supabaseAdmin.ts`.
+- Current page: `/imports-health` (Imports & Data Health heartbeat).
+- Optional flags:
+  - `ENABLE_SPEND_RECONCILIATION` (default `0`) toggles spend reconciliation query.
+  - `PENDING_RECONCILE_DIR` enables a local-only pending manifest count; if unset, UI shows "not configured".
+
 ## Core Principles
 1) Facts layer first (bulksheets) before DB/Supabase *features*.
 2) Deterministic outputs: stable IDs, normalized names, repeatable selection rules.

@@ -26,6 +26,11 @@ supabase/.temp/
 # build output
 dist/
 
+# web app
+apps/web/node_modules
+apps/web/.next
+apps/web/.env.local
+
 # Local docs / temp files
 *.docx
 ~
