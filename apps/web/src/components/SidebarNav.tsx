@@ -16,7 +16,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Ads', href: '/ads/performance' },
   { label: 'SQP', href: '#' },
   { label: 'Ranking', href: '#' },
-  { label: 'Logbook', href: '#' },
+  { label: 'Logbook', href: '/logbook/experiments' },
   { label: 'Bulksheet Ops', href: '#' },
   { label: 'Imports & Health', href: '/imports-health', badge: 'Live' },
   { label: 'Settings', href: '#' },
