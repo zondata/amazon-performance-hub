@@ -20,8 +20,11 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Security: Supabase service role is server-only; never expose it in client components. Server client lives in `apps/web/src/lib/supabaseAdmin.ts`.
 - Default page: `/dashboard` (primary UI). Uses `si_sales_trend_daily_latest` for sales KPIs.
 - URL filters: `start=YYYY-MM-DD`, `end=YYYY-MM-DD`, `asin=<ASIN|all>` (shareable dashboard state).
+- `ui_page_settings` stores per-page default UI settings across devices (e.g., Sales Trend metric selections).
 - Products UI: `/products` list and `/products/[asin]` detail with tabs (overview/sales/logbook/costs) using the same URL filters.
 - Ads UI: `/ads/performance` with URL params `start`, `end`, `asin` (carried but ignored), `channel=sp|sb|sd`, `level=campaigns|adgroups|targets|placements|searchterms`. Campaigns table is implemented for SP/SB/SD; other levels are placeholders.
+- Sales Trend UI: `/sales/trend` supports `granularity=daily|weekly|monthly|quarterly`, `cols=<int>`, `last=YYYY-MM-DD`. When present, start/end are derived from calendar buckets and kept in the URL for tab switching.
+- Sales Trend pivot table renders KPI rows vs. time buckets with a Summary column; KPI + Summary columns are sticky/frozen while buckets scroll horizontally.
 - Imports & Health page: `/imports-health` (data heartbeat).
 - Bulksheet Ops pages: `/bulksheet-ops/sp-update`, `/bulksheet-ops/sb-update`, `/bulksheet-ops/sp-create`, `/bulksheet-ops/reconcile` (local-first generators + reconcile queue).
 - Optional flags:

@@ -43,7 +43,7 @@ export default function RootLayout({
             <SidebarNav />
           </aside>
 
-          <div className="flex min-h-screen flex-1 flex-col">
+          <div className="flex min-h-screen flex-1 min-w-0 flex-col">
             <header className="flex items-center justify-between border-b border-slate-200/70 bg-white/70 px-8 py-4 backdrop-blur">
               <div>
                 <div className="text-xs uppercase tracking-[0.35em] text-slate-400">
@@ -63,7 +63,7 @@ export default function RootLayout({
               </div>
             </header>
 
-            <main className="flex-1 px-8 py-6">{children}</main>
+            <main className="flex-1 min-w-0 w-full px-8 py-6">{children}</main>
           </div>
         </div>
       </body>
