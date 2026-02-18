@@ -19,7 +19,12 @@ export type SalesMetricKey =
   | 'sessions'
   | 'organic_orders'
   | 'organic_units'
-  | 'payout';
+  | 'payout'
+  | 'cost_of_goods'
+  | 'referral_fees'
+  | 'fulfillment_fees'
+  | 'refund_cost'
+  | 'promotion_value';
 
 export type SalesMetricKind = 'sum' | 'ratio';
 
@@ -71,7 +76,7 @@ export const SALES_METRICS: SalesMetric[] = [
   },
   {
     key: 'profits',
-    label: 'Profit',
+    label: 'Profits',
     group: 'Revenue',
     format: 'currency',
     axisGroup: 'currency',
@@ -90,6 +95,46 @@ export const SALES_METRICS: SalesMetric[] = [
   {
     key: 'payout',
     label: 'Payout',
+    group: 'Revenue',
+    format: 'currency',
+    axisGroup: 'currency',
+    kind: 'sum',
+  },
+  {
+    key: 'cost_of_goods',
+    label: 'Cost of Goods',
+    group: 'Revenue',
+    format: 'currency',
+    axisGroup: 'currency',
+    kind: 'sum',
+  },
+  {
+    key: 'referral_fees',
+    label: 'Referral Fees',
+    group: 'Revenue',
+    format: 'currency',
+    axisGroup: 'currency',
+    kind: 'sum',
+  },
+  {
+    key: 'fulfillment_fees',
+    label: 'Fulfillment Fees',
+    group: 'Revenue',
+    format: 'currency',
+    axisGroup: 'currency',
+    kind: 'sum',
+  },
+  {
+    key: 'refund_cost',
+    label: 'Refund Balance',
+    group: 'Revenue',
+    format: 'currency',
+    axisGroup: 'currency',
+    kind: 'sum',
+  },
+  {
+    key: 'promotion_value',
+    label: 'Promotion Value',
     group: 'Revenue',
     format: 'currency',
     axisGroup: 'currency',
@@ -244,5 +289,41 @@ export const DEFAULT_KPI_CARD_SLOTS: SalesMetricKey[] = [
   'profits',
   'margin',
 ];
+
+export const DISPLAY_ORDER: SalesMetricKey[] = [
+  'sales',
+  'profits',
+  'payout',
+  'orders',
+  'units',
+  'organic_orders',
+  'organic_units',
+  'sessions',
+  'ppc_orders',
+  'ppc_units',
+  'ppc_sales',
+  'ppc_cost',
+  'ppc_impressions',
+  'ppc_clicks',
+  'ctr',
+  'cost_per_click',
+  'ppc_cost_per_order',
+  'acos',
+  'tacos',
+  'margin',
+  'avg_sales_price',
+];
+
+export const PROFITS_BREAKDOWN = {
+  parentKey: 'profits',
+  childKeys: [
+    'payout',
+    'cost_of_goods',
+    'referral_fees',
+    'fulfillment_fees',
+    'refund_cost',
+    'promotion_value',
+  ],
+} as const;
 
 export const SALES_METRIC_KEYS = new Set(SALES_METRICS.map((metric) => metric.key));

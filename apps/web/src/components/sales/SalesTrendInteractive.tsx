@@ -50,6 +50,7 @@ const METRIC_LABELS = Object.fromEntries(
 ) as Record<SalesMetricKey, string>;
 
 const SESSION_STORAGE_KEY = 'sales.trend.session';
+const KPI_COLLAPSE_KEY = 'sales.trend:kpisCollapsed';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const normalizeISODate = (value: string): string | null => {
@@ -74,21 +75,30 @@ const groupMetrics = () => {
 
 const formatCurrency = (value?: number | null) => {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  const fractionDigits = Number.isInteger(value) ? 0 : 2;
   return value.toLocaleString('en-US', {
     style: 'currency',
     currency: 'USD',
-    maximumFractionDigits: 0,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   });
 };
 
 const formatNumber = (value?: number | null) => {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  return value.toLocaleString('en-US');
+  const fractionDigits = Number.isInteger(value) ? 0 : 2;
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  });
 };
 
 const formatPercent = (value?: number | null) => {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  return `${(value * 100).toFixed(1)}%`;
+  return `${(value * 100).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}%`;
 };
 
 const formatMetricValue = (key: SalesMetricKey, value?: number | null) => {
@@ -168,6 +178,7 @@ export default function SalesTrendInteractive({
   const [draftMetrics, setDraftMetrics] = useState<SalesMetricKey[]>(
     initial.enabledMetrics
   );
+  const [kpisCollapsed, setKpisCollapsed] = useState(true);
   const [savedMessage, setSavedMessage] = useState<string>('');
   const [isPending, startTransition] = useTransition();
 
@@ -212,6 +223,12 @@ export default function SalesTrendInteractive({
   }, []);
 
   useEffect(() => {
+    const stored = sessionStorage.getItem(KPI_COLLAPSE_KEY);
+    if (stored === null) return;
+    setKpisCollapsed(stored === 'true');
+  }, []);
+
+  useEffect(() => {
     if (!sessionLoadedRef.current) return;
     const payload = JSON.stringify({
       enabledMetrics,
@@ -220,6 +237,10 @@ export default function SalesTrendInteractive({
     });
     sessionStorage.setItem(SESSION_STORAGE_KEY, payload);
   }, [enabledMetrics, cardSlots, chartMetrics]);
+
+  useEffect(() => {
+    sessionStorage.setItem(KPI_COLLAPSE_KEY, String(kpisCollapsed));
+  }, [kpisCollapsed]);
 
   const applyEnabledMetrics = (metrics: SalesMetricKey[]) => {
     const sanitized = metrics.length > 0 ? metrics : DEFAULT_ENABLED_METRICS;
@@ -273,9 +294,7 @@ export default function SalesTrendInteractive({
 
   const pivotRows = useMemo<PivotRow[]>(
     () =>
-      buildPivotRows(bucketTotals, summaryTotals).filter((row) =>
-        enabledMetrics.includes(row.metricKey)
-      ),
+      buildPivotRows(bucketTotals, summaryTotals, { enabledMetrics }),
     [bucketTotals, summaryTotals, enabledMetrics]
   );
 
@@ -304,7 +323,7 @@ export default function SalesTrendInteractive({
             {filters.start} → {filters.end}
           </div>
           <div className="mt-1 text-xs text-slate-500">
-            {bucketConfig.granularity} - {buckets.length} buckets
+            {bucketConfig.granularity} - {buckets.length} periods
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -485,56 +504,75 @@ export default function SalesTrendInteractive({
               Customize each slot
             </div>
           </div>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          {cardSlots.map((slot, index) => (
-            <div
-              key={`slot-${index}`}
-              className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm"
+          <button
+            type="button"
+            onClick={() => setKpisCollapsed((current) => !current)}
+            className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600"
+            aria-expanded={!kpisCollapsed}
+          >
+            <span
+              className={`inline-block text-[10px] transition-transform ${
+                kpisCollapsed ? 'rotate-0' : 'rotate-90'
+              }`}
             >
-              <div className="flex items-center justify-between">
-                <div className="text-xs uppercase tracking-[0.25em] text-slate-400">
-                  Slot {index + 1}
-                </div>
-                <select
-                  value={slot}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setCardSlots((current) => {
-                      const updated = [...current];
-                      updated[index] =
-                        value === 'none' ? 'none' : (value as SalesMetricKey);
-                      return updated;
-                    });
-                  }}
-                  className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600"
-                >
-                  <option value="none">None</option>
-                  {enabledMetrics.map((metric) => (
-                    <option key={metric} value={metric}>
-                      {METRIC_LABELS[metric]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="mt-3 text-2xl font-semibold text-slate-900">
-                {slot === 'none'
-                  ? 'Hidden'
-                  : formatMetricValue(
-                      slot,
-                      (summaryTotals[slot] as number | null | undefined) ??
-                        (kpiTotals[slot] as number | null | undefined) ??
-                        null
-                    )}
-              </div>
-              {slot !== 'none' ? (
-                <div className="mt-1 text-xs text-slate-500">{METRIC_LABELS[slot]}</div>
-              ) : (
-                <div className="mt-1 text-xs text-slate-400">Select a metric</div>
-              )}
-            </div>
-          ))}
+              ▸
+            </span>
+            {kpisCollapsed ? 'Show KPIs' : 'Hide KPIs'}
+          </button>
         </div>
+        {kpisCollapsed ? null : (
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            {cardSlots.map((slot, index) => (
+              <div
+                key={`slot-${index}`}
+                className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                    Slot {index + 1}
+                  </div>
+                  <select
+                    value={slot}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setCardSlots((current) => {
+                        const updated = [...current];
+                        updated[index] =
+                          value === 'none' ? 'none' : (value as SalesMetricKey);
+                        return updated;
+                      });
+                    }}
+                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600"
+                  >
+                    <option value="none">None</option>
+                    {enabledMetrics.map((metric) => (
+                      <option key={metric} value={metric}>
+                        {METRIC_LABELS[metric]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mt-3 text-2xl font-semibold text-slate-900">
+                  {slot === 'none'
+                    ? 'Hidden'
+                    : formatMetricValue(
+                        slot,
+                        (summaryTotals[slot] as number | null | undefined) ??
+                          (kpiTotals[slot] as number | null | undefined) ??
+                          null
+                      )}
+                </div>
+                {slot !== 'none' ? (
+                  <div className="mt-1 text-xs text-slate-500">
+                    {METRIC_LABELS[slot]}
+                  </div>
+                ) : (
+                  <div className="mt-1 text-xs text-slate-400">Select a metric</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
@@ -547,7 +585,7 @@ export default function SalesTrendInteractive({
               {chartMetrics.length} metrics selected
             </div>
           </div>
-          <div className="text-xs text-slate-500">{buckets.length} buckets</div>
+          <div className="text-xs text-slate-500">{buckets.length} periods</div>
         </div>
         {dailyRows.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
@@ -586,10 +624,10 @@ export default function SalesTrendInteractive({
         <div className="mb-4 flex items-center justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
-              Pivot table
+              KPI breakdown
             </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">
-              {buckets.length} buckets • {enabledMetrics.length} KPIs
+              {buckets.length} periods • {enabledMetrics.length} KPIs
             </div>
           </div>
         </div>
@@ -600,6 +638,7 @@ export default function SalesTrendInteractive({
         ) : (
           <SalesPivotTable
             buckets={buckets}
+            granularity={bucketConfig.granularity}
             rows={pivotRows}
             formatValue={formatMetricValue}
           />

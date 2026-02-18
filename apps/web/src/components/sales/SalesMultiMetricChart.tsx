@@ -130,7 +130,7 @@ export default function SalesMultiMetricChart({
             return (
               <Line
                 key={key}
-                type="monotone"
+                type="linear"
                 dataKey={key}
                 yAxisId={metric.axisGroup}
                 stroke={COLORS[index % COLORS.length]}

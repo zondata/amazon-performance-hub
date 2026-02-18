@@ -27,6 +27,11 @@ type SalesRow = {
   organic_units: number | string | null;
   profits: number | string | null;
   payout: number | string | null;
+  cost_of_goods: number | string | null;
+  referral_fees: number | string | null;
+  fulfillment_fees: number | string | null;
+  refund_cost: number | string | null;
+  promotion_value: number | string | null;
 };
 
 type AsinOption = {
@@ -52,6 +57,11 @@ export type SalesDailyPoint = {
   avg_price: number | null;
   profits?: number | null;
   payout?: number | null;
+  cost_of_goods?: number | null;
+  referral_fees?: number | null;
+  fulfillment_fees?: number | null;
+  refund_cost?: number | null;
+  promotion_value?: number | null;
   tacos: number | null;
   acos: number | null;
   ctr: number | null;
@@ -77,6 +87,11 @@ type SalesDailyKpis = {
   avg_price: number | null;
   profits?: number | null;
   payout?: number | null;
+  cost_of_goods?: number | null;
+  referral_fees?: number | null;
+  fulfillment_fees?: number | null;
+  refund_cost?: number | null;
+  promotion_value?: number | null;
   tacos: number | null;
   acos: number | null;
   ctr: number | null;
@@ -168,6 +183,11 @@ export const getSalesDaily = async ({
         'organic_units',
         'profits',
         'payout',
+        'cost_of_goods',
+        'referral_fees',
+        'fulfillment_fees',
+        'refund_cost',
+        'promotion_value',
       ].join(',')
     )
     .eq('account_id', accountId)
@@ -206,6 +226,11 @@ export const getSalesDaily = async ({
       organic_units: number;
       profits: number;
       payout: number;
+      cost_of_goods: number;
+      referral_fees: number;
+      fulfillment_fees: number;
+      refund_cost: number;
+      promotion_value: number;
     }
   >();
 
@@ -223,9 +248,19 @@ export const getSalesDaily = async ({
   let totalOrganicUnits = 0;
   let totalProfits = 0;
   let totalPayout = 0;
+  let totalCostOfGoods = 0;
+  let totalReferralFees = 0;
+  let totalFulfillmentFees = 0;
+  let totalRefundCost = 0;
+  let totalPromotionValue = 0;
 
   let profitSeen = false;
   let payoutSeen = false;
+  let costOfGoodsSeen = false;
+  let referralFeesSeen = false;
+  let fulfillmentFeesSeen = false;
+  let refundCostSeen = false;
+  let promotionValueSeen = false;
 
   rows.forEach((row) => {
     if (!row.date) return;
@@ -260,6 +295,11 @@ export const getSalesDaily = async ({
       organic_units: 0,
       profits: 0,
       payout: 0,
+      cost_of_goods: 0,
+      referral_fees: 0,
+      fulfillment_fees: 0,
+      refund_cost: 0,
+      promotion_value: 0,
     };
 
     existing.sales += sales;
@@ -285,6 +325,31 @@ export const getSalesDaily = async ({
       payoutSeen = true;
     }
 
+    if (row.cost_of_goods !== null && row.cost_of_goods !== undefined) {
+      existing.cost_of_goods += numberValue(row.cost_of_goods);
+      costOfGoodsSeen = true;
+    }
+
+    if (row.referral_fees !== null && row.referral_fees !== undefined) {
+      existing.referral_fees += numberValue(row.referral_fees);
+      referralFeesSeen = true;
+    }
+
+    if (row.fulfillment_fees !== null && row.fulfillment_fees !== undefined) {
+      existing.fulfillment_fees += numberValue(row.fulfillment_fees);
+      fulfillmentFeesSeen = true;
+    }
+
+    if (row.refund_cost !== null && row.refund_cost !== undefined) {
+      existing.refund_cost += numberValue(row.refund_cost);
+      refundCostSeen = true;
+    }
+
+    if (row.promotion_value !== null && row.promotion_value !== undefined) {
+      existing.promotion_value += numberValue(row.promotion_value);
+      promotionValueSeen = true;
+    }
+
     dailyMap.set(dateKey, existing);
 
     totalSales += sales;
@@ -306,6 +371,26 @@ export const getSalesDaily = async ({
 
     if (row.payout !== null && row.payout !== undefined) {
       totalPayout += numberValue(row.payout);
+    }
+
+    if (row.cost_of_goods !== null && row.cost_of_goods !== undefined) {
+      totalCostOfGoods += numberValue(row.cost_of_goods);
+    }
+
+    if (row.referral_fees !== null && row.referral_fees !== undefined) {
+      totalReferralFees += numberValue(row.referral_fees);
+    }
+
+    if (row.fulfillment_fees !== null && row.fulfillment_fees !== undefined) {
+      totalFulfillmentFees += numberValue(row.fulfillment_fees);
+    }
+
+    if (row.refund_cost !== null && row.refund_cost !== undefined) {
+      totalRefundCost += numberValue(row.refund_cost);
+    }
+
+    if (row.promotion_value !== null && row.promotion_value !== undefined) {
+      totalPromotionValue += numberValue(row.promotion_value);
     }
   });
 
@@ -346,6 +431,26 @@ export const getSalesDaily = async ({
         result.payout = row.payout;
       }
 
+      if (costOfGoodsSeen) {
+        result.cost_of_goods = row.cost_of_goods;
+      }
+
+      if (referralFeesSeen) {
+        result.referral_fees = row.referral_fees;
+      }
+
+      if (fulfillmentFeesSeen) {
+        result.fulfillment_fees = row.fulfillment_fees;
+      }
+
+      if (refundCostSeen) {
+        result.refund_cost = row.refund_cost;
+      }
+
+      if (promotionValueSeen) {
+        result.promotion_value = row.promotion_value;
+      }
+
       return result;
     });
 
@@ -380,6 +485,26 @@ export const getSalesDaily = async ({
 
   if (payoutSeen) {
     kpis.payout = totalPayout;
+  }
+
+  if (costOfGoodsSeen) {
+    kpis.cost_of_goods = totalCostOfGoods;
+  }
+
+  if (referralFeesSeen) {
+    kpis.referral_fees = totalReferralFees;
+  }
+
+  if (fulfillmentFeesSeen) {
+    kpis.fulfillment_fees = totalFulfillmentFees;
+  }
+
+  if (refundCostSeen) {
+    kpis.refund_cost = totalRefundCost;
+  }
+
+  if (promotionValueSeen) {
+    kpis.promotion_value = totalPromotionValue;
   }
 
   return {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { bucketAggregate } from '../apps/web/src/lib/sales/pivot/bucketAggregate';
+import { buildPivotRows } from '../apps/web/src/lib/sales/pivot/pivotRows';
 import type { CalendarBucket } from '../apps/web/src/lib/sales/buckets/getCalendarBuckets';
 import type { SalesMetricKey } from '../apps/web/src/lib/sales/salesMetrics';
 
@@ -64,5 +65,53 @@ describe('bucketAggregate', () => {
 
     expect(result.bucketTotals.tacos).toEqual([null, null]);
     expect(result.summaryTotals.tacos).toBeNull();
+  });
+});
+
+describe('buildPivotRows', () => {
+  it('orders rows with Sales first and Profits grouped', () => {
+    const rows = [
+      {
+        date: '2026-02-01',
+        sales: 100,
+        profits: 25,
+        payout: 80,
+        orders: 5,
+        units: 6,
+      },
+    ];
+
+    const { bucketTotals, summaryTotals } = bucketAggregate(rows, buckets);
+
+    const result = buildPivotRows(bucketTotals, summaryTotals, {
+      enabledMetrics: [
+        'sales',
+        'profits',
+        'payout',
+        'cost_of_goods',
+        'referral_fees',
+        'fulfillment_fees',
+        'refund_cost',
+        'promotion_value',
+        'orders',
+        'units',
+      ],
+    });
+
+    expect(result[0]?.metricKey).toBe('sales');
+    expect(result[1]?.type).toBe('group');
+    expect(result[1]?.metricKey).toBe('profits');
+
+    const profitsGroup = result[1];
+    if (profitsGroup && profitsGroup.type === 'group') {
+      expect(profitsGroup.children.map((child) => child.metricKey)).toEqual([
+        'payout',
+        'cost_of_goods',
+        'referral_fees',
+        'fulfillment_fees',
+        'refund_cost',
+        'promotion_value',
+      ]);
+    }
   });
 });

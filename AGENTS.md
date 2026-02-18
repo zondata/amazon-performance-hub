@@ -14,24 +14,40 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Supabase: Postgres schema + ingestion CLIs (service role key in `.env.local`, never committed)
 
 ## UI (apps/web)
+**Overview**
 - Next.js App Router UI scaffold (read-only from Supabase).
+
+**Shared**
 - Run from repo root: `npm run web:dev`, `npm run web:build`, `npm run web:lint`.
-- Env: copy `apps/web/.env.local.example` to `apps/web/.env.local`. Required vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APP_ACCOUNT_ID`, `APP_MARKETPLACE`.
-- Security: Supabase service role is server-only; never expose it in client components. Server client lives in `apps/web/src/lib/supabaseAdmin.ts`.
-- Default page: `/dashboard` (primary UI). Uses `si_sales_trend_daily_latest` for sales KPIs.
+- Env: copy `apps/web/.env.local.example` to `apps/web/.env.local`. Required vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+  `APP_ACCOUNT_ID`, `APP_MARKETPLACE`.
+- Security: Supabase service role is server-only; never expose it in client components.
+  Server client lives in `apps/web/src/lib/supabaseAdmin.ts`.
 - URL filters: `start=YYYY-MM-DD`, `end=YYYY-MM-DD`, `asin=<ASIN|all>` (shareable dashboard state).
 - `ui_page_settings` stores per-page default UI settings across devices (e.g., Sales Trend metric selections).
-- Products UI: `/products` list and `/products/[asin]` detail with tabs (overview/sales/logbook/costs) using the same URL filters.
-- Ads UI: `/ads/performance` with URL params `start`, `end`, `asin` (carried but ignored), `channel=sp|sb|sd`, `level=campaigns|adgroups|targets|placements|searchterms`. Campaigns table is implemented for SP/SB/SD; other levels are placeholders.
-- Sales Trend UI: `/sales/trend` supports `granularity=daily|weekly|monthly|quarterly`, `cols=<int>`, `last=YYYY-MM-DD`. When present, start/end are derived from calendar buckets and kept in the URL for tab switching.
-- Sales Trend pivot table renders KPI rows vs. time buckets with a Summary column; KPI + Summary columns are sticky/frozen while buckets scroll horizontally.
-- Imports & Health page: `/imports-health` (data heartbeat).
-- Bulksheet Ops pages: `/bulksheet-ops/sp-update`, `/bulksheet-ops/sb-update`, `/bulksheet-ops/sp-create`, `/bulksheet-ops/reconcile` (local-first generators + reconcile queue).
-- Optional flags:
-  - `ENABLE_SPEND_RECONCILIATION` (default `0`) toggles spend reconciliation query.
-  - `PENDING_RECONCILE_DIR` enables a local-only pending manifest count; if unset, UI shows "not configured".
-  - Bulksheet Ops env vars: `BULKGEN_OUT_ROOT`, `BULKGEN_PENDING_RECONCILE_DIR`, `BULKGEN_RECONCILED_DIR`, `BULKGEN_FAILED_DIR`, `BULKGEN_TEMPLATE_SP_UPDATE`, `BULKGEN_TEMPLATE_SB_UPDATE`, `BULKGEN_TEMPLATE_SP_CREATE`, `ENABLE_BULKGEN_SPAWN`.
-  - Local-first caveat: Bulksheet Ops depends on local filesystem paths (Dropbox). This will not work on Vercel/serverless.
+
+**Pages**
+- Dashboard: `/dashboard` (primary UI). Uses `si_sales_trend_daily_latest` for sales KPIs.
+- Products: `/products` list and `/products/[asin]` detail with tabs (overview/sales/logbook/costs) using the same URL filters.
+- Ads: `/ads/performance` with URL params `start`, `end`, `asin` (carried but ignored),
+  `channel=sp|sb|sd`, `level=campaigns|adgroups|targets|placements|searchterms`.
+  Campaigns table is implemented for SP/SB/SD; other levels are placeholders.
+- Sales Center: `/sales`.
+- Sales Trend (URL + params): `/sales/trend` supports `granularity=daily|weekly|monthly|quarterly`, `cols=<int>`, `last=YYYY-MM-DD`. When present, start/end are derived from calendar buckets and kept in the URL for tab switching.
+- Sales Trend (chart): uses straight (linear) line segments (no curve smoothing).
+- Sales Trend (KPI table): ordered to mirror Scale Insights; sticky KPI + Summary columns; Profits breakdown expandable.
+  Analysis mini bar sparklines have instant hover tooltip (2 lines: date/period + formatted value).
+- Sales Trend (KPI cards): collapsible and default to closed.
+- Imports & Health: `/imports-health` (data heartbeat).
+- Bulksheet Ops: `/bulksheet-ops/sp-update`, `/bulksheet-ops/sb-update`, `/bulksheet-ops/sp-create`, `/bulksheet-ops/reconcile`
+  (local-first generators + reconcile queue).
+
+**Optional Flags**
+- `ENABLE_SPEND_RECONCILIATION` (default `0`) toggles spend reconciliation query.
+- `PENDING_RECONCILE_DIR` enables a local-only pending manifest count; if unset, UI shows "not configured".
+- Bulksheet Ops env vars: `BULKGEN_OUT_ROOT`, `BULKGEN_PENDING_RECONCILE_DIR`, `BULKGEN_RECONCILED_DIR`, `BULKGEN_FAILED_DIR`,
+  `BULKGEN_TEMPLATE_SP_UPDATE`, `BULKGEN_TEMPLATE_SB_UPDATE`, `BULKGEN_TEMPLATE_SP_CREATE`, `ENABLE_BULKGEN_SPAWN`.
+- Local-first caveat: Bulksheet Ops depends on local filesystem paths (Dropbox). This will not work on Vercel/serverless.
 
 ## Core Principles
 1) Facts layer first (bulksheets) before DB/Supabase *features*.
@@ -139,7 +155,7 @@ Detects:
 - budget/strategy/placement changes
 - target bid/state changes
 - added/removed entities
-Writes JSON diff output to `out/`.
+- Writes JSON diff output to `out/`.
 
 ### Milestone 3 — Name History Builder (SCD-style, local)
 Command:
