@@ -23,9 +23,12 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Products UI: `/products` list and `/products/[asin]` detail with tabs (overview/sales/logbook/costs) using the same URL filters.
 - Ads UI: `/ads/performance` with URL params `start`, `end`, `asin` (carried but ignored), `channel=sp|sb|sd`, `level=campaigns|adgroups|targets|placements|searchterms`. Campaigns table is implemented for SP/SB/SD; other levels are placeholders.
 - Imports & Health page: `/imports-health` (data heartbeat).
+- Bulksheet Ops pages: `/bulksheet-ops/sp-update`, `/bulksheet-ops/sb-update`, `/bulksheet-ops/sp-create`, `/bulksheet-ops/reconcile` (local-first generators + reconcile queue).
 - Optional flags:
   - `ENABLE_SPEND_RECONCILIATION` (default `0`) toggles spend reconciliation query.
   - `PENDING_RECONCILE_DIR` enables a local-only pending manifest count; if unset, UI shows "not configured".
+  - Bulksheet Ops env vars: `BULKGEN_OUT_ROOT`, `BULKGEN_PENDING_RECONCILE_DIR`, `BULKGEN_RECONCILED_DIR`, `BULKGEN_FAILED_DIR`, `BULKGEN_TEMPLATE_SP_UPDATE`, `BULKGEN_TEMPLATE_SB_UPDATE`, `BULKGEN_TEMPLATE_SP_CREATE`, `ENABLE_BULKGEN_SPAWN`.
+  - Local-first caveat: Bulksheet Ops depends on local filesystem paths (Dropbox). This will not work on Vercel/serverless.
 
 ## Core Principles
 1) Facts layer first (bulksheets) before DB/Supabase *features*.

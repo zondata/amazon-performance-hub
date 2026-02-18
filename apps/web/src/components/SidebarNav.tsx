@@ -17,7 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'SQP', href: '#' },
   { label: 'Ranking', href: '#' },
   { label: 'Logbook', href: '/logbook/experiments' },
-  { label: 'Bulksheet Ops', href: '#' },
+  { label: 'Bulksheet Ops', href: '/bulksheet-ops/sp-update' },
   { label: 'Imports & Health', href: '/imports-health', badge: 'Live' },
   { label: 'Settings', href: '#' },
 ];
