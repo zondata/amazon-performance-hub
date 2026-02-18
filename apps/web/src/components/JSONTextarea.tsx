@@ -41,7 +41,7 @@ export default function JSONTextarea({
 
   return (
     <div className="space-y-2">
-      <label htmlFor={id} className="text-xs uppercase tracking-wider text-slate-400">
+      <label htmlFor={id} className="text-xs uppercase tracking-wider text-muted">
         {label}
       </label>
       <textarea
@@ -52,11 +52,11 @@ export default function JSONTextarea({
         placeholder={placeholder}
         onChange={(event) => validate(event.target.value)}
         onBlur={(event) => validate(event.target.value)}
-        className={`min-h-[120px] w-full rounded-lg border px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 ${
-          error ? 'border-red-400 bg-red-50' : 'border-slate-200 bg-white'
+        className={`min-h-[120px] w-full rounded-lg border px-3 py-2 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30 ${
+          error ? 'border-red-400 bg-red-50' : 'border-border bg-surface'
         }`}
       />
-      <div className="text-xs text-slate-400">
+      <div className="text-xs text-muted">
         {error ? <span className="text-red-500">{error}</span> : helperText}
       </div>
     </div>

@@ -55,7 +55,9 @@ export default function SidebarNav() {
             href={item.href}
             title={item.label}
             className={`aph-sidebar-link flex items-center gap-3 rounded-lg px-3 py-2 transition ${
-              active ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+              active
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted hover:bg-surface-2/60'
             }`}
           >
             <Icon className="h-5 w-5 shrink-0" />
@@ -63,7 +65,9 @@ export default function SidebarNav() {
             {item.badge ? (
               <span
                 className={`aph-sidebar-badge ml-auto rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide ${
-                  active ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
+                  active
+                    ? 'bg-white/20 text-primary-foreground'
+                    : 'bg-surface-2 text-muted'
                 }`}
               >
                 {item.badge}

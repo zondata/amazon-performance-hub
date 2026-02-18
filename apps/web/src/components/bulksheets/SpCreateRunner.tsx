@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import type { ExperimentOption } from '@/lib/logbook/getExperimentOptions';
 import type { GeneratorResult } from '@/lib/bulksheets/runGenerators';
@@ -30,12 +30,6 @@ export default function SpCreateRunner(props: {
   const [actionsJson, setActionsJson] = useState('');
   const [selectedExperiment, setSelectedExperiment] = useState('');
   const [logEnabled, setLogEnabled] = useState(false);
-
-  useEffect(() => {
-    if (selectedExperiment) {
-      setLogEnabled(true);
-    }
-  }, [selectedExperiment]);
 
   const downloadLink = (relativePath?: string | null) => {
     if (!relativePath) return null;
@@ -223,7 +217,11 @@ export default function SpCreateRunner(props: {
               <select
                 name="experiment_id"
                 value={selectedExperiment}
-                onChange={(event) => setSelectedExperiment(event.target.value)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSelectedExperiment(value);
+                  if (value) setLogEnabled(true);
+                }}
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
               >
                 <option value="">No experiment</option>

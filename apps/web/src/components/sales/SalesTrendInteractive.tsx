@@ -316,25 +316,25 @@ export default function SalesTrendInteractive({
     <div className="space-y-8">
       <InlineFilters>
         <div>
-          <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+          <div className="text-xs uppercase tracking-[0.3em] text-muted">
             Sales trend
           </div>
-          <div className="mt-2 text-lg font-semibold text-slate-900">
+          <div className="mt-2 text-lg font-semibold text-foreground">
             {filters.start} → {filters.end}
           </div>
-          <div className="mt-1 text-xs text-slate-500">
+          <div className="mt-1 text-xs text-muted">
             {bucketConfig.granularity} - {buckets.length} periods
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col text-xs uppercase tracking-wide text-slate-500">
+          <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
             Granularity
             <select
               value={granularity}
               onChange={(event) =>
                 setGranularity(event.target.value as SalesGranularity)
               }
-              className="mt-1 min-w-[140px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              className="mt-1 min-w-[140px] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
             >
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
@@ -342,7 +342,7 @@ export default function SalesTrendInteractive({
               <option value="quarterly">Quarterly</option>
             </select>
           </label>
-          <label className="flex flex-col text-xs uppercase tracking-wide text-slate-500">
+          <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
             Columns
             <input
               type="number"
@@ -350,24 +350,24 @@ export default function SalesTrendInteractive({
               max={120}
               value={cols}
               onChange={(event) => setCols(event.target.value)}
-              className="mt-1 w-24 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              className="mt-1 w-24 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
             />
           </label>
-          <label className="flex flex-col text-xs uppercase tracking-wide text-slate-500">
+          <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
             Last date
             <input
               type="date"
               value={lastDate}
               onChange={(event) => setLastDate(event.target.value)}
-              className="mt-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
             />
           </label>
-          <label className="flex flex-col text-xs uppercase tracking-wide text-slate-500">
+          <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
             Product (ASIN)
             <select
               value={asin}
               onChange={(event) => setAsin(event.target.value)}
-              className="mt-1 min-w-[220px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              className="mt-1 min-w-[220px] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
             >
               <option value="all">All products</option>
               {asinOptions.map((option) => (
@@ -397,7 +397,7 @@ export default function SalesTrendInteractive({
               params.set('asin', asin);
               router.push(`?${params.toString()}`);
             }}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Apply
           </button>
@@ -409,7 +409,7 @@ export default function SalesTrendInteractive({
               setDraftMetrics(enabledMetrics);
               setIsPickerOpen(true);
             }}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground"
           >
             Metrics
           </button>
@@ -417,21 +417,21 @@ export default function SalesTrendInteractive({
       </InlineFilters>
 
       {isPickerOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-6">
-          <div className="max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6">
+          <div className="max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-surface shadow-xl">
+            <div className="flex items-center justify-between border-b border-border px-6 py-4">
               <div>
-                <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                <div className="text-xs uppercase tracking-[0.3em] text-muted">
                   Metrics
                 </div>
-                <div className="mt-1 text-lg font-semibold text-slate-900">
+                <div className="mt-1 text-lg font-semibold text-foreground">
                   Choose KPI metrics
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsPickerOpen(false)}
-                className="text-sm font-semibold text-slate-500"
+                className="text-sm font-semibold text-muted"
               >
                 Close
               </button>
@@ -439,14 +439,14 @@ export default function SalesTrendInteractive({
             <div className="max-h-[60vh] overflow-y-auto px-6 py-4">
               {Array.from(groupedMetrics.entries()).map(([group, keys]) => (
                 <div key={group} className="mb-6">
-                  <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                  <div className="text-xs uppercase tracking-[0.3em] text-muted">
                     {group}
                   </div>
                   <div className="mt-3 grid gap-2 md:grid-cols-2">
                     {keys.map((key) => (
                       <label
                         key={key}
-                        className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm"
                       >
                         <input
                           type="checkbox"
@@ -460,8 +460,8 @@ export default function SalesTrendInteractive({
                 </div>
               ))}
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-6 py-4">
-              <div className="text-xs text-slate-500">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-4">
+              <div className="text-xs text-muted">
                 {draftMetrics.length} metrics selected
               </div>
               <div className="flex items-center gap-2">
@@ -476,7 +476,7 @@ export default function SalesTrendInteractive({
                     applyEnabledMetrics(draftMetrics);
                     setIsPickerOpen(false);
                   }}
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
                 >
                   Apply
                 </button>
@@ -484,7 +484,7 @@ export default function SalesTrendInteractive({
                   type="button"
                   disabled={isPending}
                   onClick={handleSaveDefaults}
-                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+                  className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground"
                 >
                   Set as default
                 </button>
@@ -497,17 +497,17 @@ export default function SalesTrendInteractive({
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+            <div className="text-xs uppercase tracking-[0.3em] text-muted">
               KPI cards
             </div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
+            <div className="mt-1 text-lg font-semibold text-foreground">
               Customize each slot
             </div>
           </div>
           <button
             type="button"
             onClick={() => setKpisCollapsed((current) => !current)}
-            className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600"
+            className="flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-muted"
             aria-expanded={!kpisCollapsed}
           >
             <span
@@ -525,10 +525,10 @@ export default function SalesTrendInteractive({
             {cardSlots.map((slot, index) => (
               <div
                 key={`slot-${index}`}
-                className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm"
+                className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm"
               >
                 <div className="flex items-center justify-between">
-                  <div className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  <div className="text-xs uppercase tracking-[0.25em] text-muted">
                     Slot {index + 1}
                   </div>
                   <select
@@ -542,7 +542,7 @@ export default function SalesTrendInteractive({
                         return updated;
                       });
                     }}
-                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600"
+                    className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-muted"
                   >
                     <option value="none">None</option>
                     {enabledMetrics.map((metric) => (
@@ -552,7 +552,7 @@ export default function SalesTrendInteractive({
                     ))}
                   </select>
                 </div>
-                <div className="mt-3 text-2xl font-semibold text-slate-900">
+                <div className="mt-3 text-2xl font-semibold text-foreground">
                   {slot === 'none'
                     ? 'Hidden'
                     : formatMetricValue(
@@ -563,11 +563,11 @@ export default function SalesTrendInteractive({
                       )}
                 </div>
                 {slot !== 'none' ? (
-                  <div className="mt-1 text-xs text-slate-500">
+                  <div className="mt-1 text-xs text-muted">
                     {METRIC_LABELS[slot]}
                   </div>
                 ) : (
-                  <div className="mt-1 text-xs text-slate-400">Select a metric</div>
+                  <div className="mt-1 text-xs text-muted">Select a metric</div>
                 )}
               </div>
             ))}
@@ -575,27 +575,27 @@ export default function SalesTrendInteractive({
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+            <div className="text-xs uppercase tracking-[0.3em] text-muted">
               Trend chart
             </div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
+            <div className="mt-1 text-lg font-semibold text-foreground">
               {chartMetrics.length} metrics selected
             </div>
           </div>
-          <div className="text-xs text-slate-500">{buckets.length} periods</div>
+          <div className="text-xs text-muted">{buckets.length} periods</div>
         </div>
         {dailyRows.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+          <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
             No sales data for this range.
           </div>
         ) : (
           <SalesMultiMetricChart data={chartData} metrics={chartMetrics} />
         )}
         <details className="mt-4">
-          <summary className="cursor-pointer text-sm font-semibold text-slate-600">
+          <summary className="cursor-pointer text-sm font-semibold text-muted">
             Customize chart series
           </summary>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -620,19 +620,19 @@ export default function SalesTrendInteractive({
         </details>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+            <div className="text-xs uppercase tracking-[0.3em] text-muted">
               KPI breakdown
             </div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
+            <div className="mt-1 text-lg font-semibold text-foreground">
               {buckets.length} periods • {enabledMetrics.length} KPIs
             </div>
           </div>
         </div>
         {pivotRows.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+          <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
             No sales data for this range.
           </div>
         ) : (

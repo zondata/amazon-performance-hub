@@ -128,53 +128,53 @@ export default async function ProductDetailPage({
 
   return (
     <div className="space-y-8">
-      <section className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+            <div className="text-xs uppercase tracking-[0.3em] text-muted">
               Product detail
             </div>
-            <div className="mt-2 text-2xl font-semibold text-slate-900">
+            <div className="mt-2 text-2xl font-semibold text-foreground">
               {data.productMeta.title ?? asin}
             </div>
-            <div className="mt-1 text-sm text-slate-500">
+            <div className="mt-1 text-sm text-muted">
               ASIN {asin} · {start} → {end}
             </div>
           </div>
-          <div className="flex flex-wrap items-end gap-4 text-sm text-slate-500">
+          <div className="flex flex-wrap items-end gap-4 text-sm text-muted">
             <form method="get" className="flex flex-wrap items-end gap-3">
               {tab ? <input type="hidden" name="tab" value={tab} /> : null}
-              <label className="flex flex-col text-xs uppercase tracking-wide text-slate-500">
+              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
                 Start
                 <input
                   type="date"
                   name="start"
                   defaultValue={start}
-                  className="mt-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
                 />
               </label>
-              <label className="flex flex-col text-xs uppercase tracking-wide text-slate-500">
+              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
                 End
                 <input
                   type="date"
                   name="end"
                   defaultValue={end}
-                  className="mt-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
                 />
               </label>
               <button
                 type="submit"
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
               >
                 Apply
               </button>
             </form>
-            <Link href={`/imports-health`} className="font-semibold text-slate-900">
+            <Link href={`/imports-health`} className="font-semibold text-foreground">
               View Imports &amp; Health
             </Link>
           </div>
         </div>
-        <div className="mt-4 text-xs text-slate-500">
+        <div className="mt-4 text-xs text-muted">
           Data is delayed 48h while ads finalize.
         </div>
       </section>
@@ -184,19 +184,19 @@ export default async function ProductDetailPage({
       {tab === 'overview' ? (
         <div className="space-y-6">
           <KpiCards items={kpiItems} />
-          <section className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
             <div className="mb-4">
-              <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+              <div className="text-xs uppercase tracking-[0.3em] text-muted">
                 Sales vs PPC cost
               </div>
-              <div className="mt-1 text-lg font-semibold text-slate-900">
+              <div className="mt-1 text-lg font-semibold text-foreground">
                 Daily trend
               </div>
             </div>
             {trendSeries.length > 0 ? (
               <TrendChart data={trendSeries} />
             ) : (
-              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+              <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
                 No sales trend data for this range.
               </div>
             )}
@@ -205,17 +205,17 @@ export default async function ProductDetailPage({
       ) : null}
 
       {tab === 'sales' ? (
-        <section className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
-          <div className="mb-4 text-lg font-semibold text-slate-900">Daily sales</div>
+        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <div className="mb-4 text-lg font-semibold text-foreground">Daily sales</div>
           {data.salesSeries.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+            <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
               No sales data for this range.
             </div>
           ) : (
             <div className="max-h-[480px] overflow-y-auto">
               <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
                 <table className="w-full table-fixed text-left text-sm">
-                  <thead className="sticky top-0 bg-white text-xs uppercase tracking-wider text-slate-400 shadow-sm">
+                  <thead className="sticky top-0 bg-surface text-xs uppercase tracking-wider text-muted shadow-sm">
                     <tr>
                       <th className="w-28 pb-2">Date</th>
                       <th className="w-28 pb-2">Sales</th>
@@ -225,26 +225,26 @@ export default async function ProductDetailPage({
                       <th className="w-28 pb-2">Avg Price</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-border">
                     {data.salesSeries.map((row, index) => (
                       <tr
                         key={row.date ?? `row-${index}`}
-                        className="hover:bg-slate-50"
+                        className="hover:bg-surface-2/70"
                       >
-                        <td className="py-3 text-slate-600">{row.date ?? '—'}</td>
-                        <td className="py-3 text-slate-600">
+                        <td className="py-3 text-muted">{row.date ?? '—'}</td>
+                        <td className="py-3 text-muted">
                           {formatCurrency(Number(row.sales ?? 0))}
                         </td>
-                        <td className="py-3 text-slate-600">
+                        <td className="py-3 text-muted">
                           {formatNumber(Number(row.orders ?? 0))}
                         </td>
-                        <td className="py-3 text-slate-600">
+                        <td className="py-3 text-muted">
                           {formatNumber(Number(row.units ?? 0))}
                         </td>
-                        <td className="py-3 text-slate-600">
+                        <td className="py-3 text-muted">
                           {formatCurrency(Number(row.ppc_cost ?? 0))}
                         </td>
-                        <td className="py-3 text-slate-600">
+                        <td className="py-3 text-muted">
                           {formatCurrency(Number(row.avg_sales_price ?? 0))}
                         </td>
                       </tr>
@@ -258,10 +258,10 @@ export default async function ProductDetailPage({
       ) : null}
 
       {tab === 'logbook' ? (
-        <section className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
-          <div className="mb-4 text-lg font-semibold text-slate-900">Logbook</div>
+        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <div className="mb-4 text-lg font-semibold text-foreground">Logbook</div>
           {data.logbook.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+            <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
               No logbook entries for this product.
             </div>
           ) : (
@@ -269,21 +269,21 @@ export default async function ProductDetailPage({
               {data.logbook.map((entry, index) => (
                 <div
                   key={`${entry.change_id}-${index}`}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-3"
+                  className="rounded-xl border border-border bg-surface px-4 py-3"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                    <div className="font-semibold text-slate-900">
+                    <div className="font-semibold text-foreground">
                       {entry.change_type}
                     </div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-muted">
                       {new Date(entry.occurred_at).toLocaleString('en-US')}
                     </div>
                   </div>
-                  <div className="mt-1 text-sm text-slate-600">{entry.summary}</div>
+                  <div className="mt-1 text-sm text-muted">{entry.summary}</div>
                   {entry.why ? (
-                    <div className="mt-1 text-xs text-slate-500">Why: {entry.why}</div>
+                    <div className="mt-1 text-xs text-muted">Why: {entry.why}</div>
                   ) : null}
-                  <div className="mt-1 text-xs text-slate-400">
+                  <div className="mt-1 text-xs text-muted">
                     Source: {entry.source}
                   </div>
                 </div>
@@ -295,10 +295,10 @@ export default async function ProductDetailPage({
 
       {tab === 'costs' ? (
         <section className="space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
-            <div className="mb-3 text-lg font-semibold text-slate-900">Current cost</div>
+          <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+            <div className="mb-3 text-lg font-semibold text-foreground">Current cost</div>
             {data.currentCosts.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+              <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
                 No current cost records.
               </div>
             ) : (
@@ -308,7 +308,7 @@ export default async function ProductDetailPage({
                 className="overflow-x-auto"
               >
                 <table className="w-full table-fixed text-left text-sm">
-                  <thead className="text-xs uppercase tracking-wider text-slate-400">
+                  <thead className="text-xs uppercase tracking-wider text-muted">
                     <tr>
                       <th className="w-40 pb-2">SKU</th>
                       <th className="w-28 pb-2">Currency</th>
@@ -318,17 +318,17 @@ export default async function ProductDetailPage({
                       <th className="w-40 pb-2">Notes</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-border">
                     {data.currentCosts.map((row, idx) => (
                       <tr key={`${row.sku ?? 'sku'}-${idx}`}>
-                        <td className="py-3 text-slate-600">{row.sku ?? '—'}</td>
-                        <td className="py-3 text-slate-600">{row.currency ?? '—'}</td>
-                        <td className="py-3 text-slate-600">
+                        <td className="py-3 text-muted">{row.sku ?? '—'}</td>
+                        <td className="py-3 text-muted">{row.currency ?? '—'}</td>
+                        <td className="py-3 text-muted">
                           {formatCurrency(Number(row.landed_cost_per_unit ?? 0))}
                         </td>
-                        <td className="py-3 text-slate-600">{row.valid_from ?? '—'}</td>
-                        <td className="py-3 text-slate-600">{row.valid_to ?? '—'}</td>
-                        <td className="py-3 text-slate-600">{row.notes ?? '—'}</td>
+                        <td className="py-3 text-muted">{row.valid_from ?? '—'}</td>
+                        <td className="py-3 text-muted">{row.valid_to ?? '—'}</td>
+                        <td className="py-3 text-muted">{row.notes ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -337,10 +337,10 @@ export default async function ProductDetailPage({
             )}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
-            <div className="mb-3 text-lg font-semibold text-slate-900">Cost history</div>
+          <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+            <div className="mb-3 text-lg font-semibold text-foreground">Cost history</div>
             {data.costHistory.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+              <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
                 No cost history records.
               </div>
             ) : (
@@ -350,7 +350,7 @@ export default async function ProductDetailPage({
                 className="overflow-x-auto"
               >
                 <table className="w-full table-fixed text-left text-sm">
-                  <thead className="text-xs uppercase tracking-wider text-slate-400">
+                  <thead className="text-xs uppercase tracking-wider text-muted">
                     <tr>
                       <th className="w-40 pb-2">SKU ID</th>
                       <th className="w-32 pb-2">Valid from</th>
@@ -361,20 +361,20 @@ export default async function ProductDetailPage({
                       <th className="w-40 pb-2">Created</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-border">
                     {data.costHistory.map((row, idx) => (
                       <tr key={`${row.sku_id ?? 'sku'}-${idx}`}>
-                        <td className="py-3 text-slate-600">{row.sku_id ?? '—'}</td>
-                        <td className="py-3 text-slate-600">{row.valid_from ?? '—'}</td>
-                        <td className="py-3 text-slate-600">{row.valid_to ?? '—'}</td>
-                        <td className="py-3 text-slate-600">{row.currency ?? '—'}</td>
-                        <td className="py-3 text-slate-600">
+                        <td className="py-3 text-muted">{row.sku_id ?? '—'}</td>
+                        <td className="py-3 text-muted">{row.valid_from ?? '—'}</td>
+                        <td className="py-3 text-muted">{row.valid_to ?? '—'}</td>
+                        <td className="py-3 text-muted">{row.currency ?? '—'}</td>
+                        <td className="py-3 text-muted">
                           {formatCurrency(Number(row.landed_cost_per_unit ?? 0))}
                         </td>
-                        <td className="py-3 text-slate-600">
+                        <td className="py-3 text-muted">
                           {formatCurrency(Number(row.supplier_cost ?? 0))}
                         </td>
-                        <td className="py-3 text-slate-600">{row.created_at ?? '—'}</td>
+                        <td className="py-3 text-muted">{row.created_at ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -386,9 +386,9 @@ export default async function ProductDetailPage({
       ) : null}
 
       {tab === 'ads' || tab === 'sqp' || tab === 'ranking' ? (
-        <section className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
-          <div className="text-lg font-semibold text-slate-900">Coming soon</div>
-          <div className="mt-2 text-sm text-slate-500">
+        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <div className="text-lg font-semibold text-foreground">Coming soon</div>
+          <div className="mt-2 text-sm text-muted">
             This section will be wired once the next facts layer is ready.
           </div>
         </section>

@@ -20,7 +20,7 @@ export default function SidebarCollapseToggle({ className }: SidebarCollapseTogg
       onClick={toggleSidebar}
       title="Toggle sidebar"
       aria-label="Toggle sidebar"
-      className={`flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-sm backdrop-blur transition hover:border-slate-300 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 ${className ?? ''}`}
+      className={`flex h-7 w-7 items-center justify-center rounded-full border border-border bg-surface/90 text-foreground shadow-sm backdrop-blur transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 ${className ?? ''}`}
     >
       <svg
         aria-hidden="true"

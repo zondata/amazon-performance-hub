@@ -36,7 +36,7 @@ export const writeBulkgenLogs = async (params: {
   experimentId?: string;
 }): Promise<{ created: number; skipped: number }> => {
   let created = 0;
-  let skipped = 0;
+  const skipped = 0;
 
   for (const entry of params.entries) {
     const payload: Record<string, unknown> = {

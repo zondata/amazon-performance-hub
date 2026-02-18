@@ -14,7 +14,7 @@ export default function BulksheetOpsTabs() {
   const pathname = usePathname();
 
   return (
-    <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
+    <div className="flex flex-wrap gap-2 border-b border-border pb-3">
       {TABS.map((tab) => {
         const active = pathname.startsWith(tab.href);
         return (
@@ -23,8 +23,8 @@ export default function BulksheetOpsTabs() {
             href={tab.href}
             className={`rounded-full px-4 py-2 text-sm font-medium transition ${
               active
-                ? 'bg-slate-900 text-white'
-                : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                ? 'bg-primary text-primary-foreground'
+                : 'border border-border bg-surface text-muted hover:bg-surface-2/70'
             }`}
           >
             {tab.label}

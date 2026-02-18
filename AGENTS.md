@@ -26,6 +26,30 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Toggle component: `apps/web/src/components/SidebarCollapseToggle.tsx`.
 - Chevron direction is CSS-driven based on `html[data-sidebar]` (no initial client-side branching).
 
+### Theme system (global palettes)
+- Themes are token-based via CSS variables (semantic tokens), not per-component hard-coded colors.
+- Theme is selected by `document.documentElement.dataset.theme`.
+- Theme persists in localStorage key: `aph.theme` (allowed: `stripe` | `saas-analytics` | `real-time`).
+- Theme is applied pre-hydration via `next/script` with `strategy="beforeInteractive"` in `apps/web/src/app/layout.tsx`.
+- `<html ... suppressHydrationWarning>` avoids hydration mismatch when data-theme changes pre-hydration.
+
+**Switcher UI**
+- Theme switcher is mounted in the global header (top-right), visible on all pages.
+- Component: `apps/web/src/components/ThemeSwitcher.tsx`.
+- Selecting a theme updates `data-theme`, writes localStorage, and dispatches window event:
+  - `aph:theme-change` (detail is the theme string).
+
+**Theme tokens live in**
+- `apps/web/src/app/globals.css` defines:
+  - base semantic CSS variables
+  - per-theme overrides via `html[data-theme="..."]`
+  - mapping into Tailwind v4 color tokens (background/surface/border/foreground/muted/primary/etc.)
+
+**How to theme new components (checklist)**
+- Prefer semantic classes: `bg-background`, `bg-surface`, `border-border`, `text-foreground`, `text-muted`, `bg-primary`, `text-primary-foreground`, `ring-ring`.
+- Avoid hard-coded `bg-white`, `border-slate-*`, `text-slate-*` in new UI.
+- Heatmap/metric coloring can remain custom; do not tie it to theme unless explicitly intended.
+
 ### Horizontal scrolling (global)
 - No page-level horizontal scrollbar: layout enforces `min-w-0` + `overflow-x-hidden`.
 - Tables must use a dedicated horizontal scroll container tagged:

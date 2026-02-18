@@ -124,7 +124,7 @@ export default function SalesPivotTable({
     measurement.style.whiteSpace = 'nowrap';
     measurement.style.left = '0';
     measurement.style.top = '0';
-    measurement.className = 'text-sm font-sans text-slate-700';
+    measurement.className = 'text-sm font-sans text-foreground';
 
     document.body.appendChild(measurement);
 
@@ -235,7 +235,7 @@ export default function SalesPivotTable({
 
   return (
     <div
-      className="rounded-2xl border border-slate-200 bg-white/90"
+      className="rounded-2xl border border-border bg-surface/90"
       style={
         {
           '--kpi-col-w': `${colWidths.kpi}px`,
@@ -247,42 +247,42 @@ export default function SalesPivotTable({
       <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
         <table
           ref={tableRef}
-          className="min-w-max w-full table-auto border-separate border-spacing-0 text-left text-sm"
+          className="min-w-max w-full table-auto border-separate border-spacing-0 text-left text-sm text-foreground"
         >
-          <thead className="sticky top-0 bg-white text-[10px] uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 bg-surface text-[10px] uppercase tracking-wide text-muted">
             <tr>
-              <th className="sticky left-0 z-30 w-[var(--kpi-col-w)] border-b border-r border-slate-200/70 bg-white px-3 py-3 text-left shadow-sm">
+              <th className="sticky left-0 z-30 w-[var(--kpi-col-w)] border-b border-r border-border/70 bg-surface px-3 py-3 text-left shadow-sm">
                 KPI
               </th>
-              <th className="sticky left-[var(--kpi-col-w)] z-30 w-[var(--summary-col-w)] border-b border-r border-slate-200/70 bg-white px-3 py-3 text-left shadow-sm">
+              <th className="sticky left-[var(--kpi-col-w)] z-30 w-[var(--summary-col-w)] border-b border-r border-border/70 bg-surface px-3 py-3 text-left shadow-sm">
                 Summary
               </th>
               {buckets.map((bucket) => (
                 <th
                   key={bucket.key}
-                  className="border-b border-r border-slate-200/70 px-2 py-2 text-left"
+                  className="border-b border-r border-border/70 px-2 py-2 text-left"
                 >
                   {granularity === 'daily' ? (
-                    <div className="text-xs font-semibold text-slate-700">
+                    <div className="text-xs font-semibold text-foreground">
                       {bucket.label}
                     </div>
                   ) : (
                     <div className="text-[10px] leading-tight">
-                      <div className="font-semibold text-slate-700">
+                      <div className="font-semibold text-foreground">
                         {bucket.label}
                       </div>
-                      <div className="text-slate-500">{bucket.start}</div>
-                      <div className="text-slate-500">{bucket.end}</div>
+                      <div className="text-muted">{bucket.start}</div>
+                      <div className="text-muted">{bucket.end}</div>
                     </div>
                   )}
                 </th>
               ))}
-              <th className="w-[var(--analysis-col-w)] border-b border-slate-200/70 px-2 py-2 text-left">
+              <th className="w-[var(--analysis-col-w)] border-b border-border/70 px-2 py-2 text-left">
                 Analysis
               </th>
             </tr>
           </thead>
-          <tbody className="text-sm text-slate-700">
+          <tbody className="text-sm text-foreground/85">
             {visibleRows.map(({ key, row, level }) => {
               const bucketValues = row.bucketValues;
               const summaryValue = row.summaryValue;
@@ -297,11 +297,11 @@ export default function SalesPivotTable({
                 (rowMetricKey === 'profits' ? DEFAULT_PROFITS_EXPANDED : true);
 
               return (
-                <tr key={key} className="hover:bg-slate-50">
+                <tr key={key} className="hover:bg-surface-2/70">
                   <td
                     data-kpi-cell
-                    className={`sticky left-0 z-20 w-[var(--kpi-col-w)] border-b border-r border-slate-200/70 bg-white px-3 py-3 shadow-[2px_0_0_rgba(226,232,240,0.6)] ${
-                      isChild ? 'pl-8 text-slate-500' : 'font-semibold text-slate-700'
+                    className={`sticky left-0 z-20 w-[var(--kpi-col-w)] border-b border-r border-border/70 bg-surface px-3 py-3 shadow-[2px_0_0_rgba(0,0,0,0.06)] ${
+                      isChild ? 'pl-8 text-muted' : 'font-semibold text-foreground'
                     }`}
                   >
                     {isGroup ? (
@@ -338,8 +338,8 @@ export default function SalesPivotTable({
                   </td>
                   <td
                     data-summary-cell
-                    className={`sticky left-[var(--kpi-col-w)] z-20 w-[var(--summary-col-w)] border-b border-r border-slate-200/70 bg-white px-3 py-3 shadow-[2px_0_0_rgba(226,232,240,0.6)] ${
-                      isChild ? 'text-slate-500' : 'text-slate-700'
+                    className={`sticky left-[var(--kpi-col-w)] z-20 w-[var(--summary-col-w)] border-b border-r border-border/70 bg-surface px-3 py-3 shadow-[2px_0_0_rgba(0,0,0,0.06)] ${
+                      isChild ? 'text-muted' : 'text-foreground'
                     }`}
                   >
                     {formatValue(rowMetricKey, summaryValue)}
@@ -347,14 +347,14 @@ export default function SalesPivotTable({
                   {bucketValues.map((value, index) => (
                     <td
                       key={`${key}-${index}`}
-                      className={`border-b border-r border-slate-200/70 px-2 py-2 text-right text-slate-600 whitespace-nowrap ${
-                        isChild ? 'text-slate-500' : ''
+                      className={`border-b border-r border-border/70 px-2 py-2 text-right text-muted whitespace-nowrap ${
+                        isChild ? 'text-muted' : ''
                       }`}
                     >
                       {formatValue(rowMetricKey, value)}
                     </td>
                   ))}
-                  <td className="border-b border-slate-200/70 px-2 py-2">
+                  <td className="border-b border-border/70 px-2 py-2">
                     {bucketValues.some((value) => value !== null) ? (
                       <div
                         className="relative h-9 w-[var(--analysis-col-w)]"
@@ -365,7 +365,7 @@ export default function SalesPivotTable({
                       >
                         {hasNegative ? (
                           <div
-                            className="absolute left-0 right-0 h-px bg-slate-200"
+                            className="absolute left-0 right-0 h-px bg-border"
                             style={{ top: `${baseline}px` }}
                           />
                         ) : null}
@@ -378,7 +378,7 @@ export default function SalesPivotTable({
                               <div key={`${key}-spark-${index}`} className="relative flex-1">
                                 <div
                                   className={`absolute left-0 right-0 rounded-sm ${
-                                    isNegative ? 'bg-rose-400/70' : 'bg-slate-700/70'
+                                    isNegative ? 'bg-rose-400/70' : 'bg-foreground/70'
                                   }`}
                                   style={
                                     hasNegative
@@ -397,7 +397,7 @@ export default function SalesPivotTable({
                         </div>
                       </div>
                     ) : (
-                      <span className="text-xs text-slate-400">-</span>
+                      <span className="text-xs text-muted">-</span>
                     )}
                   </td>
                 </tr>
@@ -408,11 +408,11 @@ export default function SalesPivotTable({
       </div>
       {tooltip.visible ? (
         <div
-          className="fixed z-50 max-w-[220px] rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-lg"
+          className="fixed z-50 max-w-[220px] rounded-md border border-border bg-surface px-3 py-2 text-xs text-foreground shadow-lg"
           style={{ left: tooltip.x, top: tooltip.y, pointerEvents: 'none' }}
         >
-          <div className="font-semibold text-slate-900">{tooltip.line1}</div>
-          <div className="mt-1 text-slate-600">{tooltip.line2}</div>
+          <div className="font-semibold text-foreground">{tooltip.line1}</div>
+          <div className="mt-1 text-muted">{tooltip.line2}</div>
         </div>
       ) : null}
     </div>

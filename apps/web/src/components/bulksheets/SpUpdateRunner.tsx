@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import type { ExperimentOption } from '@/lib/logbook/getExperimentOptions';
 import type { GeneratorResult } from '@/lib/bulksheets/runGenerators';
@@ -53,26 +53,21 @@ export default function SpUpdateRunner(props: {
   const [mode, setMode] = useState<'builder' | 'json'>('builder');
   const [rows, setRows] = useState<SpUpdateRowInput[]>([defaultRow()]);
   const [actionsJson, setActionsJson] = useState('');
-  const [builderError, setBuilderError] = useState<string | null>(null);
   const [selectedExperiment, setSelectedExperiment] = useState('');
   const [logEnabled, setLogEnabled] = useState(false);
 
-  useEffect(() => {
-    if (selectedExperiment) {
-      setLogEnabled(true);
-    }
-  }, [selectedExperiment]);
-
-  useEffect(() => {
-    if (mode !== 'builder') return;
+  const builderState = useMemo(() => {
     try {
       const actions = buildSpUpdateActions(rows);
-      setActionsJson(JSON.stringify(actions, null, 2));
-      setBuilderError(null);
+      return { json: JSON.stringify(actions, null, 2), error: null as string | null };
     } catch (error) {
-      setBuilderError(error instanceof Error ? error.message : 'Invalid action row');
+      return {
+        json: '',
+        error: error instanceof Error ? error.message : 'Invalid action row',
+      };
     }
-  }, [rows, mode]);
+  }, [rows]);
+  const effectiveActionsJson = mode === 'builder' ? builderState.json : actionsJson;
 
   const addRow = () => setRows((prev) => [...prev, defaultRow()]);
   const removeRow = (index: number) =>
@@ -162,7 +157,10 @@ export default function SpUpdateRunner(props: {
               </button>
               <button
                 type="button"
-                onClick={() => setMode('json')}
+                onClick={() => {
+                  setActionsJson(builderState.json);
+                  setMode('json');
+                }}
                 className={`rounded-full px-3 py-1 ${
                   mode === 'json'
                     ? 'bg-slate-900 text-white'
@@ -305,8 +303,8 @@ export default function SpUpdateRunner(props: {
                   </div>
                 </div>
               ))}
-              {builderError ? (
-                <div className="text-sm text-red-500">{builderError}</div>
+              {builderState.error ? (
+                <div className="text-sm text-red-500">{builderState.error}</div>
               ) : null}
               <div className="flex justify-between">
                 <button
@@ -317,7 +315,7 @@ export default function SpUpdateRunner(props: {
                   Add action
                 </button>
               </div>
-              <input type="hidden" name="actions_json" value={actionsJson} />
+              <input type="hidden" name="actions_json" value={effectiveActionsJson} />
             </div>
           ) : (
             <div className="mt-4 space-y-2">
@@ -342,7 +340,11 @@ export default function SpUpdateRunner(props: {
               <select
                 name="experiment_id"
                 value={selectedExperiment}
-                onChange={(event) => setSelectedExperiment(event.target.value)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSelectedExperiment(value);
+                  if (value) setLogEnabled(true);
+                }}
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
               >
                 <option value="">No experiment</option>

@@ -73,21 +73,21 @@ const renderUploadTable = (
   rows: DataHealthResult['latestUploadsBySourceType']
 ) => {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+    <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-        <span className="text-xs uppercase tracking-[0.2em] text-slate-400">
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
+        <span className="text-xs uppercase tracking-[0.2em] text-muted">
           {rows.length} sources
         </span>
       </div>
       {rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+        <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
           No uploads found for this module.
         </div>
       ) : (
         <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
           <table className="w-full table-fixed text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-slate-400">
+            <thead className="text-xs uppercase tracking-wider text-muted">
               <tr>
                 <th className="w-40 pb-2">Source</th>
                 <th className="w-32 pb-2">Latest export</th>
@@ -98,24 +98,24 @@ const renderUploadTable = (
                 <th className="w-24 pb-2 text-right">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-border">
               {rows.map((row) => (
                 <tr key={getRowKey(row)}>
-                  <td className="py-3 font-medium text-slate-900">
+                  <td className="py-3 font-medium text-foreground">
                     {row.source_type}
                   </td>
-                  <td className="py-3 text-slate-600">
+                  <td className="py-3 text-muted">
                     {formatDate(getLatestTimestamp(row))}
                   </td>
-                  <td className="py-3 text-slate-600">
+                  <td className="py-3 text-muted">
                     {row.coverage_start || row.coverage_end
                       ? `${row.coverage_start ?? '—'} → ${row.coverage_end ?? '—'}`
                       : '—'}
                   </td>
-                  <td className="py-3 text-slate-600">
+                  <td className="py-3 text-muted">
                     {formatNumber(row.row_count)}
                   </td>
-                  <td className="py-3 text-slate-600">
+                  <td className="py-3 text-muted">
                     <div className="flex min-w-0 items-center gap-2">
                       <span
                         className="min-w-0 flex-1 truncate"
@@ -128,7 +128,7 @@ const renderUploadTable = (
                       ) : null}
                     </div>
                   </td>
-                  <td className="py-3 text-xs text-slate-400">
+                  <td className="py-3 text-xs text-muted">
                     <div className="flex min-w-0 items-center gap-2">
                       <span
                         className="min-w-0 flex-1 truncate"
@@ -184,86 +184,86 @@ export default async function ImportsHealthPage() {
   return (
     <div className="space-y-8">
       <section className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
-          <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+        <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <div className="text-xs uppercase tracking-[0.3em] text-muted">
             Account
           </div>
-          <div className="mt-2 text-2xl font-semibold text-slate-900">
+          <div className="mt-2 text-2xl font-semibold text-foreground">
             {data.accountId}
           </div>
-          <div className="mt-1 text-sm text-slate-500">
+          <div className="mt-1 text-sm text-muted">
             Marketplace {data.marketplace}
           </div>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
-          <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+        <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <div className="text-xs uppercase tracking-[0.3em] text-muted">
             Mapping issues (latest)
           </div>
           <div className="mt-3 space-y-2 text-sm">
             <div className="flex items-center justify-between">
               <span>SP</span>
-              <span className="font-semibold text-slate-900">
+              <span className="font-semibold text-foreground">
                 {data.mappingIssues.sp.issue_rows} issues ·{' '}
                 {formatNumber(data.mappingIssues.sp.affected_rows)} rows
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span>SB</span>
-              <span className="font-semibold text-slate-900">
+              <span className="font-semibold text-foreground">
                 {data.mappingIssues.sb.issue_rows} issues ·{' '}
                 {formatNumber(data.mappingIssues.sb.affected_rows)} rows
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span>SD</span>
-              <span className="font-semibold text-slate-900">
+              <span className="font-semibold text-foreground">
                 {data.mappingIssues.sd.issue_rows} issues ·{' '}
                 {formatNumber(data.mappingIssues.sd.affected_rows)} rows
               </span>
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
-          <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+        <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <div className="text-xs uppercase tracking-[0.3em] text-muted">
             Reconcile queue
           </div>
-          <div className="mt-2 text-2xl font-semibold text-slate-900">
+          <div className="mt-2 text-2xl font-semibold text-foreground">
             {data.reconcileQueue.configured
               ? formatNumber(data.reconcileQueue.pending_count ?? 0)
               : 'Not configured'}
           </div>
-          <div className="mt-1 text-sm text-slate-500">
+          <div className="mt-1 text-sm text-muted">
             Pending manifests
           </div>
         </div>
       </section>
 
       {data.spendReconciliation ? (
-        <section className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+              <div className="text-xs uppercase tracking-[0.3em] text-muted">
                 Spend reconciliation (14 days)
               </div>
               {data.spendReconciliation.enabled ? (
                 'recent_flags_count' in data.spendReconciliation ? (
-                  <div className="mt-2 text-2xl font-semibold text-slate-900">
+                  <div className="mt-2 text-2xl font-semibold text-foreground">
                     {data.spendReconciliation.recent_flags_count} flagged days
                   </div>
                 ) : (
-                  <div className="mt-2 text-2xl font-semibold text-slate-900">
+                  <div className="mt-2 text-2xl font-semibold text-foreground">
                     Spend reconciliation: unavailable (timeout)
                   </div>
                 )
               ) : (
-                <div className="mt-2 text-2xl font-semibold text-slate-900">
+                <div className="mt-2 text-2xl font-semibold text-foreground">
                   Spend reconciliation: disabled
                 </div>
               )}
             </div>
             {data.spendReconciliation.enabled &&
             'latest_flag_date' in data.spendReconciliation ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <div className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm text-muted">
                 Latest flag: {formatDate(data.spendReconciliation.latest_flag_date)}
               </div>
             ) : null}
