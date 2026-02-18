@@ -659,6 +659,8 @@ What was added (high-level):
 - `products` (ASIN-level) + `product_skus` (SKU-level) supports multiple SKUs under one ASIN.
 - `product_cost_history` (SKU cost history) + safe insert behavior (close previous current row; skip identical).
 - `product_profile` (profile_json context).
+- Saving product profile auto-creates missing `products` rows via:
+  - `apps/web/src/lib/products/ensureProductId.ts`
 - Cost helper views: `v_product_sku_base`, `v_product_sku_cost_current` (CURRENT_DATE; base-SKU fallback).
 - Keyword grouping tables + exclusivity trigger (strategy-only; no Amazon status mirroring).
 
@@ -666,6 +668,22 @@ Scripts:
 - `scripts/product_seed.ts` (`npm run product:seed`)
 - `scripts/import_keyword_groups_from_csv.ts` (`npm run keywords:import`)
 - `scripts/cleanup_test_skus.ts` (`npm run product:cleanup-test-skus`)
+
+### Keyword Groups CSV Format (contract)
+- CSV header is the FIRST row (no note row required).
+- Backward compatible: importer auto-detects old format with a leading note row + header on row 2.
+- Columns:
+- A: keyword (reserved)
+- B: group (reserved)
+- C: note (reserved)
+- D..O: group names (max 12 groups)
+- Keywords are listed under each group column; blanks allowed; importer normalizes keywords and de-dupes.
+- Source of truth:
+- Importer: `scripts/import_keyword_groups_from_csv.ts`
+- Export/template/AI-pack routes:
+- `apps/web/src/app/products/[asin]/keywords/export/route.ts`
+- `apps/web/src/app/products/[asin]/keywords/template/route.ts`
+- `apps/web/src/app/products/[asin]/keywords/ai-pack/route.ts`
 
 Migrations:
 - `20260211100000_remote_placeholder.sql` (history alignment placeholder)

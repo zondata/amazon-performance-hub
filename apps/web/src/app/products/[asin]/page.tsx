@@ -1,10 +1,14 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 import KpiCards from '@/components/KpiCards';
 import Tabs from '@/components/Tabs';
 import TrendChart from '@/components/TrendChart';
 import { env } from '@/lib/env';
+import { ensureProductId } from '@/lib/products/ensureProductId';
 import { getProductDetailData } from '@/lib/products/getProductDetailData';
+import { getProductKeywordGroups } from '@/lib/products/getProductKeywordGroups';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -69,6 +73,103 @@ export default async function ProductDetailPage({
   let start = normalizeDate(paramValue('start')) ?? defaults.start;
   let end = normalizeDate(paramValue('end')) ?? defaults.end;
   const tab = paramValue('tab') ?? 'overview';
+  const errorMessage = paramValue('error');
+
+  const saveProductProfile = async (formData: FormData) => {
+    'use server';
+
+    const shortNameRaw = formData.get('short_name');
+    const notesRaw = formData.get('notes');
+    const nextStart = String(formData.get('start') ?? start);
+    const nextEnd = String(formData.get('end') ?? end);
+
+    const shortName =
+      typeof shortNameRaw === 'string' ? shortNameRaw.trim() : '';
+    const notes = typeof notesRaw === 'string' ? notesRaw.trim() : '';
+
+    try {
+      const { productId } = await ensureProductId({
+        accountId: env.accountId,
+        marketplace: env.marketplace,
+        asin,
+        title: data.productMeta.title ?? undefined,
+      });
+
+      let existingProfile: Record<string, unknown> = {};
+      const { data: profileRow, error: profileError } = await supabaseAdmin
+        .from('product_profile')
+        .select('profile_json')
+        .eq('product_id', productId)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error('profile_save:profile_fetch_error', {
+          productId,
+          error: profileError.message,
+        });
+      }
+
+      if (
+        profileRow?.profile_json &&
+        typeof profileRow.profile_json === 'object' &&
+        !Array.isArray(profileRow.profile_json)
+      ) {
+        existingProfile = {
+          ...(profileRow.profile_json as Record<string, unknown>),
+        };
+      }
+
+      const nextProfile = { ...existingProfile };
+      if (shortName) {
+        nextProfile.short_name = shortName;
+      } else {
+        delete nextProfile.short_name;
+      }
+
+      if (notes) {
+        nextProfile.notes = notes;
+      } else {
+        delete nextProfile.notes;
+      }
+
+      const { error: upsertError } = await supabaseAdmin
+        .from('product_profile')
+        .upsert(
+          {
+            product_id: productId,
+            profile_json: nextProfile,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'product_id' }
+        );
+
+      console.log('profile_save', {
+        productId,
+        shortNameLength: shortName.length,
+        error: upsertError?.message ?? null,
+      });
+
+      if (upsertError) {
+        redirect(
+          `/products/${asin}?start=${nextStart}&end=${nextEnd}&tab=overview&error=${encodeURIComponent(
+            upsertError.message
+          )}`
+        );
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('NEXT_REDIRECT')) {
+        throw error;
+      }
+      console.error('profile_save:exception', { asin, error });
+      redirect(
+        `/products/${asin}?start=${nextStart}&end=${nextEnd}&tab=overview&error=${encodeURIComponent(
+          'Failed to save profile.'
+        )}`
+      );
+    }
+
+    redirect(`/products/${asin}?start=${nextStart}&end=${nextEnd}&tab=overview`);
+  };
 
   if (start > end) {
     const tmp = start;
@@ -83,6 +184,20 @@ export default async function ProductDetailPage({
     start,
     end,
   });
+
+  const keywordGroups =
+    tab === 'sqp'
+      ? await getProductKeywordGroups({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+          asin,
+        })
+      : null;
+
+  const shortName = data.productMeta.short_name?.trim();
+  const title = data.productMeta.title?.trim();
+  const displayName = shortName || title || asin;
+  const showTitle = Boolean(shortName && title && title !== shortName);
 
   const kpiItems = [
     {
@@ -135,11 +250,14 @@ export default async function ProductDetailPage({
               Product detail
             </div>
             <div className="mt-2 text-2xl font-semibold text-foreground">
-              {data.productMeta.title ?? asin}
+              {displayName}
             </div>
             <div className="mt-1 text-sm text-muted">
               ASIN {asin} · {start} → {end}
             </div>
+            {showTitle ? (
+              <div className="mt-2 text-sm text-muted">{title}</div>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-end gap-4 text-sm text-muted">
             <form method="get" className="flex flex-wrap items-end gap-3">
@@ -184,6 +302,58 @@ export default async function ProductDetailPage({
       {tab === 'overview' ? (
         <div className="space-y-6">
           <KpiCards items={kpiItems} />
+          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+            <div className="mb-4">
+              <div className="text-xs uppercase tracking-[0.3em] text-muted">
+                Product profile
+              </div>
+              <div className="mt-1 text-lg font-semibold text-foreground">
+                Short name and notes
+              </div>
+            </div>
+            {errorMessage ? (
+              <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {errorMessage}
+              </div>
+            ) : null}
+            <form action={saveProductProfile} className="space-y-4">
+              <input type="hidden" name="start" value={start} />
+              <input type="hidden" name="end" value={end} />
+              <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                  Short name
+                  <input
+                    type="text"
+                    name="short_name"
+                    defaultValue={shortName ?? ''}
+                    placeholder="e.g. Core Bundle"
+                    className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                  />
+                </label>
+                <div className="text-xs text-muted">
+                  Short names show across filters and headers. Leave blank to clear.
+                </div>
+              </div>
+              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                Notes (optional)
+                <textarea
+                  name="notes"
+                  defaultValue={data.productMeta.notes ?? ''}
+                  placeholder="Optional notes for this product."
+                  rows={4}
+                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                />
+              </label>
+              <div>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+                >
+                  Save profile
+                </button>
+              </div>
+            </form>
+          </section>
           <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
             <div className="mb-4">
               <div className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -385,7 +555,131 @@ export default async function ProductDetailPage({
         </section>
       ) : null}
 
-      {tab === 'ads' || tab === 'sqp' || tab === 'ranking' ? (
+      {tab === 'ads' ? (
+        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <div className="text-lg font-semibold text-foreground">Coming soon</div>
+          <div className="mt-2 text-sm text-muted">
+            This section will be wired once the next facts layer is ready.
+          </div>
+        </section>
+      ) : null}
+
+      {tab === 'sqp' && keywordGroups ? (
+        <section className="space-y-6">
+          <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="text-xs uppercase tracking-[0.3em] text-muted">
+                  Keyword strategy summary
+                </div>
+                <div className="mt-1 text-lg font-semibold text-foreground">
+                  {keywordGroups.active_set?.name ?? 'No keyword set yet'}
+                </div>
+                {keywordGroups.active_set ? (
+                  <div className="mt-2 text-sm text-muted">
+                    Created {keywordGroups.active_set.created_at ?? '—'} ·{' '}
+                    {keywordGroups.active_set.is_exclusive ? 'Exclusive' : 'Non-exclusive'}
+                  </div>
+                ) : (
+                  <div className="mt-2 text-sm text-muted">
+                    Import a keyword group set to enable downloads.
+                  </div>
+                )}
+                {keywordGroups.multiple_active ? (
+                  <div className="mt-2 text-xs text-amber-600">
+                    Multiple active sets detected. Latest active is shown.
+                  </div>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
+                <div className="rounded-lg border border-border bg-surface px-3 py-2">
+                  Groups{' '}
+                  <span className="ml-2 font-semibold text-foreground">
+                    {keywordGroups.active_set?.group_count ?? 0}
+                  </span>
+                </div>
+                <div className="rounded-lg border border-border bg-surface px-3 py-2">
+                  Keywords{' '}
+                  <span className="ml-2 font-semibold text-foreground">
+                    {keywordGroups.active_set?.keyword_count ?? 0}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href={`/products/${asin}/keywords/export`}
+                className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+              >
+                Download grouped CSV
+              </Link>
+              <Link
+                href={`/products/${asin}/keywords/template`}
+                className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+              >
+                Download template CSV
+              </Link>
+              <Link
+                href={`/products/${asin}/keywords/ai-pack`}
+                className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+              >
+                Download AI formatting pack
+              </Link>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+            <div className="mb-4 text-lg font-semibold text-foreground">
+              Recent keyword group sets
+            </div>
+            {keywordGroups.group_sets.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
+                No keyword group sets found.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {keywordGroups.group_sets.map((group) => (
+                  <div
+                    key={group.group_set_id}
+                    className="rounded-xl border border-border bg-surface px-4 py-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-semibold text-foreground">
+                          {group.name}
+                          {group.is_active ? (
+                            <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                              Active
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-1 text-xs text-muted">
+                          {group.created_at ?? '—'} ·{' '}
+                          {group.is_exclusive ? 'Exclusive' : 'Non-exclusive'}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+                        <span>
+                          Groups{' '}
+                          <strong className="text-foreground">{group.group_count}</strong>
+                        </span>
+                        <span>
+                          Keywords{' '}
+                          <strong className="text-foreground">
+                            {group.keyword_count}
+                          </strong>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {tab === 'ranking' ? (
         <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
           <div className="text-lg font-semibold text-foreground">Coming soon</div>
           <div className="mt-2 text-sm text-muted">

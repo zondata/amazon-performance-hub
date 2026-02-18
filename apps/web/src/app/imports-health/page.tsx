@@ -1,5 +1,8 @@
+import { redirect } from 'next/navigation';
+
 import CopyButton from '@/components/CopyButton';
 import { getDataHealth, type DataHealthResult } from '@/lib/health/getDataHealth';
+import { seedProductsFromSalesLatest } from '@/lib/products/seedProductsFromSalesLatest';
 
 const SOURCE_GROUPS: Array<{ title: string; sources: string[] }> = [
   { title: 'Bulksheets', sources: ['bulk'] },
@@ -162,7 +165,42 @@ const renderUploadTable = (
   );
 };
 
-export default async function ImportsHealthPage() {
+type ImportsHealthPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function ImportsHealthPage({
+  searchParams,
+}: ImportsHealthPageProps) {
+  const params = searchParams ? await searchParams : undefined;
+  const paramValue = (key: string): string | undefined => {
+    const value = params?.[key];
+    if (!value) return undefined;
+    return Array.isArray(value) ? value[0] : value;
+  };
+  const seedStatus = paramValue('seed');
+  const seedInserted = paramValue('inserted');
+  const seedSkipped = paramValue('skipped');
+  const seedTotal = paramValue('total');
+  const seedError = paramValue('error');
+
+  const seedProducts = async () => {
+    'use server';
+    try {
+      const data = await getDataHealth();
+      const result = await seedProductsFromSalesLatest({
+        accountId: data.accountId,
+        marketplace: data.marketplace,
+      });
+      redirect(
+        `/imports-health?seed=ok&inserted=${result.insertedCount}&skipped=${result.skippedCount}&total=${result.totalFactsAsins}`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Seed failed.';
+      redirect(`/imports-health?seed=error&error=${encodeURIComponent(message)}`);
+    }
+  };
+
   const data = await getDataHealth();
   const latestBySource = new Map(
     data.latestUploadsBySourceType.map((row) => [row.source_type ?? '', row])
@@ -183,6 +221,41 @@ export default async function ImportsHealthPage() {
 
   return (
     <div className="space-y-8">
+      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="text-xs uppercase tracking-[0.3em] text-muted">
+              Maintenance
+            </div>
+            <div className="mt-2 text-lg font-semibold text-foreground">
+              Seed products from Sales (latest)
+            </div>
+            <div className="mt-1 text-sm text-muted">
+              Inserts missing ASINs from sales facts into products.
+            </div>
+          </div>
+          <form action={seedProducts}>
+            <button
+              type="submit"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+            >
+              Seed products
+            </button>
+          </form>
+        </div>
+        {seedStatus === 'ok' ? (
+          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            Seeded products. Inserted {seedInserted ?? '0'}, skipped{' '}
+            {seedSkipped ?? '0'}, total facts ASINs {seedTotal ?? '0'}.
+          </div>
+        ) : null}
+        {seedStatus === 'error' ? (
+          <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            Seed failed: {seedError ?? 'Unknown error.'}
+          </div>
+        ) : null}
+      </section>
+
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">

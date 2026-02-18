@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
 
 type ProductsFilters = {
   accountId: string;
@@ -21,13 +22,21 @@ type SalesRow = {
 };
 
 type ProductRow = {
+  product_id: string;
   asin: string | null;
   title: string | null;
+};
+
+type ProfileRow = {
+  product_id: string;
+  profile_json: unknown | null;
 };
 
 type ProductKpiRow = {
   asin: string;
   title?: string | null;
+  short_name?: string | null;
+  display_name?: string | null;
   sales: number;
   orders: number;
   units: number;
@@ -35,11 +44,7 @@ type ProductKpiRow = {
   ppc_sales: number;
   avg_sales_price: number | null;
   tacos: number | null;
-};
-
-type AsinOption = {
-  asin: string;
-  label: string;
+  acos: number | null;
 };
 
 const numberValue = (value: number | string | null | undefined): number => {
@@ -49,8 +54,13 @@ const numberValue = (value: number | string | null | undefined): number => {
   return numeric;
 };
 
-const safeLabel = (asin: string, title?: string | null) =>
-  title ? `${asin} — ${title}` : asin;
+const parseShortName = (value: unknown): string | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const shortName = (value as Record<string, unknown>).short_name;
+  return typeof shortName === 'string' && shortName.trim().length > 0
+    ? shortName.trim()
+    : null;
+};
 
 export const getProductsData = async ({
   accountId,
@@ -59,50 +69,58 @@ export const getProductsData = async ({
   end,
   asinFilter,
 }: ProductsFilters) => {
-  let asinOptions: AsinOption[] = [];
+  const asinOptions = await fetchAsinOptions(accountId, marketplace);
   const productTitleByAsin = new Map<string, string>();
+  const productShortNameByAsin = new Map<string, string>();
 
   try {
     const { data: products, error } = await supabaseAdmin
       .from('products')
-      .select('asin,title')
+      .select('product_id,asin,title')
       .eq('account_id', accountId)
       .eq('marketplace', marketplace)
       .order('asin', { ascending: true })
       .limit(500);
 
     if (!error && products && products.length > 0) {
-      asinOptions = (products as ProductRow[])
-        .filter((row) => row.asin)
-        .map((row) => {
-          productTitleByAsin.set(row.asin as string, row.title ?? '');
-          return {
-            asin: row.asin as string,
-            label: safeLabel(row.asin as string, row.title),
-          };
-        });
+      const productRows = products as ProductRow[];
+      const productIds = productRows.map((row) => row.product_id);
+
+      productRows.forEach((row) => {
+        if (!row.asin) return;
+        productTitleByAsin.set(row.asin, row.title ?? '');
+      });
+
+      if (productIds.length > 0) {
+        try {
+          const { data: profiles, error: profileError } = await supabaseAdmin
+            .from('product_profile')
+            .select('product_id,profile_json')
+            .in('product_id', productIds);
+
+          if (!profileError && profiles) {
+            const asinByProductId = new Map<string, string>();
+            productRows.forEach((row) => {
+              if (!row.asin) return;
+              asinByProductId.set(row.product_id, row.asin);
+            });
+
+            (profiles as ProfileRow[]).forEach((profile) => {
+              const asin = asinByProductId.get(profile.product_id);
+              if (!asin) return;
+              const shortName = parseShortName(profile.profile_json);
+              if (shortName) {
+                productShortNameByAsin.set(asin, shortName);
+              }
+            });
+          }
+        } catch {
+          // ignore
+        }
+      }
     }
   } catch {
     // ignore and fallback to sales data
-  }
-
-  if (asinOptions.length === 0) {
-    const { data: salesRows } = await supabaseAdmin
-      .from('si_sales_trend_daily_latest')
-      .select('asin')
-      .eq('account_id', accountId)
-      .eq('marketplace', marketplace)
-      .not('asin', 'is', null)
-      .order('asin', { ascending: true })
-      .limit(2000);
-
-    const seen = new Set<string>();
-    (salesRows ?? []).forEach((row) => {
-      if (!row.asin) return;
-      if (seen.has(row.asin)) return;
-      seen.add(row.asin);
-      asinOptions.push({ asin: row.asin, label: row.asin });
-    });
   }
 
   let query = supabaseAdmin
@@ -173,9 +191,14 @@ export const getProductsData = async ({
         ? row.weighted_price_total / row.weighted_units_total
         : null;
     const tacos = row.sales > 0 ? row.ppc_cost / row.sales : null;
+    const acos = row.ppc_sales > 0 ? row.ppc_cost / row.ppc_sales : null;
+    const shortName = productShortNameByAsin.get(row.asin);
+    const title = productTitleByAsin.get(row.asin);
     return {
       asin: row.asin,
-      title: productTitleByAsin.get(row.asin),
+      title,
+      short_name: shortName,
+      display_name: shortName || title || row.asin,
       sales: row.sales,
       orders: row.orders,
       units: row.units,
@@ -183,6 +206,7 @@ export const getProductsData = async ({
       ppc_sales: row.ppc_sales,
       avg_sales_price: avgPrice,
       tacos,
+      acos,
     };
   });
 

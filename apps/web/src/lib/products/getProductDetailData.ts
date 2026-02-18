@@ -26,6 +26,8 @@ type ProductMeta = {
   title?: string | null;
   brand?: string | null;
   profile_json?: unknown | null;
+  short_name?: string | null;
+  notes?: string | null;
 };
 
 type SkuRow = {
@@ -80,6 +82,11 @@ const numberValue = (value: number | string | null | undefined): number => {
   return numeric;
 };
 
+const parseProfile = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
 export const getProductDetailData = async ({
   accountId,
   marketplace,
@@ -123,6 +130,10 @@ export const getProductDetailData = async ({
 
       if (!error && data) {
         productMeta.profile_json = data.profile_json ?? null;
+        const parsed = parseProfile(data.profile_json);
+        productMeta.short_name =
+          typeof parsed?.short_name === 'string' ? parsed.short_name : null;
+        productMeta.notes = typeof parsed?.notes === 'string' ? parsed.notes : null;
       }
     } catch {
       // ignore

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
 
 type SalesDailyFilters = {
   accountId: string;
@@ -32,11 +33,6 @@ type SalesRow = {
   fulfillment_fees: number | string | null;
   refund_cost: number | string | null;
   promotion_value: number | string | null;
-};
-
-type AsinOption = {
-  asin: string;
-  label: string;
 };
 
 export type SalesDailyPoint = {
@@ -110,48 +106,6 @@ const numberValue = (value: number | string | null | undefined): number => {
 const safeRatio = (numerator: number, denominator: number): number | null => {
   if (denominator <= 0) return null;
   return numerator / denominator;
-};
-
-const fetchAsinOptions = async (
-  accountId: string,
-  marketplace: string
-): Promise<AsinOption[]> => {
-  const { data: products, error } = await supabaseAdmin
-    .from('products')
-    .select('asin,title')
-    .eq('account_id', accountId)
-    .eq('marketplace', marketplace)
-    .order('asin', { ascending: true })
-    .limit(500);
-
-  if (!error && products && products.length > 0) {
-    return products
-      .filter((row) => row.asin)
-      .map((row) => ({
-        asin: row.asin,
-        label: row.title ? `${row.asin} — ${row.title}` : row.asin,
-      }));
-  }
-
-  const { data: salesRows } = await supabaseAdmin
-    .from('si_sales_trend_daily_latest')
-    .select('asin')
-    .eq('account_id', accountId)
-    .eq('marketplace', marketplace)
-    .not('asin', 'is', null)
-    .order('asin', { ascending: true })
-    .limit(2000);
-
-  const seen = new Set<string>();
-  const options: AsinOption[] = [];
-  (salesRows ?? []).forEach((row) => {
-    if (!row.asin) return;
-    if (seen.has(row.asin)) return;
-    seen.add(row.asin);
-    options.push({ asin: row.asin, label: row.asin });
-  });
-
-  return options;
 };
 
 export const getSalesDaily = async ({

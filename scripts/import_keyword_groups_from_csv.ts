@@ -101,6 +101,21 @@ type ExclusivityFailure = {
   existingGroup: string | null;
 };
 
+function looksLikeHeader(row: string[]): boolean {
+  const c0 = (row[0] ?? "").trim().toLowerCase();
+  const c1 = (row[1] ?? "").trim().toLowerCase();
+  if (c0 === "keyword") return true;
+  if (c1 === "group") return true;
+  for (let j = 3; j <= 14; j += 1) {
+    if ((row[j] ?? "").trim().length > 0) return true;
+  }
+  return false;
+}
+
+function looksLikeNote(row: string[]): boolean {
+  return !looksLikeHeader(row);
+}
+
 async function main(): Promise<void> {
   const accountId = requireArg("--account_id");
   const marketplace = requireArg("--marketplace");
@@ -147,14 +162,31 @@ async function main(): Promise<void> {
 
     const groupSetId = groupSetRes.rows[0].group_set_id as string;
 
+    await client.query(
+      `update keyword_group_sets
+       set is_active = false
+       where product_id = $1
+         and group_set_id <> $2`,
+      [productId, groupSetId]
+    );
+
     const csvContent = fs.readFileSync(csvPath, "utf8");
     const rows = parseCsv(csvContent);
 
-    if (rows.length < 2) {
-      throw new Error("CSV must contain at least two rows (notes + headers).");
+    if (rows.length < 1) {
+      throw new Error("CSV must contain at least one header row.");
     }
 
-    const headerRow = rows[1];
+    let headerIndex = 0;
+    if (
+      rows.length >= 2 &&
+      looksLikeNote(rows[0]) &&
+      looksLikeHeader(rows[1])
+    ) {
+      headerIndex = 1;
+    }
+
+    const headerRow = rows[headerIndex];
     const groupHeaders: string[] = [];
     for (let j = 3; j <= 14; j += 1) {
       const headerValue = headerRow[j];
@@ -194,7 +226,8 @@ async function main(): Promise<void> {
       }
     };
 
-    for (let i = 2; i < rows.length; i += 1) {
+    const dataStart = headerIndex + 1;
+    for (let i = dataStart; i < rows.length; i += 1) {
       const row = rows[i];
       if (!row) continue;
 

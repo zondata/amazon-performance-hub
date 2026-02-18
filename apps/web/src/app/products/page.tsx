@@ -152,18 +152,18 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
                 <thead className="sticky top-0 bg-surface text-xs uppercase tracking-wider text-muted shadow-sm">
                   <tr>
                     <th className="w-32 pb-2">ASIN</th>
-                    <th className="w-72 pb-2">Title</th>
+                    <th className="w-72 pb-2">Name</th>
                     <th className="w-28 pb-2">Sales</th>
                     <th className="w-24 pb-2">Orders</th>
-                    <th className="w-24 pb-2">Units</th>
-                    <th className="w-28 pb-2">PPC Cost</th>
+                    <th className="w-28 pb-2">PPC Spend</th>
                     <th className="w-20 pb-2">TACOS</th>
-                    <th className="w-28 pb-2">Avg Price</th>
+                    <th className="w-20 pb-2">ACOS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {rows.map((row) => {
                     const href = `/products/${row.asin}?start=${start}&end=${end}`;
+                    const displayName = row.display_name || row.short_name || row.title || '—';
                     return (
                       <tr key={row.asin} className="hover:bg-surface-2/70">
                         <td className="py-3 font-medium text-foreground">
@@ -172,9 +172,10 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
                           </Link>
                         </td>
                         <td className="py-3 text-muted">
-                          <span className="block truncate" title={row.title ?? undefined}>
-                            {row.title ?? '—'}
-                          </span>
+                          <div className="text-sm font-semibold text-foreground">
+                            {displayName}
+                          </div>
+                          <div className="mt-1 text-xs text-muted">{row.asin}</div>
                         </td>
                         <td className="py-3 text-muted">
                           {formatCurrency(row.sales)}
@@ -183,16 +184,13 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
                           {formatNumber(row.orders)}
                         </td>
                         <td className="py-3 text-muted">
-                          {formatNumber(row.units)}
-                        </td>
-                        <td className="py-3 text-muted">
                           {formatCurrency(row.ppc_cost)}
                         </td>
                         <td className="py-3 text-muted">
                           {formatPercent(row.tacos)}
                         </td>
                         <td className="py-3 text-muted">
-                          {formatCurrency(row.avg_sales_price)}
+                          {formatPercent(row.acos)}
                         </td>
                       </tr>
                     );

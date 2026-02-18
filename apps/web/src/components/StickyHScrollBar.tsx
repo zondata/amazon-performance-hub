@@ -55,7 +55,10 @@ export default function StickyHScrollBar() {
   }, [refreshTarget, updateLayout]);
 
   useEffect(() => {
-    refreshTarget();
+    const raf = requestAnimationFrame(() => {
+      refreshTarget();
+    });
+    return () => cancelAnimationFrame(raf);
   }, [refreshTarget, pathname]);
 
   useEffect(() => {

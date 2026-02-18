@@ -2,6 +2,7 @@ import 'server-only';
 
 import { env } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
 
 type DashboardFilters = {
   start: string;
@@ -19,11 +20,6 @@ type SalesRow = {
   avg_sales_price: number | string | null;
   profits: number | string | null;
   margin: number | string | null;
-};
-
-type AsinOption = {
-  asin: string;
-  label: string;
 };
 
 type SpendReconciliation =
@@ -51,45 +47,6 @@ const computeDefaultFilters = (): DashboardFilters => {
   };
 };
 
-const fetchAsinOptions = async (): Promise<AsinOption[]> => {
-  const { data: products, error } = await supabaseAdmin
-    .from('products')
-    .select('asin,title')
-    .eq('account_id', env.accountId)
-    .eq('marketplace', env.marketplace)
-    .order('asin', { ascending: true })
-    .limit(500);
-
-  if (!error && products && products.length > 0) {
-    return products
-      .filter((row) => row.asin)
-      .map((row) => ({
-        asin: row.asin,
-        label: row.title ? `${row.asin} — ${row.title}` : row.asin,
-      }));
-  }
-
-  const { data: salesRows } = await supabaseAdmin
-    .from('si_sales_trend_daily_latest')
-    .select('asin')
-    .eq('account_id', env.accountId)
-    .eq('marketplace', env.marketplace)
-    .not('asin', 'is', null)
-    .order('asin', { ascending: true })
-    .limit(2000);
-
-  const seen = new Set<string>();
-  const options: AsinOption[] = [];
-  (salesRows ?? []).forEach((row) => {
-    if (!row.asin) return;
-    if (seen.has(row.asin)) return;
-    seen.add(row.asin);
-    options.push({ asin: row.asin, label: row.asin });
-  });
-
-  return options;
-};
-
 export const getDashboardData = async (filters?: Partial<DashboardFilters>) => {
   const defaults = computeDefaultFilters();
   let start = filters?.start ?? defaults.start;
@@ -102,7 +59,7 @@ export const getDashboardData = async (filters?: Partial<DashboardFilters>) => {
     end = tmp;
   }
 
-  const asinOptions = await fetchAsinOptions();
+  const asinOptions = await fetchAsinOptions(env.accountId, env.marketplace);
 
   let spendReconciliation: SpendReconciliation = { enabled: false };
   if (env.enableSpendReconciliation) {

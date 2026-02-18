@@ -42,7 +42,7 @@ export default function ThemeSwitcher() {
   }, [open]);
 
   const applyTheme = (theme: ThemeOption['id']) => {
-    document.documentElement.dataset.theme = theme;
+    document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('aph.theme', theme);
     window.dispatchEvent(new CustomEvent('aph:theme-change', { detail: theme }));
     setOpen(false);
