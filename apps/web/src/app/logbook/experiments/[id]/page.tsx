@@ -205,40 +205,42 @@ export default async function ExperimentDetailPage({
               Checked items will be linked to this experiment.
             </div>
           </InlineFilters>
-          <div className="max-h-[420px] overflow-auto rounded-xl border border-slate-200">
-            <table className="w-full table-fixed text-left text-sm">
-              <thead className="sticky top-0 bg-white text-xs uppercase tracking-wider text-slate-400">
-                <tr>
-                  <th className="w-12"></th>
-                  <th className="w-36 pb-2">Occurred</th>
-                  <th className="w-20 pb-2">Channel</th>
-                  <th className="w-32 pb-2">Type</th>
-                  <th className="pb-2">Summary</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {recentChanges.map((change) => (
-                  <tr key={change.change_id} className="hover:bg-slate-50">
-                    <td className="py-3 text-center">
-                      <input
-                        type="checkbox"
-                        name="change_id"
-                        value={change.change_id}
-                        className="h-4 w-4 rounded border-slate-300 text-slate-900"
-                      />
-                    </td>
-                    <td className="py-3 text-slate-500">
-                      {formatDateTime(change.occurred_at)}
-                    </td>
-                    <td className="py-3 text-xs uppercase text-slate-400">
-                      {change.channel}
-                    </td>
-                    <td className="py-3 text-slate-600">{change.change_type}</td>
-                    <td className="py-3 text-slate-900">{change.summary}</td>
+          <div className="max-h-[420px] overflow-y-auto rounded-xl border border-slate-200">
+            <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
+              <table className="w-full table-fixed text-left text-sm">
+                <thead className="sticky top-0 bg-white text-xs uppercase tracking-wider text-slate-400">
+                  <tr>
+                    <th className="w-12"></th>
+                    <th className="w-36 pb-2">Occurred</th>
+                    <th className="w-20 pb-2">Channel</th>
+                    <th className="w-32 pb-2">Type</th>
+                    <th className="pb-2">Summary</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {recentChanges.map((change) => (
+                    <tr key={change.change_id} className="hover:bg-slate-50">
+                      <td className="py-3 text-center">
+                        <input
+                          type="checkbox"
+                          name="change_id"
+                          value={change.change_id}
+                          className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                        />
+                      </td>
+                      <td className="py-3 text-slate-500">
+                        {formatDateTime(change.occurred_at)}
+                      </td>
+                      <td className="py-3 text-xs uppercase text-slate-400">
+                        {change.channel}
+                      </td>
+                      <td className="py-3 text-slate-600">{change.change_type}</td>
+                      <td className="py-3 text-slate-900">{change.summary}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
           <div className="flex justify-end">
             <button

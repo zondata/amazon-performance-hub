@@ -1,7 +1,7 @@
 'use client';
 
 import type { CSSProperties, MouseEvent } from 'react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import type { CalendarBucket, SalesGranularity } from '@/lib/sales/buckets/getCalendarBuckets';
 import type { PivotMetricRow, PivotRow } from '@/lib/sales/pivot/pivotRows';
@@ -63,8 +63,15 @@ export default function SalesPivotTable({
   formatValue,
 }: SalesPivotTableProps) {
   const [colWidths, setColWidths] = useState({ kpi: 220, summary: 140 });
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    profits: DEFAULT_PROFITS_EXPANDED,
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
+    if (typeof window === 'undefined') {
+      return { profits: DEFAULT_PROFITS_EXPANDED };
+    }
+    const stored = sessionStorage.getItem(PROFITS_EXPANDED_KEY);
+    if (stored === null) {
+      return { profits: DEFAULT_PROFITS_EXPANDED };
+    }
+    return { profits: stored === 'true' };
   });
   const [tooltip, setTooltip] = useState<TooltipState>({
     visible: false,
@@ -102,22 +109,13 @@ export default function SalesPivotTable({
   }, [rows, expandedGroups]);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem(PROFITS_EXPANDED_KEY);
-    if (stored === null) return;
-    setExpandedGroups((current) => ({
-      ...current,
-      profits: stored === 'true',
-    }));
-  }, []);
-
-  useEffect(() => {
     sessionStorage.setItem(
       PROFITS_EXPANDED_KEY,
       String(expandedGroups.profits ?? DEFAULT_PROFITS_EXPANDED)
     );
   }, [expandedGroups.profits]);
 
-  const measureWidths = () => {
+  const measureWidths = useCallback(() => {
     if (visibleRows.length === 0) return;
 
     const measurement = document.createElement('div');
@@ -169,17 +167,20 @@ export default function SalesPivotTable({
       kpi: clamp(kpiWidth + 24, 140, 220),
       summary: clamp(summaryWidth + 24, 90, 160),
     });
-  };
+  }, [formatValue, visibleRows]);
 
   useLayoutEffect(() => {
-    measureWidths();
-  }, [visibleRows, buckets.length]);
+    const rafId = requestAnimationFrame(() => {
+      measureWidths();
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [measureWidths]);
 
   useEffect(() => {
     const handleResize = () => measureWidths();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [rows, buckets.length]);
+  }, [measureWidths]);
 
   const hideTooltip = () => {
     lastHoverKeyRef.current = null;
@@ -243,7 +244,7 @@ export default function SalesPivotTable({
         } as CSSProperties
       }
     >
-      <div className="overflow-x-auto">
+      <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
         <table
           ref={tableRef}
           className="min-w-max w-full table-auto border-separate border-spacing-0 text-left text-sm"

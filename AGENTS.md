@@ -17,6 +17,34 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 **Overview**
 - Next.js App Router UI scaffold (read-only from Supabase).
 
+**UI Layout System**
+### Sidebar (global)
+- Sidebar is sticky/locked and scrolls internally if long.
+- Collapsible state stored in localStorage: `aph.sidebarCollapsed` ('1' collapsed, '0' expanded).
+- `html[data-sidebar]` is set pre-hydration via beforeInteractive script in `apps/web/src/app/layout.tsx`.
+- `<html suppressHydrationWarning>` avoids hydration mismatch.
+- Toggle component: `apps/web/src/components/SidebarCollapseToggle.tsx`.
+- Chevron direction is CSS-driven based on `html[data-sidebar]` (no initial client-side branching).
+
+### Horizontal scrolling (global)
+- No page-level horizontal scrollbar: layout enforces `min-w-0` + `overflow-x-hidden`.
+- Tables must use a dedicated horizontal scroll container tagged:
+  - `data-aph-hscroll`
+  - `data-aph-hscroll-axis="x"`
+- If a table needs vertical + horizontal scrolling, split wrappers:
+  - outer `overflow-y-auto`
+  - inner `overflow-x-auto` (tag this inner div)
+- Native table horizontal scrollbars are hidden via CSS, but the container remains scrollable via scrollLeft.
+- Single sticky bottom scrollbar is global:
+  - `apps/web/src/components/StickyHScrollBar.tsx`
+  - Picks visible overflowing `[data-aph-hscroll]`, syncs scrollLeft both ways, updates on route change, window scroll/resize, and `aph:sidebar-toggle`.
+
+### Adding a New Wide Table (Checklist)
+- Use split wrappers if needed (y outer, x inner).
+- Tag the overflow-x container with data-aph-hscroll + axis=x.
+- Ensure the scroll container is the one with overflow-x-auto.
+- Verify overflow: `scrollWidth > clientWidth`.
+
 **Shared**
 - Run from repo root: `npm run web:dev`, `npm run web:build`, `npm run web:lint`.
 - Env: copy `apps/web/.env.local.example` to `apps/web/.env.local`. Required vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,

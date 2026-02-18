@@ -251,57 +251,62 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
                 No campaign data for this range.
               </div>
             ) : (
-              <div className="max-h-[520px] overflow-auto">
-                <table className="w-full table-fixed text-left text-sm">
-                  <thead className="sticky top-0 bg-white text-xs uppercase tracking-wider text-slate-400 shadow-sm">
-                    <tr>
-                      <th className="w-40 pb-2">Campaign</th>
-                      <th className="w-32 pb-2">Spend</th>
-                      <th className="w-32 pb-2">Sales</th>
-                      <th className="w-24 pb-2">Orders</th>
-                      <th className="w-24 pb-2">Units</th>
-                      <th className="w-24 pb-2">CTR</th>
-                      <th className="w-24 pb-2">CPC</th>
-                      <th className="w-24 pb-2">ACOS</th>
-                      <th className="w-24 pb-2">ROAS</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {data.rows.map((row) => (
-                      <tr key={row.campaign_id} className="hover:bg-slate-50">
-                        <td className="py-3 text-slate-900">
-                          <div className="truncate font-medium" title={row.campaign_name ?? row.campaign_id}>
-                            {row.campaign_name ?? row.campaign_id}
-                          </div>
-                        </td>
-                        <td className="py-3 text-slate-600">
-                          {formatCurrency(row.spend)}
-                        </td>
-                        <td className="py-3 text-slate-600">
-                          {formatCurrency(row.sales)}
-                        </td>
-                        <td className="py-3 text-slate-600">
-                          {formatNumber(row.orders)}
-                        </td>
-                        <td className="py-3 text-slate-600">
-                          {formatNumber(row.units)}
-                        </td>
-                        <td className="py-3 text-slate-600">
-                          {formatPercent(row.ctr)}
-                        </td>
-                        <td className="py-3 text-slate-600">
-                          {formatCurrency(row.cpc)}
-                        </td>
-                        <td className="py-3 text-slate-600">
-                          {formatPercent(row.acos)}
-                        </td>
-                        <td className="py-3 text-slate-600">
-                          {formatNumber(row.roas)}
-                        </td>
+              <div className="max-h-[520px] overflow-y-auto">
+                <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
+                  <table className="w-full table-fixed text-left text-sm">
+                    <thead className="sticky top-0 bg-white text-xs uppercase tracking-wider text-slate-400 shadow-sm">
+                      <tr>
+                        <th className="w-40 pb-2">Campaign</th>
+                        <th className="w-32 pb-2">Spend</th>
+                        <th className="w-32 pb-2">Sales</th>
+                        <th className="w-24 pb-2">Orders</th>
+                        <th className="w-24 pb-2">Units</th>
+                        <th className="w-24 pb-2">CTR</th>
+                        <th className="w-24 pb-2">CPC</th>
+                        <th className="w-24 pb-2">ACOS</th>
+                        <th className="w-24 pb-2">ROAS</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {data.rows.map((row) => (
+                        <tr key={row.campaign_id} className="hover:bg-slate-50">
+                          <td className="py-3 text-slate-900">
+                            <div
+                              className="truncate font-medium"
+                              title={row.campaign_name ?? row.campaign_id}
+                            >
+                              {row.campaign_name ?? row.campaign_id}
+                            </div>
+                          </td>
+                          <td className="py-3 text-slate-600">
+                            {formatCurrency(row.spend)}
+                          </td>
+                          <td className="py-3 text-slate-600">
+                            {formatCurrency(row.sales)}
+                          </td>
+                          <td className="py-3 text-slate-600">
+                            {formatNumber(row.orders)}
+                          </td>
+                          <td className="py-3 text-slate-600">
+                            {formatNumber(row.units)}
+                          </td>
+                          <td className="py-3 text-slate-600">
+                            {formatPercent(row.ctr)}
+                          </td>
+                          <td className="py-3 text-slate-600">
+                            {formatCurrency(row.cpc)}
+                          </td>
+                          <td className="py-3 text-slate-600">
+                            {formatPercent(row.acos)}
+                          </td>
+                          <td className="py-3 text-slate-600">
+                            {formatNumber(row.roas)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>

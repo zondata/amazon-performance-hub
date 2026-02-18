@@ -85,7 +85,7 @@ const renderUploadTable = (
           No uploads found for this module.
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
           <table className="w-full table-fixed text-left text-sm">
             <thead className="text-xs uppercase tracking-wider text-slate-400">
               <tr>

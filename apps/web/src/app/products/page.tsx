@@ -146,58 +146,60 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
             No products found for this range.
           </div>
         ) : (
-          <div className="max-h-[520px] overflow-auto">
-            <table className="w-full table-fixed text-left text-sm">
-              <thead className="sticky top-0 bg-white text-xs uppercase tracking-wider text-slate-400 shadow-sm">
-                <tr>
-                  <th className="w-32 pb-2">ASIN</th>
-                  <th className="w-72 pb-2">Title</th>
-                  <th className="w-28 pb-2">Sales</th>
-                  <th className="w-24 pb-2">Orders</th>
-                  <th className="w-24 pb-2">Units</th>
-                  <th className="w-28 pb-2">PPC Cost</th>
-                  <th className="w-20 pb-2">TACOS</th>
-                  <th className="w-28 pb-2">Avg Price</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {rows.map((row) => {
-                  const href = `/products/${row.asin}?start=${start}&end=${end}`;
-                  return (
-                    <tr key={row.asin} className="hover:bg-slate-50">
-                      <td className="py-3 font-medium text-slate-900">
-                        <Link href={href} className="hover:underline">
-                          {row.asin}
-                        </Link>
-                      </td>
-                      <td className="py-3 text-slate-600">
-                        <span className="block truncate" title={row.title ?? undefined}>
-                          {row.title ?? '—'}
-                        </span>
-                      </td>
-                      <td className="py-3 text-slate-600">
-                        {formatCurrency(row.sales)}
-                      </td>
-                      <td className="py-3 text-slate-600">
-                        {formatNumber(row.orders)}
-                      </td>
-                      <td className="py-3 text-slate-600">
-                        {formatNumber(row.units)}
-                      </td>
-                      <td className="py-3 text-slate-600">
-                        {formatCurrency(row.ppc_cost)}
-                      </td>
-                      <td className="py-3 text-slate-600">
-                        {formatPercent(row.tacos)}
-                      </td>
-                      <td className="py-3 text-slate-600">
-                        {formatCurrency(row.avg_sales_price)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="max-h-[520px] overflow-y-auto">
+            <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
+              <table className="w-full table-fixed text-left text-sm">
+                <thead className="sticky top-0 bg-white text-xs uppercase tracking-wider text-slate-400 shadow-sm">
+                  <tr>
+                    <th className="w-32 pb-2">ASIN</th>
+                    <th className="w-72 pb-2">Title</th>
+                    <th className="w-28 pb-2">Sales</th>
+                    <th className="w-24 pb-2">Orders</th>
+                    <th className="w-24 pb-2">Units</th>
+                    <th className="w-28 pb-2">PPC Cost</th>
+                    <th className="w-20 pb-2">TACOS</th>
+                    <th className="w-28 pb-2">Avg Price</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {rows.map((row) => {
+                    const href = `/products/${row.asin}?start=${start}&end=${end}`;
+                    return (
+                      <tr key={row.asin} className="hover:bg-slate-50">
+                        <td className="py-3 font-medium text-slate-900">
+                          <Link href={href} className="hover:underline">
+                            {row.asin}
+                          </Link>
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          <span className="block truncate" title={row.title ?? undefined}>
+                            {row.title ?? '—'}
+                          </span>
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {formatCurrency(row.sales)}
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {formatNumber(row.orders)}
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {formatNumber(row.units)}
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {formatCurrency(row.ppc_cost)}
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {formatPercent(row.tacos)}
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {formatCurrency(row.avg_sales_price)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </section>

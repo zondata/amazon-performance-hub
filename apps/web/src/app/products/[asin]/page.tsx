@@ -212,44 +212,46 @@ export default async function ProductDetailPage({
               No sales data for this range.
             </div>
           ) : (
-            <div className="max-h-[480px] overflow-auto">
-              <table className="w-full table-fixed text-left text-sm">
-                <thead className="sticky top-0 bg-white text-xs uppercase tracking-wider text-slate-400 shadow-sm">
-                  <tr>
-                    <th className="w-28 pb-2">Date</th>
-                    <th className="w-28 pb-2">Sales</th>
-                    <th className="w-24 pb-2">Orders</th>
-                    <th className="w-24 pb-2">Units</th>
-                    <th className="w-28 pb-2">PPC Cost</th>
-                    <th className="w-28 pb-2">Avg Price</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {data.salesSeries.map((row, index) => (
-                    <tr
-                      key={row.date ?? `row-${index}`}
-                      className="hover:bg-slate-50"
-                    >
-                      <td className="py-3 text-slate-600">{row.date ?? '—'}</td>
-                      <td className="py-3 text-slate-600">
-                        {formatCurrency(Number(row.sales ?? 0))}
-                      </td>
-                      <td className="py-3 text-slate-600">
-                        {formatNumber(Number(row.orders ?? 0))}
-                      </td>
-                      <td className="py-3 text-slate-600">
-                        {formatNumber(Number(row.units ?? 0))}
-                      </td>
-                      <td className="py-3 text-slate-600">
-                        {formatCurrency(Number(row.ppc_cost ?? 0))}
-                      </td>
-                      <td className="py-3 text-slate-600">
-                        {formatCurrency(Number(row.avg_sales_price ?? 0))}
-                      </td>
+            <div className="max-h-[480px] overflow-y-auto">
+              <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
+                <table className="w-full table-fixed text-left text-sm">
+                  <thead className="sticky top-0 bg-white text-xs uppercase tracking-wider text-slate-400 shadow-sm">
+                    <tr>
+                      <th className="w-28 pb-2">Date</th>
+                      <th className="w-28 pb-2">Sales</th>
+                      <th className="w-24 pb-2">Orders</th>
+                      <th className="w-24 pb-2">Units</th>
+                      <th className="w-28 pb-2">PPC Cost</th>
+                      <th className="w-28 pb-2">Avg Price</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {data.salesSeries.map((row, index) => (
+                      <tr
+                        key={row.date ?? `row-${index}`}
+                        className="hover:bg-slate-50"
+                      >
+                        <td className="py-3 text-slate-600">{row.date ?? '—'}</td>
+                        <td className="py-3 text-slate-600">
+                          {formatCurrency(Number(row.sales ?? 0))}
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {formatNumber(Number(row.orders ?? 0))}
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {formatNumber(Number(row.units ?? 0))}
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {formatCurrency(Number(row.ppc_cost ?? 0))}
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {formatCurrency(Number(row.avg_sales_price ?? 0))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </section>
@@ -300,7 +302,11 @@ export default async function ProductDetailPage({
                 No current cost records.
               </div>
             ) : (
-              <div className="overflow-auto">
+              <div
+                data-aph-hscroll
+                data-aph-hscroll-axis="x"
+                className="overflow-x-auto"
+              >
                 <table className="w-full table-fixed text-left text-sm">
                   <thead className="text-xs uppercase tracking-wider text-slate-400">
                     <tr>
@@ -338,7 +344,11 @@ export default async function ProductDetailPage({
                 No cost history records.
               </div>
             ) : (
-              <div className="overflow-auto">
+              <div
+                data-aph-hscroll
+                data-aph-hscroll-axis="x"
+                className="overflow-x-auto"
+              >
                 <table className="w-full table-fixed text-left text-sm">
                   <thead className="text-xs uppercase tracking-wider text-slate-400">
                     <tr>

@@ -3,6 +3,7 @@
 :root {
   --background: #ffffff;
   --foreground: #0f172a;
+  --aph-sidebar-width: 16rem;
 }
 
 @theme inline {
@@ -10,6 +11,67 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+html[data-sidebar='collapsed'] {
+  --aph-sidebar-width: 4.5rem;
+}
+
+.aph-sidebar {
+  width: var(--aph-sidebar-width);
+  transition: width 220ms ease;
+}
+
+.aph-sidebar-brand-collapsed {
+  display: none;
+}
+
+html[data-sidebar='collapsed'] .aph-sidebar-brand-expanded,
+html[data-sidebar='collapsed'] .aph-sidebar-label,
+html[data-sidebar='collapsed'] .aph-sidebar-badge {
+  display: none;
+}
+
+html[data-sidebar='collapsed'] .aph-sidebar-brand-collapsed {
+  display: flex;
+}
+
+html[data-sidebar='collapsed'] .aph-sidebar-link {
+  justify-content: center;
+}
+
+html[data-sidebar='collapsed'] .aph-sidebar-toggle-icon {
+  transform: rotate(180deg);
+}
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+.aph-sticky-xscroll {
+  height: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-top: 1px solid rgb(226 232 240 / 0.9);
+  background: rgb(255 255 255 / 0.9);
+  backdrop-filter: blur(6px);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* stop horizontal scroll chaining to the page */
+[data-aph-hscroll] {
+  overscroll-behavior-x: contain;
+}
+
+/* Hide ONLY horizontal scrollbar on WebKit browsers */
+[data-aph-hscroll]::-webkit-scrollbar {
+  height: 0px;
+}
+
+/* Firefox can’t hide only horizontal; use none on horizontal-only scrollers */
+[data-aph-hscroll][data-aph-hscroll-axis="x"] {
+  scrollbar-width: none;
 }
 
 body {
