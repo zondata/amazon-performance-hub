@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 
 import KpiCards from '@/components/KpiCards';
 import KeywordGroupImport from '@/components/KeywordGroupImport';
+import KeywordGroupSetManager from '@/components/KeywordGroupSetManager';
 import Tabs from '@/components/Tabs';
 import TrendChart from '@/components/TrendChart';
 import { parseCsv } from '@/lib/csv/parseCsv';
@@ -79,6 +80,13 @@ type KeywordImportState = {
   groupCount?: number;
   keywordCount?: number;
   membershipCount?: number;
+};
+
+type KeywordSetActionState = {
+  ok?: boolean;
+  error?: string | null;
+  action?: 'activate' | 'deactivate';
+  groupSetId?: string;
 };
 
 const buildTabHref = (asin: string, tab: string, start: string, end: string) =>
@@ -344,6 +352,127 @@ export default async function ProductDetailPage({
       console.error('keyword_import:error', { asin, error });
       return { ok: false, error: 'Failed to import keyword groups.' };
     }
+  };
+
+  const setKeywordGroupSetActive = async (
+    _prevState: KeywordSetActionState,
+    formData: FormData
+  ): Promise<KeywordSetActionState> => {
+    'use server';
+
+    const groupSetIdRaw = formData.get('group_set_id');
+    const groupSetId = typeof groupSetIdRaw === 'string' ? groupSetIdRaw.trim() : '';
+    if (!groupSetId) {
+      return { ok: false, error: 'Missing group set id.' };
+    }
+
+    const { data: productRow, error: productError } = await supabaseAdmin
+      .from('products')
+      .select('product_id')
+      .eq('account_id', env.accountId)
+      .eq('marketplace', env.marketplace)
+      .eq('asin', asin)
+      .maybeSingle();
+
+    if (productError || !productRow?.product_id) {
+      return { ok: false, error: 'Product not found.' };
+    }
+
+    const productId = productRow.product_id as string;
+
+    const { data: existingSet, error: existingError } = await supabaseAdmin
+      .from('keyword_group_sets')
+      .select('group_set_id')
+      .eq('product_id', productId)
+      .eq('group_set_id', groupSetId)
+      .maybeSingle();
+
+    if (existingError) {
+      return { ok: false, error: existingError.message };
+    }
+
+    if (!existingSet?.group_set_id) {
+      return { ok: false, error: 'Group set not found for this product.' };
+    }
+
+    const { error: deactivateError } = await supabaseAdmin
+      .from('keyword_group_sets')
+      .update({ is_active: false })
+      .eq('product_id', productId);
+
+    if (deactivateError) {
+      return { ok: false, error: deactivateError.message };
+    }
+
+    const { error: activateError } = await supabaseAdmin
+      .from('keyword_group_sets')
+      .update({ is_active: true })
+      .eq('product_id', productId)
+      .eq('group_set_id', groupSetId);
+
+    if (activateError) {
+      return { ok: false, error: activateError.message };
+    }
+
+    revalidatePath(`/products/${asin}`);
+
+    return { ok: true, action: 'activate', groupSetId };
+  };
+
+  const deactivateKeywordGroupSet = async (
+    _prevState: KeywordSetActionState,
+    formData: FormData
+  ): Promise<KeywordSetActionState> => {
+    'use server';
+
+    const groupSetIdRaw = formData.get('group_set_id');
+    const groupSetId = typeof groupSetIdRaw === 'string' ? groupSetIdRaw.trim() : '';
+    if (!groupSetId) {
+      return { ok: false, error: 'Missing group set id.' };
+    }
+
+    const { data: productRow, error: productError } = await supabaseAdmin
+      .from('products')
+      .select('product_id')
+      .eq('account_id', env.accountId)
+      .eq('marketplace', env.marketplace)
+      .eq('asin', asin)
+      .maybeSingle();
+
+    if (productError || !productRow?.product_id) {
+      return { ok: false, error: 'Product not found.' };
+    }
+
+    const productId = productRow.product_id as string;
+
+    const { data: existingSet, error: existingError } = await supabaseAdmin
+      .from('keyword_group_sets')
+      .select('group_set_id')
+      .eq('product_id', productId)
+      .eq('group_set_id', groupSetId)
+      .maybeSingle();
+
+    if (existingError) {
+      return { ok: false, error: existingError.message };
+    }
+
+    if (!existingSet?.group_set_id) {
+      return { ok: false, error: 'Group set not found for this product.' };
+    }
+
+    const { error: deactivateError } = await supabaseAdmin
+      .from('keyword_group_sets')
+      .update({ is_active: false })
+      .eq('product_id', productId)
+      .eq('group_set_id', groupSetId);
+
+    if (deactivateError) {
+      return { ok: false, error: deactivateError.message };
+    }
+
+    revalidatePath(`/products/${asin}`);
+
+    return { ok: true, action: 'deactivate', groupSetId };
   };
 
   const saveProductProfile = async (formData: FormData) => {
@@ -846,21 +975,32 @@ export default async function ProductDetailPage({
                   Keyword strategy summary
                 </div>
                 <div className="mt-1 text-lg font-semibold text-foreground">
-                  {keywordGroups.active_set?.name ?? 'No keyword set yet'}
+                  {keywordGroups.effective_set?.name ?? 'No keyword set yet'}
                 </div>
-                {keywordGroups.active_set ? (
-                  <div className="mt-2 text-sm text-muted">
-                    Created {keywordGroups.active_set.created_at ?? '—'} ·{' '}
-                    {keywordGroups.active_set.is_exclusive ? 'Exclusive' : 'Non-exclusive'}
-                  </div>
-                ) : (
+                {!keywordGroups.effective_set ? (
                   <div className="mt-2 text-sm text-muted">
                     Import a keyword group set to enable downloads.
                   </div>
+                ) : keywordGroups.active_set ? (
+                  <div className="mt-2 text-sm text-muted">
+                    Created {keywordGroups.active_set.created_at ?? '—'} ·{' '}
+                    {keywordGroups.active_set.is_exclusive ? 'Exclusive' : 'Non-exclusive'}{' '}
+                    · Active
+                  </div>
+                ) : (
+                  <>
+                    <div className="mt-2 text-sm text-muted">
+                      Latest import {keywordGroups.latest_set?.created_at ?? '—'} ·{' '}
+                      {keywordGroups.latest_set?.is_exclusive ? 'Exclusive' : 'Non-exclusive'}
+                    </div>
+                    <div className="mt-1 text-sm text-muted">
+                      No active set selected — using latest import for downloads.
+                    </div>
+                  </>
                 )}
                 {keywordGroups.multiple_active ? (
                   <div className="mt-2 text-xs text-amber-600">
-                    Multiple active sets detected. Latest active is shown.
+                    Multiple active sets detected. Please set one active to normalize.
                   </div>
                 ) : null}
               </div>
@@ -868,13 +1008,13 @@ export default async function ProductDetailPage({
                 <div className="rounded-lg border border-border bg-surface px-3 py-2">
                   Groups{' '}
                   <span className="ml-2 font-semibold text-foreground">
-                    {keywordGroups.active_set?.group_count ?? 0}
+                    {keywordGroups.effective_set?.group_count ?? 0}
                   </span>
                 </div>
                 <div className="rounded-lg border border-border bg-surface px-3 py-2">
                   Keywords{' '}
                   <span className="ml-2 font-semibold text-foreground">
-                    {keywordGroups.active_set?.keyword_count ?? 0}
+                    {keywordGroups.effective_set?.keyword_count ?? 0}
                   </span>
                 </div>
               </div>
@@ -904,54 +1044,12 @@ export default async function ProductDetailPage({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-            <div className="mb-4 text-lg font-semibold text-foreground">
-              Recent keyword group sets
-            </div>
-            {keywordGroups.group_sets.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
-                No keyword group sets found.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {keywordGroups.group_sets.map((group) => (
-                  <div
-                    key={group.group_set_id}
-                    className="rounded-xl border border-border bg-surface px-4 py-3"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <div className="text-sm font-semibold text-foreground">
-                          {group.name}
-                          {group.is_active ? (
-                            <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                              Active
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="mt-1 text-xs text-muted">
-                          {group.created_at ?? '—'} ·{' '}
-                          {group.is_exclusive ? 'Exclusive' : 'Non-exclusive'}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
-                        <span>
-                          Groups{' '}
-                          <strong className="text-foreground">{group.group_count}</strong>
-                        </span>
-                        <span>
-                          Keywords{' '}
-                          <strong className="text-foreground">
-                            {group.keyword_count}
-                          </strong>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <KeywordGroupSetManager
+            asin={asin}
+            groupSets={keywordGroups.group_sets}
+            setActiveAction={setKeywordGroupSetActive}
+            deactivateAction={deactivateKeywordGroupSet}
+          />
         </section>
       ) : null}
 

@@ -672,6 +672,11 @@ Scripts:
 ### Product → Keywords tab
 - Keyword groups are managed under Product detail → Keywords tab (not SQP).
 - Import UI component: `apps/web/src/components/KeywordGroupImport.tsx`
+- Keyword Set Management UI: `apps/web/src/components/KeywordGroupSetManager.tsx`
+  - Activate a set deactivates all other sets for the product.
+  - Deactivate is supported; no delete/soft-delete.
+  - Per-group keyword counts are displayed.
+  - Per-set export uses `/products/[asin]/keywords/export?set=<group_set_id>`.
 - CSV parsing helper used by UI import: `apps/web/src/lib/csv/parseCsv.ts`
 - Downloads:
   - Template + AI pack are downloadable even when no group set exists.
