@@ -7,11 +7,14 @@ import KeywordGroupImport from '@/components/KeywordGroupImport';
 import KeywordGroupSetManager from '@/components/KeywordGroupSetManager';
 import Tabs from '@/components/Tabs';
 import TrendChart from '@/components/TrendChart';
+import ProductRankingHeatmap from '@/components/ranking/ProductRankingHeatmap';
 import { parseCsv } from '@/lib/csv/parseCsv';
 import { env } from '@/lib/env';
 import { ensureProductId } from '@/lib/products/ensureProductId';
 import { getProductDetailData } from '@/lib/products/getProductDetailData';
 import { getProductKeywordGroups } from '@/lib/products/getProductKeywordGroups';
+import { getProductKeywordGroupMemberships } from '@/lib/products/getProductKeywordGroupMemberships';
+import { getProductRankingDaily } from '@/lib/ranking/getProductRankingDaily';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -586,13 +589,31 @@ export default async function ProductDetailPage({
   });
 
   const keywordGroups =
-    tab === 'keywords'
+    tab === 'keywords' || tab === 'ranking'
       ? await getProductKeywordGroups({
           accountId: env.accountId,
           marketplace: env.marketplace,
           asin,
         })
       : null;
+
+  const keywordGroupMemberships =
+    tab === 'ranking' && keywordGroups?.group_sets?.length
+      ? await getProductKeywordGroupMemberships({
+          groupSetIds: keywordGroups.group_sets.map((set) => set.group_set_id),
+        })
+      : null;
+
+  const rankingRows =
+    tab === 'ranking'
+      ? await getProductRankingDaily({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+          asin,
+          start,
+          end,
+        })
+      : [];
 
   const shortName = data.productMeta.short_name?.trim();
   const title = data.productMeta.title?.trim();
@@ -1063,11 +1084,15 @@ export default async function ProductDetailPage({
       ) : null}
 
       {tab === 'ranking' ? (
-        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-          <div className="text-lg font-semibold text-foreground">Coming soon</div>
-          <div className="mt-2 text-sm text-muted">
-            This section will be wired once the next facts layer is ready.
-          </div>
+        <section className="space-y-6">
+          <ProductRankingHeatmap
+            asin={asin}
+            start={start}
+            end={end}
+            rankingRows={rankingRows}
+            keywordGroups={keywordGroups}
+            keywordGroupMemberships={keywordGroupMemberships}
+          />
         </section>
       ) : null}
     </div>

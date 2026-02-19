@@ -94,6 +94,18 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Bulksheet Ops: `/bulksheet-ops/sp-update`, `/bulksheet-ops/sb-update`, `/bulksheet-ops/sp-create`, `/bulksheet-ops/reconcile`
   (local-first generators + reconcile queue).
 
+### Products Ranking Tab
+- Ranking heatmap is implemented on the product detail page (`tab=ranking`).
+- Date columns are newest → oldest (latest on the left).
+- Color bands: Top 10 highlight, then every 45 ranks shifts band (HSL-based).
+- Each cell shows organic (top, color-coded) + sponsored (bottom, neutral).
+- Date headers are compact (day over month) with full ISO date on hover.
+- Header sorting supports keyword, search volume, and date columns (sorts by organic rank).
+- Missing values sort last for numeric sorts.
+- Ranking header is sticky during vertical scroll; left sticky columns stay aligned.
+- Filters: keyword set scope, group filter, columns 14/30/60/∞, search, hide unranked.
+- Wide table uses split wrappers with `data-aph-hscroll` for horizontal sync.
+
 **Optional Flags**
 - `ENABLE_SPEND_RECONCILIATION` (default `0`) toggles spend reconciliation query.
 - `PENDING_RECONCILE_DIR` enables a local-only pending manifest count; if unset, UI shows "not configured".
