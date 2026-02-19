@@ -80,7 +80,7 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 
 **Pages**
 - Dashboard: `/dashboard` (primary UI). Uses `si_sales_trend_daily_latest` for sales KPIs.
-- Products: `/products` list and `/products/[asin]` detail with tabs (overview/sales/logbook/costs) using the same URL filters.
+- Products: `/products` list and `/products/[asin]` detail with tabs (overview, sales, logbook, costs, ads, keywords, SQP, ranking) using the same URL filters. Keywords is configuration; SQP is analytics/rollups by group (coming soon).
 - Ads: `/ads/performance` with URL params `start`, `end`, `asin` (carried but ignored),
   `channel=sp|sb|sd`, `level=campaigns|adgroups|targets|placements|searchterms`.
   Campaigns table is implemented for SP/SB/SD; other levels are placeholders.
@@ -669,21 +669,34 @@ Scripts:
 - `scripts/import_keyword_groups_from_csv.ts` (`npm run keywords:import`)
 - `scripts/cleanup_test_skus.ts` (`npm run product:cleanup-test-skus`)
 
+### Product → Keywords tab
+- Keyword groups are managed under Product detail → Keywords tab (not SQP).
+- Import UI component: `apps/web/src/components/KeywordGroupImport.tsx`
+- CSV parsing helper used by UI import: `apps/web/src/lib/csv/parseCsv.ts`
+- Downloads:
+  - Template + AI pack are downloadable even when no group set exists.
+  - Export grouped CSV requires an existing group set (otherwise 404 “No keyword group set found”).
+  - Route handlers:
+    - `apps/web/src/app/products/[asin]/keywords/export/route.ts`
+    - `apps/web/src/app/products/[asin]/keywords/template/route.ts`
+    - `apps/web/src/app/products/[asin]/keywords/ai-pack/route.ts`
+  - Download links must be plain `<a>` anchors with the `download` attribute (do not use `next/link`) to prevent Next App Router navigation/POST behavior.
+
 ### Keyword Groups CSV Format (contract)
 - CSV header is the FIRST row (no note row required).
 - Backward compatible: importer auto-detects old format with a leading note row + header on row 2.
 - Columns:
-- A: keyword (reserved)
-- B: group (reserved)
-- C: note (reserved)
-- D..O: group names (max 12 groups)
+  - A: keyword (reserved)
+  - B: group (reserved)
+  - C: note (reserved)
+  - D..O: group names (max 12 groups)
 - Keywords are listed under each group column; blanks allowed; importer normalizes keywords and de-dupes.
 - Source of truth:
-- Importer: `scripts/import_keyword_groups_from_csv.ts`
-- Export/template/AI-pack routes:
-- `apps/web/src/app/products/[asin]/keywords/export/route.ts`
-- `apps/web/src/app/products/[asin]/keywords/template/route.ts`
-- `apps/web/src/app/products/[asin]/keywords/ai-pack/route.ts`
+  - Importer: `scripts/import_keyword_groups_from_csv.ts`
+  - Export/template/AI-pack routes:
+    - `apps/web/src/app/products/[asin]/keywords/export/route.ts`
+    - `apps/web/src/app/products/[asin]/keywords/template/route.ts`
+    - `apps/web/src/app/products/[asin]/keywords/ai-pack/route.ts`
 
 Migrations:
 - `20260211100000_remote_placeholder.sql` (history alignment placeholder)
