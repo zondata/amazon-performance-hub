@@ -1,9 +1,12 @@
 import Link from 'next/link';
+import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import KpiCards from '@/components/KpiCards';
+import KeywordGroupImport from '@/components/KeywordGroupImport';
 import Tabs from '@/components/Tabs';
 import TrendChart from '@/components/TrendChart';
+import { parseCsv } from '@/lib/csv/parseCsv';
 import { env } from '@/lib/env';
 import { ensureProductId } from '@/lib/products/ensureProductId';
 import { getProductDetailData } from '@/lib/products/getProductDetailData';
@@ -48,9 +51,34 @@ const formatPercent = (value?: number | null) => {
   return `${(value * 100).toFixed(1)}%`;
 };
 
+const normalizeKeyword = (value: string): string =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ');
+
+const looksLikeHeader = (row: string[]): boolean => {
+  const c0 = (row[0] ?? '').trim().toLowerCase();
+  const c1 = (row[1] ?? '').trim().toLowerCase();
+  if (c0 === 'keyword') return true;
+  if (c1 === 'group') return true;
+  for (let j = 3; j <= 14; j += 1) {
+    if ((row[j] ?? '').trim().length > 0) return true;
+  }
+  return false;
+};
+
 type ProductDetailPageProps = {
   params: Promise<{ asin: string }> | { asin: string };
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+type KeywordImportState = {
+  ok?: boolean;
+  error?: string | null;
+  groupCount?: number;
+  keywordCount?: number;
+  membershipCount?: number;
 };
 
 const buildTabHref = (asin: string, tab: string, start: string, end: string) =>
@@ -74,6 +102,249 @@ export default async function ProductDetailPage({
   let end = normalizeDate(paramValue('end')) ?? defaults.end;
   const tab = paramValue('tab') ?? 'overview';
   const errorMessage = paramValue('error');
+
+  const importKeywordGroups = async (
+    _prevState: KeywordImportState,
+    formData: FormData
+  ): Promise<KeywordImportState> => {
+    'use server';
+
+    const groupSetNameRaw = formData.get('group_set_name');
+    const groupSetName =
+      typeof groupSetNameRaw === 'string' ? groupSetNameRaw.trim() : '';
+    const isExclusive = formData.get('is_exclusive') === 'on';
+    const setActive = formData.get('set_active') === 'on';
+    const file = formData.get('file');
+
+    if (!groupSetName) {
+      return { ok: false, error: 'Group set name is required.' };
+    }
+
+    if (!file || !(file instanceof File) || file.size === 0) {
+      return { ok: false, error: 'CSV file is required.' };
+    }
+
+    try {
+      const { productId } = await ensureProductId({
+        accountId: env.accountId,
+        marketplace: env.marketplace,
+        asin,
+      });
+
+      const csvContent = await file.text();
+      const rows = parseCsv(csvContent);
+
+      if (rows.length < 1) {
+        return { ok: false, error: 'CSV must contain at least one header row.' };
+      }
+
+      if (rows[0]?.[0]?.startsWith('\ufeff')) {
+        rows[0][0] = rows[0][0].replace(/^\ufeff/, '');
+      }
+
+      let headerIndex = 0;
+      if (rows.length >= 2 && !looksLikeHeader(rows[0]) && looksLikeHeader(rows[1])) {
+        headerIndex = 1;
+      }
+
+      const headerRow = rows[headerIndex];
+      const groupHeaders: string[] = [];
+      for (let j = 3; j <= 14; j += 1) {
+        const headerValue = headerRow[j];
+        if (!headerValue) continue;
+        const trimmed = headerValue.trim();
+        if (!trimmed) continue;
+        groupHeaders.push(trimmed);
+      }
+
+      const uniqueGroupNames: string[] = [];
+      const seenGroupNames = new Set<string>();
+      for (const name of groupHeaders) {
+        if (seenGroupNames.has(name)) continue;
+        seenGroupNames.add(name);
+        uniqueGroupNames.push(name);
+      }
+
+      if (uniqueGroupNames.length === 0) {
+        return {
+          ok: false,
+          error: 'At least one group name is required in columns D..O.',
+        };
+      }
+
+      const { data: groupSet, error: groupSetError } = await supabaseAdmin
+        .from('keyword_group_sets')
+        .insert({
+          product_id: productId,
+          name: groupSetName,
+          is_exclusive: isExclusive,
+          is_active: setActive,
+        })
+        .select('group_set_id')
+        .single();
+
+      if (groupSetError || !groupSet?.group_set_id) {
+        return {
+          ok: false,
+          error: groupSetError?.message ?? 'Failed to create group set.',
+        };
+      }
+
+      const groupSetId = groupSet.group_set_id as string;
+
+      if (setActive) {
+        const { error: deactivateError } = await supabaseAdmin
+          .from('keyword_group_sets')
+          .update({ is_active: false })
+          .eq('product_id', productId)
+          .neq('group_set_id', groupSetId);
+
+        if (deactivateError) {
+          return {
+            ok: false,
+            error: deactivateError.message,
+          };
+        }
+      }
+
+      const { data: groupRows, error: groupError } = await supabaseAdmin
+        .from('keyword_groups')
+        .insert(
+          uniqueGroupNames.map((name) => ({
+            group_set_id: groupSetId,
+            name,
+          }))
+        )
+        .select('group_id,name');
+
+      if (groupError || !groupRows) {
+        return { ok: false, error: groupError?.message ?? 'Failed to create groups.' };
+      }
+
+      const groupIdByName = new Map<string, string>();
+      groupRows.forEach((row) => {
+        if (!row.name || !row.group_id) return;
+        groupIdByName.set(row.name, row.group_id);
+      });
+
+      const memberships = new Map<
+        string,
+        { keywordNorm: string; keywordRaw: string; groupName: string }
+      >();
+      const keywordLatestRaw = new Map<string, string>();
+
+      const addMembership = (keywordRaw: string, groupName: string) => {
+        const keywordNorm = normalizeKeyword(keywordRaw);
+        if (!keywordNorm) return;
+        keywordLatestRaw.set(keywordNorm, keywordRaw);
+        const key = `${groupName}||${keywordNorm}`;
+        if (!memberships.has(key)) {
+          memberships.set(key, { keywordNorm, keywordRaw, groupName });
+        }
+      };
+
+      const dataStart = headerIndex + 1;
+      for (let i = dataStart; i < rows.length; i += 1) {
+        const row = rows[i];
+        if (!row) continue;
+
+        const col0 = row[0] ?? '';
+        const col1 = row[1] ?? '';
+
+        if (col0.trim().length > 0 && col1.trim().length > 0) {
+          addMembership(col0, col1.trim());
+        }
+
+        for (let j = 3; j <= 14; j += 1) {
+          const cell = row[j] ?? '';
+          if (cell.trim().length === 0) continue;
+          const headerValue = headerRow[j];
+          if (!headerValue || headerValue.trim().length === 0) continue;
+          addMembership(cell, headerValue.trim());
+        }
+      }
+
+      const keywordRows = Array.from(keywordLatestRaw.entries()).map(
+        ([keywordNorm, keywordRaw]) => ({
+          marketplace: env.marketplace,
+          keyword_norm: keywordNorm,
+          keyword_raw: keywordRaw,
+        })
+      );
+
+      const keywordIdByNorm = new Map<string, string>();
+      const keywordChunkSize = 500;
+      for (let i = 0; i < keywordRows.length; i += keywordChunkSize) {
+        const chunk = keywordRows.slice(i, i + keywordChunkSize);
+        if (chunk.length === 0) continue;
+        const { data: keywordData, error: keywordError } = await supabaseAdmin
+          .from('dim_keyword')
+          .upsert(chunk, { onConflict: 'marketplace,keyword_norm' })
+          .select('keyword_id,keyword_norm');
+
+        if (keywordError) {
+          return { ok: false, error: keywordError.message };
+        }
+
+        (keywordData ?? []).forEach((row) => {
+          if (!row.keyword_norm || !row.keyword_id) return;
+          keywordIdByNorm.set(row.keyword_norm, row.keyword_id);
+        });
+      }
+
+      const membershipRows = Array.from(memberships.values())
+        .map((member) => {
+          const groupId = groupIdByName.get(member.groupName);
+          const keywordId = keywordIdByNorm.get(member.keywordNorm);
+          if (!groupId || !keywordId) return null;
+          return {
+            group_id: groupId,
+            group_set_id: groupSetId,
+            keyword_id: keywordId,
+          };
+        })
+        .filter(Boolean) as Array<{
+        group_id: string;
+        group_set_id: string;
+        keyword_id: string;
+      }>;
+
+      const membershipChunkSize = 500;
+      for (let i = 0; i < membershipRows.length; i += membershipChunkSize) {
+        const chunk = membershipRows.slice(i, i + membershipChunkSize);
+        if (chunk.length === 0) continue;
+        const { error: membershipError } = await supabaseAdmin
+          .from('keyword_group_members')
+          .upsert(chunk, {
+            onConflict: 'group_id,keyword_id',
+            ignoreDuplicates: true,
+          });
+
+        if (membershipError) {
+          if (membershipError.message.includes('Exclusive group set')) {
+            return {
+              ok: false,
+              error:
+                'Exclusive group set violation: a keyword was assigned to multiple groups.',
+            };
+          }
+          return { ok: false, error: membershipError.message };
+        }
+      }
+
+      revalidatePath(`/products/${asin}`);
+
+      return {
+        ok: true,
+        groupCount: uniqueGroupNames.length,
+        keywordCount: keywordRows.length,
+        membershipCount: membershipRows.length,
+      };
+    } catch (error) {
+      console.error('keyword_import:error', { asin, error });
+      return { ok: false, error: 'Failed to import keyword groups.' };
+    }
+  };
 
   const saveProductProfile = async (formData: FormData) => {
     'use server';
@@ -186,7 +457,7 @@ export default async function ProductDetailPage({
   });
 
   const keywordGroups =
-    tab === 'sqp'
+    tab === 'keywords'
       ? await getProductKeywordGroups({
           accountId: env.accountId,
           marketplace: env.marketplace,
@@ -226,6 +497,7 @@ export default async function ProductDetailPage({
     { label: 'Logbook', value: 'logbook' },
     { label: 'Costs', value: 'costs' },
     { label: 'Ads', value: 'ads' },
+    { label: 'Keywords', value: 'keywords' },
     { label: 'SQP', value: 'sqp' },
     { label: 'Ranking', value: 'ranking' },
   ].map((item) => ({
@@ -564,8 +836,9 @@ export default async function ProductDetailPage({
         </section>
       ) : null}
 
-      {tab === 'sqp' && keywordGroups ? (
+      {tab === 'keywords' && keywordGroups ? (
         <section className="space-y-6">
+          <KeywordGroupImport action={importKeywordGroups} />
           <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
             <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
               <div>
@@ -607,24 +880,27 @@ export default async function ProductDetailPage({
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Link
+              <a
                 href={`/products/${asin}/keywords/export`}
+                download
                 className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
               >
                 Download grouped CSV
-              </Link>
-              <Link
+              </a>
+              <a
                 href={`/products/${asin}/keywords/template`}
+                download
                 className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
               >
                 Download template CSV
-              </Link>
-              <Link
+              </a>
+              <a
                 href={`/products/${asin}/keywords/ai-pack`}
+                download
                 className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
               >
                 Download AI formatting pack
-              </Link>
+              </a>
             </div>
           </div>
 
@@ -675,6 +951,15 @@ export default async function ProductDetailPage({
                 ))}
               </div>
             )}
+          </div>
+        </section>
+      ) : null}
+
+      {tab === 'sqp' ? (
+        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <div className="text-lg font-semibold text-foreground">Coming soon</div>
+          <div className="mt-2 text-sm text-muted">
+            Keyword groups moved to Keywords tab. SQP rollups by group coming soon.
           </div>
         </section>
       ) : null}

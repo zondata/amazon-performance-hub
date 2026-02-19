@@ -52,7 +52,22 @@ export async function GET(request: Request, { params }: Ctx) {
     if (result?.reason === 'product_not_found') {
       return new Response('Product not found.', { status: 404 });
     }
-    return new Response('No keyword group set found.', { status: 404 });
+
+    const headerRow = new Array(15).fill('');
+    headerRow[0] = 'keyword';
+    headerRow[1] = 'group';
+    headerRow[2] = 'note';
+    const csv = buildCsv([headerRow]);
+    const filename = `${asin}_keyword_template.csv`;
+
+    console.log('keyword_template_generic', { asin });
+
+    return new Response(csv, {
+      headers: {
+        'content-type': 'text/csv; charset=utf-8',
+        'content-disposition': `attachment; filename="${filename}"`,
+      },
+    });
   }
 
   const data = result.data;
