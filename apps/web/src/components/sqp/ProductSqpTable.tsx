@@ -14,7 +14,6 @@ import { formatSqpWeekLabel } from '@/lib/sqp/formatSqpWeekLabel';
 import { coerceFloat, coerceInt } from '@/lib/sqp/normalizeSqpValue';
 import type {
   SqpKnownKeywordRow,
-  SqpScope,
   SqpWeek,
 } from '@/lib/sqp/getProductSqpWeekly';
 import type { SqpTrendRow } from '@/lib/sqp/getProductSqpTrendSeries';
@@ -54,7 +53,6 @@ const toNumber = (value: unknown): number | null => coerceFloat(value);
 const toInt = (value: unknown): number | null => coerceInt(value);
 
 type ProductSqpTableProps = {
-  scope: SqpScope;
   availableWeeks: SqpWeek[];
   selectedWeekEnd: string | null;
   rows: SqpKnownKeywordRow[];
@@ -70,7 +68,6 @@ type ProductSqpTableProps = {
 };
 
 export default function ProductSqpTable({
-  scope,
   availableWeeks,
   selectedWeekEnd,
   rows,
@@ -145,13 +142,13 @@ export default function ProductSqpTable({
   const filteredRows = useMemo(() => {
     let nextRows = enrichedRows;
 
-    if (scope === 'asin' && setScope !== 'all') {
+    if (setScope !== 'all') {
       nextRows = nextRows.filter(
         (row) => row.keyword_id && membershipMap.has(row.keyword_id)
       );
     }
 
-    if (scope === 'asin' && setScope !== 'all' && safeGroupFilter !== 'all') {
+    if (setScope !== 'all' && safeGroupFilter !== 'all') {
       nextRows = nextRows.filter((row) => {
         if (!row.keyword_id) return false;
         const groups = membershipMap.get(row.keyword_id) ?? [];
@@ -169,7 +166,7 @@ export default function ProductSqpTable({
     }
 
     return nextRows;
-  }, [enrichedRows, keywordSearch, membershipMap, safeGroupFilter, scope, setScope]);
+  }, [enrichedRows, keywordSearch, membershipMap, safeGroupFilter, setScope]);
 
   const sortedRows = useMemo(() => {
     const rowsCopy = [...filteredRows];
@@ -223,7 +220,7 @@ export default function ProductSqpTable({
     [router, searchParams]
   );
 
-  const showGroupColumn = scope === 'asin' && setScope !== 'all';
+  const showGroupColumn = setScope !== 'all';
 
   const columnStyles: CSSProperties = {
     '--query-col-w': '260px',
@@ -267,6 +264,7 @@ export default function ProductSqpTable({
     }
   }, [replaceParamChange, searchParams, selectedWeekEnd]);
 
+
   return (
     <div className="space-y-6">
       <InlineFilters>
@@ -288,35 +286,6 @@ export default function ProductSqpTable({
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-            Scope
-            <div className="mt-1 inline-flex rounded-lg border border-border bg-surface p-1">
-              {(
-                [
-                  { value: 'asin', label: 'ASIN View' },
-                  { value: 'brand', label: 'Brand (continuous)' },
-                ] as const
-              ).map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() =>
-                    handleParamChange({
-                      sqp_scope: option.value,
-                      sqp_week_end: selectedWeekEnd ?? null,
-                    })
-                  }
-                  className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
-                    scope === option.value
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-foreground hover:bg-surface-2'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </label>
           <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
             Week ending
             <select
@@ -375,8 +344,7 @@ export default function ProductSqpTable({
                 setSetScope(event.target.value);
                 setGroupFilter('all');
               }}
-              disabled={scope !== 'asin'}
-              className="mt-1 min-w-[200px] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground disabled:opacity-60"
+              className="mt-1 min-w-[200px] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
             >
               <option value="all">All tracked keywords</option>
               {(keywordGroups?.group_sets ?? []).map((set) => (

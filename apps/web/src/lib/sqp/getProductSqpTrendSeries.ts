@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { enrichSqpRow } from '@/lib/sqp/enrichSqpRow';
-import type { SqpKnownKeywordRow, SqpScope, SqpWeek } from '@/lib/sqp/getProductSqpWeekly';
+import type { SqpKnownKeywordRow, SqpWeek } from '@/lib/sqp/getProductSqpWeekly';
 import { normalizeSqpRow } from '@/lib/sqp/normalizeSqpRow';
 import { selectSqpTrendRange } from '@/lib/sqp/sqpTrendRange';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
@@ -44,7 +44,6 @@ export const getProductSqpTrendSeries = async ({
   accountId,
   marketplace,
   asin,
-  scope,
   searchQueryNorm,
   fromWeekEnd,
   toWeekEnd,
@@ -52,27 +51,19 @@ export const getProductSqpTrendSeries = async ({
   accountId: string;
   marketplace: string;
   asin: string;
-  scope: SqpScope;
   searchQueryNorm: string;
   fromWeekEnd?: string | null;
   toWeekEnd?: string | null;
 }): Promise<SqpTrendResult> => {
-  const viewName =
-    scope === 'asin'
-      ? 'sqp_weekly_latest_known_keywords'
-      : 'sqp_weekly_brand_continuous_latest';
-
   const weeksQuery = supabaseAdmin
-    .from(viewName)
+    .from('sqp_weekly_latest_known_keywords')
     .select('week_start,week_end')
     .eq('account_id', accountId)
     .eq('marketplace', marketplace)
+    .eq('scope_type', 'asin')
+    .eq('scope_value', asin)
     .eq('search_query_norm', searchQueryNorm)
     .order('week_end', { ascending: false });
-
-  if (scope === 'asin') {
-    weeksQuery.eq('scope_type', 'asin').eq('scope_value', asin);
-  }
 
   const { data: weekRows, error: weekError } = await weeksQuery;
   const availableWeeks = weekError || !weekRows ? [] : dedupeWeeks(weekRows);
@@ -102,22 +93,19 @@ export const getProductSqpTrendSeries = async ({
     'cart_adds_price_median_total,cart_adds_price_median_self,' +
     'purchases_total,purchases_self,purchases_self_share,purchases_rate_per_query,' +
     'purchases_price_median_total,purchases_price_median_self';
-  const selectColumns =
-    scope === 'asin' ? `${selectColumnsBase},keyword_id` : selectColumnsBase;
+  const selectColumns = `${selectColumnsBase},keyword_id`;
 
   const buildBaseQuery = () => {
     const query = supabaseAdmin
-      .from(viewName)
+      .from('sqp_weekly_latest_known_keywords')
       .select(selectColumns)
       .eq('account_id', accountId)
       .eq('marketplace', marketplace)
+      .eq('scope_type', 'asin')
+      .eq('scope_value', asin)
       .gte('week_end', from)
       .lte('week_end', to)
       .order('week_end', { ascending: true });
-
-    if (scope === 'asin') {
-      query.eq('scope_type', 'asin').eq('scope_value', asin);
-    }
 
     return query;
   };

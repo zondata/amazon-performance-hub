@@ -109,7 +109,7 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 ### Products SQP Tab
 #### What's implemented (SQP)
 - SQP is weekly cadence and week-driven (ignores product-level Start/End range).
-- Scope toggle is present in UI: ASIN View (`sqp_weekly_latest_known_keywords`, `scope_type='asin'`) and Brand (continuous) (`sqp_weekly_brand_continuous_latest`).
+- SQP tab is ASIN View only, powered by `sqp_weekly_latest_known_keywords` with `scope_type='asin'` and `scope_value=<asin>`.
 - Week Ending selector uses ISO week labels in the form `Wxx YYYY (Mon)` (example: `W06 2026 (Feb)`).
 - Snapshot table renders selected-week SQP rows with URL-driven state.
 - Columns toggle is implemented: `Important` (default) vs `All`.
@@ -125,7 +125,7 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Trend Inspector supports multi-KPI selection (chart presentation refinements are optional follow-up).
 
 #### Known issues / WIP (Brand continuous)
-- Present but not validated; may not show full week history; KPI rendering may be incomplete.
+- Brand (continuous) scope is currently disabled/hidden in the Products SQP UI due to unresolved week history and KPI rendering issues.
 
 **Optional Flags**
 - `ENABLE_SPEND_RECONCILIATION` (default `0`) toggles spend reconciliation query.
@@ -584,7 +584,7 @@ Sample JSON:
   "source_upload_id": null,
   "entities": [
     { "entity_type": "campaign", "campaign_id": "1234567890", "note": "main campaign" },
-    { "entity_type": "product", "product_id": "9a0e6a9c-1c7a-4c0f-9a6f-3a2c119bb2b1" }
+    { "entity_type": "product", "product_id": "B0ABC12345" }
   ]
 }
 ```

@@ -116,8 +116,6 @@ export default async function ProductDetailPage({
   let end = normalizeDate(paramValue('end')) ?? defaults.end;
   const tab = paramValue('tab') ?? 'overview';
   const errorMessage = paramValue('error');
-  const sqpScopeParam = paramValue('sqp_scope');
-  const sqpScope = sqpScopeParam === 'brand' ? 'brand' : 'asin';
   const sqpWeekEnd = normalizeDate(paramValue('sqp_week_end'));
   const sqpTrendEnabled = paramValue('sqp_trend') === '1';
   const sqpTrendQuery = paramValue('sqp_trend_query');
@@ -640,7 +638,6 @@ export default async function ProductDetailPage({
           asin,
           start,
           end,
-          scope: sqpScope,
           weekEnd: sqpWeekEnd,
         })
       : null;
@@ -651,7 +648,6 @@ export default async function ProductDetailPage({
           accountId: env.accountId,
           marketplace: env.marketplace,
           asin,
-          scope: sqpScope,
           searchQueryNorm: sqpTrendQuery,
           fromWeekEnd: sqpTrendFromRaw,
           toWeekEnd: sqpTrendToRaw,
@@ -1133,7 +1129,6 @@ export default async function ProductDetailPage({
       {tab === 'sqp' && sqpWeekly ? (
         <section className="space-y-6">
           <ProductSqpTable
-            scope={sqpWeekly.scope}
             availableWeeks={sqpWeekly.availableWeeks}
             selectedWeekEnd={sqpWeekly.selectedWeekEnd}
             rows={sqpWeekly.rows}

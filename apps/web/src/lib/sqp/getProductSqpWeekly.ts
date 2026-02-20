@@ -4,8 +4,6 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { fetchAvailableSqpWeeks } from '@/lib/sqp/fetchAvailableSqpWeeks';
 import { normalizeSqpRow } from '@/lib/sqp/normalizeSqpRow';
 
-export type SqpScope = 'asin' | 'brand';
-
 type SqpWeek = {
   week_start: string;
   week_end: string;
@@ -62,7 +60,6 @@ type SqpKnownKeywordRow = SqpRowBase & {
 };
 
 type SqpWeeklyResult = {
-  scope: SqpScope;
   availableWeeks: SqpWeek[];
   selectedWeekEnd: string | null;
   rows: SqpKnownKeywordRow[];
@@ -74,7 +71,6 @@ export const getProductSqpWeekly = async ({
   asin,
   start: _start,
   end: _end,
-  scope,
   weekEnd,
 }: {
   accountId: string;
@@ -82,7 +78,6 @@ export const getProductSqpWeekly = async ({
   asin: string;
   start: string;
   end: string;
-  scope: SqpScope;
   weekEnd?: string;
 }): Promise<SqpWeeklyResult> => {
   void _start;
@@ -90,13 +85,11 @@ export const getProductSqpWeekly = async ({
   const availableWeeks = await fetchAvailableSqpWeeks({
     accountId,
     marketplace,
-    scope,
     asin,
   });
 
   if (availableWeeks.length === 0) {
     return {
-      scope,
       availableWeeks: [],
       selectedWeekEnd: null,
       rows: [],
@@ -110,29 +103,21 @@ export const getProductSqpWeekly = async ({
 
   if (!selectedWeekEnd) {
     return {
-      scope,
       availableWeeks,
       selectedWeekEnd: null,
       rows: [],
     };
   }
 
-  const viewName =
-    scope === 'asin'
-      ? 'sqp_weekly_latest_known_keywords'
-      : 'sqp_weekly_brand_continuous_latest';
-
   const rowsQuery = supabaseAdmin
-    .from(viewName)
+    .from('sqp_weekly_latest_known_keywords')
     .select('*')
     .eq('account_id', accountId)
     .eq('marketplace', marketplace)
+    .eq('scope_type', 'asin')
+    .eq('scope_value', asin)
     .eq('week_end', selectedWeekEnd)
     .limit(1000);
-
-  if (scope === 'asin') {
-    rowsQuery.eq('scope_type', 'asin').eq('scope_value', asin);
-  }
 
   const { data: rows, error: rowsError } = await rowsQuery;
 
@@ -142,7 +127,6 @@ export const getProductSqpWeekly = async ({
       : (rows as SqpKnownKeywordRow[]).map((row) => normalizeSqpRow(row));
 
   return {
-    scope,
     availableWeeks,
     selectedWeekEnd,
     rows: normalizedRows,
