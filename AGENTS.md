@@ -73,6 +73,12 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Run from repo root: `npm run web:dev`, `npm run web:build`, `npm run web:lint`.
 - Env: copy `apps/web/.env.local.example` to `apps/web/.env.local`. Required vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
   `APP_ACCOUNT_ID`, `APP_MARKETPLACE`.
+- Example values:
+  - `APP_ACCOUNT_ID=<account_slug>` (e.g., `sourbear`, `dynamix`)
+  - `APP_MARKETPLACE=US`
+- `account_id` is a logical partition key (brand or Amazon account slug), not the marketplace.
+- `marketplace` is the marketplace code (e.g., `US`).
+- Multiple accounts are supported by using different `account_id` values and separate web deployments if desired.
 - Security: Supabase service role is server-only; never expose it in client components.
   Server client lives in `apps/web/src/lib/supabaseAdmin.ts`.
 - URL filters: `start=YYYY-MM-DD`, `end=YYYY-MM-DD`, `asin=<ASIN|all>` (shareable dashboard state).
