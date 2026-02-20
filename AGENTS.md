@@ -80,7 +80,7 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 
 **Pages**
 - Dashboard: `/dashboard` (primary UI). Uses `si_sales_trend_daily_latest` for sales KPIs.
-- Products: `/products` list and `/products/[asin]` detail with tabs (overview, sales, logbook, costs, ads, keywords, SQP, ranking) using the same URL filters. Keywords is configuration; SQP is analytics/rollups by group (coming soon).
+- Products: `/products` list and `/products/[asin]` detail with tabs (overview, sales, logbook, costs, ads, keywords, SQP, ranking) using the same URL filters. Keywords is configuration; SQP is weekly Brand Analytics (Search Query Performance).
 - Ads: `/ads/performance` with URL params `start`, `end`, `asin` (carried but ignored),
   `channel=sp|sb|sd`, `level=campaigns|adgroups|targets|placements|searchterms`.
   Campaigns table is implemented for SP/SB/SD; other levels are placeholders.
@@ -105,6 +105,27 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Ranking header is sticky during vertical scroll; left sticky columns stay aligned.
 - Filters: keyword set scope, group filter, columns 14/30/60/∞, search, hide unranked.
 - Wide table uses split wrappers with `data-aph-hscroll` for horizontal sync.
+
+### Products SQP Tab
+#### What's implemented (SQP)
+- SQP is weekly cadence and week-driven (ignores product-level Start/End range).
+- Scope toggle is present in UI: ASIN View (`sqp_weekly_latest_known_keywords`, `scope_type='asin'`) and Brand (continuous) (`sqp_weekly_brand_continuous_latest`).
+- Week Ending selector uses ISO week labels in the form `Wxx YYYY (Mon)` (example: `W06 2026 (Feb)`).
+- Snapshot table renders selected-week SQP rows with URL-driven state.
+- Columns toggle is implemented: `Important` (default) vs `All`.
+- Trend Inspector is implemented and opens from both the Trend button and row/query interaction.
+
+#### Validated behavior (ASIN View)
+- Week Ending dropdown lists all available weeks for the selected ASIN (newest first); week discovery is paginated and not limited by the snapshot row cap.
+- Default week selection is the latest available `week_end`.
+- Default table sort is `search_query_volume` descending, with missing values last.
+- Columns toggle works as `Important` vs `All`.
+- SQP table supports dual-axis scrolling with frozen/sticky header using the same split-wrapper scroll pattern as Ranking (`data-aph-hscroll`, `data-aph-hscroll-axis="x"`).
+- Trend Inspector supports KPI selection plus From/To week range and applies changes via `Apply` (no re-render on each KPI checkbox change).
+- Trend Inspector supports multi-KPI selection (chart presentation refinements are optional follow-up).
+
+#### Known issues / WIP (Brand continuous)
+- Present but not validated; may not show full week history; KPI rendering may be incomplete.
 
 **Optional Flags**
 - `ENABLE_SPEND_RECONCILIATION` (default `0`) toggles spend reconciliation query.

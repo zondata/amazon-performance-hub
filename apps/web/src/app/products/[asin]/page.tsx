@@ -8,6 +8,7 @@ import KeywordGroupSetManager from '@/components/KeywordGroupSetManager';
 import Tabs from '@/components/Tabs';
 import TrendChart from '@/components/TrendChart';
 import ProductRankingHeatmap from '@/components/ranking/ProductRankingHeatmap';
+import ProductSqpTable from '@/components/sqp/ProductSqpTable';
 import { parseCsv } from '@/lib/csv/parseCsv';
 import { env } from '@/lib/env';
 import { ensureProductId } from '@/lib/products/ensureProductId';
@@ -15,6 +16,8 @@ import { getProductDetailData } from '@/lib/products/getProductDetailData';
 import { getProductKeywordGroups } from '@/lib/products/getProductKeywordGroups';
 import { getProductKeywordGroupMemberships } from '@/lib/products/getProductKeywordGroupMemberships';
 import { getProductRankingDaily } from '@/lib/ranking/getProductRankingDaily';
+import { getProductSqpWeekly } from '@/lib/sqp/getProductSqpWeekly';
+import { getProductSqpTrendSeries } from '@/lib/sqp/getProductSqpTrendSeries';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -113,6 +116,20 @@ export default async function ProductDetailPage({
   let end = normalizeDate(paramValue('end')) ?? defaults.end;
   const tab = paramValue('tab') ?? 'overview';
   const errorMessage = paramValue('error');
+  const sqpScopeParam = paramValue('sqp_scope');
+  const sqpScope = sqpScopeParam === 'brand' ? 'brand' : 'asin';
+  const sqpWeekEnd = normalizeDate(paramValue('sqp_week_end'));
+  const sqpTrendEnabled = paramValue('sqp_trend') === '1';
+  const sqpTrendQuery = paramValue('sqp_trend_query');
+  const sqpTrendMetricsRaw =
+    paramValue('sqp_trend_kpis') ?? paramValue('sqp_trend_metrics');
+  const sqpTrendMetrics =
+    sqpTrendMetricsRaw
+      ?.split(',')
+      .map((value) => value.trim())
+      .filter(Boolean) ?? [];
+  const sqpTrendFromRaw = normalizeDate(paramValue('sqp_trend_from'));
+  const sqpTrendToRaw = normalizeDate(paramValue('sqp_trend_to'));
 
   const importKeywordGroups = async (
     _prevState: KeywordImportState,
@@ -589,7 +606,7 @@ export default async function ProductDetailPage({
   });
 
   const keywordGroups =
-    tab === 'keywords' || tab === 'ranking'
+    tab === 'keywords' || tab === 'ranking' || tab === 'sqp'
       ? await getProductKeywordGroups({
           accountId: env.accountId,
           marketplace: env.marketplace,
@@ -598,7 +615,7 @@ export default async function ProductDetailPage({
       : null;
 
   const keywordGroupMemberships =
-    tab === 'ranking' && keywordGroups?.group_sets?.length
+    (tab === 'ranking' || tab === 'sqp') && keywordGroups?.group_sets?.length
       ? await getProductKeywordGroupMemberships({
           groupSetIds: keywordGroups.group_sets.map((set) => set.group_set_id),
         })
@@ -614,6 +631,43 @@ export default async function ProductDetailPage({
           end,
         })
       : [];
+
+  const sqpWeekly =
+    tab === 'sqp'
+      ? await getProductSqpWeekly({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+          asin,
+          start,
+          end,
+          scope: sqpScope,
+          weekEnd: sqpWeekEnd,
+        })
+      : null;
+
+  const sqpTrendResult =
+    tab === 'sqp' && sqpTrendEnabled && sqpTrendQuery
+      ? await getProductSqpTrendSeries({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+          asin,
+          scope: sqpScope,
+          searchQueryNorm: sqpTrendQuery,
+          fromWeekEnd: sqpTrendFromRaw,
+          toWeekEnd: sqpTrendToRaw,
+        })
+      : null;
+
+  const sqpTrendSeries = sqpTrendResult?.series ?? null;
+  const sqpTrendFrom = sqpTrendResult?.selectedFrom ?? null;
+  const sqpTrendTo = sqpTrendResult?.selectedTo ?? null;
+  const sqpTrendAvailableWeeks = sqpTrendResult?.availableWeeks ?? [];
+
+  const sqpTrendLabel =
+    sqpTrendSeries?.[0]?.search_query_raw ??
+    sqpTrendSeries?.[0]?.search_query_norm ??
+    sqpTrendQuery ??
+    null;
 
   const shortName = data.productMeta.short_name?.trim();
   const title = data.productMeta.title?.trim();
@@ -682,33 +736,35 @@ export default async function ProductDetailPage({
             ) : null}
           </div>
           <div className="flex flex-wrap items-end gap-4 text-sm text-muted">
-            <form method="get" className="flex flex-wrap items-end gap-3">
-              {tab ? <input type="hidden" name="tab" value={tab} /> : null}
-              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-                Start
-                <input
-                  type="date"
-                  name="start"
-                  defaultValue={start}
-                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                />
-              </label>
-              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-                End
-                <input
-                  type="date"
-                  name="end"
-                  defaultValue={end}
-                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                />
-              </label>
-              <button
-                type="submit"
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
-              >
-                Apply
-              </button>
-            </form>
+            {tab !== 'sqp' ? (
+              <form method="get" className="flex flex-wrap items-end gap-3">
+                {tab ? <input type="hidden" name="tab" value={tab} /> : null}
+                <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                  Start
+                  <input
+                    type="date"
+                    name="start"
+                    defaultValue={start}
+                    className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                  />
+                </label>
+                <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                  End
+                  <input
+                    type="date"
+                    name="end"
+                    defaultValue={end}
+                    className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+                >
+                  Apply
+                </button>
+              </form>
+            ) : null}
             <Link href={`/imports-health`} className="font-semibold text-foreground">
               View Imports &amp; Health
             </Link>
@@ -1074,12 +1130,23 @@ export default async function ProductDetailPage({
         </section>
       ) : null}
 
-      {tab === 'sqp' ? (
-        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-          <div className="text-lg font-semibold text-foreground">Coming soon</div>
-          <div className="mt-2 text-sm text-muted">
-            Keyword groups moved to Keywords tab. SQP rollups by group coming soon.
-          </div>
+      {tab === 'sqp' && sqpWeekly ? (
+        <section className="space-y-6">
+          <ProductSqpTable
+            scope={sqpWeekly.scope}
+            availableWeeks={sqpWeekly.availableWeeks}
+            selectedWeekEnd={sqpWeekly.selectedWeekEnd}
+            rows={sqpWeekly.rows}
+            keywordGroups={keywordGroups}
+            keywordGroupMemberships={keywordGroupMemberships}
+            trendKey={sqpTrendEnabled ? sqpTrendQuery : null}
+            trendMetrics={sqpTrendMetrics}
+            trendFrom={sqpTrendFrom}
+            trendTo={sqpTrendTo}
+            trendAvailableWeeks={sqpTrendAvailableWeeks}
+            trendSeries={sqpTrendSeries}
+            trendQueryLabel={sqpTrendLabel}
+          />
         </section>
       ) : null}
 
