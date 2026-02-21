@@ -25,6 +25,7 @@ export type GeneratorPayload<TAction> = {
   outRoot?: string | null;
   notes?: string | null;
   runId?: string | null;
+  productId?: string | null;
   exportedAt?: string | null;
   experimentId?: string | null;
   logEnabled?: boolean | null;
@@ -145,6 +146,7 @@ export const runSpUpdateGenerator = async (
 
   const changes = {
     exported_at: exportedAt,
+    product_id: payload.productId ?? undefined,
     notes: payload.notes ?? undefined,
     actions: payload.actions,
   };
@@ -197,6 +199,7 @@ export const runSbUpdateGenerator = async (
 
   const changes = {
     exported_at: exportedAt,
+    product_id: payload.productId ?? undefined,
     notes: payload.notes ?? undefined,
     actions: payload.actions,
   };

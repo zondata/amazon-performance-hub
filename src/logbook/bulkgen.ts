@@ -28,6 +28,12 @@ function toNumber(value: unknown): number | null {
   return Number.isFinite(num) ? num : null;
 }
 
+function toOptionalString(value: unknown): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  const text = String(value).trim();
+  return text.length ? text : undefined;
+}
+
 function buildDedupeKey(params: {
   runId: string;
   generator: string;
@@ -78,11 +84,16 @@ function buildEntityLinks(params: {
   campaignId: string;
   adGroupId: string;
   targetId: string;
+  productId?: string;
+  placementCode?: string;
+  placementRawNorm?: string;
+  placementRaw?: string;
 }): LogChangeEntityInput[] {
   const links: LogChangeEntityInput[] = [];
   if (params.entity === "Campaign") {
     links.push({
       entity_type: "campaign",
+      product_id: params.productId,
       campaign_id: params.campaignId,
     });
     return links;
@@ -90,6 +101,7 @@ function buildEntityLinks(params: {
   if (params.entity === "Ad Group") {
     links.push({
       entity_type: "ad_group",
+      product_id: params.productId,
       campaign_id: params.campaignId,
       ad_group_id: params.adGroupId,
     });
@@ -98,6 +110,7 @@ function buildEntityLinks(params: {
   if (params.entity.includes("Keyword") || params.entity.includes("Targeting")) {
     links.push({
       entity_type: "target",
+      product_id: params.productId,
       campaign_id: params.campaignId,
       ad_group_id: params.adGroupId,
       target_id: params.targetId,
@@ -107,7 +120,13 @@ function buildEntityLinks(params: {
   if (params.entity.includes("Bidding Adjustment")) {
     links.push({
       entity_type: "placement",
+      product_id: params.productId,
       campaign_id: params.campaignId,
+      extra: {
+        placement_code: params.placementCode ?? null,
+        placement_raw_norm: params.placementRawNorm ?? null,
+        placement_raw: params.placementRaw ?? null,
+      },
     });
   }
   return links;
@@ -214,6 +233,7 @@ export function buildSpBulkgenLogEntries(params: {
   runId: string;
   generator: string;
   outputPaths: BulkgenOutputPaths;
+  productId?: string;
 }): BulkgenLogEntry[] {
   const entries: BulkgenLogEntry[] = [];
   const channelLabel = "SP";
@@ -292,6 +312,13 @@ export function buildSpBulkgenLogEntries(params: {
       );
       if (placement) {
         before.percentage = placement.percentage ?? null;
+        before.placement_code = placement.placement_code;
+        before.placement_raw_norm = normText(placement.placement_raw || placement.placement_code);
+        afterFields.placement_code = placement.placement_code;
+        afterFields.placement_raw_norm = normText(
+          placement.placement_raw || placement.placement_code
+        );
+        afterFields.placement_raw = placement.placement_raw || null;
       }
       const percentage = toNumber(row.cells.Percentage);
       if (percentage !== null) afterFields.percentage = percentage;
@@ -327,6 +354,10 @@ export function buildSpBulkgenLogEntries(params: {
         campaignId,
         adGroupId,
         targetId,
+        productId: params.productId,
+        placementCode: toOptionalString(afterFields.placement_code),
+        placementRawNorm: toOptionalString(afterFields.placement_raw_norm),
+        placementRaw: toOptionalString(afterFields.placement_raw),
       }),
     };
 
@@ -342,6 +373,7 @@ export function buildSbBulkgenLogEntries(params: {
   runId: string;
   generator: string;
   outputPaths: BulkgenOutputPaths;
+  productId?: string;
 }): BulkgenLogEntry[] {
   const entries: BulkgenLogEntry[] = [];
   const channelLabel = "SB";
@@ -419,6 +451,11 @@ export function buildSbBulkgenLogEntries(params: {
       });
       if (placement) {
         before.percentage = placement.percentage ?? null;
+        before.placement_code = placement.placement_code;
+        before.placement_raw_norm = placement.placement_raw_norm;
+        afterFields.placement_code = placement.placement_code;
+        afterFields.placement_raw_norm = placement.placement_raw_norm;
+        afterFields.placement_raw = placement.placement_raw;
       }
       const percentage = toNumber(row.cells.Percentage);
       if (percentage !== null) afterFields.percentage = percentage;
@@ -454,6 +491,10 @@ export function buildSbBulkgenLogEntries(params: {
         campaignId,
         adGroupId,
         targetId,
+        productId: params.productId,
+        placementCode: toOptionalString(afterFields.placement_code),
+        placementRawNorm: toOptionalString(afterFields.placement_raw_norm),
+        placementRaw: toOptionalString(afterFields.placement_raw),
       }),
     };
 

@@ -33,12 +33,22 @@ const parseEntities = (formData: FormData) => {
 };
 
 type NewChangePageProps = {
-  searchParams?: {
-    experiment_id?: string;
-  };
+  searchParams?:
+    | Promise<{
+        experiment_id?: string;
+        product_id?: string;
+      }>
+    | {
+        experiment_id?: string;
+        product_id?: string;
+      };
 };
 
-export default function NewChangePage({ searchParams }: NewChangePageProps) {
+export default async function NewChangePage({ searchParams }: NewChangePageProps) {
+  const resolvedSearchParams =
+    searchParams instanceof Promise ? await searchParams : searchParams;
+  const initialProductId = resolvedSearchParams?.product_id?.trim().toUpperCase();
+
   const handleSubmit = async (formData: FormData) => {
     'use server';
 
@@ -66,9 +76,9 @@ export default function NewChangePage({ searchParams }: NewChangePageProps) {
       entities,
     });
 
-    if (searchParams?.experiment_id) {
-      await linkChangesToExperiment(searchParams.experiment_id, [changeId]);
-      redirect(`/logbook/experiments/${searchParams.experiment_id}`);
+    if (resolvedSearchParams?.experiment_id) {
+      await linkChangesToExperiment(resolvedSearchParams.experiment_id, [changeId]);
+      redirect(`/logbook/experiments/${resolvedSearchParams.experiment_id}`);
     }
 
     redirect('/logbook/changes');
@@ -157,7 +167,7 @@ export default function NewChangePage({ searchParams }: NewChangePageProps) {
 
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
           <div className="mb-4 text-xs uppercase tracking-wider text-slate-400">Entity links</div>
-          <EntityLinksEditor />
+          <EntityLinksEditor initialProductId={initialProductId} />
         </div>
 
         <div className="flex justify-end gap-3">

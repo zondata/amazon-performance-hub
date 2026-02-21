@@ -3,6 +3,7 @@ export type ExperimentFormPayload = {
   objective?: string | null;
   hypothesis?: string | null;
   status?: string | null;
+  product_id?: string | null;
   evaluation_lag_days?: number | null;
   evaluation_window_days?: number | null;
   primary_metrics?: unknown;
@@ -63,6 +64,7 @@ export const validateExperimentPayload = (
   const objective = optionalTrimmed(payload.objective);
   const hypothesis = optionalTrimmed(payload.hypothesis);
   const status = optionalTrimmed(payload.status) ?? 'planned';
+  const product_id = optionalTrimmed(payload.product_id) ?? null;
 
   const evaluation_lag_days =
     typeof payload.evaluation_lag_days === 'number'
@@ -82,6 +84,7 @@ export const validateExperimentPayload = (
       objective: objective ?? '',
       hypothesis: hypothesis ?? null,
       status,
+      product_id,
       evaluation_lag_days: evaluation_lag_days ?? null,
       evaluation_window_days: evaluation_window_days ?? null,
       primary_metrics: payload.primary_metrics ?? null,

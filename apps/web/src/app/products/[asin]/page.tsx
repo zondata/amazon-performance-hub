@@ -7,14 +7,24 @@ import KeywordGroupImport from '@/components/KeywordGroupImport';
 import KeywordGroupSetManager from '@/components/KeywordGroupSetManager';
 import Tabs from '@/components/Tabs';
 import TrendChart from '@/components/TrendChart';
+import ProductLogbookAiPackImport from '@/components/logbook/ProductLogbookAiPackImport';
 import ProductRankingHeatmap from '@/components/ranking/ProductRankingHeatmap';
 import ProductSqpTable from '@/components/sqp/ProductSqpTable';
+import { runSbUpdateGenerator, runSpUpdateGenerator } from '@/lib/bulksheets/runGenerators';
 import { parseCsv } from '@/lib/csv/parseCsv';
 import { env } from '@/lib/env';
+import { importProductExperimentOutputPack } from '@/lib/logbook/aiPack/importProductExperimentOutputPack';
+import {
+  buildPlanPreviewsForScope,
+  extractBulkgenPlans,
+  PlanPreview,
+} from '@/lib/logbook/productExperimentPlans';
+import { runManualBulkgenValidation } from '@/lib/logbook/runBulkgenValidation';
 import { ensureProductId } from '@/lib/products/ensureProductId';
 import { getProductDetailData } from '@/lib/products/getProductDetailData';
 import { getProductKeywordGroups } from '@/lib/products/getProductKeywordGroups';
 import { getProductKeywordGroupMemberships } from '@/lib/products/getProductKeywordGroupMemberships';
+import { getProductLogbookData } from '@/lib/products/getProductLogbookData';
 import { getProductRankingDaily } from '@/lib/ranking/getProductRankingDaily';
 import { getProductSqpWeekly } from '@/lib/sqp/getProductSqpWeekly';
 import { getProductSqpTrendSeries } from '@/lib/sqp/getProductSqpTrendSeries';
@@ -58,6 +68,123 @@ const formatPercent = (value?: number | null) => {
   return `${(value * 100).toFixed(1)}%`;
 };
 
+const formatDateTime = (value?: string | null) => {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString('en-US');
+};
+
+const formatDateOnly = (value?: string | null) => {
+  if (!value) return '—';
+  if (!DATE_RE.test(value)) return value;
+  return value;
+};
+
+const asObject = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const scopeString = (scope: Record<string, unknown> | null, key: string) => {
+  if (!scope) return null;
+  const value = scope[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+};
+
+const scopeStringArray = (scope: Record<string, unknown> | null, key: string) => {
+  if (!scope) return [];
+  const value = scope[key];
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean);
+};
+
+const formatOutcomePercent = (score: number | null): string => {
+  if (score === null || !Number.isFinite(score)) return '—';
+  const normalized = score <= 1 ? score * 100 : score;
+  return `${normalized.toFixed(0)}%`;
+};
+
+const outcomeToneClass = (score: number | null): string => {
+  if (score === null || !Number.isFinite(score)) return 'text-muted';
+  const normalized = score <= 1 ? score : score / 100;
+  if (normalized >= 0.7) return 'text-emerald-600';
+  if (normalized >= 0.5) return 'text-amber-600';
+  return 'text-rose-600';
+};
+
+const formatEntityDetails = (entity: {
+  product_id: string | null;
+  campaign_id: string | null;
+  ad_group_id: string | null;
+  target_id: string | null;
+  keyword_id: string | null;
+}) => {
+  const parts: string[] = [];
+  if (entity.product_id) parts.push(`Product ${entity.product_id}`);
+  if (entity.campaign_id) parts.push(`Campaign ${entity.campaign_id}`);
+  if (entity.ad_group_id) parts.push(`Ad group ${entity.ad_group_id}`);
+  if (entity.target_id) parts.push(`Target ${entity.target_id}`);
+  if (entity.keyword_id) parts.push(`Keyword ${entity.keyword_id}`);
+  return parts;
+};
+
+const formatUnknownJson = (value: unknown) => {
+  if (value === null || value === undefined) return null;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const toDisplayValue = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'number' && Number.isFinite(value)) return value.toLocaleString('en-US');
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  return String(value);
+};
+
+const validationToneClass = (status: string) => {
+  if (status === 'validated') return 'border-emerald-300 bg-emerald-50 text-emerald-700';
+  if (status === 'mismatch') return 'border-rose-300 bg-rose-50 text-rose-700';
+  if (status === 'not_found') return 'border-amber-300 bg-amber-50 text-amber-700';
+  return 'border-border bg-surface-2 text-muted';
+};
+
+const orderedBulksheetColumns = (rows: PlanPreview['bulksheet_rows']) => {
+  const preferred = [
+    'Product',
+    'Entity',
+    'Operation',
+    'Campaign ID',
+    'Campaign Name',
+    'Ad Group ID',
+    'Ad Group Name',
+    'Keyword ID',
+    'Product Targeting ID',
+    'Keyword Text',
+    'Product Targeting Expression',
+    'Match Type',
+    'Placement',
+    'Daily Budget',
+    'Budget',
+    'Ad Group Default Bid',
+    'Bid',
+    'State',
+    'Bidding Strategy',
+    'Percentage',
+  ];
+  const all = new Set<string>();
+  for (const row of rows) {
+    Object.keys(row.cells).forEach((key) => all.add(key));
+  }
+  const rest = [...all].filter((col) => !preferred.includes(col)).sort((a, b) => a.localeCompare(b));
+  return [...preferred.filter((col) => all.has(col)), ...rest];
+};
+
 const normalizeKeyword = (value: string): string =>
   value
     .toLowerCase()
@@ -95,6 +222,13 @@ type KeywordSetActionState = {
   groupSetId?: string;
 };
 
+type LogbookAiPackImportState = {
+  ok?: boolean;
+  error?: string | null;
+  created_experiment_id?: string;
+  created_change_ids_count?: number;
+};
+
 const buildTabHref = (asin: string, tab: string, start: string, end: string) =>
   `/products/${asin}?start=${start}&end=${end}&tab=${tab}`;
 
@@ -116,6 +250,8 @@ export default async function ProductDetailPage({
   let end = normalizeDate(paramValue('end')) ?? defaults.end;
   const tab = paramValue('tab') ?? 'overview';
   const errorMessage = paramValue('error');
+  const logbookNotice = paramValue('logbook_notice');
+  const logbookError = paramValue('logbook_error');
   const sqpWeekEnd = normalizeDate(paramValue('sqp_week_end'));
   const sqpTrendEnabled = paramValue('sqp_trend') === '1';
   const sqpTrendQuery = paramValue('sqp_trend_query');
@@ -493,6 +629,162 @@ export default async function ProductDetailPage({
     return { ok: true, action: 'deactivate', groupSetId };
   };
 
+  const importLogbookAiPackAction = async (
+    _prevState: LogbookAiPackImportState,
+    formData: FormData
+  ): Promise<LogbookAiPackImportState> => {
+    'use server';
+
+    const file = formData.get('file');
+    if (!file || !(file instanceof File) || file.size === 0) {
+      return { ok: false, error: 'JSON file is required.' };
+    }
+
+    const fileText = await file.text();
+    const result = await importProductExperimentOutputPack({
+      fileText,
+      currentAsin: asin,
+    });
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: result.error ?? 'Failed to import AI pack.',
+      };
+    }
+
+    revalidatePath(`/products/${asin}`);
+
+    return {
+      ok: true,
+      created_experiment_id: result.created_experiment_id,
+      created_change_ids_count: result.created_change_ids_count,
+    };
+  };
+
+  const generateBulkgenPlanAction = async (formData: FormData) => {
+    'use server';
+
+    const experimentId = String(formData.get('experiment_id') ?? '').trim();
+    const channel = String(formData.get('channel') ?? '').trim().toUpperCase();
+    const runId = String(formData.get('run_id') ?? '').trim();
+
+    if (!experimentId || (channel !== 'SP' && channel !== 'SB') || !runId) {
+      redirect(
+        `/products/${asin}?start=${start}&end=${end}&tab=logbook&logbook_error=${encodeURIComponent(
+          'Missing experiment plan identifiers.'
+        )}`
+      );
+    }
+
+    try {
+      const { data: experimentRow, error: experimentError } = await supabaseAdmin
+        .from('log_experiments')
+        .select('experiment_id,scope')
+        .eq('account_id', env.accountId)
+        .eq('marketplace', env.marketplace)
+        .eq('experiment_id', experimentId)
+        .maybeSingle();
+
+      if (experimentError || !experimentRow?.experiment_id) {
+        throw new Error('Experiment not found.');
+      }
+
+      const plans = extractBulkgenPlans(experimentRow.scope);
+      const matchedPlan = plans.find((plan) => plan.channel === channel && plan.run_id === runId);
+      if (!matchedPlan) {
+        throw new Error('Plan not found in experiment scope.');
+      }
+
+      if (!env.bulkgenOutRoot) {
+        throw new Error('BULKGEN_OUT_ROOT is required.');
+      }
+
+      if (matchedPlan.channel === 'SP') {
+        if (!env.bulkgenTemplateSpUpdate) {
+          throw new Error('BULKGEN_TEMPLATE_SP_UPDATE is required.');
+        }
+
+        await runSpUpdateGenerator({
+          templatePath: env.bulkgenTemplateSpUpdate,
+          outRoot: env.bulkgenOutRoot,
+          notes: matchedPlan.notes ?? null,
+          runId: matchedPlan.run_id,
+          productId: asin,
+          experimentId: experimentId,
+          logEnabled: true,
+          actions: matchedPlan.actions as Record<string, unknown>[],
+        });
+      } else {
+        if (!env.bulkgenTemplateSbUpdate) {
+          throw new Error('BULKGEN_TEMPLATE_SB_UPDATE is required.');
+        }
+
+        await runSbUpdateGenerator({
+          templatePath: env.bulkgenTemplateSbUpdate,
+          outRoot: env.bulkgenOutRoot,
+          notes: matchedPlan.notes ?? null,
+          runId: matchedPlan.run_id,
+          productId: asin,
+          experimentId: experimentId,
+          logEnabled: true,
+          actions: matchedPlan.actions as Record<string, unknown>[],
+        });
+      }
+
+      revalidatePath(`/products/${asin}`);
+
+      redirect(
+        `/products/${asin}?start=${start}&end=${end}&tab=logbook&logbook_notice=${encodeURIComponent(
+          `Generated ${channel} bulksheet for run_id=${runId}.`
+        )}`
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('NEXT_REDIRECT')) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : 'Failed to generate bulksheet.';
+      redirect(
+        `/products/${asin}?start=${start}&end=${end}&tab=logbook&logbook_error=${encodeURIComponent(
+          message
+        )}`
+      );
+    }
+  };
+
+  const validateLogbookChangeNowAction = async (formData: FormData) => {
+    'use server';
+
+    const changeId = String(formData.get('change_id') ?? '').trim();
+    if (!changeId) {
+      redirect(
+        `/products/${asin}?start=${start}&end=${end}&tab=logbook&logbook_error=${encodeURIComponent(
+          'Missing change id.'
+        )}`
+      );
+    }
+
+    try {
+      await runManualBulkgenValidation(changeId);
+      revalidatePath(`/products/${asin}`);
+      redirect(
+        `/products/${asin}?start=${start}&end=${end}&tab=logbook&logbook_notice=${encodeURIComponent(
+          'Validation completed.'
+        )}`
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('NEXT_REDIRECT')) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : 'Validation failed.';
+      redirect(
+        `/products/${asin}?start=${start}&end=${end}&tab=logbook&logbook_error=${encodeURIComponent(
+          message
+        )}`
+      );
+    }
+  };
+
   const saveProductProfile = async (formData: FormData) => {
     'use server';
 
@@ -603,6 +895,28 @@ export default async function ProductDetailPage({
     end,
   });
 
+  const logbookData =
+    tab === 'logbook'
+      ? await getProductLogbookData({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+          asin,
+        })
+      : {
+          experiments: [],
+          unassigned_changes: [],
+        };
+
+  const planPreviewsByExperimentId = new Map<string, PlanPreview[]>();
+  if (tab === 'logbook') {
+    await Promise.all(
+      logbookData.experiments.map(async (group) => {
+        const previews = await buildPlanPreviewsForScope(group.experiment.scope);
+        planPreviewsByExperimentId.set(group.experiment.experiment_id, previews);
+      })
+    );
+  }
+
   const keywordGroups =
     tab === 'keywords' || tab === 'ranking' || tab === 'sqp'
       ? await getProductKeywordGroups({
@@ -712,6 +1026,9 @@ export default async function ProductDetailPage({
     orders: Number(row.orders ?? 0),
     units: Number(row.units ?? 0),
   }));
+  const logbookExperiments = logbookData.experiments;
+  const logbookUnassigned = logbookData.unassigned_changes;
+  const hasLogbookEntries = logbookExperiments.length > 0 || logbookUnassigned.length > 0;
 
   return (
     <div className="space-y-8">
@@ -902,38 +1219,671 @@ export default async function ProductDetailPage({
       ) : null}
 
       {tab === 'logbook' ? (
-        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-          <div className="mb-4 text-lg font-semibold text-foreground">Logbook</div>
-          {data.logbook.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
+        <section className="space-y-6">
+          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-[0.3em] text-muted">
+                  Product logbook
+                </div>
+                <div className="mt-1 text-lg font-semibold text-foreground">
+                  AI workflow + experiments linked to {asin}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/logbook/changes/new?product_id=${encodeURIComponent(asin)}`}
+                  className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-2"
+                >
+                  Create change
+                </Link>
+                <Link
+                  href={`/logbook/experiments/new?product_id=${encodeURIComponent(asin)}`}
+                  className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
+                >
+                  Create experiment
+                </Link>
+              </div>
+            </div>
+
+            {logbookError ? (
+              <div className="mt-4 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {logbookError}
+              </div>
+            ) : null}
+            {logbookNotice ? (
+              <div className="mt-4 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                {logbookNotice}
+              </div>
+            ) : null}
+
+            <div className="mt-4 rounded-xl border border-border bg-surface p-4">
+              <div className="mb-2 text-sm font-semibold text-foreground">AI workflow</div>
+              <div className="mb-3 text-sm text-muted">
+                Download the prompt + data packs for this ASIN, run your AI workflow, then upload
+                the AI Output Pack JSON to create the experiment and optional manual changes.
+              </div>
+              <div className="mb-3 flex flex-wrap gap-2">
+                <a
+                  href={`/products/${asin}/logbook/ai-prompt-pack`}
+                  download
+                  className="inline-flex rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface"
+                >
+                  Download AI Prompt Pack
+                </a>
+                <a
+                  href={`/products/${asin}/logbook/ai-data-pack?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`}
+                  download
+                  className="inline-flex rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface"
+                >
+                  Download AI Data Pack
+                </a>
+              </div>
+              <ProductLogbookAiPackImport action={importLogbookAiPackAction} />
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+            <div className="mb-3 text-sm font-semibold text-foreground">Experiments</div>
+            {logbookExperiments.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-5 text-sm text-muted">
+                No experiments for this product yet.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {logbookExperiments.map((group) => {
+                  const scope = asObject(group.experiment.scope);
+                  const fiveWOneH =
+                    asObject(scope?.five_w_one_h) ?? asObject(scope?.['5w1h']);
+                  const plan = scopeStringArray(scope, 'plan');
+                  const actions = scopeStringArray(scope, 'actions');
+                  const tags = scopeStringArray(scope, 'tags');
+                  const expectedOutcome = scopeString(scope, 'expected_outcome');
+                  const outcomeSummary = scopeString(scope, 'outcome_summary');
+                  const rawScope = formatUnknownJson(group.experiment.scope);
+                  const rawEvaluation = formatUnknownJson(
+                    group.latest_evaluation?.metrics_json ?? null
+                  );
+                  const planPreviews =
+                    planPreviewsByExperimentId.get(group.experiment.experiment_id) ?? [];
+
+                  return (
+                    <details
+                      key={group.experiment.experiment_id}
+                      className="rounded-xl border border-border bg-surface p-4"
+                    >
+                      <summary className="cursor-pointer list-none">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="text-base font-semibold text-foreground">
+                              {group.experiment.name}
+                            </div>
+                            <div className="mt-1 text-sm text-muted">
+                              {group.experiment.objective}
+                            </div>
+                            <div className="mt-1 text-xs text-muted">
+                              {formatDateOnly(group.start_date)} → {formatDateOnly(group.end_date)}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <span className="rounded-full bg-primary/10 px-2 py-1 font-medium uppercase text-primary">
+                              {group.status}
+                            </span>
+                            <span
+                              className={`rounded-full border border-border px-2 py-1 font-semibold ${outcomeToneClass(
+                                group.outcome_score
+                              )}`}
+                            >
+                              Outcome {formatOutcomePercent(group.outcome_score)}
+                            </span>
+                          </div>
+                        </div>
+                      </summary>
+
+                      <div className="mt-4 space-y-4 border-t border-border pt-4">
+                        {group.experiment.hypothesis ? (
+                          <div className="text-sm text-muted">
+                            <span className="font-semibold text-foreground">Hypothesis:</span>{' '}
+                            {group.experiment.hypothesis}
+                          </div>
+                        ) : null}
+
+                        {tags.length > 0 ? (
+                          <div className="text-sm text-muted">
+                            <span className="font-semibold text-foreground">Tags:</span>{' '}
+                            {tags.join(', ')}
+                          </div>
+                        ) : null}
+
+                        {fiveWOneH ? (
+                          <div className="rounded-lg border border-border bg-surface-2 p-3">
+                            <div className="mb-2 text-xs uppercase tracking-wide text-muted">
+                              5W1H
+                            </div>
+                            <div className="grid gap-2 text-sm text-muted md:grid-cols-2">
+                              <div>
+                                <span className="font-semibold text-foreground">Who:</span>{' '}
+                                {scopeString(fiveWOneH, 'who') ?? '—'}
+                              </div>
+                              <div>
+                                <span className="font-semibold text-foreground">What:</span>{' '}
+                                {scopeString(fiveWOneH, 'what') ?? '—'}
+                              </div>
+                              <div>
+                                <span className="font-semibold text-foreground">When:</span>{' '}
+                                {scopeString(fiveWOneH, 'when') ?? '—'}
+                              </div>
+                              <div>
+                                <span className="font-semibold text-foreground">Where:</span>{' '}
+                                {scopeString(fiveWOneH, 'where') ?? '—'}
+                              </div>
+                              <div>
+                                <span className="font-semibold text-foreground">Why:</span>{' '}
+                                {scopeString(fiveWOneH, 'why') ?? '—'}
+                              </div>
+                              <div>
+                                <span className="font-semibold text-foreground">How:</span>{' '}
+                                {scopeString(fiveWOneH, 'how') ?? '—'}
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {plan.length > 0 ? (
+                          <div>
+                            <div className="text-sm font-semibold text-foreground">Plan</div>
+                            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-muted">
+                              {plan.map((step, index) => (
+                                <li key={`${group.experiment.experiment_id}-plan-${index}`}>
+                                  {step}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+
+                        {expectedOutcome ? (
+                          <div className="text-sm text-muted">
+                            <span className="font-semibold text-foreground">
+                              Expected outcome:
+                            </span>{' '}
+                            {expectedOutcome}
+                          </div>
+                        ) : null}
+
+                        {actions.length > 0 ? (
+                          <div>
+                            <div className="text-sm font-semibold text-foreground">Actions</div>
+                            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-muted">
+                              {actions.map((action, index) => (
+                                <li key={`${group.experiment.experiment_id}-action-${index}`}>
+                                  {action}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+
+                        {planPreviews.length > 0 ? (
+                          <div className="space-y-4">
+                            <div className="text-sm font-semibold text-foreground">
+                              Ads plan previews
+                            </div>
+                            {planPreviews.map((preview, previewIndex) => {
+                              const bulksheetColumns = orderedBulksheetColumns(
+                                preview.bulksheet_rows
+                              );
+                              return (
+                                <div
+                                  key={`${group.experiment.experiment_id}-plan-${preview.channel}-${preview.run_id}-${previewIndex}`}
+                                  className="rounded-lg border border-border bg-surface-2 p-3"
+                                >
+                                  <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <div>
+                                      <div className="text-sm font-semibold text-foreground">
+                                        {preview.channel} · run_id={preview.run_id}
+                                      </div>
+                                      <div className="text-xs text-muted">
+                                        Snapshot {preview.snapshot_date || '—'}
+                                      </div>
+                                      {preview.notes ? (
+                                        <div className="mt-1 text-xs text-muted">
+                                          Notes: {preview.notes}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <form action={generateBulkgenPlanAction}>
+                                        <input
+                                          type="hidden"
+                                          name="experiment_id"
+                                          value={group.experiment.experiment_id}
+                                        />
+                                        <input type="hidden" name="channel" value={preview.channel} />
+                                        <input type="hidden" name="run_id" value={preview.run_id} />
+                                        <button
+                                          type="submit"
+                                          className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
+                                        >
+                                          Generate bulksheet
+                                        </button>
+                                      </form>
+                                      <a
+                                        href={`/api/files?path=${encodeURIComponent(`${preview.run_id}/upload_strict.xlsx`)}`}
+                                        className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground hover:bg-surface-2"
+                                      >
+                                        Download upload
+                                      </a>
+                                      <a
+                                        href={`/api/files?path=${encodeURIComponent(`${preview.run_id}/review.xlsx`)}`}
+                                        className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground hover:bg-surface-2"
+                                      >
+                                        Download review
+                                      </a>
+                                    </div>
+                                  </div>
+
+                                  {preview.error ? (
+                                    <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-2 text-xs text-amber-700">
+                                      {preview.error}
+                                    </div>
+                                  ) : null}
+
+                                  <div className="mt-3 space-y-3">
+                                    <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+                                      Review preview
+                                    </div>
+                                    <div className="max-h-[240px] overflow-y-auto">
+                                      <div
+                                        data-aph-hscroll
+                                        data-aph-hscroll-axis="x"
+                                        className="overflow-x-auto"
+                                      >
+                                        <table className="w-full min-w-[960px] table-fixed text-left text-xs">
+                                          <thead className="sticky top-0 bg-surface text-[11px] uppercase tracking-wider text-muted shadow-sm">
+                                            <tr>
+                                              <th className="w-36 pb-2">Action</th>
+                                              <th className="w-24 pb-2">Entity</th>
+                                              <th className="w-32 pb-2">Campaign</th>
+                                              <th className="w-28 pb-2">Ad Group</th>
+                                              <th className="w-28 pb-2">Target</th>
+                                              <th className="w-36 pb-2">Placement</th>
+                                              <th className="w-24 pb-2">Field</th>
+                                              <th className="w-28 pb-2">Before</th>
+                                              <th className="w-28 pb-2">After</th>
+                                              <th className="w-24 pb-2">Delta</th>
+                                              <th className="w-36 pb-2">Notes</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-border">
+                                            {preview.review_rows.map((row, rowIndex) => (
+                                              <tr key={`${preview.run_id}-review-${rowIndex}`}>
+                                                <td className="py-2 text-muted">{row.action_type}</td>
+                                                <td className="py-2 text-muted">{row.entity}</td>
+                                                <td className="py-2 text-muted">
+                                                  {row.campaign_id ?? '—'}
+                                                </td>
+                                                <td className="py-2 text-muted">
+                                                  {row.ad_group_id ?? '—'}
+                                                </td>
+                                                <td className="py-2 text-muted">
+                                                  {row.target_id ?? '—'}
+                                                </td>
+                                                <td className="py-2 text-muted">
+                                                  {row.placement ?? '—'}
+                                                </td>
+                                                <td className="py-2 text-muted">{row.field}</td>
+                                                <td className="py-2 text-muted">
+                                                  {toDisplayValue(row.before)}
+                                                </td>
+                                                <td className="py-2 text-muted">
+                                                  {toDisplayValue(row.after)}
+                                                </td>
+                                                <td className="py-2 text-muted">
+                                                  {toDisplayValue(row.delta)}
+                                                </td>
+                                                <td className="py-2 text-muted">
+                                                  {row.notes ?? '—'}
+                                                </td>
+                                              </tr>
+                                            ))}
+                                            {preview.review_rows.length === 0 ? (
+                                              <tr>
+                                                <td
+                                                  colSpan={11}
+                                                  className="py-3 text-center text-muted"
+                                                >
+                                                  No review rows.
+                                                </td>
+                                              </tr>
+                                            ) : null}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+
+                                    <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+                                      Bulksheet preview
+                                    </div>
+                                    <div className="max-h-[240px] overflow-y-auto">
+                                      <div
+                                        data-aph-hscroll
+                                        data-aph-hscroll-axis="x"
+                                        className="overflow-x-auto"
+                                      >
+                                        <table className="w-full min-w-[960px] table-fixed text-left text-xs">
+                                          <thead className="sticky top-0 bg-surface text-[11px] uppercase tracking-wider text-muted shadow-sm">
+                                            <tr>
+                                              <th className="w-36 pb-2">Sheet</th>
+                                              {bulksheetColumns.map((column) => (
+                                                <th key={column} className="w-36 pb-2">
+                                                  {column}
+                                                </th>
+                                              ))}
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-border">
+                                            {preview.bulksheet_rows.map((row, rowIndex) => (
+                                              <tr key={`${preview.run_id}-sheet-${rowIndex}`}>
+                                                <td className="py-2 text-muted">{row.sheet_name}</td>
+                                                {bulksheetColumns.map((column) => (
+                                                  <td
+                                                    key={`${preview.run_id}-${rowIndex}-${column}`}
+                                                    className="py-2 text-muted"
+                                                  >
+                                                    {toDisplayValue(row.cells[column])}
+                                                  </td>
+                                                ))}
+                                              </tr>
+                                            ))}
+                                            {preview.bulksheet_rows.length === 0 ? (
+                                              <tr>
+                                                <td
+                                                  colSpan={1 + bulksheetColumns.length}
+                                                  className="py-3 text-center text-muted"
+                                                >
+                                                  No bulksheet rows.
+                                                </td>
+                                              </tr>
+                                            ) : null}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+
+                        {group.latest_evaluation ? (
+                          <div className="rounded-lg border border-border bg-surface-2 p-3">
+                            <div className="text-xs uppercase tracking-wide text-muted">
+                              Latest evaluation
+                            </div>
+                            <div className="mt-1 text-sm text-muted">
+                              {formatDateTime(group.latest_evaluation.evaluated_at)}
+                              {group.latest_evaluation.window_start ||
+                              group.latest_evaluation.window_end
+                                ? ` · ${group.latest_evaluation.window_start ?? '—'} → ${group.latest_evaluation.window_end ?? '—'}`
+                                : ''}
+                            </div>
+                            <div className="mt-1 text-sm text-muted">
+                              Notes: {group.latest_evaluation_notes ?? '—'}
+                            </div>
+                            {outcomeSummary ? (
+                              <div className="mt-1 text-sm text-muted">
+                                Outcome summary: {outcomeSummary}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        <div className="flex flex-wrap gap-2">
+                          <a
+                            href={`/logbook/experiments/${group.experiment.experiment_id}/ai-pack`}
+                            download
+                            className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground hover:bg-surface"
+                          >
+                            Download Deep Dive Pack
+                          </a>
+                          <Link
+                            href={`/logbook/changes/new?experiment_id=${group.experiment.experiment_id}`}
+                            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-2"
+                          >
+                            Add change
+                          </Link>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="text-sm font-semibold text-foreground">
+                            Linked changes ({group.changes.length})
+                          </div>
+                          {group.changes.length === 0 ? (
+                            <div className="rounded-lg border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted">
+                              No linked changes.
+                            </div>
+                          ) : (
+                            group.changes.map((item) => {
+                              const validationStatus =
+                                item.change.source === 'bulkgen'
+                                  ? item.validation?.status ?? 'pending'
+                                  : 'n/a';
+                              return (
+                                <div
+                                  key={item.change.change_id}
+                                  className="rounded-lg border border-border bg-surface-2 p-3"
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="font-semibold text-foreground">
+                                        {item.change.change_type}
+                                      </span>
+                                      <span className="rounded-full border border-border px-2 py-0.5 text-xs uppercase text-muted">
+                                        {item.change.channel}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs text-muted">
+                                      {formatDateTime(item.change.occurred_at)}
+                                    </span>
+                                  </div>
+                                  <div className="mt-1 text-sm text-foreground">
+                                    {item.change.summary}
+                                  </div>
+                                  {item.change.why ? (
+                                    <div className="mt-1 text-xs text-muted">
+                                      Why: {item.change.why}
+                                    </div>
+                                  ) : null}
+                                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                                    <span>Source: {item.change.source}</span>
+                                    <span
+                                      className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase ${validationToneClass(
+                                        validationStatus
+                                      )}`}
+                                    >
+                                      {validationStatus}
+                                    </span>
+                                    {item.change.source === 'bulkgen' ? (
+                                      <form action={validateLogbookChangeNowAction}>
+                                        <input
+                                          type="hidden"
+                                          name="change_id"
+                                          value={item.change.change_id}
+                                        />
+                                        <button
+                                          type="submit"
+                                          className="rounded border border-border bg-surface px-2 py-1 text-[11px] font-medium text-foreground hover:bg-surface-2"
+                                        >
+                                          Validate now
+                                        </button>
+                                      </form>
+                                    ) : null}
+                                  </div>
+                                  {item.entities.length > 0 ? (
+                                    <div className="mt-2 space-y-2">
+                                      {item.entities.map((entity) => {
+                                        const details = formatEntityDetails(entity);
+                                        return (
+                                          <div
+                                            key={entity.change_entity_id}
+                                            className="rounded border border-border bg-surface px-2 py-2"
+                                          >
+                                            <div className="text-xs font-medium uppercase text-muted">
+                                              {entity.entity_type}
+                                            </div>
+                                            {details.length > 0 ? (
+                                              <div className="mt-1 text-xs text-muted">
+                                                {details.join(' · ')}
+                                              </div>
+                                            ) : null}
+                                            {entity.note ? (
+                                              <div className="mt-1 text-xs text-muted">
+                                                Note: {entity.note}
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        {(rawScope || rawEvaluation) && (
+                          <details className="rounded-lg border border-border bg-surface-2 p-3">
+                            <summary className="cursor-pointer text-sm font-semibold text-foreground">
+                              Show raw JSON
+                            </summary>
+                            {rawScope ? (
+                              <div className="mt-3">
+                                <div className="mb-1 text-xs uppercase tracking-wide text-muted">
+                                  Experiment scope
+                                </div>
+                                <pre className="overflow-x-auto rounded border border-border bg-surface p-2 text-xs text-muted">
+                                  {rawScope}
+                                </pre>
+                              </div>
+                            ) : null}
+                            {rawEvaluation ? (
+                              <div className="mt-3">
+                                <div className="mb-1 text-xs uppercase tracking-wide text-muted">
+                                  Latest evaluation metrics_json
+                                </div>
+                                <pre className="overflow-x-auto rounded border border-border bg-surface p-2 text-xs text-muted">
+                                  {rawEvaluation}
+                                </pre>
+                              </div>
+                            ) : null}
+                          </details>
+                        )}
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+            <div className="mb-3 text-sm font-semibold text-foreground">Unassigned changes</div>
+            {logbookUnassigned.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-5 text-sm text-muted">
+                No unassigned changes.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {logbookUnassigned.map((item) => {
+                  const validationStatus =
+                    item.change.source === 'bulkgen'
+                      ? item.validation?.status ?? 'pending'
+                      : 'n/a';
+                  return (
+                    <div
+                      key={item.change.change_id}
+                      className="rounded-xl border border-border bg-surface p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-foreground">
+                            {item.change.change_type}
+                          </span>
+                          <span className="rounded-full border border-border px-2 py-0.5 text-xs uppercase text-muted">
+                            {item.change.channel}
+                          </span>
+                        </div>
+                        <span className="text-xs text-muted">
+                          {formatDateTime(item.change.occurred_at)}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-sm text-foreground">{item.change.summary}</div>
+                      {item.change.why ? (
+                        <div className="mt-1 text-xs text-muted">Why: {item.change.why}</div>
+                      ) : null}
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                        <span>Source: {item.change.source}</span>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase ${validationToneClass(
+                            validationStatus
+                          )}`}
+                        >
+                          {validationStatus}
+                        </span>
+                        {item.change.source === 'bulkgen' ? (
+                          <form action={validateLogbookChangeNowAction}>
+                            <input type="hidden" name="change_id" value={item.change.change_id} />
+                            <button
+                              type="submit"
+                              className="rounded border border-border bg-surface px-2 py-1 text-[11px] font-medium text-foreground hover:bg-surface-2"
+                            >
+                              Validate now
+                            </button>
+                          </form>
+                        ) : null}
+                      </div>
+                      {item.entities.length > 0 ? (
+                        <div className="mt-2 space-y-2">
+                          {item.entities.map((entity) => {
+                            const details = formatEntityDetails(entity);
+                            return (
+                              <div
+                                key={entity.change_entity_id}
+                                className="rounded border border-border bg-surface-2 px-2 py-2"
+                              >
+                                <div className="text-xs font-medium uppercase text-muted">
+                                  {entity.entity_type}
+                                </div>
+                                {details.length > 0 ? (
+                                  <div className="mt-1 text-xs text-muted">
+                                    {details.join(' · ')}
+                                  </div>
+                                ) : null}
+                                {entity.note ? (
+                                  <div className="mt-1 text-xs text-muted">
+                                    Note: {entity.note}
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {!hasLogbookEntries ? (
+            <div className="rounded-2xl border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
               No logbook entries for this product.
             </div>
-          ) : (
-            <div className="space-y-3">
-              {data.logbook.map((entry, index) => (
-                <div
-                  key={`${entry.change_id}-${index}`}
-                  className="rounded-xl border border-border bg-surface px-4 py-3"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                    <div className="font-semibold text-foreground">
-                      {entry.change_type}
-                    </div>
-                    <div className="text-xs text-muted">
-                      {new Date(entry.occurred_at).toLocaleString('en-US')}
-                    </div>
-                  </div>
-                  <div className="mt-1 text-sm text-muted">{entry.summary}</div>
-                  {entry.why ? (
-                    <div className="mt-1 text-xs text-muted">Why: {entry.why}</div>
-                  ) : null}
-                  <div className="mt-1 text-xs text-muted">
-                    Source: {entry.source}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          ) : null}
         </section>
       ) : null}
 

@@ -28,6 +28,7 @@ describe("bulkgen logbook integration", () => {
     const actions: SpUpdateAction[] = [
       { type: "update_campaign_budget", campaign_id: "C1", new_budget: 30 },
       { type: "update_target_bid", target_id: "T1", new_bid: 1.5 },
+      { type: "update_placement_modifier", campaign_id: "C1", placement_code: "TOS", new_pct: 45 },
     ];
 
     const current: FetchCurrentResult = {
@@ -72,7 +73,17 @@ describe("bulkgen logbook integration", () => {
           },
         ],
       ]),
-      placementsByKey: new Map(),
+      placementsByKey: new Map([
+        [
+          "C1::tos",
+          {
+            campaign_id: "C1",
+            placement_raw: "Top of search",
+            placement_code: "TOS",
+            percentage: 15,
+          },
+        ],
+      ]),
     };
 
     const rows = buildSpUploadRows({ actions, current, notes: "logbook test" });
@@ -82,9 +93,10 @@ describe("bulkgen logbook integration", () => {
       runId: "run-1",
       generator: "bulkgen:sp:update",
       outputPaths: { uploadPath: "/tmp/upload.xlsx", reviewPath: "/tmp/review.xlsx" },
+      productId: "B0TEST12345",
     });
 
-    expect(entries.length).toBe(2);
+    expect(entries.length).toBe(3);
     const campaignEntry = entries.find(
       (entry) => entry.change.change_type === "bulk_update_campaign"
     );
@@ -92,6 +104,7 @@ describe("bulkgen logbook integration", () => {
     expect((campaignEntry?.change.before_json as any).daily_budget).toBe(20);
     expect((campaignEntry?.change.after_json as any).daily_budget).toBe(30);
     expect((campaignEntry?.change.after_json as any).run_id).toBe("run-1");
+    expect(campaignEntry?.change.entities[0]?.product_id).toBe("B0TEST12345");
 
     const targetEntry = entries.find(
       (entry) => entry.change.change_type === "bulk_update_target"
@@ -99,6 +112,17 @@ describe("bulkgen logbook integration", () => {
     expect(targetEntry?.change.summary).toContain("target_id=T1");
     expect((targetEntry?.change.before_json as any).bid).toBe(1.1);
     expect((targetEntry?.change.after_json as any).bid).toBe(1.5);
+
+    const placementEntry = entries.find(
+      (entry) => entry.change.change_type === "bulk_update_placement"
+    );
+    expect((placementEntry?.change.after_json as any).placement_code).toBe("TOS");
+    expect((placementEntry?.change.after_json as any).placement_raw_norm).toBe("top of search");
+    expect((placementEntry?.change.entities[0] as any).product_id).toBe("B0TEST12345");
+    expect((placementEntry?.change.entities[0] as any).extra.placement_code).toBe("TOS");
+    expect((placementEntry?.change.entities[0] as any).extra.placement_raw_norm).toBe(
+      "top of search"
+    );
   });
 
   it("writes changes, links entities and experiment, and is idempotent", async () => {

@@ -1,5 +1,5 @@
 # Supabase Schema Snapshot
-Generated: 2026-02-14T07:54:22.890Z
+Generated: 2026-02-21T07:44:17.464Z
 
 ## accounts (BASE TABLE)
 | column | type | nullable |
@@ -270,6 +270,19 @@ Generated: 2026-02-14T07:54:22.890Z
 | extra | jsonb | YES |
 | created_at | timestamp with time zone | NO |
 
+## log_change_validations (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| change_id | uuid | NO |
+| status | text | NO |
+| expected_json | jsonb | YES |
+| actual_json | jsonb | YES |
+| diff_json | jsonb | YES |
+| validated_upload_id | uuid | YES |
+| validated_snapshot_date | date | YES |
+| checked_at | timestamp with time zone | NO |
+| created_at | timestamp with time zone | NO |
+
 ## log_changes (BASE TABLE)
 | column | type | nullable |
 |---|---|---|
@@ -286,6 +299,7 @@ Generated: 2026-02-14T07:54:22.890Z
 | source | text | NO |
 | source_upload_id | text | YES |
 | created_at | timestamp with time zone | NO |
+| dedupe_key | text | YES |
 
 ## log_evaluations (BASE TABLE)
 | column | type | nullable |
@@ -1369,6 +1383,16 @@ Generated: 2026-02-14T07:54:22.890Z
 | purchases_1d_ship | integer | YES |
 | purchases_2d_ship | integer | YES |
 | exported_at | timestamp with time zone | NO |
+
+## ui_page_settings (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | NO |
+| marketplace | text | NO |
+| page_key | text | NO |
+| settings | jsonb | NO |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
 
 ## uploads (BASE TABLE)
 | column | type | nullable |

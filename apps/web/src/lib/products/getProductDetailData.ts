@@ -1,5 +1,14 @@
 import 'server-only';
 
+import {
+  buildProductLogbookViewModel,
+  ProductLogbookChangeRow,
+  ProductLogbookEntityRow,
+  ProductLogbookEvaluationRow,
+  ProductLogbookExperimentLinkRow,
+  ProductLogbookExperimentRow,
+  ProductLogbookViewModel,
+} from '@/lib/logbook/buildProductLogbookViewModel';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 type DetailFilters = {
@@ -56,24 +65,10 @@ type CostHistoryRow = {
   created_at: string | null;
 };
 
-type LogChange = {
-  change_id: string;
-  occurred_at: string;
-  change_type: string;
-  summary: string;
-  why: string | null;
-  source: string;
+type CombinedLog = Omit<ProductLogbookChangeRow, 'before_json' | 'after_json' | 'created_at'> & {
+  note?: string | null;
+  entity_type?: string;
 };
-
-type LogEntity = {
-  change_id: string;
-  note: string | null;
-  created_at: string;
-  entity_type: string;
-  extra: unknown | null;
-};
-
-type CombinedLog = LogChange & { note?: string | null; entity_type?: string };
 
 const numberValue = (value: number | string | null | undefined): number => {
   if (value === null || value === undefined) return 0;
@@ -236,42 +231,129 @@ export const getProductDetailData = async ({
   const tacos = totalSales > 0 ? totalPpcCost / totalSales : null;
 
   let logbook: CombinedLog[] = [];
+  let logbookViewModel: ProductLogbookViewModel = {
+    experiments: [],
+    unassigned: [],
+  };
   try {
-    const { data: entities, error: entityError } = await supabaseAdmin
+    const { data: productEntities, error: productEntityError } = await supabaseAdmin
       .from('log_change_entities')
-      .select('change_id,note,created_at,entity_type,extra')
+      .select('change_id')
       .eq('product_id', asin)
       .order('created_at', { ascending: false })
       .limit(200);
 
-    if (!entityError && entities && entities.length > 0) {
-      const entityRows = entities as LogEntity[];
-      const changeIds = Array.from(new Set(entityRows.map((row) => row.change_id)));
+    if (!productEntityError && productEntities && productEntities.length > 0) {
+      const changeIds = Array.from(
+        new Set((productEntities as Array<{ change_id: string }>).map((row) => row.change_id))
+      );
+
       const { data: changes, error: changeError } = await supabaseAdmin
         .from('log_changes')
-        .select('change_id,occurred_at,change_type,summary,why,source')
+        .select(
+          'change_id,occurred_at,channel,change_type,summary,why,source,before_json,after_json,created_at'
+        )
         .eq('account_id', accountId)
         .eq('marketplace', marketplace)
         .in('change_id', changeIds)
         .order('occurred_at', { ascending: false })
         .limit(200);
 
-      if (!changeError && changes) {
-        const changeMap = new Map(
-          (changes as LogChange[]).map((row) => [row.change_id, row])
+      if (!changeError && changes && changes.length > 0) {
+        const changeRows = changes as ProductLogbookChangeRow[];
+
+        const { data: allEntities, error: allEntitiesError } = await supabaseAdmin
+          .from('log_change_entities')
+          .select(
+            'change_entity_id,change_id,entity_type,product_id,campaign_id,ad_group_id,target_id,keyword_id,note,extra,created_at'
+          )
+          .in('change_id', changeIds)
+          .order('created_at', { ascending: false });
+
+        const entityRows = !allEntitiesError
+          ? ((allEntities ?? []) as ProductLogbookEntityRow[])
+          : [];
+
+        const { data: experimentLinks, error: experimentLinksError } = await supabaseAdmin
+          .from('log_experiment_changes')
+          .select('experiment_change_id,experiment_id,change_id,created_at')
+          .in('change_id', changeIds);
+
+        const experimentLinkRows = !experimentLinksError
+          ? ((experimentLinks ?? []) as ProductLogbookExperimentLinkRow[])
+          : [];
+
+        const experimentIds = Array.from(
+          new Set(experimentLinkRows.map((row) => row.experiment_id))
         );
-        logbook = entityRows
-          .map((entity) => {
-            const change = changeMap.get(entity.change_id);
-            if (!change) return null;
-            return {
-              ...change,
-              note: entity.note ?? null,
-              entity_type: entity.entity_type,
-            } as CombinedLog;
-          })
-          .filter((row): row is CombinedLog => Boolean(row))
-          .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
+
+        let experimentRows: ProductLogbookExperimentRow[] = [];
+        let evaluationRows: ProductLogbookEvaluationRow[] = [];
+
+        if (experimentIds.length > 0) {
+          const { data: experiments, error: experimentsError } = await supabaseAdmin
+            .from('log_experiments')
+            .select(
+              'experiment_id,name,objective,hypothesis,evaluation_lag_days,evaluation_window_days,primary_metrics,guardrails,scope,created_at'
+            )
+            .eq('account_id', accountId)
+            .eq('marketplace', marketplace)
+            .in('experiment_id', experimentIds)
+            .limit(200);
+
+          if (!experimentsError && experiments) {
+            experimentRows = experiments as ProductLogbookExperimentRow[];
+          }
+
+          const { data: evaluations, error: evaluationsError } = await supabaseAdmin
+            .from('log_evaluations')
+            .select(
+              'evaluation_id,experiment_id,evaluated_at,window_start,window_end,metrics_json,notes,created_at'
+            )
+            .eq('account_id', accountId)
+            .eq('marketplace', marketplace)
+            .in('experiment_id', experimentIds)
+            .order('evaluated_at', { ascending: false })
+            .limit(200);
+
+          if (!evaluationsError && evaluations) {
+            evaluationRows = evaluations as ProductLogbookEvaluationRow[];
+          }
+        }
+
+        logbookViewModel = buildProductLogbookViewModel({
+          changes: changeRows,
+          entities: entityRows,
+          experimentLinks: experimentLinkRows,
+          experiments: experimentRows,
+          evaluations: evaluationRows,
+        });
+
+        const deduped = new Map<string, CombinedLog>();
+        const flattened = [
+          ...logbookViewModel.experiments.flatMap((group) => group.changes),
+          ...logbookViewModel.unassigned,
+        ];
+
+        for (const item of flattened) {
+          if (deduped.has(item.change.change_id)) continue;
+          const firstEntity = item.entities[0];
+          deduped.set(item.change.change_id, {
+            change_id: item.change.change_id,
+            occurred_at: item.change.occurred_at,
+            channel: item.change.channel,
+            change_type: item.change.change_type,
+            summary: item.change.summary,
+            why: item.change.why,
+            source: item.change.source,
+            note: firstEntity?.note ?? null,
+            entity_type: firstEntity?.entity_type,
+          });
+        }
+
+        logbook = Array.from(deduped.values()).sort((a, b) =>
+          b.occurred_at.localeCompare(a.occurred_at)
+        );
       }
     }
   } catch {
@@ -292,6 +374,7 @@ export const getProductDetailData = async ({
       avg_selling_price: avgSellingPrice,
       tacos,
     },
+    logbookViewModel,
     logbook,
   };
 };

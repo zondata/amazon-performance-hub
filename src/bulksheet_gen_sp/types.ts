@@ -59,6 +59,7 @@ export type SpUpdateAction =
 
 export type SpUpdateChangesFile = {
   exported_at: string;
+  product_id?: string;
   notes?: string;
   actions: SpUpdateAction[];
 };

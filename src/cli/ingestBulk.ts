@@ -50,6 +50,7 @@ async function main() {
     uploadId: result.uploadId,
     snapshotDate: result.snapshotDate,
     counts: result.counts,
+    validation: result.validation,
   });
 }
 

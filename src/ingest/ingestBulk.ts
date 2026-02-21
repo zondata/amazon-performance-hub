@@ -9,11 +9,13 @@ import { getSupabaseClient } from "../db/supabaseClient";
 import { chunkArray, hashFileSha256 } from "./utils";
 import { planNameHistoryUpdates } from "./nameHistoryUtils";
 import { retryAsync, isTransientSupabaseError, formatRetryError } from "../lib/retry";
+import { ValidateBulkgenChangesResult, validateBulkgenChanges } from "../logbook/validateBulkgenChanges";
 
 type IngestResult = {
   status: "ok" | "already ingested";
   uploadId?: string;
   snapshotDate?: string;
+  validation?: ValidateBulkgenChangesResult;
   counts?: {
     portfolios: number;
     campaigns: number;
@@ -663,10 +665,25 @@ export async function ingestBulk(
     return { status: "already ingested" };
   }
 
+  let validation: ValidateBulkgenChangesResult | undefined;
+  if (uploadId) {
+    try {
+      validation = await validateBulkgenChanges({
+        accountId,
+        mode: "auto",
+        uploadId,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`Bulkgen validation skipped due to error: ${message}`);
+    }
+  }
+
   return {
     status: "ok",
     uploadId,
     snapshotDate,
+    validation,
     counts: {
       portfolios: bulkPortfolios.length,
       campaigns: bulkCampaigns.length,

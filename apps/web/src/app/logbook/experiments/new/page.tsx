@@ -8,7 +8,21 @@ import { safeParseJson } from '@/lib/logbook/validation';
 const DEFAULT_LAG_DAYS = 2;
 const DEFAULT_WINDOW_DAYS = 7;
 
-export default function NewExperimentPage() {
+type NewExperimentPageProps = {
+  searchParams?:
+    | Promise<{
+        product_id?: string;
+      }>
+    | {
+        product_id?: string;
+      };
+};
+
+export default async function NewExperimentPage({ searchParams }: NewExperimentPageProps) {
+  const resolvedSearchParams =
+    searchParams instanceof Promise ? await searchParams : searchParams;
+  const initialProductId = resolvedSearchParams?.product_id?.trim().toUpperCase();
+
   const handleSubmit = async (formData: FormData) => {
     'use server';
 
@@ -33,6 +47,7 @@ export default function NewExperimentPage() {
       ),
       primary_metrics: parsedPrimary.value ?? null,
       guardrails: parsedGuardrails.value ?? null,
+      product_id: String(formData.get('product_id') ?? ''),
     });
 
     if (!experimentId) {
@@ -50,6 +65,7 @@ export default function NewExperimentPage() {
       />
 
       <form action={handleSubmit} className="space-y-6">
+        <input type="hidden" name="product_id" value={initialProductId ?? ''} />
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2 md:col-span-2">

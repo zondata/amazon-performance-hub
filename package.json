@@ -49,6 +49,7 @@
     "log:experiment:list": "ts-node src/cli/logListExperiments.ts",
     "log:change:create": "ts-node src/cli/logCreateChange.ts",
     "log:change:list": "ts-node src/cli/logListChanges.ts",
+    "log:validate:bulkgen": "ts-node src/cli/logValidateBulkgenChanges.ts",
     "map:sp:campaign": "ts-node src/cli/mapSpCampaign.ts",
     "map:sp:placement": "ts-node src/cli/mapSpPlacement.ts",
     "map:sp:targeting": "ts-node src/cli/mapSpTargeting.ts",

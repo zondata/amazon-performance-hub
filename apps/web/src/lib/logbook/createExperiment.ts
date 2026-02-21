@@ -10,7 +10,9 @@ export const createExperiment = async (payload: ExperimentFormPayload) => {
     throw new Error(`Experiment validation failed: ${errors.join(', ')}`);
   }
 
-  const scope = value.status ? { status: value.status } : null;
+  const scope: Record<string, unknown> = {};
+  if (value.status) scope.status = value.status;
+  if (value.product_id) scope.product_id = value.product_id;
 
   const { data, error } = await supabaseAdmin
     .from('log_experiments')
@@ -24,7 +26,7 @@ export const createExperiment = async (payload: ExperimentFormPayload) => {
       evaluation_window_days: value.evaluation_window_days,
       primary_metrics: value.primary_metrics,
       guardrails: value.guardrails,
-      scope,
+      scope: Object.keys(scope).length > 0 ? scope : null,
     })
     .select('experiment_id')
     .single();

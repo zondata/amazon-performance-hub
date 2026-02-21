@@ -60,6 +60,7 @@ export type SbUpdateAction =
 
 export type SbUpdateChangesFile = {
   exported_at: string;
+  product_id?: string;
   notes?: string;
   actions: SbUpdateAction[];
 };

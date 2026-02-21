@@ -23,23 +23,49 @@ type EntityLink = {
   note: string;
 };
 
+type EntityLinkSeed = Partial<Omit<EntityLink, 'id'>>;
+
 type EntityLinksEditorProps = {
   namePrefix?: string;
+  initialLinks?: EntityLinkSeed[];
+  initialProductId?: string;
 };
 
-const blankLink = (): EntityLink => ({
+const blankLink = (seed?: EntityLinkSeed): EntityLink => ({
   id: `entity-${Math.random().toString(36).slice(2, 9)}`,
-  entity_type: '',
-  product_id: '',
-  campaign_id: '',
-  ad_group_id: '',
-  target_id: '',
-  keyword_id: '',
-  note: '',
+  entity_type: seed?.entity_type ?? '',
+  product_id: seed?.product_id ?? '',
+  campaign_id: seed?.campaign_id ?? '',
+  ad_group_id: seed?.ad_group_id ?? '',
+  target_id: seed?.target_id ?? '',
+  keyword_id: seed?.keyword_id ?? '',
+  note: seed?.note ?? '',
 });
 
-export default function EntityLinksEditor({ namePrefix = 'entities' }: EntityLinksEditorProps) {
-  const [links, setLinks] = useState<EntityLink[]>([blankLink()]);
+const initialEntityLinks = ({
+  initialLinks,
+  initialProductId,
+}: Pick<EntityLinksEditorProps, 'initialLinks' | 'initialProductId'>): EntityLink[] => {
+  if (initialLinks && initialLinks.length > 0) {
+    return initialLinks.map((row) => blankLink(row));
+  }
+
+  const trimmedProductId = initialProductId?.trim();
+  if (trimmedProductId) {
+    return [blankLink({ entity_type: 'product', product_id: trimmedProductId })];
+  }
+
+  return [blankLink()];
+};
+
+export default function EntityLinksEditor({
+  namePrefix = 'entities',
+  initialLinks,
+  initialProductId,
+}: EntityLinksEditorProps) {
+  const [links, setLinks] = useState<EntityLink[]>(() =>
+    initialEntityLinks({ initialLinks, initialProductId })
+  );
 
   const indexedLinks = useMemo(
     () =>
