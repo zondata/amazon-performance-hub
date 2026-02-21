@@ -7,18 +7,24 @@ import KeywordGroupImport from '@/components/KeywordGroupImport';
 import KeywordGroupSetManager from '@/components/KeywordGroupSetManager';
 import Tabs from '@/components/Tabs';
 import TrendChart from '@/components/TrendChart';
+import ExperimentEvaluationOutputPackImport from '@/components/logbook/ExperimentEvaluationOutputPackImport';
 import ProductLogbookAiPackImport from '@/components/logbook/ProductLogbookAiPackImport';
 import ProductRankingHeatmap from '@/components/ranking/ProductRankingHeatmap';
 import ProductSqpTable from '@/components/sqp/ProductSqpTable';
 import { runSbUpdateGenerator, runSpUpdateGenerator } from '@/lib/bulksheets/runGenerators';
 import { parseCsv } from '@/lib/csv/parseCsv';
 import { env } from '@/lib/env';
+import { importExperimentEvaluationOutputPack } from '@/lib/logbook/aiPack/importExperimentEvaluationOutputPack';
 import { importProductExperimentOutputPack } from '@/lib/logbook/aiPack/importProductExperimentOutputPack';
 import {
   buildPlanPreviewsForScope,
   extractBulkgenPlans,
   PlanPreview,
 } from '@/lib/logbook/productExperimentPlans';
+import {
+  getOutcomePillClassName,
+  normalizeOutcomeScorePercent,
+} from '@/lib/logbook/outcomePill';
 import { runManualBulkgenValidation } from '@/lib/logbook/runBulkgenValidation';
 import { ensureProductId } from '@/lib/products/ensureProductId';
 import { getProductDetailData } from '@/lib/products/getProductDetailData';
@@ -101,18 +107,39 @@ const scopeStringArray = (scope: Record<string, unknown> | null, key: string) =>
     .filter(Boolean);
 };
 
-const formatOutcomePercent = (score: number | null): string => {
-  if (score === null || !Number.isFinite(score)) return '—';
-  const normalized = score <= 1 ? score * 100 : score;
-  return `${normalized.toFixed(0)}%`;
+const extractEvaluationSummary = (metricsJson: unknown): string | null => {
+  const metrics = asObject(metricsJson);
+  return metrics ? scopeString(metrics, 'summary') : null;
 };
 
-const outcomeToneClass = (score: number | null): string => {
-  if (score === null || !Number.isFinite(score)) return 'text-muted';
-  const normalized = score <= 1 ? score : score / 100;
-  if (normalized >= 0.7) return 'text-emerald-600';
-  if (normalized >= 0.5) return 'text-amber-600';
-  return 'text-rose-600';
+const extractEvaluationOutcome = (metricsJson: unknown) => {
+  const metrics = asObject(metricsJson);
+  const outcome = asObject(metrics?.outcome);
+  if (!outcome) return null;
+  const scoreRaw = outcome.score;
+  const score =
+    typeof scoreRaw === 'number'
+      ? scoreRaw
+      : typeof scoreRaw === 'string'
+        ? Number(scoreRaw)
+        : NaN;
+  const normalized = Number.isFinite(score) ? normalizeOutcomeScorePercent(score) : null;
+  return {
+    score: normalized,
+    label: scopeString(outcome, 'label'),
+    confidence:
+      typeof outcome.confidence === 'number'
+        ? outcome.confidence
+        : typeof outcome.confidence === 'string'
+          ? Number(outcome.confidence)
+          : null,
+  };
+};
+
+const formatOutcomePercent = (score: number | null): string => {
+  const normalized = normalizeOutcomeScorePercent(score);
+  if (normalized === null) return '—';
+  return `${normalized.toFixed(0)}%`;
 };
 
 const formatEntityDetails = (entity: {
@@ -227,6 +254,14 @@ type LogbookAiPackImportState = {
   error?: string | null;
   created_experiment_id?: string;
   created_change_ids_count?: number;
+};
+
+type EvaluationPackImportState = {
+  ok?: boolean;
+  error?: string | null;
+  evaluation_id?: string;
+  outcome_score?: number;
+  outcome_label?: string;
 };
 
 const buildTabHref = (asin: string, tab: string, start: string, end: string) =>
@@ -659,6 +694,48 @@ export default async function ProductDetailPage({
       ok: true,
       created_experiment_id: result.created_experiment_id,
       created_change_ids_count: result.created_change_ids_count,
+    };
+  };
+
+  const importExperimentEvaluationPackAction = async (
+    _prevState: EvaluationPackImportState,
+    formData: FormData
+  ): Promise<EvaluationPackImportState> => {
+    'use server';
+
+    const experimentId = String(formData.get('experiment_id') ?? '').trim();
+    const file = formData.get('file');
+
+    if (!experimentId) {
+      return { ok: false, error: 'Missing experiment id.' };
+    }
+
+    if (!file || !(file instanceof File) || file.size === 0) {
+      return { ok: false, error: 'JSON file is required.' };
+    }
+
+    const fileText = await file.text();
+    const result = await importExperimentEvaluationOutputPack({
+      fileText,
+      currentAsin: asin,
+      expectedExperimentId: experimentId,
+    });
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: result.error ?? 'Failed to import evaluation output pack.',
+      };
+    }
+
+    revalidatePath(`/products/${asin}`);
+    revalidatePath(`/logbook/experiments/${experimentId}`);
+
+    return {
+      ok: true,
+      evaluation_id: result.evaluation_id,
+      outcome_score: result.outcome_score,
+      outcome_label: result.outcome_label,
     };
   };
 
@@ -1291,6 +1368,59 @@ export default async function ProductDetailPage({
               </div>
             ) : (
               <div className="space-y-4">
+                <div
+                  data-aph-hscroll
+                  data-aph-hscroll-axis="x"
+                  className="overflow-x-auto rounded-lg border border-border"
+                >
+                  <table className="w-full min-w-[920px] table-fixed text-left text-sm">
+                    <thead className="sticky top-0 bg-surface text-xs uppercase tracking-wider text-muted">
+                      <tr>
+                        <th className="w-[34%] px-3 py-2">Title</th>
+                        <th className="w-[18%] px-3 py-2">Window</th>
+                        <th className="w-[14%] px-3 py-2">Status</th>
+                        <th className="w-[14%] px-3 py-2">Outcome</th>
+                        <th className="w-[20%] px-3 py-2">Last Evaluated</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {logbookExperiments.map((group) => (
+                        <tr key={`summary-${group.experiment.experiment_id}`} className="hover:bg-surface-2/70">
+                          <td className="px-3 py-2">
+                            <a
+                              href={`#experiment-${group.experiment.experiment_id}`}
+                              className="font-semibold text-foreground hover:underline"
+                            >
+                              {group.experiment.name}
+                            </a>
+                            <div className="text-xs text-muted">{group.experiment.objective}</div>
+                          </td>
+                          <td className="px-3 py-2 text-muted">
+                            {formatDateOnly(group.start_date)} → {formatDateOnly(group.end_date)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium uppercase text-primary">
+                              {group.status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={`rounded-full border px-2 py-1 text-xs font-semibold ${getOutcomePillClassName(
+                                group.outcome_score
+                              )}`}
+                            >
+                              {formatOutcomePercent(group.outcome_score)}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-muted">
+                            {formatDateTime(group.latest_evaluation?.evaluated_at)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
                 {logbookExperiments.map((group) => {
                   const scope = asObject(group.experiment.scope);
                   const fiveWOneH =
@@ -1299,16 +1429,37 @@ export default async function ProductDetailPage({
                   const actions = scopeStringArray(scope, 'actions');
                   const tags = scopeStringArray(scope, 'tags');
                   const expectedOutcome = scopeString(scope, 'expected_outcome');
-                  const outcomeSummary = scopeString(scope, 'outcome_summary');
+                  const outcomeSummary =
+                    extractEvaluationSummary(group.latest_evaluation?.metrics_json ?? null) ??
+                    scopeString(scope, 'outcome_summary');
                   const rawScope = formatUnknownJson(group.experiment.scope);
                   const rawEvaluation = formatUnknownJson(
+                    group.latest_evaluation?.metrics_json ?? null
+                  );
+                  const latestOutcome = extractEvaluationOutcome(
                     group.latest_evaluation?.metrics_json ?? null
                   );
                   const planPreviews =
                     planPreviewsByExperimentId.get(group.experiment.experiment_id) ?? [];
 
+                  const validationSummary = group.changes.reduce(
+                    (acc, item) => {
+                      const status =
+                        item.change.source === 'bulkgen'
+                          ? item.validation?.status ?? 'pending'
+                          : 'pending';
+                      if (status === 'validated') acc.validated += 1;
+                      else if (status === 'mismatch') acc.mismatch += 1;
+                      else if (status === 'not_found') acc.notFound += 1;
+                      else acc.pending += 1;
+                      return acc;
+                    },
+                    { validated: 0, mismatch: 0, pending: 0, notFound: 0 }
+                  );
+
                   return (
                     <details
+                      id={`experiment-${group.experiment.experiment_id}`}
                       key={group.experiment.experiment_id}
                       className="rounded-xl border border-border bg-surface p-4"
                     >
@@ -1330,11 +1481,14 @@ export default async function ProductDetailPage({
                               {group.status}
                             </span>
                             <span
-                              className={`rounded-full border border-border px-2 py-1 font-semibold ${outcomeToneClass(
-                                group.outcome_score
+                              className={`rounded-full border px-2 py-1 font-semibold ${getOutcomePillClassName(
+                                latestOutcome?.score ?? group.outcome_score
                               )}`}
                             >
-                              Outcome {formatOutcomePercent(group.outcome_score)}
+                              Outcome {formatOutcomePercent(latestOutcome?.score ?? group.outcome_score)}
+                            </span>
+                            <span className="text-muted">
+                              Last evaluated {formatDateTime(group.latest_evaluation?.evaluated_at)}
                             </span>
                           </div>
                         </div>
@@ -1387,7 +1541,24 @@ export default async function ProductDetailPage({
                               </div>
                             </div>
                           </div>
-                        ) : null}
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted">
+                            5W1H is missing from experiment scope.
+                          </div>
+                        )}
+
+                        {expectedOutcome ? (
+                          <div className="text-sm text-muted">
+                            <span className="font-semibold text-foreground">
+                              Expected outcome:
+                            </span>{' '}
+                            {expectedOutcome}
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted">
+                            Expected outcome is missing from experiment scope.
+                          </div>
+                        )}
 
                         {plan.length > 0 ? (
                           <div>
@@ -1399,15 +1570,6 @@ export default async function ProductDetailPage({
                                 </li>
                               ))}
                             </ul>
-                          </div>
-                        ) : null}
-
-                        {expectedOutcome ? (
-                          <div className="text-sm text-muted">
-                            <span className="font-semibold text-foreground">
-                              Expected outcome:
-                            </span>{' '}
-                            {expectedOutcome}
                           </div>
                         ) : null}
 
@@ -1423,6 +1585,15 @@ export default async function ProductDetailPage({
                             </ul>
                           </div>
                         ) : null}
+
+                        <div className="rounded-lg border border-border bg-surface-2 p-3 text-sm text-muted">
+                          <div className="font-semibold text-foreground">Validation summary</div>
+                          <div className="mt-1">
+                            validated {validationSummary.validated} · mismatch{' '}
+                            {validationSummary.mismatch} · pending {validationSummary.pending} ·
+                            not_found {validationSummary.notFound}
+                          </div>
+                        </div>
 
                         {planPreviews.length > 0 ? (
                           <div className="space-y-4">
@@ -1632,21 +1803,47 @@ export default async function ProductDetailPage({
                             <div className="mt-1 text-sm text-muted">
                               Notes: {group.latest_evaluation_notes ?? '—'}
                             </div>
-                            {outcomeSummary ? (
-                              <div className="mt-1 text-sm text-muted">
-                                Outcome summary: {outcomeSummary}
-                              </div>
-                            ) : null}
+                            <div className="mt-1 text-sm text-muted">
+                              Outcome summary: {outcomeSummary ?? '—'}
+                            </div>
+                            <div className="mt-1 text-xs text-muted">
+                              Outcome label: {latestOutcome?.label ?? '—'}
+                              {latestOutcome?.confidence !== null &&
+                              latestOutcome?.confidence !== undefined &&
+                              Number.isFinite(latestOutcome.confidence)
+                                ? ` · confidence ${Math.round(
+                                    (latestOutcome.confidence as number) * 100
+                                  )}%`
+                                : ''}
+                            </div>
                           </div>
-                        ) : null}
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted">
+                            No evaluation uploaded yet.
+                          </div>
+                        )}
 
                         <div className="flex flex-wrap gap-2">
                           <a
-                            href={`/logbook/experiments/${group.experiment.experiment_id}/ai-pack`}
+                            href={`/logbook/experiments/${group.experiment.experiment_id}/ai-deep-dive-pack`}
                             download
                             className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground hover:bg-surface"
                           >
                             Download Deep Dive Pack
+                          </a>
+                          <a
+                            href={`/logbook/experiments/${group.experiment.experiment_id}/ai-eval-prompt-pack`}
+                            download
+                            className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground hover:bg-surface"
+                          >
+                            Download Eval Prompt Pack
+                          </a>
+                          <a
+                            href={`/logbook/experiments/${group.experiment.experiment_id}/ai-eval-data-pack`}
+                            download
+                            className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground hover:bg-surface"
+                          >
+                            Download Eval Data Pack
                           </a>
                           <Link
                             href={`/logbook/changes/new?experiment_id=${group.experiment.experiment_id}`}
@@ -1655,6 +1852,11 @@ export default async function ProductDetailPage({
                             Add change
                           </Link>
                         </div>
+
+                        <ExperimentEvaluationOutputPackImport
+                          action={importExperimentEvaluationPackAction}
+                          experimentId={group.experiment.experiment_id}
+                        />
 
                         <div className="space-y-2">
                           <div className="text-sm font-semibold text-foreground">
@@ -1757,7 +1959,7 @@ export default async function ProductDetailPage({
                         {(rawScope || rawEvaluation) && (
                           <details className="rounded-lg border border-border bg-surface-2 p-3">
                             <summary className="cursor-pointer text-sm font-semibold text-foreground">
-                              Show raw JSON
+                              Show raw JSON appendix
                             </summary>
                             {rawScope ? (
                               <div className="mt-3">

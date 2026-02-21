@@ -704,7 +704,7 @@ Recommended workflow:
 4. Later evaluate with logbook views/evaluations
 
 ### Milestone 17 — Product Logbook Experiments (SP+SB) + Bulkgen Validation
-Goal: support Product Logbook experiment workflow across SP and SB with AI packs, plan preview/generation, bulkgen linkage, and post-ingest validation.
+Goal: Product Logbook experiment workflow is now end-to-end for SP and SB: AI packs → experiment/plans → plan preview + bulksheet generation → bulk ingest validation → evaluation packs/output → outcome UI.
 
 Migration:
 - `supabase/migrations/20260221130000_logbook_change_validations.sql`
@@ -715,6 +715,8 @@ Validator:
 - `src/cli/logValidateBulkgenChanges.ts` (CLI wrapper)
 - Command:
   - `npm run log:validate:bulkgen -- --account-id <id> [--mode auto|manual] [--upload-id <uuid>] [--change-id <uuid> ...] [--limit <n>]`
+- Evaluation CLI:
+  - No separate evaluation CLI in this phase (evaluation import is web route/server action).
 
 Auto-validation hook:
 - Triggered from bulk ingest flow in `src/ingest/ingestBulk.ts` (after successful new bulk ingest).
@@ -733,23 +735,70 @@ Bulkgen logging improvements:
   - web server generator wrapper (`apps/web/src/lib/bulksheets/runGenerators.ts`)
 
 Product UI workflow:
-- AI Prompt Pack route:
+- Product Prompt + Data packs:
   - `apps/web/src/app/products/[asin]/logbook/ai-prompt-pack/route.ts`
-- AI Data Pack route:
   - `apps/web/src/app/products/[asin]/logbook/ai-data-pack/route.ts`
-- AI Output Pack upload/import:
-  - parser/importer in `apps/web/src/lib/logbook/aiPack/`
+- Product Output Pack upload/import creates experiment + optional manual changes, with SP/SB plans embedded in scope:
+  - parser/importer:
+    - `apps/web/src/lib/logbook/aiPack/parseProductExperimentOutputPack.ts`
+    - `apps/web/src/lib/logbook/aiPack/importProductExperimentOutputPack.ts`
   - upload UI `apps/web/src/components/logbook/ProductLogbookAiPackImport.tsx`
   - Product tab action wiring in `apps/web/src/app/products/[asin]/page.tsx`
 - Product Logbook experiment cards render SP/SB plan previews:
   - Review preview table + Bulksheet preview table
   - sticky table headers + `data-aph-hscroll` wide-table pattern
-- Change list shows validation status pill (`pending|validated|mismatch|not_found`) and per-change manual `Validate now`.
+- Per-plan generate buttons exist for SP + SB and keep `run_id` linkage into bulkgen/logging:
+  - web server generator wrapper: `apps/web/src/lib/bulksheets/runGenerators.ts`
+  - Product tab action wiring in `apps/web/src/app/products/[asin]/page.tsx`
+- Validation status is surfaced on changes (`pending|validated|mismatch|not_found`) with manual `Validate now`.
+- Evaluation workflow (Phase 2):
+  - Experiment Deep Dive pack download:
+    - `apps/web/src/app/logbook/experiments/[id]/ai-deep-dive-pack/route.ts`
+  - Evaluation Prompt/Data pack downloads:
+    - `apps/web/src/app/logbook/experiments/[id]/ai-eval-prompt-pack/route.ts`
+    - `apps/web/src/app/logbook/experiments/[id]/ai-eval-data-pack/route.ts`
+  - Evaluation Output Pack upload/import:
+    - parser/importer:
+      - `apps/web/src/lib/logbook/aiPack/parseExperimentEvaluationOutputPack.ts`
+      - `apps/web/src/lib/logbook/aiPack/importExperimentEvaluationOutputPack.ts`
+    - upload UI:
+      - `apps/web/src/components/logbook/ExperimentEvaluationOutputPackImport.tsx`
+    - writes `log_evaluations`, stores computed KPIs + outcome in `metrics_json`, and updates experiment `scope.status='complete'` (default behavior) plus `scope.outcome_summary`.
+  - Outcome score pill thresholds:
+    - `0-39 red`, `40-69 yellow`, `70-100 green`
+    - shared helper: `apps/web/src/lib/logbook/outcomePill.ts`
+
+Workflow (current):
+1. Download product Prompt/Data packs.
+2. Brainstorm externally and produce Output Pack JSON.
+3. Upload Output Pack (creates experiment + optional manual changes + plans).
+4. Review plan previews (review + bulksheet).
+5. Generate SP/SB bulksheets per plan and upload to Amazon.
+6. Ingest next bulk snapshot.
+7. Auto-validation runs after bulk ingest (manual `Validate now` available).
+8. Download experiment evaluation packs (Deep Dive, Eval Prompt, Eval Data).
+9. Upload Evaluation Output Pack.
+10. Outcome/status is updated and shown in UI.
+
+Phase 2 key files:
+- `apps/web/src/lib/logbook/computeExperimentKpis.ts`
+- `apps/web/src/lib/logbook/getExperimentContext.ts`
+- `apps/web/src/app/logbook/experiments/[id]/ai-deep-dive-pack/route.ts`
+- `apps/web/src/app/logbook/experiments/[id]/ai-eval-prompt-pack/route.ts`
+- `apps/web/src/app/logbook/experiments/[id]/ai-eval-data-pack/route.ts`
+- `apps/web/src/lib/logbook/aiPack/parseExperimentEvaluationOutputPack.ts`
+- `apps/web/src/lib/logbook/aiPack/importExperimentEvaluationOutputPack.ts`
+- `apps/web/src/components/logbook/ExperimentEvaluationOutputPackImport.tsx`
+- `apps/web/src/app/products/[asin]/page.tsx`
+- `apps/web/src/app/logbook/experiments/[id]/page.tsx`
 
 Tests added/updated:
 - `test/bulkGenLogbook.test.ts`
 - `test/logbookChangeValidationLogic.test.ts`
 - `test/productExperimentOutputPack.test.ts`
+- `test/experimentKpiWindows.test.ts`
+- `test/experimentEvaluationPack.test.ts`
+- `test/outcomePillColor.test.ts`
 
 ### Milestone 8 — Product Profile Module (Catalog) + Keyword Strategy Library
 What was added (high-level):
