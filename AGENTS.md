@@ -547,7 +547,7 @@ Parsing rules:
 - Mixed ASIN rows in a single file are rejected (one ASIN per file required).
 
 ### Milestone 13 — Logbook (Experiments + Changes)
-Goal: log experiments and operational changes (no UI yet).
+Goal: log experiments and operational changes, surfaced in the Product detail Logbook tab.
 
 Tables:
 - `log_experiments`: experiment metadata (objective, hypothesis, evaluation windows, metrics).
@@ -562,6 +562,16 @@ Commands:
 - `npm run log:experiment:link-change -- --account-id US --marketplace US --experiment-id <uuid> --change-id <uuid>`
 - `npm run log:change:list -- --account-id US --marketplace US --limit 5`
 - `npm run log:experiment:list -- --account-id US --marketplace US --limit 5`
+
+Workflow (validated):
+- Download AI packs from Product Logbook.
+- Upload AI Output Pack JSON to create experiment + optional manual changes.
+- Review SP/SB plan previews (review + bulksheet tables).
+- Generate bulksheet per SP/SB plan (`run_id` scoped).
+- Upload generated bulksheet to Amazon.
+- Ingest the next bulk snapshot.
+- Auto validation runs after ingest and updates change statuses.
+- Manual `Validate now` is available per bulkgen change in Product Logbook.
 
 Sample JSON:
 ```json
@@ -692,6 +702,54 @@ Recommended workflow:
 2. Generate bulksheet with `--log --experiment-id <uuid>`
 3. Upload bulksheet to Amazon
 4. Later evaluate with logbook views/evaluations
+
+### Milestone 17 — Product Logbook Experiments (SP+SB) + Bulkgen Validation
+Goal: support Product Logbook experiment workflow across SP and SB with AI packs, plan preview/generation, bulkgen linkage, and post-ingest validation.
+
+Migration:
+- `supabase/migrations/20260221130000_logbook_change_validations.sql`
+  - creates `log_change_validations` (one row per `change_id`) with status, expected/actual/diff JSON, validated upload/snapshot, and check timestamps.
+
+Validator:
+- `src/logbook/validateBulkgenChanges.ts` (shared validation logic)
+- `src/cli/logValidateBulkgenChanges.ts` (CLI wrapper)
+- Command:
+  - `npm run log:validate:bulkgen -- --account-id <id> [--mode auto|manual] [--upload-id <uuid>] [--change-id <uuid> ...] [--limit <n>]`
+
+Auto-validation hook:
+- Triggered from bulk ingest flow in `src/ingest/ingestBulk.ts` (after successful new bulk ingest).
+- Validation summary is surfaced in ingest CLI outputs:
+  - `src/cli/ingestBulk.ts`
+  - `src/cli/ingestBulkDate.ts`
+
+Bulkgen logging improvements:
+- `product_id` (ASIN) is carried through SP/SB update changes and written to `log_change_entities.product_id`.
+- Placement identity is included for validation and traceability:
+  - `log_change_entities.extra` (`placement_code`, `placement_raw_norm`, `placement_raw`)
+  - `after_json` for placement updates
+- Wired end-to-end for SP and SB via:
+  - generator types (`src/bulksheet_gen_sp/types.ts`, `src/bulksheet_gen_sb/types.ts`)
+  - generator CLIs (`src/cli/bulkGenSpUpdate.ts`, `src/cli/bulkGenSbUpdate.ts`)
+  - web server generator wrapper (`apps/web/src/lib/bulksheets/runGenerators.ts`)
+
+Product UI workflow:
+- AI Prompt Pack route:
+  - `apps/web/src/app/products/[asin]/logbook/ai-prompt-pack/route.ts`
+- AI Data Pack route:
+  - `apps/web/src/app/products/[asin]/logbook/ai-data-pack/route.ts`
+- AI Output Pack upload/import:
+  - parser/importer in `apps/web/src/lib/logbook/aiPack/`
+  - upload UI `apps/web/src/components/logbook/ProductLogbookAiPackImport.tsx`
+  - Product tab action wiring in `apps/web/src/app/products/[asin]/page.tsx`
+- Product Logbook experiment cards render SP/SB plan previews:
+  - Review preview table + Bulksheet preview table
+  - sticky table headers + `data-aph-hscroll` wide-table pattern
+- Change list shows validation status pill (`pending|validated|mismatch|not_found`) and per-change manual `Validate now`.
+
+Tests added/updated:
+- `test/bulkGenLogbook.test.ts`
+- `test/logbookChangeValidationLogic.test.ts`
+- `test/productExperimentOutputPack.test.ts`
 
 ### Milestone 8 — Product Profile Module (Catalog) + Keyword Strategy Library
 What was added (high-level):
