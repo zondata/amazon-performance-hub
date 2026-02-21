@@ -86,47 +86,65 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
               {start} → {end}
             </div>
           </div>
-          <form method="get" className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-              Start
-              <input
-                type="date"
-                name="start"
-                defaultValue={start}
-                className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-              />
-            </label>
-            <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-              End
-              <input
-                type="date"
-                name="end"
-                defaultValue={end}
-                className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-              />
-            </label>
-            <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-              Product (ASIN)
-              <select
-                name="asin"
-                defaultValue={asinFilter}
-                className="mt-1 min-w-[220px] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+          <div className="space-y-3">
+            <form method="get" className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                Start
+                <input
+                  type="date"
+                  name="start"
+                  defaultValue={start}
+                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                />
+              </label>
+              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                End
+                <input
+                  type="date"
+                  name="end"
+                  defaultValue={end}
+                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                />
+              </label>
+              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                Product (ASIN)
+                <select
+                  name="asin"
+                  defaultValue={asinFilter}
+                  className="mt-1 min-w-[220px] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="all">All products</option>
+                  {data.asinOptions.map((option) => (
+                    <option key={option.asin} value={option.asin}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="submit"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
               >
-                <option value="all">All products</option>
-                {data.asinOptions.map((option) => (
-                  <option key={option.asin} value={option.asin}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="submit"
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
-            >
-              Apply
-            </button>
-          </form>
+                Apply
+              </button>
+            </form>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href="/logbook/ai-baseline-prompt-pack"
+                download
+                className="inline-flex rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface-2"
+              >
+                Download AI Baseline Prompt Pack
+              </a>
+              <a
+                href="/logbook/ai-baseline-data-pack"
+                download
+                className="inline-flex rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface-2"
+              >
+                Download AI Baseline Data Pack
+              </a>
+            </div>
+          </div>
         </div>
       </section>
 

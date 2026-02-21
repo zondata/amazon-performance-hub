@@ -800,6 +800,65 @@ Tests added/updated:
 - `test/experimentEvaluationPack.test.ts`
 - `test/outcomePillColor.test.ts`
 
+### Milestone 18 — Product Changes Explorer + Account Baseline AI Packs
+Goal: add a product-level change explorer and account-level baseline packs for first-run AI analysis, while preserving the Phase 2 logbook workflow.
+
+Product Changes Explorer:
+- New Product tab: `tab=changes` on `/products/[asin]`.
+- URL-driven filters:
+  - `ch_channel=all|sp|sb|sd|non_ads`
+  - `ch_source=all|bulkgen|manual`
+  - `ch_validation=all|pending|validated|mismatch|not_found|none`
+  - `ch_q=<search>`
+- Date scoping uses existing product `start/end` URL filters.
+- Data loader:
+  - `apps/web/src/lib/products/getProductChangesExplorerData.ts`
+  - joins `log_changes` + `log_change_entities` (product_id ASIN) + optional `log_change_validations` + optional experiment join (`log_experiment_changes`, `log_experiments`).
+- View-model/filter logic:
+  - `apps/web/src/lib/products/buildProductChangesExplorerViewModel.ts`
+- UI behavior:
+  - sticky header table
+  - wide table wrapper uses `data-aph-hscroll` + `data-aph-hscroll-axis="x"`
+  - row detail includes human-readable before/after diff summary
+  - raw `before_json`/`after_json` shown in collapsible `<details>`
+  - validation status pill styling reuses existing pattern classes.
+
+Account Baseline AI Packs:
+- New download routes:
+  - `apps/web/src/app/logbook/ai-baseline-prompt-pack/route.ts`
+  - `apps/web/src/app/logbook/ai-baseline-data-pack/route.ts`
+- Data computation:
+  - `apps/web/src/lib/logbook/aiPack/getAccountBaselineDataPack.ts`
+  - pack schema helper:
+    - `apps/web/src/lib/logbook/aiPack/accountBaselinePack.ts`
+- Data pack content (top-N / bounded):
+  - sales KPI summaries for last 30d/90d
+  - top products snapshot with revenue/orders/units and 30d-vs-prev30d deltas
+  - SP + SB ads summaries for 30d/90d (spend, sales, ACOS, ROAS, combined)
+  - recent experiments with status + latest outcome score (if present)
+  - validation summary counts (`validated|mismatch|pending|not_found|none`)
+  - ingestion heartbeat by `source_type` from `upload_stats`.
+- Prompt pack enforces:
+  - objective-driven analysis
+  - required “Missing Info Checklist” when data is insufficient
+  - structured markdown response with JSON appendix.
+
+Baseline pack download entry points:
+- Products header (`/products`) includes plain `<a download>` links for prompt/data packs.
+- Logbook experiments header (`/logbook/experiments`) includes plain `<a download>` links for prompt/data packs.
+
+Global Experiments Library (Phase 3C optional, implemented):
+- Route remains `/logbook/experiments`.
+- Added filters:
+  - `status=all|<status>`
+  - `outcome=all|win|mixed|loss|none`
+  - `q=<search>`
+- Table includes cross-product context (`scope.product_id`) and latest outcome score band.
+
+Phase 3 tests added:
+- `test/productChangesExplorerViewModel.test.ts`
+- `test/accountBaselinePack.test.ts`
+
 ### Milestone 8 — Product Profile Module (Catalog) + Keyword Strategy Library
 What was added (high-level):
 - `products` (ASIN-level) + `product_skus` (SKU-level) supports multiple SKUs under one ASIN.

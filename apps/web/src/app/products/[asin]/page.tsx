@@ -28,6 +28,11 @@ import {
 import { runManualBulkgenValidation } from '@/lib/logbook/runBulkgenValidation';
 import { ensureProductId } from '@/lib/products/ensureProductId';
 import { getProductDetailData } from '@/lib/products/getProductDetailData';
+import type {
+  ProductChangesExplorerFilters,
+  ProductChangesExplorerRow,
+} from '@/lib/products/buildProductChangesExplorerViewModel';
+import { getProductChangesExplorerData } from '@/lib/products/getProductChangesExplorerData';
 import { getProductKeywordGroups } from '@/lib/products/getProductKeywordGroups';
 import { getProductKeywordGroupMemberships } from '@/lib/products/getProductKeywordGroupMemberships';
 import { getProductLogbookData } from '@/lib/products/getProductLogbookData';
@@ -181,6 +186,125 @@ const validationToneClass = (status: string) => {
   return 'border-border bg-surface-2 text-muted';
 };
 
+const CHANGES_CHANNEL_FILTERS = new Set(['all', 'sp', 'sb', 'sd', 'non_ads']);
+const CHANGES_SOURCE_FILTERS = new Set(['all', 'bulkgen', 'manual']);
+const CHANGES_VALIDATION_FILTERS = new Set([
+  'all',
+  'pending',
+  'validated',
+  'mismatch',
+  'not_found',
+  'none',
+]);
+
+const normalizeChangesChannelFilter = (
+  value?: string
+): ProductChangesExplorerFilters['channel'] => {
+  const normalized = (value ?? '').trim().toLowerCase();
+  if (!CHANGES_CHANNEL_FILTERS.has(normalized)) return 'all';
+  return normalized as ProductChangesExplorerFilters['channel'];
+};
+
+const normalizeChangesSourceFilter = (
+  value?: string
+): ProductChangesExplorerFilters['source'] => {
+  const normalized = (value ?? '').trim().toLowerCase();
+  if (!CHANGES_SOURCE_FILTERS.has(normalized)) return 'all';
+  return normalized as ProductChangesExplorerFilters['source'];
+};
+
+const normalizeChangesValidationFilter = (
+  value?: string
+): ProductChangesExplorerFilters['validation'] => {
+  const normalized = (value ?? '').trim().toLowerCase();
+  if (!CHANGES_VALIDATION_FILTERS.has(normalized)) return 'all';
+  return normalized as ProductChangesExplorerFilters['validation'];
+};
+
+const toDiffLabel = (key: string) =>
+  key
+    .replace(/_/g, ' ')
+    .replace(/\b([a-z])/g, (value) => value.toUpperCase());
+
+const stringifyUnknown = (value: unknown) => {
+  if (value === null || value === undefined) return '';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+};
+
+const buildChangeDiffLines = (change: ProductChangesExplorerRow['change']) => {
+  const before = asObject(change.before_json);
+  const after = asObject(change.after_json);
+  if (!before && !after) return [] as string[];
+
+  const lines: string[] = [];
+  const seenKeys = new Set<string>();
+  const addLine = (key: string, label?: string) => {
+    if (seenKeys.has(key)) return;
+    seenKeys.add(key);
+    const beforeValue = before?.[key];
+    const afterValue = after?.[key];
+    if (beforeValue === undefined && afterValue === undefined) return;
+    if (stringifyUnknown(beforeValue) === stringifyUnknown(afterValue)) return;
+    lines.push(`${label ?? toDiffLabel(key)}: ${toDisplayValue(beforeValue)} -> ${toDisplayValue(afterValue)}`);
+  };
+
+  const changeType = change.change_type.toLowerCase();
+  if (changeType.includes('budget')) {
+    addLine('daily_budget', 'Daily Budget');
+    addLine('budget', 'Budget');
+    addLine('new_budget', 'New Budget');
+  }
+  if (changeType.includes('bid')) {
+    addLine('bid', 'Bid');
+    addLine('new_bid', 'New Bid');
+  }
+  if (changeType.includes('placement')) {
+    addLine('placement_code', 'Placement Code');
+    addLine('placement_raw', 'Placement');
+    addLine('percentage', 'Placement %');
+    addLine('new_pct', 'New Placement %');
+  }
+  if (
+    changeType.includes('state') ||
+    changeType.includes('pause') ||
+    changeType.includes('enable')
+  ) {
+    addLine('state', 'State');
+    addLine('status', 'Status');
+  }
+  addLine('run_id', 'Run ID');
+
+  if (lines.length === 0) {
+    const keys = new Set<string>([
+      ...Object.keys(before ?? {}),
+      ...Object.keys(after ?? {}),
+    ]);
+    for (const key of Array.from(keys).sort((left, right) => left.localeCompare(right))) {
+      if (key === 'run_id') continue;
+      addLine(key);
+      if (lines.length >= 8) break;
+    }
+  }
+
+  return lines;
+};
+
+const formatEntityCompact = (entity: {
+  entity_type: string;
+  product_id: string | null;
+  campaign_id: string | null;
+  ad_group_id: string | null;
+  target_id: string | null;
+  keyword_id: string | null;
+}) => {
+  const parts = formatEntityDetails(entity);
+  return `${entity.entity_type}: ${parts.length > 0 ? parts.join(' · ') : '—'}`;
+};
+
 const orderedBulksheetColumns = (rows: PlanPreview['bulksheet_rows']) => {
   const preferred = [
     'Product',
@@ -299,6 +423,10 @@ export default async function ProductDetailPage({
       .filter(Boolean) ?? [];
   const sqpTrendFromRaw = normalizeDate(paramValue('sqp_trend_from'));
   const sqpTrendToRaw = normalizeDate(paramValue('sqp_trend_to'));
+  const changesChannel = normalizeChangesChannelFilter(paramValue('ch_channel'));
+  const changesSource = normalizeChangesSourceFilter(paramValue('ch_source'));
+  const changesValidation = normalizeChangesValidationFilter(paramValue('ch_validation'));
+  const changesQuery = (paramValue('ch_q') ?? '').trim();
 
   const importKeywordGroups = async (
     _prevState: KeywordImportState,
@@ -984,6 +1112,25 @@ export default async function ProductDetailPage({
           unassigned_changes: [],
         };
 
+  const changesExplorerFilters: ProductChangesExplorerFilters = {
+    channel: changesChannel,
+    source: changesSource,
+    validation: changesValidation,
+    q: changesQuery,
+  };
+
+  const changesExplorerRows =
+    tab === 'changes'
+      ? await getProductChangesExplorerData({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+          asin,
+          start,
+          end,
+          filters: changesExplorerFilters,
+        })
+      : [];
+
   const planPreviewsByExperimentId = new Map<string, PlanPreview[]>();
   if (tab === 'logbook') {
     await Promise.all(
@@ -1086,6 +1233,7 @@ export default async function ProductDetailPage({
     { label: 'Overview', value: 'overview' },
     { label: 'Sales', value: 'sales' },
     { label: 'Logbook', value: 'logbook' },
+    { label: 'Changes', value: 'changes' },
     { label: 'Costs', value: 'costs' },
     { label: 'Ads', value: 'ads' },
     { label: 'Keywords', value: 'keywords' },
@@ -2086,6 +2234,236 @@ export default async function ProductDetailPage({
               No logbook entries for this product.
             </div>
           ) : null}
+        </section>
+      ) : null}
+
+      {tab === 'changes' ? (
+        <section className="space-y-6">
+          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-[0.3em] text-muted">
+                  Product changes
+                </div>
+                <div className="mt-1 text-lg font-semibold text-foreground">
+                  Changes Explorer for {asin}
+                </div>
+                <div className="mt-1 text-sm text-muted">
+                  Showing {start} → {end}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/logbook/changes/new?product_id=${encodeURIComponent(asin)}`}
+                  className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-2"
+                >
+                  Create change
+                </Link>
+                <Link
+                  href={buildTabHref(asin, 'logbook', start, end)}
+                  className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-2"
+                >
+                  Open logbook
+                </Link>
+              </div>
+            </div>
+
+            <form method="get" className="mt-4 flex flex-wrap items-end gap-3">
+              <input type="hidden" name="tab" value="changes" />
+              <input type="hidden" name="start" value={start} />
+              <input type="hidden" name="end" value={end} />
+              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                Channel
+                <select
+                  name="ch_channel"
+                  defaultValue={changesChannel ?? 'all'}
+                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="all">All</option>
+                  <option value="sp">SP</option>
+                  <option value="sb">SB</option>
+                  <option value="sd">SD</option>
+                  <option value="non_ads">Non-ads</option>
+                </select>
+              </label>
+              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                Source
+                <select
+                  name="ch_source"
+                  defaultValue={changesSource ?? 'all'}
+                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="all">All</option>
+                  <option value="bulkgen">bulkgen</option>
+                  <option value="manual">manual</option>
+                </select>
+              </label>
+              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                Validation
+                <select
+                  name="ch_validation"
+                  defaultValue={changesValidation ?? 'all'}
+                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="all">All</option>
+                  <option value="pending">pending</option>
+                  <option value="validated">validated</option>
+                  <option value="mismatch">mismatch</option>
+                  <option value="not_found">not_found</option>
+                  <option value="none">none</option>
+                </select>
+              </label>
+              <label className="min-w-[220px] flex-1 text-xs uppercase tracking-wide text-muted">
+                Search
+                <input
+                  type="text"
+                  name="ch_q"
+                  defaultValue={changesQuery}
+                  placeholder="summary, entity ids, experiment"
+                  className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                />
+              </label>
+              <button
+                type="submit"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              >
+                Apply
+              </button>
+            </form>
+          </section>
+
+          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+            {changesExplorerRows.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
+                No changes match this filter set.
+              </div>
+            ) : (
+              <div className="max-h-[720px] overflow-y-auto">
+                <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
+                  <table className="w-full min-w-[1400px] table-fixed text-left text-sm">
+                    <thead className="sticky top-0 bg-surface text-xs uppercase tracking-wider text-muted shadow-sm">
+                      <tr>
+                        <th className="w-44 px-3 py-2">Occurred</th>
+                        <th className="w-[30%] px-3 py-2">Summary</th>
+                        <th className="w-16 px-3 py-2">Channel</th>
+                        <th className="w-36 px-3 py-2">Change Type</th>
+                        <th className="w-[24%] px-3 py-2">Entities</th>
+                        <th className="w-44 px-3 py-2">Experiment</th>
+                        <th className="w-28 px-3 py-2">Validation</th>
+                        <th className="w-52 px-3 py-2">Run ID</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {changesExplorerRows.map((item) => {
+                        const diffLines = buildChangeDiffLines(item.change);
+                        const rawBefore = formatUnknownJson(item.change.before_json);
+                        const rawAfter = formatUnknownJson(item.change.after_json);
+                        return (
+                          <tr key={item.change.change_id} className="hover:bg-surface-2/70 align-top">
+                            <td className="px-3 py-3 text-xs text-muted">
+                              {formatDateTime(item.change.occurred_at)}
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="text-sm font-medium text-foreground">{item.change.summary}</div>
+                              <div className="mt-1 text-xs text-muted">
+                                Source {item.change.source} · {item.change.change_id}
+                              </div>
+                              <details className="mt-2 rounded border border-border bg-surface px-2 py-1">
+                                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted">
+                                  Row detail
+                                </summary>
+                                <div className="mt-2 space-y-2">
+                                  {diffLines.length > 0 ? (
+                                    <div>
+                                      <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+                                        Diff summary
+                                      </div>
+                                      <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-muted">
+                                        {diffLines.map((line) => (
+                                          <li key={`${item.change.change_id}-${line}`}>{line}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs text-muted">
+                                      No structured before/after diff fields found.
+                                    </div>
+                                  )}
+                                  <details className="rounded border border-border bg-surface-2 px-2 py-2">
+                                    <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted">
+                                      Raw before/after JSON
+                                    </summary>
+                                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                                      <div>
+                                        <div className="mb-1 text-[11px] uppercase tracking-wide text-muted">
+                                          before_json
+                                        </div>
+                                        <pre className="overflow-x-auto rounded border border-border bg-surface p-2 text-[11px] text-muted">
+                                          {rawBefore ?? 'null'}
+                                        </pre>
+                                      </div>
+                                      <div>
+                                        <div className="mb-1 text-[11px] uppercase tracking-wide text-muted">
+                                          after_json
+                                        </div>
+                                        <pre className="overflow-x-auto rounded border border-border bg-surface p-2 text-[11px] text-muted">
+                                          {rawAfter ?? 'null'}
+                                        </pre>
+                                      </div>
+                                    </div>
+                                  </details>
+                                </div>
+                              </details>
+                            </td>
+                            <td className="px-3 py-3 text-xs uppercase text-muted">{item.change.channel}</td>
+                            <td className="px-3 py-3 text-xs text-muted">{item.change.change_type}</td>
+                            <td className="px-3 py-3 text-xs text-muted">
+                              {item.entities.length === 0 ? (
+                                '—'
+                              ) : (
+                                <div className="space-y-1">
+                                  {item.entities.slice(0, 2).map((entity) => (
+                                    <div key={entity.change_entity_id}>{formatEntityCompact(entity)}</div>
+                                  ))}
+                                  {item.entities.length > 2 ? (
+                                    <div>+{item.entities.length - 2} more</div>
+                                  ) : null}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 text-xs text-muted">
+                              {item.experiment?.experiment_id ? (
+                                <Link
+                                  href={`/logbook/experiments/${item.experiment.experiment_id}`}
+                                  className="font-medium text-foreground hover:underline"
+                                >
+                                  {item.experiment.name}
+                                </Link>
+                              ) : (
+                                '—'
+                              )}
+                            </td>
+                            <td className="px-3 py-3">
+                              <span
+                                className={`rounded-full border px-2 py-1 text-[11px] font-semibold uppercase ${validationToneClass(
+                                  item.validation_status
+                                )}`}
+                              >
+                                {item.validation_status}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 font-mono text-[11px] text-muted">
+                              {item.run_id ?? '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </section>
         </section>
       ) : null}
 
