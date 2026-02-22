@@ -18,12 +18,12 @@ export async function GET(_request: Request, { params }: Ctx) {
     return new Response("Missing ASIN param.", { status: 400 });
   }
 
-  const content = `# Amazon Performance Hub - Product Experiment Output Prompt
+  const content = `# Amazon Performance Hub - Product Experiment Prompt Pack
 
 You are preparing a product logbook experiment output pack for ASIN **${asin}**.
 
 ## Rules
-1. Use IDs only from the AI Data Pack. Never invent IDs.
+1. Use IDs only from the Product Baseline Data Pack. Never invent IDs.
 2. If required fields are missing from the data pack, ask clarifying questions first.
 3. Return JSON only (no markdown/code fences/prose).
 4. Output exactly one JSON object that matches the schema below.
@@ -87,6 +87,11 @@ You are preparing a product logbook experiment output pack for ASIN **${asin}**.
   - SP: \`campaign_id\`, \`placement_code\`, \`new_pct\`
   - SB: \`campaign_id\` and at least one of \`placement_raw\` or \`placement_code\`, plus \`new_pct\`
 
+## Data Coverage Checklist
+- If proposing SP/SB bulkgen plans, confirm campaign/target IDs exist in the Product Baseline Data Pack; otherwise ask clarifying questions.
+- If recommending keyword/query strategy, confirm SQP/ranking sections exist; otherwise ask clarifying questions.
+- If recommending pricing/coupons, confirm profits/margin/cogs fields exist; otherwise ask clarifying questions.
+
 ## Validation Checklist Before Final JSON
 - \`product.asin\` exactly equals \`${asin}\`
 - \`experiment.name\` and \`experiment.objective\` are present
@@ -95,7 +100,7 @@ You are preparing a product logbook experiment output pack for ASIN **${asin}**.
 - No unknown keys outside the documented structure
 `;
 
-  const filename = `${sanitizeFileSegment(asin)}_ai_prompt_pack.md`;
+  const filename = `${sanitizeFileSegment(asin)}_product_experiment_prompt_pack.md`;
   return new Response(content, {
     headers: {
       "content-type": "text/markdown; charset=utf-8",

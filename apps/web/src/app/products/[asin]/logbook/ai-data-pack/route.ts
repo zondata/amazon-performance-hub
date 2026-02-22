@@ -1,3 +1,11 @@
+import {
+  computeBaselineWindow,
+  computeEndCandidate,
+  computeTodayMinusExcludeDays,
+  normalizeBaselineRange,
+  normalizeExcludeLastDays,
+  type BaselineAvailabilityMap,
+} from "@/lib/logbook/aiPack/computeBaselineWindow";
 import { env } from "@/lib/env";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -39,18 +47,27 @@ type TargetAggregate = {
   impressions: number;
 };
 
+type DateBounds = {
+  minDate: string | null;
+  maxDate: string | null;
+};
+
+type QueryErrorLike = { message?: string } | null | undefined;
+
+type QueryResult = {
+  data?: Array<Record<string, unknown>> | null;
+  error?: QueryErrorLike;
+};
+
 const num = (value: unknown): number => {
   const parsed = typeof value === "number" ? value : Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const toDateString = (value: Date) => value.toISOString().slice(0, 10);
-
-const defaultRange30d = () => {
-  const end = new Date();
-  const start = new Date(end);
-  start.setUTCDate(start.getUTCDate() - 29);
-  return { start: toDateString(start), end: toDateString(end) };
+const toFiniteNumberOrNull = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
 const formatPct = (value: number | null) =>
@@ -65,6 +82,24 @@ const sanitizeFileSegment = (value: string): string =>
     .replace(/\s+/g, "_")
     .replace(/[^a-zA-Z0-9_-]+/g, "")
     .slice(0, 80);
+
+const parseDateField = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  if (!DATE_RE.test(value)) return null;
+  return value;
+};
+
+const asRecord = (value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+};
+
+const compareNullableDesc = (left: number | null, right: number | null): number => {
+  if (left === null && right === null) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  return right - left;
+};
 
 const aggregateCampaignRows = (
   rows: Array<MetricRow & { campaign_id: string; campaign_name_raw: string; campaign_name_norm: string }>
@@ -134,9 +169,30 @@ const aggregateTargetRows = (
   return [...byId.values()].sort((a, b) => b.spend - a.spend);
 };
 
-const asinCampaignFilter = (campaignNameNorm: string | null | undefined, asin: string) => {
-  const text = (campaignNameNorm ?? "").toLowerCase();
-  return text.includes(asin.toLowerCase());
+const loadDateBounds = async (
+  dateColumn: string,
+  label: string,
+  minQuery: PromiseLike<unknown>,
+  maxQuery: PromiseLike<unknown>
+): Promise<DateBounds> => {
+  const [minRaw, maxRaw] = await Promise.all([minQuery, maxQuery]);
+  const minResult = minRaw as QueryResult;
+  const maxResult = maxRaw as QueryResult;
+
+  const minError = minResult.error;
+  const maxError = maxResult.error;
+  if (minError?.message) {
+    throw new Error(`Failed loading ${label} minimum date: ${minError.message}`);
+  }
+  if (maxError?.message) {
+    throw new Error(`Failed loading ${label} maximum date: ${maxError.message}`);
+  }
+
+  const minRows = minResult.data ?? [];
+  const maxRows = maxResult.data ?? [];
+  const minDate = parseDateField(minRows[0]?.[dateColumn]);
+  const maxDate = parseDateField(maxRows[0]?.[dateColumn]);
+  return { minDate, maxDate };
 };
 
 type Ctx = { params: Promise<{ asin: string }> };
@@ -149,11 +205,13 @@ export async function GET(request: Request, { params }: Ctx) {
   }
 
   const url = new URL(request.url);
-  const startArg = url.searchParams.get("start");
+  const requestedRange = normalizeBaselineRange(url.searchParams.get("range"));
+  const excludeLastDays = normalizeExcludeLastDays(url.searchParams.get("exclude_last_days"));
+  const todayMinusExcludeDays = computeTodayMinusExcludeDays(excludeLastDays);
   const endArg = url.searchParams.get("end");
-  const defaults = defaultRange30d();
-  const start = startArg && DATE_RE.test(startArg) ? startArg : defaults.start;
-  const end = endArg && DATE_RE.test(endArg) ? endArg : defaults.end;
+  const userEnd = endArg && DATE_RE.test(endArg) ? endArg : null;
+  const endCandidate = computeEndCandidate(todayMinusExcludeDays, userEnd);
+  const asinPattern = `%${asin}%`;
 
   const { data: productRow, error: productError } = await supabaseAdmin
     .from("products")
@@ -179,14 +237,212 @@ export async function GET(request: Request, { params }: Ctx) {
       ? ((profileRow.profile_json as Record<string, unknown>).short_name as string).trim()
       : null;
 
+  let availability: BaselineAvailabilityMap;
+  try {
+    const [
+      salesBounds,
+      spCampaignBounds,
+      spTargetBounds,
+      sbCampaignBounds,
+      sbKeywordBounds,
+      rankingBounds,
+      sqpBounds,
+    ] = await Promise.all([
+      loadDateBounds(
+        "date",
+        "sales baseline",
+        supabaseAdmin
+          .from("si_sales_trend_daily_latest")
+          .select("date")
+          .eq("account_id", env.accountId)
+          .eq("marketplace", env.marketplace)
+          .eq("asin", asin)
+          .lte("date", endCandidate)
+          .order("date", { ascending: true })
+          .limit(1),
+        supabaseAdmin
+          .from("si_sales_trend_daily_latest")
+          .select("date")
+          .eq("account_id", env.accountId)
+          .eq("marketplace", env.marketplace)
+          .eq("asin", asin)
+          .lte("date", endCandidate)
+          .order("date", { ascending: false })
+          .limit(1)
+      ),
+      loadDateBounds(
+        "date",
+        "SP campaign baseline",
+        supabaseAdmin
+          .from("sp_campaign_hourly_fact_latest")
+          .select("date")
+          .eq("account_id", env.accountId)
+          .ilike("campaign_name_norm", asinPattern)
+          .lte("date", endCandidate)
+          .order("date", { ascending: true })
+          .limit(1),
+        supabaseAdmin
+          .from("sp_campaign_hourly_fact_latest")
+          .select("date")
+          .eq("account_id", env.accountId)
+          .ilike("campaign_name_norm", asinPattern)
+          .lte("date", endCandidate)
+          .order("date", { ascending: false })
+          .limit(1)
+      ),
+      loadDateBounds(
+        "date",
+        "SP targeting baseline",
+        supabaseAdmin
+          .from("sp_targeting_daily_fact_latest")
+          .select("date")
+          .eq("account_id", env.accountId)
+          .ilike("campaign_name_norm", asinPattern)
+          .lte("date", endCandidate)
+          .order("date", { ascending: true })
+          .limit(1),
+        supabaseAdmin
+          .from("sp_targeting_daily_fact_latest")
+          .select("date")
+          .eq("account_id", env.accountId)
+          .ilike("campaign_name_norm", asinPattern)
+          .lte("date", endCandidate)
+          .order("date", { ascending: false })
+          .limit(1)
+      ),
+      loadDateBounds(
+        "date",
+        "SB campaign baseline",
+        supabaseAdmin
+          .from("sb_campaign_daily_fact_latest")
+          .select("date")
+          .eq("account_id", env.accountId)
+          .ilike("campaign_name_norm", asinPattern)
+          .lte("date", endCandidate)
+          .order("date", { ascending: true })
+          .limit(1),
+        supabaseAdmin
+          .from("sb_campaign_daily_fact_latest")
+          .select("date")
+          .eq("account_id", env.accountId)
+          .ilike("campaign_name_norm", asinPattern)
+          .lte("date", endCandidate)
+          .order("date", { ascending: false })
+          .limit(1)
+      ),
+      loadDateBounds(
+        "date",
+        "SB keyword baseline",
+        supabaseAdmin
+          .from("sb_keyword_daily_fact_latest")
+          .select("date")
+          .eq("account_id", env.accountId)
+          .ilike("campaign_name_norm", asinPattern)
+          .lte("date", endCandidate)
+          .order("date", { ascending: true })
+          .limit(1),
+        supabaseAdmin
+          .from("sb_keyword_daily_fact_latest")
+          .select("date")
+          .eq("account_id", env.accountId)
+          .ilike("campaign_name_norm", asinPattern)
+          .lte("date", endCandidate)
+          .order("date", { ascending: false })
+          .limit(1)
+      ),
+      loadDateBounds(
+        "observed_date",
+        "ranking baseline",
+        supabaseAdmin
+          .from("h10_keyword_rank_daily_latest")
+          .select("observed_date")
+          .eq("account_id", env.accountId)
+          .eq("marketplace", env.marketplace)
+          .eq("asin", asin)
+          .lte("observed_date", endCandidate)
+          .order("observed_date", { ascending: true })
+          .limit(1),
+        supabaseAdmin
+          .from("h10_keyword_rank_daily_latest")
+          .select("observed_date")
+          .eq("account_id", env.accountId)
+          .eq("marketplace", env.marketplace)
+          .eq("asin", asin)
+          .lte("observed_date", endCandidate)
+          .order("observed_date", { ascending: false })
+          .limit(1)
+      ),
+      loadDateBounds(
+        "week_end",
+        "SQP baseline",
+        supabaseAdmin
+          .from("sqp_weekly_latest_enriched")
+          .select("week_end")
+          .eq("account_id", env.accountId)
+          .eq("marketplace", env.marketplace)
+          .eq("scope_type", "asin")
+          .eq("scope_value", asin)
+          .lte("week_end", endCandidate)
+          .order("week_end", { ascending: true })
+          .limit(1),
+        supabaseAdmin
+          .from("sqp_weekly_latest_enriched")
+          .select("week_end")
+          .eq("account_id", env.accountId)
+          .eq("marketplace", env.marketplace)
+          .eq("scope_type", "asin")
+          .eq("scope_value", asin)
+          .lte("week_end", endCandidate)
+          .order("week_end", { ascending: false })
+          .limit(1)
+      ),
+    ]);
+
+    availability = {
+      sales: salesBounds,
+      sp_campaign: spCampaignBounds,
+      sp_target: spTargetBounds,
+      sb_campaign: sbCampaignBounds,
+      sb_keyword: sbKeywordBounds,
+      ranking: rankingBounds,
+      sqp: sqpBounds,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed loading dataset availability.";
+    return new Response(message, { status: 500 });
+  }
+
+  const window = computeBaselineWindow({
+    requestedRange,
+    endCandidate,
+    availability,
+  });
+
+  const warnings: string[] = [];
+  for (const [dataset, bounds] of Object.entries(availability)) {
+    if (!bounds.minDate || !bounds.maxDate) {
+      warnings.push(`Dataset "${dataset}" has no rows for this ASIN through ${endCandidate}.`);
+    }
+  }
+  if (window.usedFallback) {
+    warnings.push(
+      "Computed overlap window was empty; fallback window set to the last 60 days (capped by exclude_last_days)."
+    );
+  }
+
+  const effectiveStart = window.effectiveStart;
+  const effectiveEnd = window.effectiveEnd;
+
   const { data: salesRows, error: salesError } = await supabaseAdmin
     .from("si_sales_trend_daily_latest")
-    .select("date,sales,orders,units,ppc_cost")
+    .select(
+      "date,sales,orders,units,sessions,conversions,ppc_cost,ppc_sales,ppc_orders,ppc_units,ppc_impressions,ppc_clicks,cost_per_click,acos,tacos,referral_fees,fulfillment_fees,cost_of_goods,payout,profits,roi,margin"
+    )
     .eq("account_id", env.accountId)
     .eq("marketplace", env.marketplace)
     .eq("asin", asin)
-    .gte("date", start)
-    .lte("date", end)
+    .gte("date", effectiveStart)
+    .lte("date", effectiveEnd)
     .order("date", { ascending: true })
     .limit(5000);
   if (salesError) {
@@ -212,8 +468,9 @@ export async function GET(request: Request, { params }: Ctx) {
     .from("sp_campaign_hourly_fact_latest")
     .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders")
     .eq("account_id", env.accountId)
-    .gte("date", start)
-    .lte("date", end)
+    .ilike("campaign_name_norm", asinPattern)
+    .gte("date", effectiveStart)
+    .lte("date", effectiveEnd)
     .limit(50000);
   if (spCampaignFactError) {
     return new Response(`Failed loading SP campaign baseline: ${spCampaignFactError.message}`, {
@@ -226,8 +483,7 @@ export async function GET(request: Request, { params }: Ctx) {
       MetricRow & { campaign_id: string; campaign_name_raw: string; campaign_name_norm: string }
     >
   );
-  const spRelevant = spCampaignAgg.filter((row) => asinCampaignFilter(row.campaign_name_norm, asin));
-  const spTopCampaigns = (spRelevant.length > 0 ? spRelevant : spCampaignAgg).slice(0, CAMPAIGN_LIMIT);
+  const spTopCampaigns = spCampaignAgg.slice(0, CAMPAIGN_LIMIT);
   const spCampaignIds = spTopCampaigns.map((row) => row.campaign_id);
 
   let spTargetAgg: TargetAggregate[] = [];
@@ -236,8 +492,8 @@ export async function GET(request: Request, { params }: Ctx) {
       .from("sp_targeting_daily_fact_latest")
       .select("target_id,campaign_id,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders")
       .eq("account_id", env.accountId)
-      .gte("date", start)
-      .lte("date", end)
+      .gte("date", effectiveStart)
+      .lte("date", effectiveEnd)
       .in("campaign_id", spCampaignIds)
       .limit(50000);
     if (spTargetError) {
@@ -262,8 +518,9 @@ export async function GET(request: Request, { params }: Ctx) {
     .from("sb_campaign_daily_fact_latest")
     .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders")
     .eq("account_id", env.accountId)
-    .gte("date", start)
-    .lte("date", end)
+    .ilike("campaign_name_norm", asinPattern)
+    .gte("date", effectiveStart)
+    .lte("date", effectiveEnd)
     .limit(50000);
   if (sbCampaignFactError) {
     return new Response(`Failed loading SB campaign baseline: ${sbCampaignFactError.message}`, {
@@ -276,8 +533,7 @@ export async function GET(request: Request, { params }: Ctx) {
       MetricRow & { campaign_id: string; campaign_name_raw: string; campaign_name_norm: string }
     >
   );
-  const sbRelevant = sbCampaignAgg.filter((row) => asinCampaignFilter(row.campaign_name_norm, asin));
-  const sbTopCampaigns = (sbRelevant.length > 0 ? sbRelevant : sbCampaignAgg).slice(0, CAMPAIGN_LIMIT);
+  const sbTopCampaigns = sbCampaignAgg.slice(0, CAMPAIGN_LIMIT);
   const sbCampaignIds = sbTopCampaigns.map((row) => row.campaign_id);
 
   let sbTargetAgg: TargetAggregate[] = [];
@@ -286,8 +542,8 @@ export async function GET(request: Request, { params }: Ctx) {
       .from("sb_keyword_daily_fact_latest")
       .select("target_id,campaign_id,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders")
       .eq("account_id", env.accountId)
-      .gte("date", start)
-      .lte("date", end)
+      .gte("date", effectiveStart)
+      .lte("date", effectiveEnd)
       .in("campaign_id", sbCampaignIds)
       .limit(50000);
     if (sbTargetError) {
@@ -405,6 +661,147 @@ export async function GET(request: Request, { params }: Ctx) {
     sbPlacementsByCampaign.set(key, rows);
   }
 
+  let sqpLatestWeekEnd: string | null = null;
+  let sqpSnapshotRows: Array<Record<string, unknown>> = [];
+  let sqpTrendRows: Array<Record<string, unknown>> = [];
+  const { data: sqpWeekRows, error: sqpWeekError } = await supabaseAdmin
+    .from("sqp_weekly_latest_enriched")
+    .select("week_end")
+    .eq("account_id", env.accountId)
+    .eq("marketplace", env.marketplace)
+    .eq("scope_type", "asin")
+    .eq("scope_value", asin)
+    .lte("week_end", effectiveEnd)
+    .order("week_end", { ascending: false })
+    .limit(1);
+  if (sqpWeekError) {
+    return new Response(`Failed loading SQP week baseline: ${sqpWeekError.message}`, { status: 500 });
+  }
+  sqpLatestWeekEnd = parseDateField(sqpWeekRows?.[0]?.week_end) ?? null;
+
+  if (sqpLatestWeekEnd) {
+    const { data: sqpRows, error: sqpRowsError } = await supabaseAdmin
+      .from("sqp_weekly_latest_enriched")
+      .select(
+        "week_start,week_end,search_query_raw,search_query_norm,search_query_score,search_query_volume,impressions_total,impressions_self,clicks_total,clicks_self,cart_adds_total,purchases_total,self_impression_share_calc,self_click_share_calc,self_purchase_share_calc,self_ctr_index,self_cvr_index,market_ctr,self_ctr,market_cvr,self_cvr"
+      )
+      .eq("account_id", env.accountId)
+      .eq("marketplace", env.marketplace)
+      .eq("scope_type", "asin")
+      .eq("scope_value", asin)
+      .eq("week_end", sqpLatestWeekEnd)
+      .order("impressions_total", { ascending: false })
+      .limit(50);
+    if (sqpRowsError) {
+      return new Response(`Failed loading SQP snapshot rows: ${sqpRowsError.message}`, { status: 500 });
+    }
+    sqpSnapshotRows = (sqpRows ?? []) as Array<Record<string, unknown>>;
+
+    const topSqpQueryNorms = sqpSnapshotRows
+      .map((row) => String(row.search_query_norm ?? "").trim())
+      .filter((value) => value.length > 0)
+      .slice(0, 10);
+    if (topSqpQueryNorms.length > 0) {
+      const { data: sqpTrendData, error: sqpTrendError } = await supabaseAdmin
+        .from("sqp_weekly_latest_enriched")
+        .select(
+          "week_start,week_end,search_query_raw,search_query_norm,search_query_volume,impressions_total,impressions_self,clicks_total,clicks_self,cart_adds_total,purchases_total,self_impression_share_calc,self_click_share_calc,self_purchase_share_calc,self_ctr_index,self_cvr_index,market_ctr,self_ctr,market_cvr,self_cvr"
+        )
+        .eq("account_id", env.accountId)
+        .eq("marketplace", env.marketplace)
+        .eq("scope_type", "asin")
+        .eq("scope_value", asin)
+        .in("search_query_norm", topSqpQueryNorms)
+        .gte("week_end", effectiveStart)
+        .lte("week_end", effectiveEnd)
+        .order("week_end", { ascending: true })
+        .limit(5000);
+      if (sqpTrendError) {
+        return new Response(`Failed loading SQP trend rows: ${sqpTrendError.message}`, { status: 500 });
+      }
+      sqpTrendRows = (sqpTrendData ?? []) as Array<Record<string, unknown>>;
+    }
+  }
+
+  let rankingLatestObservedDate: string | null = null;
+  let rankingSnapshotTopRows: Array<Record<string, unknown>> = [];
+  let rankingTrendRows: Array<Record<string, unknown>> = [];
+  const { data: rankingDateRows, error: rankingDateError } = await supabaseAdmin
+    .from("h10_keyword_rank_daily_latest")
+    .select("observed_date")
+    .eq("account_id", env.accountId)
+    .eq("marketplace", env.marketplace)
+    .eq("asin", asin)
+    .lte("observed_date", effectiveEnd)
+    .order("observed_date", { ascending: false })
+    .limit(1);
+  if (rankingDateError) {
+    return new Response(`Failed loading ranking snapshot date: ${rankingDateError.message}`, {
+      status: 500,
+    });
+  }
+  rankingLatestObservedDate = parseDateField(rankingDateRows?.[0]?.observed_date) ?? null;
+
+  if (rankingLatestObservedDate) {
+    const { data: rankingRows, error: rankingRowsError } = await supabaseAdmin
+      .from("h10_keyword_rank_daily_latest")
+      .select(
+        "observed_date,keyword_raw,keyword_norm,search_volume,keyword_sales,organic_rank_raw,organic_rank_value,sponsored_pos_raw,sponsored_pos_value"
+      )
+      .eq("account_id", env.accountId)
+      .eq("marketplace", env.marketplace)
+      .eq("asin", asin)
+      .eq("observed_date", rankingLatestObservedDate)
+      .limit(2000);
+    if (rankingRowsError) {
+      return new Response(`Failed loading ranking snapshot rows: ${rankingRowsError.message}`, {
+        status: 500,
+      });
+    }
+    rankingSnapshotTopRows = ((rankingRows ?? []) as Array<Record<string, unknown>>)
+      .sort((left, right) => {
+        const primary = compareNullableDesc(
+          toFiniteNumberOrNull(left.search_volume),
+          toFiniteNumberOrNull(right.search_volume)
+        );
+        if (primary !== 0) return primary;
+        const secondary = compareNullableDesc(
+          toFiniteNumberOrNull(left.keyword_sales),
+          toFiniteNumberOrNull(right.keyword_sales)
+        );
+        if (secondary !== 0) return secondary;
+        return String(left.keyword_raw ?? "").localeCompare(String(right.keyword_raw ?? ""));
+      })
+      .slice(0, 50);
+
+    const topRankingKeywordNorms = rankingSnapshotTopRows
+      .map((row) => String(row.keyword_norm ?? "").trim())
+      .filter((value) => value.length > 0)
+      .slice(0, 20);
+
+    if (topRankingKeywordNorms.length > 0) {
+      const { data: rankingTrendData, error: rankingTrendError } = await supabaseAdmin
+        .from("h10_keyword_rank_daily_latest")
+        .select(
+          "observed_date,keyword_raw,keyword_norm,search_volume,keyword_sales,organic_rank_raw,organic_rank_value,sponsored_pos_raw,sponsored_pos_value"
+        )
+        .eq("account_id", env.accountId)
+        .eq("marketplace", env.marketplace)
+        .eq("asin", asin)
+        .in("keyword_norm", topRankingKeywordNorms)
+        .gte("observed_date", effectiveStart)
+        .lte("observed_date", effectiveEnd)
+        .order("observed_date", { ascending: true })
+        .limit(20000);
+      if (rankingTrendError) {
+        return new Response(`Failed loading ranking trend rows: ${rankingTrendError.message}`, {
+          status: 500,
+        });
+      }
+      rankingTrendRows = (rankingTrendData ?? []) as Array<Record<string, unknown>>;
+    }
+  }
+
   const { data: experimentsRows, error: experimentsError } = await supabaseAdmin
     .from("log_experiments")
     .select("experiment_id,name,scope,created_at")
@@ -418,11 +815,37 @@ export async function GET(request: Request, { params }: Ctx) {
   }
 
   const output = {
-    kind: "aph_product_ai_data_pack_v1",
+    kind: "aph_product_baseline_data_pack_v2",
     generated_at: new Date().toISOString(),
     account_id: env.accountId,
     marketplace: env.marketplace,
-    window: { start, end },
+    metadata: {
+      requested_range: requestedRange,
+      effective_window: {
+        start: effectiveStart,
+        end: effectiveEnd,
+      },
+      exclude_last_days: excludeLastDays,
+      today_minus_exclude_days: todayMinusExcludeDays,
+      availability: Object.fromEntries(
+        Object.entries(availability).map(([key, bounds]) => [
+          key,
+          {
+            min_date: bounds.minDate,
+            max_date: bounds.maxDate,
+            has_data: Boolean(bounds.minDate && bounds.maxDate),
+          },
+        ])
+      ),
+      warnings,
+      window_candidates: {
+        start_candidate: window.startCandidate,
+        end_candidate: window.endCandidate,
+        overlap_start: window.overlapStart,
+        overlap_end: window.overlapEnd,
+      },
+    },
+    window: { start: effectiveStart, end: effectiveEnd },
     product: {
       asin,
       title: productRow.title,
@@ -433,7 +856,24 @@ export async function GET(request: Request, { params }: Ctx) {
       sales: num(row.sales),
       orders: num(row.orders),
       units: num(row.units),
+      sessions: num(row.sessions),
+      conversions: num(row.conversions),
       ppc_cost: num(row.ppc_cost),
+      ppc_sales: num(row.ppc_sales),
+      ppc_orders: num(row.ppc_orders),
+      ppc_units: num(row.ppc_units),
+      ppc_impressions: num(row.ppc_impressions),
+      ppc_clicks: num(row.ppc_clicks),
+      cost_per_click: num(row.cost_per_click),
+      acos: num(row.acos),
+      tacos: num(row.tacos),
+      referral_fees: num(row.referral_fees),
+      fulfillment_fees: num(row.fulfillment_fees),
+      cost_of_goods: num(row.cost_of_goods),
+      payout: num(row.payout),
+      profits: num(row.profits),
+      roi: num(row.roi),
+      margin: num(row.margin),
     })),
     ads_baseline: {
       latest_bulk_snapshot_date: latestSnapshotDate,
@@ -496,18 +936,91 @@ export async function GET(request: Request, { params }: Ctx) {
         })),
       },
     },
-    experiments: (experimentsRows ?? []).map((row) => ({
-      experiment_id: row.experiment_id,
-      name: row.name,
-      status:
-        row.scope && typeof row.scope === "object" && !Array.isArray(row.scope)
-          ? ((row.scope as Record<string, unknown>).status as string | undefined) ?? "planned"
-          : "planned",
-      created_at: row.created_at,
-    })),
+    sqp_baseline: {
+      latest_week_end: sqpLatestWeekEnd,
+      snapshot_top_queries: sqpSnapshotRows.map((row) => ({
+        week_start: row.week_start,
+        week_end: row.week_end,
+        search_query_raw: row.search_query_raw,
+        search_query_norm: row.search_query_norm,
+        search_query_score: toFiniteNumberOrNull(row.search_query_score),
+        search_query_volume: toFiniteNumberOrNull(row.search_query_volume),
+        impressions_total: toFiniteNumberOrNull(row.impressions_total),
+        impressions_self: toFiniteNumberOrNull(row.impressions_self),
+        clicks_total: toFiniteNumberOrNull(row.clicks_total),
+        clicks_self: toFiniteNumberOrNull(row.clicks_self),
+        cart_adds_total: toFiniteNumberOrNull(row.cart_adds_total),
+        purchases_total: toFiniteNumberOrNull(row.purchases_total),
+        self_impression_share_calc: toFiniteNumberOrNull(row.self_impression_share_calc),
+        self_click_share_calc: toFiniteNumberOrNull(row.self_click_share_calc),
+        self_purchase_share_calc: toFiniteNumberOrNull(row.self_purchase_share_calc),
+        self_ctr_index: toFiniteNumberOrNull(row.self_ctr_index),
+        self_cvr_index: toFiniteNumberOrNull(row.self_cvr_index),
+        market_ctr: toFiniteNumberOrNull(row.market_ctr),
+        self_ctr: toFiniteNumberOrNull(row.self_ctr),
+        market_cvr: toFiniteNumberOrNull(row.market_cvr),
+        self_cvr: toFiniteNumberOrNull(row.self_cvr),
+      })),
+      top_query_trends: sqpTrendRows.map((row) => ({
+        week_start: row.week_start,
+        week_end: row.week_end,
+        search_query_raw: row.search_query_raw,
+        search_query_norm: row.search_query_norm,
+        search_query_volume: toFiniteNumberOrNull(row.search_query_volume),
+        impressions_total: toFiniteNumberOrNull(row.impressions_total),
+        impressions_self: toFiniteNumberOrNull(row.impressions_self),
+        clicks_total: toFiniteNumberOrNull(row.clicks_total),
+        clicks_self: toFiniteNumberOrNull(row.clicks_self),
+        cart_adds_total: toFiniteNumberOrNull(row.cart_adds_total),
+        purchases_total: toFiniteNumberOrNull(row.purchases_total),
+        self_impression_share_calc: toFiniteNumberOrNull(row.self_impression_share_calc),
+        self_click_share_calc: toFiniteNumberOrNull(row.self_click_share_calc),
+        self_purchase_share_calc: toFiniteNumberOrNull(row.self_purchase_share_calc),
+        self_ctr_index: toFiniteNumberOrNull(row.self_ctr_index),
+        self_cvr_index: toFiniteNumberOrNull(row.self_cvr_index),
+        market_ctr: toFiniteNumberOrNull(row.market_ctr),
+        self_ctr: toFiniteNumberOrNull(row.self_ctr),
+        market_cvr: toFiniteNumberOrNull(row.market_cvr),
+        self_cvr: toFiniteNumberOrNull(row.self_cvr),
+      })),
+    },
+    ranking_baseline: {
+      latest_observed_date: rankingLatestObservedDate,
+      snapshot_top_keywords: rankingSnapshotTopRows.map((row) => ({
+        observed_date: row.observed_date,
+        keyword_raw: row.keyword_raw,
+        keyword_norm: row.keyword_norm,
+        search_volume: toFiniteNumberOrNull(row.search_volume),
+        keyword_sales: toFiniteNumberOrNull(row.keyword_sales),
+        organic_rank_raw: row.organic_rank_raw,
+        organic_rank_value: toFiniteNumberOrNull(row.organic_rank_value),
+        sponsored_pos_raw: row.sponsored_pos_raw,
+        sponsored_pos_value: toFiniteNumberOrNull(row.sponsored_pos_value),
+      })),
+      top_keyword_trends: rankingTrendRows.map((row) => ({
+        observed_date: row.observed_date,
+        keyword_raw: row.keyword_raw,
+        keyword_norm: row.keyword_norm,
+        search_volume: toFiniteNumberOrNull(row.search_volume),
+        keyword_sales: toFiniteNumberOrNull(row.keyword_sales),
+        organic_rank_raw: row.organic_rank_raw,
+        organic_rank_value: toFiniteNumberOrNull(row.organic_rank_value),
+        sponsored_pos_raw: row.sponsored_pos_raw,
+        sponsored_pos_value: toFiniteNumberOrNull(row.sponsored_pos_value),
+      })),
+    },
+    experiments: (experimentsRows ?? []).map((row) => {
+      const scope = asRecord(row.scope);
+      return {
+        experiment_id: row.experiment_id,
+        name: row.name,
+        status: (scope.status as string | undefined) ?? "planned",
+        created_at: row.created_at,
+      };
+    }),
   };
 
-  const filename = `${sanitizeFileSegment(asin)}_ai_data_pack.json`;
+  const filename = `${sanitizeFileSegment(asin)}_product_baseline_data_pack.json`;
   return new Response(`${JSON.stringify(output, null, 2)}\n`, {
     headers: {
       "content-type": "application/json; charset=utf-8",

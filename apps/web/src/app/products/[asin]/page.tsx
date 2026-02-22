@@ -8,6 +8,7 @@ import KeywordGroupSetManager from '@/components/KeywordGroupSetManager';
 import Tabs from '@/components/Tabs';
 import TrendChart from '@/components/TrendChart';
 import ExperimentEvaluationOutputPackImport from '@/components/logbook/ExperimentEvaluationOutputPackImport';
+import ProductBaselineDataPackDownload from '@/components/logbook/ProductBaselineDataPackDownload';
 import ProductLogbookAiPackImport from '@/components/logbook/ProductLogbookAiPackImport';
 import ProductRankingHeatmap from '@/components/ranking/ProductRankingHeatmap';
 import ProductSqpTable from '@/components/sqp/ProductSqpTable';
@@ -408,6 +409,7 @@ export default async function ProductDetailPage({
   let start = normalizeDate(paramValue('start')) ?? defaults.start;
   let end = normalizeDate(paramValue('end')) ?? defaults.end;
   const tab = paramValue('tab') ?? 'overview';
+  const aiBaselineRange = paramValue('range');
   const errorMessage = paramValue('error');
   const logbookNotice = paramValue('logbook_notice');
   const logbookError = paramValue('logbook_error');
@@ -1494,15 +1496,9 @@ export default async function ProductDetailPage({
                   download
                   className="inline-flex rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface"
                 >
-                  Download AI Prompt Pack
+                  Download Product Experiment Prompt Pack
                 </a>
-                <a
-                  href={`/products/${asin}/logbook/ai-data-pack?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`}
-                  download
-                  className="inline-flex rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface"
-                >
-                  Download AI Data Pack
-                </a>
+                <ProductBaselineDataPackDownload asin={asin} initialRange={aiBaselineRange} />
               </div>
               <ProductLogbookAiPackImport action={importLogbookAiPackAction} />
             </div>
