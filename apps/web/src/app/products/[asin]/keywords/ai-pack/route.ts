@@ -1,16 +1,11 @@
 import { env } from '@/lib/env';
+import { buildKeywordAiPackFilename } from '@/lib/keywords/keywordAiPackFilenames';
+import { getKeywordAiPackTemplates } from '@/lib/keywords/keywordAiPackTemplates';
+import { renderKeywordAiPackMarkdown } from '@/lib/keywords/renderKeywordAiPack';
 import { getKeywordGroupExportData } from '@/lib/products/keywordGroupExport';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
-
-const sanitizeFileSegment = (value: string): string => {
-  const cleaned = value
-    .trim()
-    .replace(/\s+/g, '_')
-    .replace(/[^a-zA-Z0-9_-]+/g, '');
-  return cleaned.length > 0 ? cleaned.slice(0, 80) : 'keyword_set';
-};
 
 const parseShortName = (value: unknown): string | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -30,6 +25,26 @@ export async function GET(request: Request, { params }: Ctx) {
   }
   const url = new URL(request.url);
   const groupSetId = url.searchParams.get('set');
+  const templateIdParam = url.searchParams.get('template')?.trim() ?? '';
+
+  let templates;
+  try {
+    templates = await getKeywordAiPackTemplates({
+      accountId: env.accountId,
+      marketplace: env.marketplace,
+    });
+  } catch (error) {
+    console.error('keyword_ai_pack:template_load_error', { asin, error });
+    return new Response('Failed to load keyword AI pack template.', { status: 500 });
+  }
+  const selectedTemplate =
+    templates.find((template) => template.id === templateIdParam) ??
+    templates.find((template) => template.is_default) ??
+    templates[0];
+
+  if (!selectedTemplate) {
+    return new Response('No keyword AI pack template configured.', { status: 500 });
+  }
 
   let result;
   try {
@@ -73,32 +88,25 @@ export async function GET(request: Request, { params }: Ctx) {
       shortName = null;
     }
 
-    const content = `# AI Keyword Formatting Pack
+    const content = renderKeywordAiPackMarkdown({
+      asin,
+      title: (productRow.title ?? null) as string | null,
+      short_name: shortName,
+      template: {
+        name: selectedTemplate.name,
+        instructions_md: selectedTemplate.instructions_md,
+      },
+    });
 
-## Product
-- ASIN: ${asin}
-- Title: ${productRow.title ?? '—'}
-- Short name: ${shortName ?? '—'}
+    const filename = buildKeywordAiPackFilename({
+      asin,
+      templateId: selectedTemplate.id,
+    });
 
-## Columns D-O
-- Columns D..O are group names (up to 12).
-- Use the group names you want to create in those header columns.
-
-## Exact CSV Requirements
-- Row 1 is headers (no notes row). Columns must be:
-  - A: keyword
-  - B: group
-  - C: note
-  - D..O: group columns (your group names).
-- Output **only** a CSV in this exact format.
-
-## Ask
-Please produce a CSV that follows the exact format above.
-`;
-
-    const filename = `${asin}_ai_pack.md`;
-
-    console.log('keyword_ai_pack_generic', { asin });
+    console.log('keyword_ai_pack_generic', {
+      asin,
+      templateId: selectedTemplate.id,
+    });
 
     return new Response(content, {
       headers: {
@@ -112,43 +120,33 @@ Please produce a CSV that follows the exact format above.
   const groupNames = data.group_names.slice(0, 12);
   const setName = data.group_set.name;
 
-  const content = `# AI Keyword Formatting Pack
+  const content = renderKeywordAiPackMarkdown({
+    asin,
+    title: data.title,
+    short_name: data.short_name,
+    group_set: {
+      name: data.group_set.name,
+      is_exclusive: data.group_set.is_exclusive,
+      created_at: data.group_set.created_at,
+    },
+    allowed_group_names: groupNames,
+    template: {
+      name: selectedTemplate.name,
+      instructions_md: selectedTemplate.instructions_md,
+    },
+  });
 
-## Product
-- ASIN: ${asin}
-- Title: ${data.title ?? '—'}
-- Short name: ${data.short_name ?? '—'}
-
-## Group Set
-- Name: ${setName}
-- Exclusive: ${data.group_set.is_exclusive ? 'Yes' : 'No'}
-- Created: ${data.group_set.created_at ?? '—'}
-
-## Allowed Group Names (Columns D-O)
-${groupNames.length > 0 ? groupNames.map((name) => `- ${name}`).join('\n') : '- (none)'}
-
-## Exact CSV Requirements
-- Row 1 is headers (no notes row). Columns must be:
-  - A: keyword
-  - B: group
-  - C: note
-  - D..O: group columns (only the names listed above).
-- Only the group names listed above are allowed in columns D..O.
-- Keywords are normalized (lowercase, trim, collapse spaces).
-- Duplicate keywords are removed automatically by the importer.
-- If this is an exclusive set, each keyword can belong to only one group.
-- Output **only** a CSV in this exact format.
-
-## Ask
-Please produce a CSV that follows the exact format above for the group names listed.
-`;
-
-  const filename = `${asin}_${sanitizeFileSegment(setName)}_ai_pack.md`;
+  const filename = buildKeywordAiPackFilename({
+    asin,
+    setName,
+    templateId: selectedTemplate.id,
+  });
 
   console.log('keyword_ai_pack', {
     asin,
     groupSetId: data.group_set.group_set_id,
     groupCount: groupNames.length,
+    templateId: selectedTemplate.id,
   });
 
   return new Response(content, {

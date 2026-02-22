@@ -7,6 +7,7 @@ import KeywordGroupImport from '@/components/KeywordGroupImport';
 import KeywordGroupSetManager from '@/components/KeywordGroupSetManager';
 import Tabs from '@/components/Tabs';
 import TrendChart from '@/components/TrendChart';
+import KeywordAiPackDownload from '@/components/keywords/KeywordAiPackDownload';
 import ExperimentEvaluationOutputPackImport from '@/components/logbook/ExperimentEvaluationOutputPackImport';
 import ProductBaselineDataPackDownload from '@/components/logbook/ProductBaselineDataPackDownload';
 import ProductLogbookAiPackImport from '@/components/logbook/ProductLogbookAiPackImport';
@@ -15,6 +16,8 @@ import ProductSqpTable from '@/components/sqp/ProductSqpTable';
 import { runSbUpdateGenerator, runSpUpdateGenerator } from '@/lib/bulksheets/runGenerators';
 import { parseCsv } from '@/lib/csv/parseCsv';
 import { env } from '@/lib/env';
+import { getKeywordAiPackTemplates } from '@/lib/keywords/keywordAiPackTemplates';
+import { toTemplateOptions } from '@/lib/keywords/keywordAiPackTemplatesModel';
 import { importExperimentEvaluationOutputPack } from '@/lib/logbook/aiPack/importExperimentEvaluationOutputPack';
 import { importProductExperimentOutputPack } from '@/lib/logbook/aiPack/importProductExperimentOutputPack';
 import {
@@ -1151,6 +1154,16 @@ export default async function ProductDetailPage({
           asin,
         })
       : null;
+
+  const keywordAiPackTemplateOptions =
+    tab === 'keywords'
+      ? toTemplateOptions(
+          await getKeywordAiPackTemplates({
+            accountId: env.accountId,
+            marketplace: env.marketplace,
+          })
+        )
+      : [];
 
   const keywordGroupMemberships =
     (tab === 'ranking' || tab === 'sqp') && keywordGroups?.group_sets?.length
@@ -2633,13 +2646,10 @@ export default async function ProductDetailPage({
               >
                 Download template CSV
               </a>
-              <a
-                href={`/products/${asin}/keywords/ai-pack`}
-                download
-                className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
-              >
-                Download AI formatting pack
-              </a>
+              <KeywordAiPackDownload
+                asin={asin}
+                templates={keywordAiPackTemplateOptions}
+              />
             </div>
           </div>
 
