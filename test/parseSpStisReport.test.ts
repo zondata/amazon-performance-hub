@@ -4,6 +4,7 @@ import { parseSpStisReport } from "../src/ads/parseSpStisReport";
 const CSV = `Date,Portfolio Name,Campaign Name,Ad Group Name,Targeting,Match Type,Customer Search Term,Search Term Impression Rank,Search Term Impression Share,Impressions,Clicks,Spend,Sales,Orders,Units,CTR,ACOS,Conversion Rate
 "Jan 05, 2026",Brand A,Campaign One,Ad Group One,blue shoes,Exact,blue running shoes,1,45%,"1,234",12,"$1,234.56",2345.00,3,4,0.98%,28.6%,12.5%
 "Jan 06, 2026",,Campaign Two,Ad Group Two,red shoes,Phrase,red shoes,2,,100,5,12.34,0,0,0,,0%,0%
+"Jan 07, 2026",Brand A,Campaign Two,Ad Group Two,"category=""123""",-,category search,3,1.00%,80,4,10.00,12.00,1,1,5.00%,83.33%,25.0%
 `;
 
 describe("parseSpStisReport", () => {
@@ -25,5 +26,6 @@ describe("parseSpStisReport", () => {
     expect(second.portfolio_name_raw).toBeNull();
     expect(second.search_term_impression_share).toBeNull();
     expect(second.ctr).toBeNull();
+    expect(result.rows.some((row) => row.targeting_norm === 'category="123"')).toBe(false);
   });
 });

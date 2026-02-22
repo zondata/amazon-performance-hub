@@ -7,6 +7,7 @@ import {
   resolveAdGroupId,
   resolveTargetId,
 } from "./core";
+import { isCategoryTargetingExpression } from "../ads/targetingFilters";
 
 export type SbCampaignRawRow = {
   date: string;
@@ -297,6 +298,8 @@ export function mapSbKeywordRows(params: {
   const pendingTargetIssues: { key: string; issue: PendingIssue }[] = [];
 
   for (const row of rows) {
+    if (isCategoryTargetingExpression(row.targeting_norm)) continue;
+
     const campaignKey = JSON.stringify(issueKeyBase(row));
     const campaignResult = resolveCampaignId({
       campaignNameNorm: row.campaign_name_norm,
@@ -444,6 +447,10 @@ export function mapSbStisRows(params: {
   const pendingTargetIssues: { key: string; issue: PendingIssue }[] = [];
 
   for (const row of rows) {
+    const isSearchTermRow =
+      !!row.customer_search_term_norm && row.customer_search_term_norm.trim() !== "";
+    if (isCategoryTargetingExpression(row.targeting_norm) && !isSearchTermRow) continue;
+
     const campaignKey = JSON.stringify(issueKeyBase(row));
     const campaignResult = resolveCampaignId({
       campaignNameNorm: row.campaign_name_norm,
@@ -493,8 +500,6 @@ export function mapSbStisRows(params: {
 
     resolvedAdGroupKeys.add(adGroupKey);
     const targetingNorm = row.targeting_norm.trim();
-    const isSearchTermRow =
-      !!row.customer_search_term_norm && row.customer_search_term_norm.trim() !== "";
     const targetKeySignature = JSON.stringify({
       ...issueKeyBase(row),
       ad_group_name_norm: row.ad_group_name_norm,

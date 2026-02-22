@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import * as XLSX from "xlsx";
 import { normText } from "../bulk/parseSponsoredProductsBulk";
+import { isCategoryTargetingExpression } from "./targetingFilters";
 
 function ensureWorksheetRef(ws: XLSX.WorkSheet) {
   const ref = ws["!ref"];
@@ -231,6 +232,8 @@ export function parseSbKeywordReport(input: string): SbKeywordParseResult {
       headerMap.targeting_raw !== undefined ? row[headerMap.targeting_raw] ?? "" : "";
     const targetingText = String(targetingRaw).trim();
     if (!targetingText) continue;
+    const targetingNorm = normText(targetingText);
+    if (isCategoryTargetingExpression(targetingNorm)) continue;
 
     const portfolioRaw =
       headerMap.portfolio_name_raw !== undefined ? row[headerMap.portfolio_name_raw] ?? "" : "";
@@ -250,7 +253,7 @@ export function parseSbKeywordReport(input: string): SbKeywordParseResult {
       ad_group_name_raw: adGroupNameRaw,
       ad_group_name_norm: normText(adGroupNameRaw),
       targeting_raw: targetingText,
-      targeting_norm: normText(targetingText),
+      targeting_norm: targetingNorm,
       match_type_raw: matchTypeRawValue,
       match_type_norm: normalizeMatchType(matchTypeRawValue),
       impressions:

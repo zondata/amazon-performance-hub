@@ -60,6 +60,24 @@ function writeTargetingXlsx(filePath: string) {
       "0%",
       "",
     ],
+    [
+      "2026-01-03",
+      "Brand A",
+      "Campaign One",
+      "Ad Group One",
+      "category=\"123\"",
+      "-",
+      "80",
+      "4",
+      "10.00",
+      "12.00",
+      "1",
+      "1",
+      "5.00%",
+      "83.33%",
+      "25.0%",
+      "10%",
+    ],
   ];
 
   const sheet = XLSX.utils.aoa_to_sheet(rows);
@@ -90,5 +108,6 @@ describe("parseSpTargetingReport", () => {
     const second = result.rows[1];
     expect(second.match_type_norm).toBe("PHRASE");
     expect(second.top_of_search_impression_share).toBeNull();
+    expect(result.rows.some((row) => row.targeting_norm === 'category="123"')).toBe(false);
   });
 });

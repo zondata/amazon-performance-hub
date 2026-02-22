@@ -63,6 +63,25 @@ function writeKeywordXlsx(filePath: string) {
       "0",
       "0%",
     ],
+    [
+      "2026-01-03",
+      "Brand A",
+      "Campaign One",
+      "Adgroup A",
+      "category=\"retirement planning\"",
+      "-",
+      "80",
+      "4",
+      "10.00",
+      "12.00",
+      "1",
+      "1",
+      "2.50",
+      "5.00%",
+      "83.33%",
+      "1.20",
+      "25.0%",
+    ],
   ];
 
   const sheet = XLSX.utils.aoa_to_sheet(rows);
@@ -91,5 +110,10 @@ describe("parseSbKeywordReport", () => {
     const second = result.rows[1];
     expect(second.match_type_raw).toBe("-");
     expect(second.match_type_norm).toBe("UNKNOWN");
+
+    const categoryRows = result.rows.filter(
+      (row) => row.targeting_norm === 'category="retirement planning"',
+    );
+    expect(categoryRows.length).toBe(0);
   });
 });

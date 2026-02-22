@@ -5,6 +5,7 @@ import {
   BulkLookup,
   resolveTargetId,
   buildTargetKey,
+  normalizeCategoryExpression,
 } from "../src/mapping_sb/core";
 import { mapSbStisRows } from "../src/mapping_sb/mappers";
 
@@ -80,6 +81,16 @@ describe("sb resolveTargetId", () => {
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") expect(result.id).toBe("t1");
+  });
+});
+
+describe("sb normalizeCategoryExpression", () => {
+  it("maps category name expression to category id expression when lookup contains a mapping", () => {
+    const lookup = emptyLookup();
+    lookup.categoryIdByNameNorm.set("retirement planning", "12345");
+
+    const normalized = normalizeCategoryExpression('category="retirement planning"', lookup);
+    expect(normalized).toBe('category="12345"');
   });
 });
 

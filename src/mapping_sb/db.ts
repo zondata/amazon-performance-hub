@@ -66,6 +66,16 @@ async function fetchAllRows<T>(table: string, select: string, filters: Record<st
   return rows;
 }
 
+function isMissingTableError(error: unknown, tableName: string): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.toLowerCase();
+  const tableNorm = tableName.toLowerCase();
+  if (!normalized.includes(tableNorm)) return false;
+  return normalized.includes("does not exist")
+    || normalized.includes("could not find the table")
+    || normalized.includes("pgrst205");
+}
+
 function dateToUtcMs(dateIso: string): number {
   const [y, m, d] = dateIso.split("-").map(Number);
   return Date.UTC(y, m - 1, d);
@@ -247,12 +257,18 @@ export async function loadBulkLookup(accountId: string, snapshotDate: string): P
       account_id: accountId,
     }),
     (async () => {
-      if (!(await tableExists("sp_category_id_map"))) return [] as { category_name_norm: string; category_id: string }[];
-      return fetchAllRows<{ category_name_norm: string; category_id: string }>(
-        "sp_category_id_map",
-        "category_name_norm,category_id",
-        { account_id: accountId }
-      );
+      try {
+        return await fetchAllRows<{ category_name_norm: string; category_id: string }>(
+          "sp_category_id_map",
+          "category_name_norm,category_id",
+          { account_id: accountId }
+        );
+      } catch (error) {
+        if (isMissingTableError(error, "sp_category_id_map")) {
+          return [] as { category_name_norm: string; category_id: string }[];
+        }
+        throw error;
+      }
     })(),
   ]);
 

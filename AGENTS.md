@@ -404,6 +404,11 @@ Commands (example):
 - Inspect issues in `sp_mapping_issues`, add overrides in `sp_manual_name_overrides`, re-run mapping.
 - `npm run pipeline:backfill:ads -- --account-id US --root /mnt/c/Users/User/Dropbox/AmazonReports --from 2025-01-01 --to 2025-03-31`
 
+Manual verification (category targeting exclusion):
+- Re-run `npm run map:sb:all:date -- --account-id <id> <YYYY-MM-DD or folder>` and `npm run map:sp:all:date -- --account-id <id> <YYYY-MM-DD or folder>`; confirm `issueRows` are `0`.
+- Confirm SB mapping issues are empty for the upload:
+  - `select count(*) from sb_mapping_issues where upload_id = '<id>';` (expect `0`)
+
 What we learned / common mapping issues & fixes:
 - Campaign + Placement issue: report campaign_name_norm not found in chosen bulk snapshot/history (rename lag or suffix mismatch).
 - Campaign + Placement fix: insert into `sp_manual_name_overrides` (campaign) using name_norm -> campaign_id; rerun mapping; issues drop to 0.
@@ -417,6 +422,14 @@ What we learned / common mapping issues & fixes:
   - If `customer_search_term_norm` is non-empty, target_id may be NULL and this is NOT an error.
   - Do NOT log mapping issues for target_id on STIS search-term rows.
   - When target_id is NULL, `target_key` must be deterministic (targeting signature). Do NOT use a constant like `"__ROLLUP__"` or it can violate `sp_stis_daily_fact_uq`.
+- Category targeting is excluded (SP + SB):
+  - Rationale: `category="name"` can map to multiple IDs; without API this is ambiguous and creates noisy unmapped issues; category targeting is not a primary sales driver.
+  - Rule: any `targeting_norm` matching `/^category=\".*\"$/i` is skipped.
+  - Where enforced:
+    - Parser-side skip so it does not enter `*_daily_raw`: `src/ads/parseSpTargetingReport.ts`, `src/ads/parseSpStisReport.ts`, `src/ads/parseSbKeywordReport.ts`, `src/ads/parseSbStisReport.ts`.
+    - Mapping-side skip so historical raw uploads do not create issues/facts: `src/mapping/mappers.ts` (SP targeting + SP STIS non-search-term), `src/mapping_sb/mappers.ts` (SB keyword + SB STIS non-search-term).
+    - Shared helper: `src/ads/targetingFilters.ts` (`isCategoryTargetingExpression`).
+  - Result: category targets do not appear in fact tables and do not produce mapping issues.
 
 Official Health Check:
 ```sql
@@ -461,6 +474,7 @@ Mapping rules:
 - If mapping is ambiguous, log to `sb_mapping_issues` and skip insert.
 - If missing snapshot, log `missing_bulk_snapshot` and skip insert.
 - Latest views for facts use max(exported_at) partitioned by stable IDs, with tie-breaks on uploads.ingested_at then upload_id.
+- Category targeting rows are intentionally ignored by parse + map paths (see Category targeting exclusion note).
 
 SB STIS rules:
 - If `customer_search_term_norm` is non-empty, target_id may be NULL and this is NOT an error.

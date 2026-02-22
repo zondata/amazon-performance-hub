@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import * as XLSX from "xlsx";
 import { normText } from "../bulk/parseSponsoredProductsBulk";
+import { isCategoryTargetingExpression } from "./targetingFilters";
 
 export type SpTargetingRow = {
   date: string;
@@ -170,6 +171,8 @@ export function parseSpTargetingReport(input: string): SpTargetingParseResult {
     const targetingRaw = headerMap.targeting_raw !== undefined ? row[headerMap.targeting_raw] ?? "" : "";
     const targetingText = String(targetingRaw).trim();
     if (!targetingText) continue;
+    const targetingNorm = normText(targetingText);
+    if (isCategoryTargetingExpression(targetingNorm)) continue;
 
     const portfolioRaw = headerMap.portfolio_name_raw !== undefined ? row[headerMap.portfolio_name_raw] ?? "" : "";
     const portfolioNameRaw = String(portfolioRaw ?? "").trim();
@@ -187,7 +190,7 @@ export function parseSpTargetingReport(input: string): SpTargetingParseResult {
       ad_group_name_raw: adGroupNameRaw,
       ad_group_name_norm: normText(adGroupNameRaw),
       targeting_raw: targetingText,
-      targeting_norm: normText(targetingText),
+      targeting_norm: targetingNorm,
       match_type_raw: matchTypeRaw || null,
       match_type_norm: matchTypeRaw ? normalizeMatchType(matchTypeRaw) : "UNKNOWN",
       impressions: headerMap.impressions !== undefined

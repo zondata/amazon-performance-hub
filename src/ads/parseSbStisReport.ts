@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { normText } from "../bulk/parseSponsoredProductsBulk";
+import { isCategoryTargetingExpression } from "./targetingFilters";
 
 export type SbStisRow = {
   date: string;
@@ -260,6 +261,8 @@ export function parseSbStisReport(input: string): SbStisParseResult {
     const targetingRaw = headerMap.targeting_raw !== undefined ? row[headerMap.targeting_raw] ?? "" : "";
     const targetingText = String(targetingRaw).trim();
     if (!targetingText) continue;
+    const targetingNorm = normText(targetingText);
+    if (isCategoryTargetingExpression(targetingNorm)) continue;
 
     const searchTermRaw =
       headerMap.customer_search_term_raw !== undefined ? row[headerMap.customer_search_term_raw] ?? "" : "";
@@ -283,7 +286,7 @@ export function parseSbStisReport(input: string): SbStisParseResult {
       ad_group_name_raw: adGroupNameRaw,
       ad_group_name_norm: normText(adGroupNameRaw),
       targeting_raw: targetingText,
-      targeting_norm: normText(targetingText),
+      targeting_norm: targetingNorm,
       match_type_raw: matchTypeRawValue,
       match_type_norm: normalizeMatchType(matchTypeRawValue),
       customer_search_term_raw: searchTermText,
