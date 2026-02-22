@@ -32,7 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Logbook', href: '/logbook/experiments', icon: LogbookIcon },
   { label: 'Bulksheet Ops', href: '/bulksheet-ops/sp-update', icon: BulksheetOpsIcon },
   { label: 'Imports & Health', href: '/imports-health', badge: 'Live', icon: ImportsHealthIcon },
-  { label: 'Settings', href: '#', icon: SettingsIcon },
+  { label: 'Settings', href: '/settings/keyword-ai-packs', icon: SettingsIcon },
 ];
 
 const isActive = (pathname: string, href: string) => {
