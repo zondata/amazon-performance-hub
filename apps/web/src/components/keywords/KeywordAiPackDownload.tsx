@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 
 type KeywordAiPackDownloadProps = {
@@ -19,34 +19,41 @@ export default function KeywordAiPackDownload({
   asin,
   templates,
 }: KeywordAiPackDownloadProps) {
-  const defaultTemplateId = useMemo(
-    () => resolveDefaultTemplateId(templates),
-    [templates]
-  );
+  const defaultId = resolveDefaultTemplateId(templates);
 
   const templateIds = useMemo(
     () => new Set(templates.map((template) => template.id)),
     [templates]
   );
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
-    () => {
-      if (typeof window === 'undefined') return resolveDefaultTemplateId(templates);
-      try {
-        const stored = window.localStorage.getItem(STORAGE_KEY) ?? '';
-        if (stored && templates.some((template) => template.id === stored)) {
-          return stored;
-        }
-      } catch {
-        // Ignore localStorage read errors and fall back to default.
-      }
-      return resolveDefaultTemplateId(templates);
-    }
-  );
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(defaultId);
+  const [hydrated, setHydrated] = useState(false);
 
-  const effectiveTemplateId = templateIds.has(selectedTemplateId)
-    ? selectedTemplateId
-    : defaultTemplateId;
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(STORAGE_KEY) ?? '';
+      if (stored && templateIds.has(stored)) {
+        setSelectedTemplateId(stored);
+        return;
+      }
+    } catch {
+      // Ignore localStorage read errors and fall back to default.
+    }
+
+    setSelectedTemplateId(defaultId);
+  }, [templates, templateIds, defaultId]);
+
+  useEffect(() => {
+    if (!templateIds.has(selectedTemplateId)) {
+      setSelectedTemplateId(resolveDefaultTemplateId(templates));
+    }
+  }, [selectedTemplateId, templateIds, templates]);
+
+  const uiTemplateId = hydrated ? selectedTemplateId : defaultId;
 
   const handleTemplateChange = (nextId: string) => {
     setSelectedTemplateId(nextId);
@@ -58,7 +65,7 @@ export default function KeywordAiPackDownload({
   };
 
   const href = `/products/${asin}/keywords/ai-pack?template=${encodeURIComponent(
-    effectiveTemplateId
+    uiTemplateId
   )}`;
 
   return (
@@ -66,7 +73,7 @@ export default function KeywordAiPackDownload({
       <label className="flex items-center gap-2 text-xs text-muted">
         <span className="uppercase tracking-wide">Template</span>
         <select
-          value={effectiveTemplateId}
+          value={uiTemplateId}
           onChange={(event) => handleTemplateChange(event.target.value)}
           className="min-w-[220px] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
         >

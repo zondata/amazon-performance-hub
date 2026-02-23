@@ -939,6 +939,7 @@ Verification:
 - Added template management page at `/settings/logbook-ai-packs` to edit prompt instructions and set a default template.
 - Added prompt-pack renderer module for Product Experiment Prompt Packs with template-driven assistant instructions.
 - Updated product logbook AI prompt-pack route to support `?template=` selection.
+- Fixed Next.js hydration mismatch for Product download links (Keywords AI pack + Logbook prompt pack) by matching SSR and first client render (hydration gate; localStorage read after mount); added regression tests `test/keywordAiPackDownloadHydration.test.ts` and `test/productExperimentPromptPackDownloadHydration.test.ts`.
 
 ### 2026-02-13
 - Added Sponsored Brands raw ingestion (campaign, campaign placement, keyword, STIS) with latest-wins views and upload_stats counts.

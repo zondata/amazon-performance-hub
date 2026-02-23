@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 
 import type { ProductExperimentPromptTemplateOption } from '@/lib/logbook/productExperimentPromptTemplatesModel';
@@ -23,30 +23,36 @@ export default function ProductExperimentPromptPackDownload({
   asin,
   templates,
 }: ProductExperimentPromptPackDownloadProps) {
-  const defaultTemplateId = useMemo(
-    () => resolveDefaultTemplateId(templates),
-    [templates]
-  );
+  const defaultTemplateId = useMemo(() => resolveDefaultTemplateId(templates), [templates]);
 
   const templateIds = useMemo(
     () => new Set(templates.map((template) => template.id)),
     [templates]
   );
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
-    () => {
-      if (typeof window === 'undefined') return resolveDefaultTemplateId(templates);
-      try {
-        const stored = window.localStorage.getItem(STORAGE_KEY) ?? '';
-        if (stored && templates.some((template) => template.id === stored)) {
-          return stored;
-        }
-      } catch {
-        // Ignore localStorage read errors and fall back to default.
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(defaultTemplateId);
+
+  useEffect(() => {
+    const defaultId = resolveDefaultTemplateId(templates);
+
+    try {
+      const stored = window.localStorage.getItem(STORAGE_KEY) ?? '';
+      if (stored && templateIds.has(stored)) {
+        setSelectedTemplateId(stored);
+        return;
       }
-      return resolveDefaultTemplateId(templates);
+    } catch {
+      // Ignore localStorage read errors and fall back to default.
     }
-  );
+
+    setSelectedTemplateId(defaultId);
+  }, [templates, templateIds]);
+
+  useEffect(() => {
+    if (!templateIds.has(selectedTemplateId)) {
+      setSelectedTemplateId(resolveDefaultTemplateId(templates));
+    }
+  }, [selectedTemplateId, templateIds, templates]);
 
   const effectiveTemplateId = templateIds.has(selectedTemplateId)
     ? selectedTemplateId
