@@ -3,22 +3,26 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 
-type KeywordAiPackDownloadProps = {
+import type { ProductExperimentPromptTemplateOption } from '@/lib/logbook/productExperimentPromptTemplatesModel';
+
+type ProductExperimentPromptPackDownloadProps = {
   asin: string;
-  templates: Array<{ id: string; name: string; is_default: boolean }>;
+  templates: ProductExperimentPromptTemplateOption[];
 };
 
-const STORAGE_KEY = 'aph.keywordAiPackTemplateId';
+const STORAGE_KEY = 'aph.productExperimentPromptTemplateId';
 
 const resolveDefaultTemplateId = (
-  templates: Array<{ id: string; name: string; is_default: boolean }>
+  templates: ProductExperimentPromptTemplateOption[]
 ): string =>
-  templates.find((template) => template.is_default)?.id ?? templates[0]?.id ?? 'formatting_only';
+  templates.find((template) => template.is_default)?.id ??
+  templates[0]?.id ??
+  'formatting_only';
 
-export default function KeywordAiPackDownload({
+export default function ProductExperimentPromptPackDownload({
   asin,
   templates,
-}: KeywordAiPackDownloadProps) {
+}: ProductExperimentPromptPackDownloadProps) {
   const defaultTemplateId = useMemo(
     () => resolveDefaultTemplateId(templates),
     [templates]
@@ -57,7 +61,7 @@ export default function KeywordAiPackDownload({
     }
   };
 
-  const href = `/products/${asin}/keywords/ai-pack?template=${encodeURIComponent(
+  const href = `/products/${asin}/logbook/ai-prompt-pack?template=${encodeURIComponent(
     effectiveTemplateId
   )}`;
 
@@ -81,13 +85,13 @@ export default function KeywordAiPackDownload({
       <a
         href={href}
         download
-        className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface-2"
+        className="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface"
       >
-        Download Keyword AI pack
+        Download Product Experiment Prompt Pack
       </a>
 
       <Link
-        href="/settings/keyword-ai-packs"
+        href="/settings/logbook-ai-packs"
         className="text-xs font-medium text-muted underline-offset-4 hover:text-foreground hover:underline"
       >
         Manage templates

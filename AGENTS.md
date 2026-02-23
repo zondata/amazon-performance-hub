@@ -934,6 +934,12 @@ Verification:
 - Cleanup removed test SKUs, leaving only real SKU.
 
 ## Recent changes / Changelog
+### 2026-02-23
+- Added Logbook AI Prompt Pack templates with template selection in the Product Logbook AI workflow download area.
+- Added template management page at `/settings/logbook-ai-packs` to edit prompt instructions and set a default template.
+- Added prompt-pack renderer module for Product Experiment Prompt Packs with template-driven assistant instructions.
+- Updated product logbook AI prompt-pack route to support `?template=` selection.
+
 ### 2026-02-13
 - Added Sponsored Brands raw ingestion (campaign, campaign placement, keyword, STIS) with latest-wins views and upload_stats counts.
 - SB parsers + CLIs + date-folder wrappers (exported_at defaults to folder date at T00:00:00Z).

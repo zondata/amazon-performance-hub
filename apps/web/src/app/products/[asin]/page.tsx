@@ -8,6 +8,7 @@ import KeywordGroupSetManager from '@/components/KeywordGroupSetManager';
 import Tabs from '@/components/Tabs';
 import TrendChart from '@/components/TrendChart';
 import KeywordAiPackDownload from '@/components/keywords/KeywordAiPackDownload';
+import ProductExperimentPromptPackDownload from '@/components/logbook/ProductExperimentPromptPackDownload';
 import ExperimentEvaluationOutputPackImport from '@/components/logbook/ExperimentEvaluationOutputPackImport';
 import ProductBaselineDataPackDownload from '@/components/logbook/ProductBaselineDataPackDownload';
 import ProductLogbookAiPackImport from '@/components/logbook/ProductLogbookAiPackImport';
@@ -17,9 +18,11 @@ import { runSbUpdateGenerator, runSpUpdateGenerator } from '@/lib/bulksheets/run
 import { parseCsv } from '@/lib/csv/parseCsv';
 import { env } from '@/lib/env';
 import { getKeywordAiPackTemplates } from '@/lib/keywords/keywordAiPackTemplates';
-import { toTemplateOptions } from '@/lib/keywords/keywordAiPackTemplatesModel';
+import { toTemplateOptions as toKeywordTemplateOptions } from '@/lib/keywords/keywordAiPackTemplatesModel';
 import { importExperimentEvaluationOutputPack } from '@/lib/logbook/aiPack/importExperimentEvaluationOutputPack';
 import { importProductExperimentOutputPack } from '@/lib/logbook/aiPack/importProductExperimentOutputPack';
+import { getProductExperimentPromptTemplates } from '@/lib/logbook/productExperimentPromptTemplates';
+import { toTemplateOptions as toProductExperimentPromptTemplateOptions } from '@/lib/logbook/productExperimentPromptTemplatesModel';
 import {
   buildPlanPreviewsForScope,
   extractBulkgenPlans,
@@ -1157,8 +1160,18 @@ export default async function ProductDetailPage({
 
   const keywordAiPackTemplateOptions =
     tab === 'keywords'
-      ? toTemplateOptions(
+      ? toKeywordTemplateOptions(
           await getKeywordAiPackTemplates({
+            accountId: env.accountId,
+            marketplace: env.marketplace,
+          })
+        )
+      : [];
+
+  const productExperimentPromptTemplateOptions =
+    tab === 'logbook'
+      ? toProductExperimentPromptTemplateOptions(
+          await getProductExperimentPromptTemplates({
             accountId: env.accountId,
             marketplace: env.marketplace,
           })
@@ -1504,13 +1517,10 @@ export default async function ProductDetailPage({
                 the AI Output Pack JSON to create the experiment and optional manual changes.
               </div>
               <div className="mb-3 flex flex-wrap gap-2">
-                <a
-                  href={`/products/${asin}/logbook/ai-prompt-pack`}
-                  download
-                  className="inline-flex rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-semibold text-foreground hover:bg-surface"
-                >
-                  Download Product Experiment Prompt Pack
-                </a>
+                <ProductExperimentPromptPackDownload
+                  asin={asin}
+                  templates={productExperimentPromptTemplateOptions}
+                />
                 <ProductBaselineDataPackDownload asin={asin} initialRange={aiBaselineRange} />
               </div>
               <ProductLogbookAiPackImport action={importLogbookAiPackAction} />
