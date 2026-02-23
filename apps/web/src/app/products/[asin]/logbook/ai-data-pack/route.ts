@@ -6,6 +6,10 @@ import {
   normalizeExcludeLastDays,
   type BaselineAvailabilityMap,
 } from "@/lib/logbook/aiPack/computeBaselineWindow";
+import {
+  loadSbCampaignIdsForAsin,
+  loadSpCampaignIdsForAsin,
+} from "@/lib/logbook/aiPack/findAsinCampaignIds";
 import { env } from "@/lib/env";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -211,7 +215,7 @@ export async function GET(request: Request, { params }: Ctx) {
   const endArg = url.searchParams.get("end");
   const userEnd = endArg && DATE_RE.test(endArg) ? endArg : null;
   const endCandidate = computeEndCandidate(todayMinusExcludeDays, userEnd);
-  const asinPattern = `%${asin}%`;
+  const asinNamePattern = `%${asin.toLowerCase()}%`;
 
   const { data: productRow, error: productError } = await supabaseAdmin
     .from("products")
@@ -236,6 +240,43 @@ export async function GET(request: Request, { params }: Ctx) {
     typeof (profileRow.profile_json as Record<string, unknown>).short_name === "string"
       ? ((profileRow.profile_json as Record<string, unknown>).short_name as string).trim()
       : null;
+
+  const { data: latestUploadRows, error: latestUploadError } = await supabaseAdmin
+    .from("uploads")
+    .select("upload_id,snapshot_date")
+    .eq("account_id", env.accountId)
+    .eq("source_type", "bulk")
+    .not("snapshot_date", "is", null)
+    .order("snapshot_date", { ascending: false })
+    .limit(1);
+  if (latestUploadError) {
+    return new Response(`Failed loading bulk snapshot date: ${latestUploadError.message}`, {
+      status: 500,
+    });
+  }
+  const latestSnapshotDate = (latestUploadRows?.[0]?.snapshot_date as string | null) ?? null;
+
+  let spCandidateCampaignIds: string[] = [];
+  let sbCandidateCampaignIds: string[] = [];
+  try {
+    [spCandidateCampaignIds, sbCandidateCampaignIds] = await Promise.all([
+      loadSpCampaignIdsForAsin({
+        asin,
+        accountId: env.accountId,
+        snapshotDate: latestSnapshotDate,
+        namePattern: asinNamePattern,
+      }),
+      loadSbCampaignIdsForAsin({
+        asin,
+        accountId: env.accountId,
+        snapshotDate: latestSnapshotDate,
+        namePattern: asinNamePattern,
+      }),
+    ]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed resolving ASIN campaign IDs.";
+    return new Response(message, { status: 500 });
+  }
 
   let availability: BaselineAvailabilityMap;
   try {
@@ -270,86 +311,80 @@ export async function GET(request: Request, { params }: Ctx) {
           .order("date", { ascending: false })
           .limit(1)
       ),
-      loadDateBounds(
-        "date",
-        "SP campaign baseline",
-        supabaseAdmin
-          .from("sp_campaign_hourly_fact_latest")
-          .select("date")
-          .eq("account_id", env.accountId)
-          .ilike("campaign_name_norm", asinPattern)
-          .lte("date", endCandidate)
-          .order("date", { ascending: true })
-          .limit(1),
-        supabaseAdmin
-          .from("sp_campaign_hourly_fact_latest")
-          .select("date")
-          .eq("account_id", env.accountId)
-          .ilike("campaign_name_norm", asinPattern)
-          .lte("date", endCandidate)
-          .order("date", { ascending: false })
-          .limit(1)
-      ),
-      loadDateBounds(
-        "date",
-        "SP targeting baseline",
-        supabaseAdmin
-          .from("sp_targeting_daily_fact_latest")
-          .select("date")
-          .eq("account_id", env.accountId)
-          .ilike("campaign_name_norm", asinPattern)
-          .lte("date", endCandidate)
-          .order("date", { ascending: true })
-          .limit(1),
-        supabaseAdmin
-          .from("sp_targeting_daily_fact_latest")
-          .select("date")
-          .eq("account_id", env.accountId)
-          .ilike("campaign_name_norm", asinPattern)
-          .lte("date", endCandidate)
-          .order("date", { ascending: false })
-          .limit(1)
-      ),
-      loadDateBounds(
-        "date",
-        "SB campaign baseline",
-        supabaseAdmin
-          .from("sb_campaign_daily_fact_latest")
-          .select("date")
-          .eq("account_id", env.accountId)
-          .ilike("campaign_name_norm", asinPattern)
-          .lte("date", endCandidate)
-          .order("date", { ascending: true })
-          .limit(1),
-        supabaseAdmin
-          .from("sb_campaign_daily_fact_latest")
-          .select("date")
-          .eq("account_id", env.accountId)
-          .ilike("campaign_name_norm", asinPattern)
-          .lte("date", endCandidate)
-          .order("date", { ascending: false })
-          .limit(1)
-      ),
-      loadDateBounds(
-        "date",
-        "SB keyword baseline",
-        supabaseAdmin
-          .from("sb_keyword_daily_fact_latest")
-          .select("date")
-          .eq("account_id", env.accountId)
-          .ilike("campaign_name_norm", asinPattern)
-          .lte("date", endCandidate)
-          .order("date", { ascending: true })
-          .limit(1),
-        supabaseAdmin
-          .from("sb_keyword_daily_fact_latest")
-          .select("date")
-          .eq("account_id", env.accountId)
-          .ilike("campaign_name_norm", asinPattern)
-          .lte("date", endCandidate)
-          .order("date", { ascending: false })
-          .limit(1)
-      ),
+      spCandidateCampaignIds.length > 0
+        ? loadDateBounds(
+            "date",
+            "SP campaign baseline",
+            supabaseAdmin
+              .from("sp_campaign_hourly_fact_latest")
+              .select("date")
+              .eq("account_id", env.accountId)
+              .in("campaign_id", spCandidateCampaignIds)
+              .lte("date", endCandidate)
+              .order("date", { ascending: true })
+              .limit(1),
+            Promise.resolve({ data: [{ date: endCandidate }], error: null })
+          )
+        : Promise.resolve({ minDate: null, maxDate: null }),
+      spCandidateCampaignIds.length > 0
+        ? loadDateBounds(
+            "date",
+            "SP targeting baseline",
+            supabaseAdmin
+              .from("sp_targeting_daily_fact_latest")
+              .select("date")
+              .eq("account_id", env.accountId)
+              .in("campaign_id", spCandidateCampaignIds)
+              .lte("date", endCandidate)
+              .order("date", { ascending: true })
+              .limit(1),
+            Promise.resolve({ data: [{ date: endCandidate }], error: null })
+          )
+        : Promise.resolve({ minDate: null, maxDate: null }),
+      sbCandidateCampaignIds.length > 0
+        ? loadDateBounds(
+            "date",
+            "SB campaign baseline",
+            supabaseAdmin
+              .from("sb_campaign_daily_fact_latest")
+              .select("date")
+              .eq("account_id", env.accountId)
+              .in("campaign_id", sbCandidateCampaignIds)
+              .lte("date", endCandidate)
+              .order("date", { ascending: true })
+              .limit(1),
+            supabaseAdmin
+              .from("sb_campaign_daily_fact_latest")
+              .select("date")
+              .eq("account_id", env.accountId)
+              .in("campaign_id", sbCandidateCampaignIds)
+              .lte("date", endCandidate)
+              .order("date", { ascending: false })
+              .limit(1)
+          )
+        : Promise.resolve({ minDate: null, maxDate: null }),
+      sbCandidateCampaignIds.length > 0
+        ? loadDateBounds(
+            "date",
+            "SB keyword baseline",
+            supabaseAdmin
+              .from("sb_keyword_daily_fact_latest")
+              .select("date")
+              .eq("account_id", env.accountId)
+              .in("campaign_id", sbCandidateCampaignIds)
+              .lte("date", endCandidate)
+              .order("date", { ascending: true })
+              .limit(1),
+            supabaseAdmin
+              .from("sb_keyword_daily_fact_latest")
+              .select("date")
+              .eq("account_id", env.accountId)
+              .in("campaign_id", sbCandidateCampaignIds)
+              .lte("date", endCandidate)
+              .order("date", { ascending: false })
+              .limit(1)
+          )
+        : Promise.resolve({ minDate: null, maxDate: null }),
       loadDateBounds(
         "observed_date",
         "ranking baseline",
@@ -449,37 +484,26 @@ export async function GET(request: Request, { params }: Ctx) {
     return new Response(`Failed loading sales trend: ${salesError.message}`, { status: 500 });
   }
 
-  const { data: latestUploadRows, error: latestUploadError } = await supabaseAdmin
-    .from("uploads")
-    .select("upload_id,snapshot_date")
-    .eq("account_id", env.accountId)
-    .eq("source_type", "bulk")
-    .not("snapshot_date", "is", null)
-    .order("snapshot_date", { ascending: false })
-    .limit(1);
-  if (latestUploadError) {
-    return new Response(`Failed loading bulk snapshot date: ${latestUploadError.message}`, {
-      status: 500,
-    });
-  }
-  const latestSnapshotDate = (latestUploadRows?.[0]?.snapshot_date as string | null) ?? null;
-
-  const { data: spCampaignFactRows, error: spCampaignFactError } = await supabaseAdmin
-    .from("sp_campaign_hourly_fact_latest")
-    .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders")
-    .eq("account_id", env.accountId)
-    .ilike("campaign_name_norm", asinPattern)
-    .gte("date", effectiveStart)
-    .lte("date", effectiveEnd)
-    .limit(50000);
-  if (spCampaignFactError) {
-    return new Response(`Failed loading SP campaign baseline: ${spCampaignFactError.message}`, {
-      status: 500,
-    });
+  let spCampaignFactRows: Array<Record<string, unknown>> = [];
+  if (spCandidateCampaignIds.length > 0) {
+    const { data, error } = await supabaseAdmin
+      .from("sp_campaign_hourly_fact_latest")
+      .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders")
+      .eq("account_id", env.accountId)
+      .in("campaign_id", spCandidateCampaignIds)
+      .gte("date", effectiveStart)
+      .lte("date", effectiveEnd)
+      .limit(50000);
+    if (error) {
+      return new Response(`Failed loading SP campaign baseline: ${error.message}`, {
+        status: 500,
+      });
+    }
+    spCampaignFactRows = (data ?? []) as Array<Record<string, unknown>>;
   }
 
   const spCampaignAgg = aggregateCampaignRows(
-    (spCampaignFactRows ?? []) as Array<
+    spCampaignFactRows as Array<
       MetricRow & { campaign_id: string; campaign_name_raw: string; campaign_name_norm: string }
     >
   );
@@ -514,22 +538,26 @@ export async function GET(request: Request, { params }: Ctx) {
     ).slice(0, TARGET_LIMIT);
   }
 
-  const { data: sbCampaignFactRows, error: sbCampaignFactError } = await supabaseAdmin
-    .from("sb_campaign_daily_fact_latest")
-    .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders")
-    .eq("account_id", env.accountId)
-    .ilike("campaign_name_norm", asinPattern)
-    .gte("date", effectiveStart)
-    .lte("date", effectiveEnd)
-    .limit(50000);
-  if (sbCampaignFactError) {
-    return new Response(`Failed loading SB campaign baseline: ${sbCampaignFactError.message}`, {
-      status: 500,
-    });
+  let sbCampaignFactRows: Array<Record<string, unknown>> = [];
+  if (sbCandidateCampaignIds.length > 0) {
+    const { data, error } = await supabaseAdmin
+      .from("sb_campaign_daily_fact_latest")
+      .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders")
+      .eq("account_id", env.accountId)
+      .in("campaign_id", sbCandidateCampaignIds)
+      .gte("date", effectiveStart)
+      .lte("date", effectiveEnd)
+      .limit(50000);
+    if (error) {
+      return new Response(`Failed loading SB campaign baseline: ${error.message}`, {
+        status: 500,
+      });
+    }
+    sbCampaignFactRows = (data ?? []) as Array<Record<string, unknown>>;
   }
 
   const sbCampaignAgg = aggregateCampaignRows(
-    (sbCampaignFactRows ?? []) as Array<
+    sbCampaignFactRows as Array<
       MetricRow & { campaign_id: string; campaign_name_raw: string; campaign_name_norm: string }
     >
   );
