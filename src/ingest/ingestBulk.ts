@@ -36,6 +36,16 @@ type BulkPlacementRow = {
   percentage: number;
 };
 
+type BulkSpProductAdRow = {
+  account_id: string;
+  snapshot_date: string;
+  ad_id: string;
+  ad_group_id: string;
+  campaign_id: string;
+  sku_raw: string | null;
+  asin_raw: string | null;
+};
+
 type BulkSbPlacementRow = {
   account_id: string;
   snapshot_date: string;
@@ -217,6 +227,7 @@ export async function ingestBulk(
   let bulkAdGroups: Record<string, unknown>[] = [];
   let bulkTargets: Record<string, unknown>[] = [];
   let bulkPlacements: BulkPlacementRow[] = [];
+  let bulkProductAds: BulkSpProductAdRow[] = [];
 
   if (snapshot) {
     bulkPortfolios = snapshot.portfolios
@@ -283,6 +294,18 @@ export async function ingestBulk(
         percentage: row.percentage ?? 0,
       }));
 
+    bulkProductAds = snapshot.productAds
+      .filter((row) => row.adId && row.adGroupId && row.campaignId)
+      .map((row) => ({
+        account_id: accountId,
+        snapshot_date: snapshotDate,
+        ad_id: row.adId as string,
+        ad_group_id: row.adGroupId as string,
+        campaign_id: row.campaignId as string,
+        sku_raw: row.skuRaw || null,
+        asin_raw: row.asinRaw || null,
+      }));
+
     await upsertChunked(
       "bulk_portfolios",
       bulkPortfolios,
@@ -307,6 +330,11 @@ export async function ingestBulk(
       "bulk_placements",
       bulkPlacements,
       "account_id,snapshot_date,campaign_id,placement_code"
+    );
+    await upsertChunked(
+      "bulk_product_ads",
+      bulkProductAds,
+      "account_id,snapshot_date,ad_id"
     );
   }
 

@@ -35,7 +35,25 @@ export const loadSpCampaignIdsForAsin = async ({
   snapshotDate,
   namePattern,
 }: LoadAsinCampaignIdsArgs): Promise<string[]> => {
+  const normalizedAsin = asin.trim();
   const effectiveNamePattern = getEffectiveNamePattern({ asin, namePattern });
+
+  if (snapshotDate && normalizedAsin.length > 0) {
+    const { data, error } = await supabaseAdmin
+      .from("bulk_product_ads")
+      .select("campaign_id")
+      .eq("account_id", accountId)
+      .eq("snapshot_date", snapshotDate)
+      .ilike("asin_raw", normalizedAsin)
+      .limit(CAMPAIGN_ID_LIMIT);
+    if (error) {
+      throw new Error(`Failed loading SP product-ad campaign candidates: ${error.message}`);
+    }
+    const campaignIdsFromProductAds = normalizeCampaignIds(
+      (data ?? null) as Array<{ campaign_id: string | null }> | null
+    );
+    if (campaignIdsFromProductAds.length > 0) return campaignIdsFromProductAds;
+  }
 
   let campaignIds: string[] = [];
   if (snapshotDate) {

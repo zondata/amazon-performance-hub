@@ -46,6 +46,14 @@ describe("parseSponsoredProductsBulk", () => {
         Bid: "1.25",
       }),
       rowFromMap({
+        Entity: "Product Ad",
+        "Campaign ID": "12345",
+        "Ad Group ID": "999",
+        "Ad ID": "333.0",
+        SKU: "  SKU-123  ",
+        "ASIN (Informational only)": "  b0testasin1  ",
+      }),
+      rowFromMap({
         Entity: "Keyword",
         "Campaign ID": "12345",
         "Ad Group ID": "999",
@@ -85,6 +93,7 @@ describe("parseSponsoredProductsBulk", () => {
     expect(snap.adGroups.length).toBe(1);
     expect(snap.targets.length).toBe(2);
     expect(snap.placements.length).toBe(1);
+    expect(snap.productAds.length).toBe(1);
     expect(snap.portfolios.length).toBe(1);
 
     expect(snap.campaigns[0]?.campaignId).toBe("12345");
@@ -97,6 +106,13 @@ describe("parseSponsoredProductsBulk", () => {
     expect(productTarget?.expressionRaw).toBe("asin=TEST123");
 
     expect(snap.placements[0]?.placement).toBe("Top of Search");
+    expect(snap.productAds[0]).toEqual({
+      adId: "333",
+      adGroupId: "999",
+      campaignId: "12345",
+      skuRaw: "SKU-123",
+      asinRaw: "b0testasin1",
+    });
   });
 
   it("cleanId strips trailing .0", () => {

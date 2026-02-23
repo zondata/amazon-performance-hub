@@ -37,6 +37,14 @@ export type PlacementRow = {
   percentage: number | null;
 };
 
+export type ProductAdRow = {
+  adId: string | null;
+  adGroupId: string | null;
+  campaignId: string | null;
+  skuRaw: string;
+  asinRaw: string;
+};
+
 export type PortfolioRow = {
   portfolioId: string | null;
   portfolioNameRaw: string;
@@ -49,6 +57,7 @@ export type SponsoredProductsSnapshot = {
   adGroups: AdGroupRow[];
   targets: TargetRow[];
   placements: PlacementRow[];
+  productAds: ProductAdRow[];
   portfolios: PortfolioRow[];
 };
 
@@ -98,12 +107,14 @@ export async function parseSponsoredProductsBulk(xlsxPath: string, snapshotDate:
   const adGroups: AdGroupRow[] = [];
   const targets: TargetRow[] = [];
   const placements: PlacementRow[] = [];
+  const productAds: ProductAdRow[] = [];
   const portfolios: PortfolioRow[] = [];
 
   const seenCampaigns = new Set<string>();
   const seenAdGroups = new Set<string>();
   const seenTargets = new Set<string>();
   const seenPlacements = new Set<string>();
+  const seenProductAds = new Set<string>();
   const seenPortfolios = new Set<string>();
 
   for (const row of rows) {
@@ -184,6 +195,22 @@ export async function parseSponsoredProductsBulk(xlsxPath: string, snapshotDate:
       continue;
     }
 
+    if (entity === "Product Ad") {
+      const adId = cleanId(getCell(row, "Ad ID"));
+      if (adId && seenProductAds.has(adId)) continue;
+      if (adId) seenProductAds.add(adId);
+      const skuRaw = String(getCell(row, "SKU") ?? "").trim();
+      const asinRaw = String(getCell(row, "ASIN (Informational only)") ?? "").trim();
+      productAds.push({
+        adId,
+        adGroupId: cleanId(getCell(row, "Ad Group ID")),
+        campaignId: cleanId(getCell(row, "Campaign ID")),
+        skuRaw,
+        asinRaw,
+      });
+      continue;
+    }
+
     if (entity === "Portfolio") {
       const portfolioId = cleanId(getCell(row, "Portfolio ID"));
       if (portfolioId && seenPortfolios.has(portfolioId)) continue;
@@ -204,6 +231,7 @@ export async function parseSponsoredProductsBulk(xlsxPath: string, snapshotDate:
     adGroups,
     targets,
     placements,
+    productAds,
     portfolios,
   } satisfies SponsoredProductsSnapshot;
 }
