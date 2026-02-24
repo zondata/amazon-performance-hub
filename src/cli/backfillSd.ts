@@ -1,4 +1,5 @@
 import { backfillSd } from "../pipeline/backfillSd";
+import { rejectDeprecatedAccountId } from "./_accountGuard";
 
 function usage() {
   console.log(
@@ -18,6 +19,7 @@ function hasFlag(flag: string): boolean {
 
 async function main() {
   const accountId = getArg("--account-id");
+  if (accountId) rejectDeprecatedAccountId(accountId);
   const root = getArg("--root");
   const from = getArg("--from");
   const to = getArg("--to");

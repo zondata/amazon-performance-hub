@@ -1,6 +1,7 @@
 import { resolveDateFolder, getSpCampaignCsv, getSpPlacementXlsx, getSpTargetingXlsx, getSpStisCsv } from "../fs/reportLocator";
 import { hashFileSha256 } from "../ingest/utils";
 import { findUploadIdByFileHash, mapUpload } from "../mapping/db";
+import { rejectDeprecatedAccountId } from "./_accountGuard";
 
 function usage() {
   console.log(
@@ -41,6 +42,7 @@ async function mapByFile(accountId: string, filePath: string, reportType: "sp_ca
 
 async function main() {
   const accountId = getArg("--account-id");
+  if (accountId) rejectDeprecatedAccountId(accountId);
   const positionals = getPositionalArgs();
   const dateInput = positionals[0];
 

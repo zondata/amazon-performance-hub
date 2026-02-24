@@ -519,6 +519,7 @@ export async function GET(request: Request, { params }: Ctx) {
       spTargetBounds,
       sbCampaignBounds,
       sbKeywordBounds,
+      sbAttributedPurchasesBounds,
       rankingBounds,
       sqpBounds,
     ] = await Promise.all([
@@ -643,6 +644,28 @@ export async function GET(request: Request, { params }: Ctx) {
           )
         : Promise.resolve({ minDate: null, maxDate: null }),
       loadDateBounds(
+        "date",
+        "SB attributed purchases baseline",
+        supabaseAdmin
+          .from("sb_attributed_purchases_daily_fact_latest")
+          .select("date")
+          .eq("account_id", env.accountId)
+          .eq("purchased_asin_norm", asin)
+          .gte("date", startBound)
+          .lte("date", endBound)
+          .order("date", { ascending: true })
+          .limit(1),
+        supabaseAdmin
+          .from("sb_attributed_purchases_daily_fact_latest")
+          .select("date")
+          .eq("account_id", env.accountId)
+          .eq("purchased_asin_norm", asin)
+          .gte("date", startBound)
+          .lte("date", endBound)
+          .order("date", { ascending: false })
+          .limit(1)
+      ),
+      loadDateBounds(
         "observed_date",
         "ranking baseline",
         supabaseAdmin
@@ -700,6 +723,7 @@ export async function GET(request: Request, { params }: Ctx) {
       sp_target: spTargetBounds,
       sb_campaign: sbCampaignBounds,
       sb_keyword: sbKeywordBounds,
+      sb_attributed_purchases: sbAttributedPurchasesBounds,
       ranking: rankingBounds,
       sqp: sqpBounds,
     };
@@ -713,6 +737,7 @@ export async function GET(request: Request, { params }: Ctx) {
     sp_target: availability.sp_target,
     sb_campaign: availability.sb_campaign,
     sb_keyword: availability.sb_keyword,
+    sb_attributed_purchases: availability.sb_attributed_purchases,
   };
 
   const window = computeBaselineWindow({
@@ -722,6 +747,8 @@ export async function GET(request: Request, { params }: Ctx) {
   });
 
   const warnings: string[] = [];
+  warnings.push(`DEBUG accountId=${env.accountId}`);
+
   for (const [dataset, bounds] of Object.entries(availability)) {
     if (!bounds.minDate || !bounds.maxDate) {
       warnings.push(`Dataset "${dataset}" has no rows for this ASIN through ${endCandidate}.`);
@@ -842,6 +869,126 @@ export async function GET(request: Request, { params }: Ctx) {
     { impressions: 0, clicks: 0, spend: 0, sales: 0, orders: 0, units: 0 }
   );
 
+  let sbAttributedPurchaseRows: Array<Record<string, unknown>> = [];
+  let sbAttributedPurchaseCampaignIds: string[] = [];
+  const { data: sbAttributedData, error: sbAttributedError } = await supabaseAdmin
+    .from("sb_attributed_purchases_daily_fact_latest")
+    .select("date,campaign_id,impressions,clicks,spend,sales,orders,units")
+    .eq("account_id", env.accountId)
+    .gte("date", effectiveStart)
+    .lte("date", effectiveEnd)
+    .eq("purchased_asin_norm", asin)
+    .limit(200000);
+  if (sbAttributedError) {
+    warnings.push(
+      `Failed loading SB attributed purchases baseline rows: ${sbAttributedError.message}`
+    );
+  } else {
+    sbAttributedPurchaseRows = (sbAttributedData ?? []) as Array<Record<string, unknown>>;
+    sbAttributedPurchaseCampaignIds = normalizeIds(
+      sbAttributedPurchaseRows.map((row) => row.campaign_id)
+    );
+    if (sbAttributedPurchaseCampaignIds.length > 0) {
+      sbCandidateCampaignIds = normalizeIds([
+        ...sbCandidateCampaignIds,
+        ...sbAttributedPurchaseCampaignIds,
+      ]);
+    }
+  }
+  const sbAttributedPurchasesDailyByDate = new Map<
+    string,
+    {
+      date: string;
+      impressions: number;
+      clicks: number;
+      spend: number;
+      sales: number;
+      orders: number;
+      units: number;
+    }
+  >();
+  for (const row of sbAttributedPurchaseRows) {
+    const date = parseDateField(row.date);
+    if (!date) continue;
+    const prev = sbAttributedPurchasesDailyByDate.get(date) ?? {
+      date,
+      impressions: 0,
+      clicks: 0,
+      spend: 0,
+      sales: 0,
+      orders: 0,
+      units: 0,
+    };
+    prev.impressions += num(row.impressions);
+    prev.clicks += num(row.clicks);
+    prev.spend += num(row.spend);
+    prev.sales += num(row.sales);
+    prev.orders += num(row.orders);
+    prev.units += num(row.units);
+    sbAttributedPurchasesDailyByDate.set(date, prev);
+  }
+  const sbAttributedPurchasesDaily = [...sbAttributedPurchasesDailyByDate.values()].sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
+  const sbAttributedPurchasesTotals = sbAttributedPurchasesDaily.reduce<{
+    impressions: number;
+    clicks: number;
+    spend: number;
+    sales: number;
+    orders: number;
+    units: number;
+  }>(
+    (totals, row) => {
+      totals.impressions += row.impressions;
+      totals.clicks += row.clicks;
+      totals.spend += row.spend;
+      totals.sales += row.sales;
+      totals.orders += row.orders;
+      totals.units += row.units;
+      return totals;
+    },
+    { impressions: 0, clicks: 0, spend: 0, sales: 0, orders: 0, units: 0 }
+  
+  );
+
+  // NOTE: SB Attributed Purchases report does not include spend in many exports.
+  // We derive ASIN-level SB spend by allocating SB campaign spend to purchased ASIN
+  // using attributed purchases (sales/orders/units) as weights (see sb_allocated_asin_spend_daily_v3).
+  let sbAllocatedSpendRows: Array<Record<string, unknown>> = [];
+  const { data: sbAllocData, error: sbAllocError } = await supabaseAdmin
+    .from("sb_allocated_asin_spend_daily_v3")
+    .select("date,allocated_spend")
+    .eq("account_id", env.accountId)
+    .gte("date", effectiveStart)
+    .lte("date", effectiveEnd)
+    .eq("purchased_asin_norm", asin)
+    .limit(200000);
+
+  if (sbAllocError) {
+    warnings.push(`Failed loading SB allocated spend rows: ${sbAllocError.message}`);
+  } else {
+    sbAllocatedSpendRows = (sbAllocData ?? []) as Array<Record<string, unknown>>;
+  }
+
+  const sbAllocatedSpendDailyByDate = new Map<string, { date: string; spend: number }>();
+  for (const row of sbAllocatedSpendRows) {
+    const date = parseDateField(row.date);
+    if (!date) continue;
+    const prev = sbAllocatedSpendDailyByDate.get(date) ?? { date, spend: 0 };
+    prev.spend += num((row as any).allocated_spend);
+    sbAllocatedSpendDailyByDate.set(date, prev);
+  }
+  const sbAllocatedSpendDaily = [...sbAllocatedSpendDailyByDate.values()].sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
+  const sbAllocatedSpendTotals = sbAllocatedSpendDaily.reduce<{ spend: number }>(
+    (totals, row) => {
+      totals.spend += row.spend;
+      return totals;
+    },
+    { spend: 0 }
+  );
+
   let sdCandidateCampaignIds: string[] = [];
   let sdCandidateAdGroupIds: string[] = [];
   let sdAdvertisedAsinRows: Array<Record<string, unknown>> = [];
@@ -889,7 +1036,10 @@ export async function GET(request: Request, { params }: Ctx) {
       date: (row.date as string | null) ?? null,
       spend: row.spend as number | string | null,
     })),
-    sbRows: [],
+    sbRows: sbAllocatedSpendDaily.map((row) => ({
+      date: row.date ?? null,
+      spend: row.spend,
+    })),
     sdRows: sdAdvertisedAsinRows.map((row) => ({
       date: (row.date as string | null) ?? null,
       spend: row.spend as number | string | null,
@@ -926,21 +1076,26 @@ export async function GET(request: Request, { params }: Ctx) {
     return (data ?? []) as Array<{ date: string | null; spend: number | string | null }>;
   };
 
-  const [spReconciliationCampaignRows, sbReconciliationCampaignRows, sdReconciliationCampaignRows] =
-    await Promise.all([
-      loadCampaignReconciliationSpendRows({
-        channel: "sp",
-        campaignIds: spSelectionCampaignIds,
-      }),
-      loadCampaignReconciliationSpendRows({
-        channel: "sb",
-        campaignIds: sbCandidateCampaignIds,
-      }),
-      loadCampaignReconciliationSpendRows({
-        channel: "sd",
-        campaignIds: sdCandidateCampaignIds,
-      }),
-    ]);
+  const sbReconciliationAttributedRows = sbAllocatedSpendDaily.map((row) => ({
+    date: row.date ?? null,
+    spend: row.spend,
+  }));
+  if (sbReconciliationAttributedRows.length === 0) {
+    warnings.push(
+      `No SB allocated spend rows found for ASIN ${asin} in ${effectiveStart}..${effectiveEnd}; reconciliation SB spend set to 0.`
+    );
+  }
+
+  const [spReconciliationCampaignRows, sdReconciliationCampaignRows] = await Promise.all([
+    loadCampaignReconciliationSpendRows({
+      channel: "sp",
+      campaignIds: spSelectionCampaignIds,
+    }),
+    loadCampaignReconciliationSpendRows({
+      channel: "sd",
+      campaignIds: sdCandidateCampaignIds,
+    }),
+  ]);
 
   const reconciliationDailyCampaigns = buildAdsReconciliationDaily({
     siRows: (salesRows ?? []).map((row) => ({
@@ -948,25 +1103,13 @@ export async function GET(request: Request, { params }: Ctx) {
       ppc_cost: row.ppc_cost as number | string | null,
     })),
     spRows: spReconciliationCampaignRows,
-    sbRows: sbReconciliationCampaignRows,
+    sbRows: sbReconciliationAttributedRows,
     sdRows: sdReconciliationCampaignRows,
     start: effectiveStart,
     end: effectiveEnd,
   });
 
-  let sbSpendTotalAccount = 0;
-  const { data: sbSpendRows, error: sbSpendError } = await supabaseAdmin
-    .from("sb_campaign_daily_fact_latest")
-    .select("spend")
-    .eq("account_id", env.accountId)
-    .gte("date", effectiveStart)
-    .lte("date", effectiveEnd)
-    .limit(50000);
-  if (sbSpendError) {
-    warnings.push(`Failed loading SB spend total for attribution bridge: ${sbSpendError.message}`);
-  } else {
-    sbSpendTotalAccount = (sbSpendRows ?? []).reduce((total, row) => total + num(row.spend), 0);
-  }
+  let sbSpendTotalAccount = sbAllocatedSpendTotals.spend;
 
   let sdSpendTotalAccount = 0;
   const { data: sdSpendRows, error: sdSpendError } = await supabaseAdmin
@@ -1059,6 +1202,7 @@ export async function GET(request: Request, { params }: Ctx) {
     spAttributedSpendTotal: spMappedSpendTotal,
     spAdvertisedAsinSpendTotal: spAdvertisedAsinTotals.spend,
     spMappedCampaignSpendTotal,
+    sbAttributedAsinSpendTotal: sbAllocatedSpendTotals.spend,
     sbSpendTotalUnattributed: sbSpendTotalAccount,
     sdSpendTotalUnattributed: sdSpendTotalAccount,
   });
@@ -1605,6 +1749,8 @@ export async function GET(request: Request, { params }: Ctx) {
       notes: {
         attribution_model:
           "Scale Insights ppc_cost is an attributed cost to the ASIN (based on conversion attribution windows). It may be >0 on days where advertised-ASIN spend is 0, and may be < advertised spend on days where ads spend did not attribute purchases to this ASIN.",
+        sb_attributed_purchases_model:
+          "Sponsored Brands Attributed Purchases is attributed to the purchased ASIN (based on Amazon attribution windows). It is not the same as advertised-ASIN spend.",
       },
       latest_bulk_snapshot_date: latestSnapshotDate,
       sp: {
@@ -1674,6 +1820,11 @@ export async function GET(request: Request, { params }: Ctx) {
         })),
       },
       sb: {
+        attributed_purchases: {
+          campaign_count: sbAttributedPurchaseCampaignIds.length,
+          daily: sbAttributedPurchasesDaily,
+          totals: sbAttributedPurchasesTotals,
+        },
         campaigns: sbTopCampaigns.map((row) => ({
           campaign_id: row.campaign_id,
           campaign_name_raw: row.campaign_name_raw,

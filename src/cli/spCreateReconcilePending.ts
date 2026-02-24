@@ -29,12 +29,15 @@ async function main() {
     process.exit(1);
   }
 
-  const maxManifests = maxManifestsRaw ? Number(maxManifestsRaw) : undefined;
-  if (maxManifestsRaw && (!Number.isFinite(maxManifests) || maxManifests < 1)) {
-    throw new Error(`Invalid --max-manifests: ${maxManifestsRaw}`);
-  }
+const maxManifests = maxManifestsRaw ? Number(maxManifestsRaw) : undefined;
+if (
+  maxManifestsRaw &&
+  (maxManifests === undefined || !Number.isFinite(maxManifests) || maxManifests < 1)
+) {
+  throw new Error(`Invalid --max-manifests: ${maxManifestsRaw}`);
+}
 
-  await processPendingManifests({
+await processPendingManifests({
     accountId,
     snapshotDate,
     pendingDir,

@@ -1,4 +1,5 @@
 import { backfillSqpWeekly } from "../pipeline/backfillSqpWeekly";
+import { rejectDeprecatedAccountId } from "./_accountGuard";
 
 function usage() {
   console.log(
@@ -18,6 +19,7 @@ function hasFlag(flag: string): boolean {
 
 async function main() {
   const accountId = getArg("--account-id");
+  if (accountId) rejectDeprecatedAccountId(accountId);
   const marketplace = getArg("--marketplace");
   const root = getArg("--root");
   const from = getArg("--from");

@@ -1,9 +1,9 @@
-import { ingestSpAdvertisedProductRaw } from "../ingest/ingestSpAdvertisedProductRaw";
+import { ingestSbAttributedPurchasesRaw } from "../ingest/ingestSbAttributedPurchasesRaw";
 import { rejectDeprecatedAccountId } from "./_accountGuard";
 
 function usage() {
   console.log(
-    "Usage: npm run ingest:sp:advertised -- --account-id <id> <xlsx> [--exported-at ISO]"
+    "Usage: npm run ingest:sb:attributed-purchases -- --account-id <id> <csv> [--exported-at ISO]"
   );
 }
 
@@ -32,14 +32,14 @@ async function main() {
   if (accountId) rejectDeprecatedAccountId(accountId);
   const exportedAt = getArg("--exported-at");
   const positionals = getPositionalArgs();
-  const xlsxPath = positionals[0];
+  const csvPath = positionals[0];
 
-  if (!accountId || !xlsxPath) {
+  if (!accountId || !csvPath) {
     usage();
     process.exit(1);
   }
 
-  const result = await ingestSpAdvertisedProductRaw(xlsxPath, accountId, exportedAt);
+  const result = await ingestSbAttributedPurchasesRaw(csvPath, accountId, exportedAt);
   if (result.status === "already ingested") {
     console.log("Already ingested (same account_id + file hash).");
     return;

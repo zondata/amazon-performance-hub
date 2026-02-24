@@ -3,6 +3,7 @@ export type ComputePpcAttributionBridgeInput = {
   spAttributedSpendTotal: number;
   spAdvertisedAsinSpendTotal: number;
   spMappedCampaignSpendTotal: number;
+  sbAttributedAsinSpendTotal: number;
   sbSpendTotalUnattributed: number;
   sdSpendTotalUnattributed: number;
 };
@@ -13,6 +14,7 @@ export type PpcAttributionBridge = {
   sp_advertised_asin_spend_total: number;
   sp_mapped_campaign_spend_total: number;
   sp_unattributed_spend_total: number;
+  sb_attributed_asin_spend_total: number;
   sb_spend_total_unattributed: number;
   sd_spend_total_unattributed: number;
   si_gap_vs_sp_attributed_total: number;
@@ -20,6 +22,7 @@ export type PpcAttributionBridge = {
     sp_vs_si_pct: number | null;
     sp_advertised_vs_si_pct: number | null;
     sp_vs_sp_campaign_pct: number | null;
+    sb_attributed_vs_si_pct: number | null;
   };
 };
 
@@ -40,6 +43,7 @@ export const computePpcAttributionBridge = (
   const spAttributedSpendTotal = clampNonNegative(input.spAttributedSpendTotal);
   const spAdvertisedAsinSpendTotal = clampNonNegative(input.spAdvertisedAsinSpendTotal);
   const spMappedCampaignSpendTotal = clampNonNegative(input.spMappedCampaignSpendTotal);
+  const sbAttributedAsinSpendTotal = clampNonNegative(input.sbAttributedAsinSpendTotal);
   const sbSpendTotalUnattributed = clampNonNegative(input.sbSpendTotalUnattributed);
   const sdSpendTotalUnattributed = clampNonNegative(input.sdSpendTotalUnattributed);
 
@@ -52,6 +56,7 @@ export const computePpcAttributionBridge = (
     sp_advertised_asin_spend_total: spAdvertisedAsinSpendTotal,
     sp_mapped_campaign_spend_total: spMappedCampaignSpendTotal,
     sp_unattributed_spend_total: spUnattributedSpendTotal,
+    sb_attributed_asin_spend_total: sbAttributedAsinSpendTotal,
     sb_spend_total_unattributed: sbSpendTotalUnattributed,
     sd_spend_total_unattributed: sdSpendTotalUnattributed,
     si_gap_vs_sp_attributed_total: siGapVsSpAttributedTotal,
@@ -59,6 +64,7 @@ export const computePpcAttributionBridge = (
       sp_vs_si_pct: ratioOrNull(spAttributedSpendTotal, siPpcCostTotal),
       sp_advertised_vs_si_pct: ratioOrNull(spAdvertisedAsinSpendTotal, siPpcCostTotal),
       sp_vs_sp_campaign_pct: ratioOrNull(spAttributedSpendTotal, spMappedCampaignSpendTotal),
+      sb_attributed_vs_si_pct: ratioOrNull(sbAttributedAsinSpendTotal, siPpcCostTotal),
     },
   };
 };

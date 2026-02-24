@@ -120,6 +120,14 @@ export function getSbStisCsv(dateFolder: string): string {
   return filePath;
 }
 
+export function getSbAttributedPurchasesCsv(dateFolder: string): string {
+  const filePath = path.join(dateFolder, "Sponsored_Brands_Attributed_Purchases_report.csv");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing Sponsored Brands Attributed Purchases report: ${filePath}`);
+  }
+  return filePath;
+}
+
 export function getSdCampaignXlsx(dateFolder: string): string {
   const filePath = path.join(dateFolder, "Sponsored_Display_Campaign_report.xlsx");
   if (!fs.existsSync(filePath)) {

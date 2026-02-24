@@ -30,6 +30,8 @@
     "ingest:sb:keyword:date": "ts-node src/cli/ingestSbKeywordDate.ts",
     "ingest:sb:stis": "ts-node src/cli/ingestSbStis.ts",
     "ingest:sb:stis:date": "ts-node src/cli/ingestSbStisDate.ts",
+    "ingest:sb:attributed-purchases": "ts-node src/cli/ingestSbAttributedPurchases.ts",
+    "ingest:sb:attributed-purchases:date": "ts-node src/cli/ingestSbAttributedPurchasesDate.ts",
     "ingest:sd:campaign": "ts-node src/cli/ingestSdCampaign.ts",
     "ingest:sd:campaign:date": "ts-node src/cli/ingestSdCampaignDate.ts",
     "ingest:sd:advertised": "ts-node src/cli/ingestSdAdvertisedProduct.ts",

@@ -8,11 +8,17 @@ const SOURCE_GROUPS: Array<{ title: string; sources: string[] }> = [
   { title: 'Bulksheets', sources: ['bulk'] },
   {
     title: 'Ads — Sponsored Products',
-    sources: ['sp_campaign', 'sp_placement', 'sp_targeting', 'sp_stis'],
+    sources: ['sp_campaign', 'sp_placement', 'sp_targeting', 'sp_advertised_product', 'sp_stis'],
   },
   {
     title: 'Ads — Sponsored Brands',
-    sources: ['sb_campaign', 'sb_campaign_placement', 'sb_keyword', 'sb_stis'],
+    sources: [
+      'sb_campaign',
+      'sb_campaign_placement',
+      'sb_keyword',
+      'sb_attributed_purchases',
+      'sb_stis',
+    ],
   },
   {
     title: 'Ads — Sponsored Display',

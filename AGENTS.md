@@ -400,9 +400,9 @@ Inspecting issues:
 - `select * from sp_mapping_issues where issue_type != 'missing_bulk_snapshot';`
 
 Commands (example):
-- `npm run map:sp:all:date -- --account-id US 2026-01-21`
+- `npm run map:sp:all:date -- --account-id sourbear 2026-01-21`
 - Inspect issues in `sp_mapping_issues`, add overrides in `sp_manual_name_overrides`, re-run mapping.
-- `npm run pipeline:backfill:ads -- --account-id US --root /mnt/c/Users/User/Dropbox/AmazonReports --from 2025-01-01 --to 2025-03-31`
+- `npm run pipeline:backfill:ads -- --account-id sourbear --root /mnt/c/Users/User/Dropbox/AmazonReports --from 2025-01-01 --to 2025-03-31`
 
 Manual verification (category targeting exclusion):
 - Re-run `npm run map:sb:all:date -- --account-id <id> <YYYY-MM-DD or folder>` and `npm run map:sp:all:date -- --account-id <id> <YYYY-MM-DD or folder>`; confirm `issueRows` are `0`.
@@ -571,11 +571,11 @@ Tables:
 - `log_evaluations`: optional experiment evaluation snapshots.
 
 Commands:
-- `npm run log:experiment:create -- --account-id US --marketplace US --file examples/logbook/experiment.ads.template.json`
-- `npm run log:change:create -- --account-id US --marketplace US --file examples/logbook/change.ads.template.json`
-- `npm run log:experiment:link-change -- --account-id US --marketplace US --experiment-id <uuid> --change-id <uuid>`
-- `npm run log:change:list -- --account-id US --marketplace US --limit 5`
-- `npm run log:experiment:list -- --account-id US --marketplace US --limit 5`
+- `npm run log:experiment:create -- --account-id sourbear --marketplace US --file examples/logbook/experiment.ads.template.json`
+- `npm run log:change:create -- --account-id sourbear --marketplace US --file examples/logbook/change.ads.template.json`
+- `npm run log:experiment:link-change -- --account-id sourbear --marketplace US --experiment-id <uuid> --change-id <uuid>`
+- `npm run log:change:list -- --account-id sourbear --marketplace US --limit 5`
+- `npm run log:experiment:list -- --account-id sourbear --marketplace US --limit 5`
 
 Workflow (validated):
 - Download AI packs from Product Logbook.
@@ -626,7 +626,7 @@ Module:
 - `src/bulksheet_gen_sp/` (types, current fetch, row builder, XLSX writer)
 
 Commands:
-- `npm run bulkgen:sp:update -- --account-id US --marketplace US --template <xlsx> --out-dir <dir> --file <changes.json>`
+- `npm run bulkgen:sp:update -- --account-id sourbear --marketplace US --template <xlsx> --out-dir <dir> --file <changes.json>`
 
 Notes:
 - Always writes two files: `upload_strict.xlsx` (template headers only) + `review.xlsx` (adds helper columns).
@@ -658,9 +658,9 @@ Logging (optional):
 Goal: generate safe-to-upload SP bulksheet create files with strict headers, defaults, caps, and a manifest.
 
 Commands:
-- `npm run bulkgen:sp:create -- --account-id US --marketplace US --template <xlsx> --out-dir <dir> --file <changes.json> [--confirm-create] [--portfolio-id <id>]`
-- `npm run sp:create:reconcile -- --account-id US --snapshot-date YYYY-MM-DD --manifest <json>`
-- `npm run sp:create:reconcile:pending -- --account-id US --snapshot-date YYYY-MM-DD --pending-dir <path> [--dry-run] [--max-manifests N] [--verbose]`
+- `npm run bulkgen:sp:create -- --account-id sourbear --marketplace US --template <xlsx> --out-dir <dir> --file <changes.json> [--confirm-create] [--portfolio-id <id>]`
+- `npm run sp:create:reconcile -- --account-id sourbear --snapshot-date YYYY-MM-DD --manifest <json>`
+- `npm run sp:create:reconcile:pending -- --account-id sourbear --snapshot-date YYYY-MM-DD --pending-dir <path> [--dry-run] [--max-manifests N] [--verbose]`
 
 Notes:
 - Always writes `review.xlsx` + `creation_manifest.json` (includes `run_id` and temp IDs used).
@@ -696,7 +696,7 @@ Module:
 - `src/bulksheet_gen_sb/` (types, current fetch, row builder, XLSX writer)
 
 Command:
-- `npm run bulkgen:sb:update -- --account-id US --marketplace US --template <xlsx> --out-dir <dir> --file <changes.json> [--sheet "SB Multi Ad Group Campaigns"]`
+- `npm run bulkgen:sb:update -- --account-id sourbear --marketplace US --template <xlsx> --out-dir <dir> --file <changes.json> [--sheet "SB Multi Ad Group Campaigns"]`
 
 Notes:
 - Always writes two files: `upload_strict.xlsx` (template headers only) + `review.xlsx` (adds helper columns).
@@ -934,6 +934,24 @@ Verification:
 - Cleanup removed test SKUs, leaving only real SKU.
 
 ## Recent changes / Changelog
+### 2026-02-24
+- Added Sponsored Brands Attributed Purchases ingestion.
+  - `source_type`: `sb_attributed_purchases`
+  - migration: `20260226120000_sb_attributed_purchases_daily.sql`
+  - tables/views: `sb_attributed_purchases_daily_fact`, `sb_attributed_purchases_daily_fact_latest`
+  - CLIs: `ingest:sb:attributed-purchases`, `ingest:sb:attributed-purchases:date`
+  - filename: `Sponsored_Brands_Attributed_Purchases_report.csv`
+- Added SB allocated ASIN spend for baseline analysis because the attributed purchases report does not include spend.
+  - SQL view created manually in Supabase: `sb_allocated_asin_spend_daily_v3`
+  - allocation rule: allocate `sb_campaign_daily_fact_latest.spend` to `purchased_asin_norm` by sales share (fallback orders/units)
+  - Product baseline AI data pack now uses allocated spend for:
+    - reconciliation SB rows
+    - PPC attribution bridge `sbAttributedAsinSpendTotal`
+- Added Reject-US account enforcement.
+  - DB constraint: `uploads_account_id_not_us_chk` with rule `lower(account_id) <> 'us'`
+  - CLI guard: `src/cli/_accountGuard.ts`, wired into common CLIs to throw on `--account-id US`
+  - policy: `US` account_id is deprecated; use `sourbear` going forward
+
 ### 2026-02-23
 - Added Logbook AI Prompt Pack templates with template selection in the Product Logbook AI workflow download area.
 - Added template management page at `/settings/logbook-ai-packs` to edit prompt instructions and set a default template.
@@ -976,10 +994,10 @@ Verification:
   - Added rows to `sp_manual_name_overrides` for remaining unmapped `campaign_name_norm` variants (rename drift / bulksheet gaps) for 2026-02-04.
   - After inserting overrides and rerunning mapping, 2026-02-04 maps clean (0 issues across campaign/placement/targeting/stis).
 - Verification commands used
-  - `npm run ingest:bulk:date -- --account-id US 2026-02-10`
+  - `npm run ingest:bulk:date -- --account-id sourbear 2026-02-10`
   - `npm run ingest:sp:*:date` for 2026-02-10
-  - `npm run map:sp:all:date -- --account-id US 2026-02-10` (0 issues)
-  - `npm run map:sp:all:date -- --account-id US 2026-02-04` (0 issues after overrides)
+  - `npm run map:sp:all:date -- --account-id sourbear 2026-02-10` (0 issues)
+  - `npm run map:sp:all:date -- --account-id sourbear 2026-02-04` (0 issues after overrides)
 - Git
   - `60fdc52` Fix UNKNOWN expression targets by resolving as TARGETING_EXPRESSION
   - `9e8abc7` Pick closest bulk snapshot within +7d window

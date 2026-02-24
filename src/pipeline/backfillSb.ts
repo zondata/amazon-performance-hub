@@ -4,6 +4,7 @@ import { findBulkXlsx } from "../fs/reportLocator";
 import { ingestBulk } from "../ingest/ingestBulk";
 import { ingestSbCampaignRaw } from "../ingest/ingestSbCampaignRaw";
 import { ingestSbCampaignPlacementRaw } from "../ingest/ingestSbCampaignPlacementRaw";
+import { ingestSbAttributedPurchasesRaw } from "../ingest/ingestSbAttributedPurchasesRaw";
 import { ingestSbKeywordRaw } from "../ingest/ingestSbKeywordRaw";
 import { ingestSbStisRaw } from "../ingest/ingestSbStisRaw";
 import { hashFileSha256 } from "../ingest/utils";
@@ -127,6 +128,10 @@ async function processFolder(folder: DateFolder, opts: BackfillOptions): Promise
   const campaignPath = fileIfExists(folder.folderPath, "Sponsored_Brands_Campaign_report.xlsx");
   const placementPath = fileIfExists(folder.folderPath, "Sponsored_Brands_Campaign_placement_report.xlsx");
   const keywordPath = fileIfExists(folder.folderPath, "Sponsored_Brands_Keyword_report.xlsx");
+  const attributedPurchasesPath = fileIfExists(
+    folder.folderPath,
+    "Sponsored_Brands_Attributed_Purchases_report.csv"
+  );
   const stisPath = fileIfExists(
     folder.folderPath,
     "Sponsored_Brands_Search_Term_Impression_Share_report.csv"
@@ -137,6 +142,7 @@ async function processFolder(folder: DateFolder, opts: BackfillOptions): Promise
     summary.ingests.sb_campaign = { status: campaignPath ? "would-run" : "missing" };
     summary.ingests.sb_campaign_placement = { status: placementPath ? "would-run" : "missing" };
     summary.ingests.sb_keyword = { status: keywordPath ? "would-run" : "missing" };
+    summary.ingests.sb_attributed_purchases = { status: attributedPurchasesPath ? "would-run" : "missing" };
     summary.ingests.sb_stis = { status: stisPath ? "would-run" : "missing" };
 
     summary.mappings.sb_campaign = { status: campaignPath ? "would-run" : "missing" };
@@ -191,6 +197,18 @@ async function processFolder(folder: DateFolder, opts: BackfillOptions): Promise
     };
   } else {
     summary.ingests.sb_keyword = { status: "missing" };
+  }
+
+  if (attributedPurchasesPath) {
+    const exportedAt = exportedAtDateFolder(folder.folderPath) ?? undefined;
+    const result = await ingestSbAttributedPurchasesRaw(attributedPurchasesPath, opts.accountId, exportedAt);
+    summary.ingests.sb_attributed_purchases = {
+      status: result.status,
+      uploadId: result.uploadId,
+      rowCount: result.rowCount,
+    };
+  } else {
+    summary.ingests.sb_attributed_purchases = { status: "missing" };
   }
 
   if (stisPath) {

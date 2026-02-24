@@ -1,5 +1,6 @@
 import { ingestBulk } from "../ingest/ingestBulk";
 import { resolveDateFolder, findBulkXlsx } from "../fs/reportLocator";
+import { rejectDeprecatedAccountId } from "./_accountGuard";
 
 function usage() {
   console.log(
@@ -29,6 +30,7 @@ function getPositionalArgs(): string[] {
 
 async function main() {
   const accountId = getArg("--account-id");
+  if (accountId) rejectDeprecatedAccountId(accountId);
   const marketplace = getArg("--marketplace");
   const snapshotDate = getArg("--snapshot-date");
   const positionals = getPositionalArgs();
