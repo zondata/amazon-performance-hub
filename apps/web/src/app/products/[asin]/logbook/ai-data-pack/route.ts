@@ -14,6 +14,10 @@ import {
   selectSpRowsForCoverage,
   sumSpSpend,
 } from "@/lib/logbook/aiPack/spCoverageSelection";
+import {
+  fetchByDateChunks,
+  type FetchByDateChunksResult,
+} from "@/lib/logbook/aiPack/fetchByDateChunks";
 import { computeBoundedRange } from "@/lib/ads/boundedDateRange";
 import { buildAdsReconciliationDaily } from "@/lib/ads/buildAdsReconciliationDaily";
 import { computePpcAttributionBridge } from "@/lib/logbook/aiPack/ppcAttributionBridge";
@@ -511,6 +515,47 @@ export async function GET(request: Request, { params }: Ctx) {
     return new Response(message, { status: 500 });
   }
 
+  const warnings: string[] = [];
+  warnings.push(`DEBUG accountId=${env.accountId}`);
+
+  const summarizeChunkFailures = (result: FetchByDateChunksResult<unknown>): string => {
+    const timeoutFailures = result.chunkErrors.filter((entry) => entry.timedOut).length;
+    if (timeoutFailures === 0) return "non-timeout errors";
+    if (timeoutFailures === result.failedChunks) return "statement timeouts";
+    return `${timeoutFailures} statement timeouts + ${result.failedChunks - timeoutFailures} other errors`;
+  };
+
+  const appendChunkFailureWarnings = (
+    label: string,
+    result: FetchByDateChunksResult<unknown>,
+    allChunksFailedSuffix: string
+  ): void => {
+    if (result.failedChunks === 0) return;
+    const failureSummary = summarizeChunkFailures(result);
+    if (result.failedChunks === result.totalChunks && result.totalChunks > 0) {
+      warnings.push(
+        `Failed loading ${label}: partial data due to chunk failures (all ${result.totalChunks} chunks failed; ${failureSummary}); ${allChunksFailedSuffix}`
+      );
+      return;
+    }
+    warnings.push(
+      `Failed loading ${label}: partial data due to chunk failures (${result.failedChunks}/${result.totalChunks} chunks failed; ${failureSummary}); using successful chunks only.`
+    );
+  };
+
+  const loadOptionalDateBounds = async (
+    label: string,
+    loader: () => Promise<DateBounds>
+  ): Promise<DateBounds> => {
+    try {
+      return await loader();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      warnings.push(`Failed loading ${label}: ${message}; treating availability as empty.`);
+      return { minDate: null, maxDate: null };
+    }
+  };
+
   let availability: BaselineAvailabilityMap;
   try {
     const [
@@ -522,6 +567,8 @@ export async function GET(request: Request, { params }: Ctx) {
       sbAttributedPurchasesBounds,
       rankingBounds,
       sqpBounds,
+      spAdvertisedAsinBounds,
+      sbAllocatedAsinSpendBounds,
     ] = await Promise.all([
       loadDateBounds(
         "date",
@@ -715,6 +762,79 @@ export async function GET(request: Request, { params }: Ctx) {
           .order("week_end", { ascending: false })
           .limit(1)
       ),
+      loadOptionalDateBounds("SP advertised-product ASIN baseline", () =>
+        loadDateBounds(
+          "date",
+          "SP advertised-product ASIN baseline",
+          supabaseAdmin
+            .from("sp_advertised_product_daily_fact_latest")
+            .select("date")
+            .eq("account_id", env.accountId)
+            .eq("advertised_asin_norm", asin)
+            .gte("date", startBound)
+            .lte("date", endBound)
+            .order("date", { ascending: true })
+            .limit(1),
+          supabaseAdmin
+            .from("sp_advertised_product_daily_fact_latest")
+            .select("date")
+            .eq("account_id", env.accountId)
+            .eq("advertised_asin_norm", asin)
+            .gte("date", startBound)
+            .lte("date", endBound)
+            .order("date", { ascending: false })
+            .limit(1)
+        )
+      ),
+      loadOptionalDateBounds("SB allocated ASIN spend baseline", async () => {
+        try {
+          return await loadDateBounds(
+            "date",
+            "SB allocated ASIN spend baseline",
+            supabaseAdmin
+              .from("sb_allocated_asin_spend_daily_v3")
+              .select("date")
+              .eq("account_id", env.accountId)
+              .eq("asin_norm", asin)
+              .gte("date", startBound)
+              .lte("date", endBound)
+              .order("date", { ascending: true })
+              .limit(1),
+            supabaseAdmin
+              .from("sb_allocated_asin_spend_daily_v3")
+              .select("date")
+              .eq("account_id", env.accountId)
+              .eq("asin_norm", asin)
+              .gte("date", startBound)
+              .lte("date", endBound)
+              .order("date", { ascending: false })
+              .limit(1)
+          );
+        } catch {
+          return loadDateBounds(
+            "date",
+            "SB allocated ASIN spend baseline",
+            supabaseAdmin
+              .from("sb_allocated_asin_spend_daily_v3")
+              .select("date")
+              .eq("account_id", env.accountId)
+              .eq("purchased_asin_norm", asin)
+              .gte("date", startBound)
+              .lte("date", endBound)
+              .order("date", { ascending: true })
+              .limit(1),
+            supabaseAdmin
+              .from("sb_allocated_asin_spend_daily_v3")
+              .select("date")
+              .eq("account_id", env.accountId)
+              .eq("purchased_asin_norm", asin)
+              .gte("date", startBound)
+              .lte("date", endBound)
+              .order("date", { ascending: false })
+              .limit(1)
+          );
+        }
+      }),
     ]);
 
     availability = {
@@ -726,6 +846,8 @@ export async function GET(request: Request, { params }: Ctx) {
       sb_attributed_purchases: sbAttributedPurchasesBounds,
       ranking: rankingBounds,
       sqp: sqpBounds,
+      sp_advertised_asin: spAdvertisedAsinBounds,
+      sb_allocated_asin_spend: sbAllocatedAsinSpendBounds,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed loading dataset availability.";
@@ -738,6 +860,10 @@ export async function GET(request: Request, { params }: Ctx) {
     sb_campaign: availability.sb_campaign,
     sb_keyword: availability.sb_keyword,
     sb_attributed_purchases: availability.sb_attributed_purchases,
+    sp_advertised_asin: availability.sp_advertised_asin,
+    sb_allocated_asin_spend: availability.sb_allocated_asin_spend,
+    ranking: availability.ranking,
+    sqp: availability.sqp,
   };
 
   const window = computeBaselineWindow({
@@ -745,9 +871,6 @@ export async function GET(request: Request, { params }: Ctx) {
     endCandidate,
     availability: requiredAvailability,
   });
-
-  const warnings: string[] = [];
-  warnings.push(`DEBUG accountId=${env.accountId}`);
 
   for (const [dataset, bounds] of Object.entries(availability)) {
     if (!bounds.minDate || !bounds.maxDate) {
@@ -762,6 +885,24 @@ export async function GET(request: Request, { params }: Ctx) {
 
   const effectiveStart = window.effectiveStart;
   const effectiveEnd = window.effectiveEnd;
+  const loadRowsByDateChunks = async <T>(params: {
+    label: string;
+    allChunksFailedSuffix: string;
+    runChunk: (chunkStart: string, chunkEnd: string) => Promise<T[]>;
+  }): Promise<T[]> => {
+    const result = await fetchByDateChunks<T>({
+      startDate: effectiveStart,
+      endDate: effectiveEnd,
+      runChunk: params.runChunk,
+    });
+    appendChunkFailureWarnings(
+      params.label,
+      result as FetchByDateChunksResult<unknown>,
+      params.allChunksFailedSuffix
+    );
+    return result.rows;
+  };
+
   let spSelectionProductAdLookup: SpBulkProductAdLookup = {
     snapshotDate: null,
     adGroupIds: [],
@@ -800,20 +941,25 @@ export async function GET(request: Request, { params }: Ctx) {
   }
   const siPpcCostTotal = (salesRows ?? []).reduce((total, row) => total + num(row.ppc_cost), 0);
 
-  let spAdvertisedAsinRows: Array<Record<string, unknown>> = [];
-  const { data: spAdvertisedData, error: spAdvertisedError } = await supabaseAdmin
-    .from("sp_advertised_product_daily_fact_latest")
-    .select("date,impressions,clicks,spend,sales,orders,units")
-    .eq("account_id", env.accountId)
-    .gte("date", effectiveStart)
-    .lte("date", effectiveEnd)
-    .eq("advertised_asin_norm", asin)
-    .limit(200000);
-  if (spAdvertisedError) {
-    warnings.push(`Failed loading SP advertised-product baseline rows: ${spAdvertisedError.message}`);
-  } else {
-    spAdvertisedAsinRows = (spAdvertisedData ?? []) as Array<Record<string, unknown>>;
-  }
+  const spAdvertisedAsinRows = await loadRowsByDateChunks<Record<string, unknown>>({
+    label: "SP advertised-product baseline rows",
+    allChunksFailedSuffix:
+      "SP advertised-product spend is incomplete/unknown for this window; totals may appear as 0.",
+    runChunk: async (chunkStart, chunkEnd) => {
+      const { data, error } = await supabaseAdmin
+        .from("sp_advertised_product_daily_fact_latest")
+        .select("date,impressions,clicks,spend,sales,orders,units")
+        .eq("account_id", env.accountId)
+        .gte("date", chunkStart)
+        .lte("date", chunkEnd)
+        .eq("advertised_asin_norm", asin)
+        .limit(200000);
+      if (error) {
+        throw new Error(error.message);
+      }
+      return (data ?? []) as Array<Record<string, unknown>>;
+    },
+  });
   const spAdvertisedAsinDailyByDate = new Map<
     string,
     {
@@ -869,31 +1015,32 @@ export async function GET(request: Request, { params }: Ctx) {
     { impressions: 0, clicks: 0, spend: 0, sales: 0, orders: 0, units: 0 }
   );
 
-  let sbAttributedPurchaseRows: Array<Record<string, unknown>> = [];
   let sbAttributedPurchaseCampaignIds: string[] = [];
-  const { data: sbAttributedData, error: sbAttributedError } = await supabaseAdmin
-    .from("sb_attributed_purchases_daily_fact_latest")
-    .select("date,campaign_id,impressions,clicks,spend,sales,orders,units")
-    .eq("account_id", env.accountId)
-    .gte("date", effectiveStart)
-    .lte("date", effectiveEnd)
-    .eq("purchased_asin_norm", asin)
-    .limit(200000);
-  if (sbAttributedError) {
-    warnings.push(
-      `Failed loading SB attributed purchases baseline rows: ${sbAttributedError.message}`
-    );
-  } else {
-    sbAttributedPurchaseRows = (sbAttributedData ?? []) as Array<Record<string, unknown>>;
-    sbAttributedPurchaseCampaignIds = normalizeIds(
-      sbAttributedPurchaseRows.map((row) => row.campaign_id)
-    );
-    if (sbAttributedPurchaseCampaignIds.length > 0) {
-      sbCandidateCampaignIds = normalizeIds([
-        ...sbCandidateCampaignIds,
-        ...sbAttributedPurchaseCampaignIds,
-      ]);
-    }
+  const sbAttributedPurchaseRows = await loadRowsByDateChunks<Record<string, unknown>>({
+    label: "SB attributed purchases baseline rows",
+    allChunksFailedSuffix:
+      "SB attributed purchases are incomplete/unknown for this window; totals may appear as 0.",
+    runChunk: async (chunkStart, chunkEnd) => {
+      const { data, error } = await supabaseAdmin
+        .from("sb_attributed_purchases_daily_fact_latest")
+        .select("date,campaign_id,impressions,clicks,spend,sales,orders,units")
+        .eq("account_id", env.accountId)
+        .gte("date", chunkStart)
+        .lte("date", chunkEnd)
+        .eq("purchased_asin_norm", asin)
+        .limit(200000);
+      if (error) {
+        throw new Error(error.message);
+      }
+      return (data ?? []) as Array<Record<string, unknown>>;
+    },
+  });
+  sbAttributedPurchaseCampaignIds = normalizeIds(sbAttributedPurchaseRows.map((row) => row.campaign_id));
+  if (sbAttributedPurchaseCampaignIds.length > 0) {
+    sbCandidateCampaignIds = normalizeIds([
+      ...sbCandidateCampaignIds,
+      ...sbAttributedPurchaseCampaignIds,
+    ]);
   }
   const sbAttributedPurchasesDailyByDate = new Map<
     string,
@@ -954,21 +1101,25 @@ export async function GET(request: Request, { params }: Ctx) {
   // NOTE: SB Attributed Purchases report does not include spend in many exports.
   // We derive ASIN-level SB spend by allocating SB campaign spend to purchased ASIN
   // using attributed purchases (sales/orders/units) as weights (see sb_allocated_asin_spend_daily_v3).
-  let sbAllocatedSpendRows: Array<Record<string, unknown>> = [];
-  const { data: sbAllocData, error: sbAllocError } = await supabaseAdmin
-    .from("sb_allocated_asin_spend_daily_v3")
-    .select("date,allocated_spend")
-    .eq("account_id", env.accountId)
-    .gte("date", effectiveStart)
-    .lte("date", effectiveEnd)
-    .eq("purchased_asin_norm", asin)
-    .limit(200000);
-
-  if (sbAllocError) {
-    warnings.push(`Failed loading SB allocated spend rows: ${sbAllocError.message}`);
-  } else {
-    sbAllocatedSpendRows = (sbAllocData ?? []) as Array<Record<string, unknown>>;
-  }
+  const sbAllocatedSpendRows = await loadRowsByDateChunks<Record<string, unknown>>({
+    label: "SB allocated spend rows",
+    allChunksFailedSuffix:
+      "SB allocated spend is incomplete/unknown for this window; totals may appear as 0.",
+    runChunk: async (chunkStart, chunkEnd) => {
+      const { data, error } = await supabaseAdmin
+        .from("sb_allocated_asin_spend_daily_v3")
+        .select("date,allocated_spend")
+        .eq("account_id", env.accountId)
+        .gte("date", chunkStart)
+        .lte("date", chunkEnd)
+        .eq("purchased_asin_norm", asin)
+        .limit(200000);
+      if (error) {
+        throw new Error(error.message);
+      }
+      return (data ?? []) as Array<Record<string, unknown>>;
+    },
+  });
 
   const sbAllocatedSpendDailyByDate = new Map<string, { date: string; spend: number }>();
   for (const row of sbAllocatedSpendRows) {
@@ -991,22 +1142,27 @@ export async function GET(request: Request, { params }: Ctx) {
 
   let sdCandidateCampaignIds: string[] = [];
   let sdCandidateAdGroupIds: string[] = [];
-  let sdAdvertisedAsinRows: Array<Record<string, unknown>> = [];
-  const { data: sdAdvertisedData, error: sdAdvertisedError } = await supabaseAdmin
-    .from("sd_advertised_product_daily_fact_latest")
-    .select("date,campaign_id,ad_group_id,impressions,clicks,spend,sales,orders,units")
-    .eq("account_id", env.accountId)
-    .gte("date", effectiveStart)
-    .lte("date", effectiveEnd)
-    .eq("advertised_asin_norm", asin)
-    .limit(50000);
-  if (sdAdvertisedError) {
-    warnings.push(`Failed loading SD advertised-product baseline rows: ${sdAdvertisedError.message}`);
-  } else {
-    sdAdvertisedAsinRows = (sdAdvertisedData ?? []) as Array<Record<string, unknown>>;
-    sdCandidateCampaignIds = normalizeIds(sdAdvertisedAsinRows.map((row) => row.campaign_id));
-    sdCandidateAdGroupIds = normalizeIds(sdAdvertisedAsinRows.map((row) => row.ad_group_id));
-  }
+  const sdAdvertisedAsinRows = await loadRowsByDateChunks<Record<string, unknown>>({
+    label: "SD advertised-product baseline rows",
+    allChunksFailedSuffix:
+      "SD advertised-product spend is incomplete/unknown for this window; totals may appear as 0.",
+    runChunk: async (chunkStart, chunkEnd) => {
+      const { data, error } = await supabaseAdmin
+        .from("sd_advertised_product_daily_fact_latest")
+        .select("date,campaign_id,ad_group_id,impressions,clicks,spend,sales,orders,units")
+        .eq("account_id", env.accountId)
+        .gte("date", chunkStart)
+        .lte("date", chunkEnd)
+        .eq("advertised_asin_norm", asin)
+        .limit(50000);
+      if (error) {
+        throw new Error(error.message);
+      }
+      return (data ?? []) as Array<Record<string, unknown>>;
+    },
+  });
+  sdCandidateCampaignIds = normalizeIds(sdAdvertisedAsinRows.map((row) => row.campaign_id));
+  sdCandidateAdGroupIds = normalizeIds(sdAdvertisedAsinRows.map((row) => row.ad_group_id));
   const sdAdvertisedAsinTotals = sdAdvertisedAsinRows.reduce<{
     impressions: number;
     clicks: number;
@@ -1058,22 +1214,27 @@ export async function GET(request: Request, { params }: Ctx) {
       );
       return [];
     }
-    const { data, error } = await supabaseAdmin
-      .from("ads_campaign_daily_fact_latest")
-      .select("date,spend")
-      .eq("account_id", env.accountId)
-      .eq("channel", params.channel)
-      .in("campaign_id", params.campaignIds)
-      .gte("date", effectiveStart)
-      .lte("date", effectiveEnd)
-      .limit(200000);
-    if (error) {
-      warnings.push(
-        `Failed loading ${params.channel.toUpperCase()} reconciliation rows: ${error.message}; defaulting to 0.`
-      );
-      return [];
-    }
-    return (data ?? []) as Array<{ date: string | null; spend: number | string | null }>;
+    const label = `${params.channel.toUpperCase()} reconciliation rows`;
+    return loadRowsByDateChunks<{ date: string | null; spend: number | string | null }>({
+      label,
+      allChunksFailedSuffix:
+        `reconciliation ${params.channel.toUpperCase()} spend is incomplete/unknown for this window; values may appear as 0.`,
+      runChunk: async (chunkStart, chunkEnd) => {
+        const { data, error } = await supabaseAdmin
+          .from("ads_campaign_daily_fact_latest")
+          .select("date,spend")
+          .eq("account_id", env.accountId)
+          .eq("channel", params.channel)
+          .in("campaign_id", params.campaignIds)
+          .gte("date", chunkStart)
+          .lte("date", chunkEnd)
+          .limit(200000);
+        if (error) {
+          throw new Error(error.message);
+        }
+        return (data ?? []) as Array<{ date: string | null; spend: number | string | null }>;
+      },
+    });
   };
 
   const sbReconciliationAttributedRows = sbAllocatedSpendDaily.map((row) => ({
@@ -1112,41 +1273,53 @@ export async function GET(request: Request, { params }: Ctx) {
   let sbSpendTotalAccount = sbAllocatedSpendTotals.spend;
 
   let sdSpendTotalAccount = 0;
-  const { data: sdSpendRows, error: sdSpendError } = await supabaseAdmin
-    .from("sd_campaign_daily_fact_latest")
-    .select("spend")
-    .eq("account_id", env.accountId)
-    .gte("date", effectiveStart)
-    .lte("date", effectiveEnd)
-    .limit(50000);
-  if (sdSpendError) {
-    warnings.push(`Failed loading SD spend total for attribution bridge: ${sdSpendError.message}`);
-  } else {
-    sdSpendTotalAccount = (sdSpendRows ?? []).reduce((total, row) => total + num(row.spend), 0);
-  }
+  const sdSpendRows = await loadRowsByDateChunks<Record<string, unknown>>({
+    label: "SD spend total for attribution bridge",
+    allChunksFailedSuffix:
+      "SD spend total is incomplete/unknown for this window; attribution bridge values may appear as 0.",
+    runChunk: async (chunkStart, chunkEnd) => {
+      const { data, error } = await supabaseAdmin
+        .from("sd_campaign_daily_fact_latest")
+        .select("spend")
+        .eq("account_id", env.accountId)
+        .gte("date", chunkStart)
+        .lte("date", chunkEnd)
+        .limit(50000);
+      if (error) {
+        throw new Error(error.message);
+      }
+      return (data ?? []) as Array<Record<string, unknown>>;
+    },
+  });
+  sdSpendTotalAccount = sdSpendRows.reduce((total, row) => total + num(row.spend), 0);
 
   let spTargetFactRows: Array<Record<string, unknown>> = [];
   if (spSelectionProductAdLookup.adGroupIds.length > 0 || spSelectionCampaignIds.length > 0) {
-    const baseQuery = supabaseAdmin
-      .from("sp_targeting_daily_fact_latest")
-      .select(
-        "target_id,campaign_id,ad_group_id,campaign_name_raw,campaign_name_norm,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders"
-      )
-      .eq("account_id", env.accountId)
-      .gte("date", effectiveStart)
-      .lte("date", effectiveEnd)
-      .limit(200000);
-    const filteredQuery =
-      spSelectionProductAdLookup.adGroupIds.length > 0
-        ? baseQuery.in("ad_group_id", spSelectionProductAdLookup.adGroupIds)
-        : baseQuery.in("campaign_id", spSelectionCampaignIds);
-    const { data, error } = await filteredQuery;
-    if (error) {
-      return new Response(`Failed loading SP target baseline: ${error.message}`, {
-        status: 500,
-      });
-    }
-    spTargetFactRows = (data ?? []) as Array<Record<string, unknown>>;
+    spTargetFactRows = await loadRowsByDateChunks<Record<string, unknown>>({
+      label: "SP target baseline",
+      allChunksFailedSuffix:
+        "SP target baseline is incomplete/unknown for this window; mapped spend and coverage may appear as 0.",
+      runChunk: async (chunkStart, chunkEnd) => {
+        const baseQuery = supabaseAdmin
+          .from("sp_targeting_daily_fact_latest")
+          .select(
+            "target_id,campaign_id,ad_group_id,campaign_name_raw,campaign_name_norm,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders"
+          )
+          .eq("account_id", env.accountId)
+          .gte("date", chunkStart)
+          .lte("date", chunkEnd)
+          .limit(200000);
+        const filteredQuery =
+          spSelectionProductAdLookup.adGroupIds.length > 0
+            ? baseQuery.in("ad_group_id", spSelectionProductAdLookup.adGroupIds)
+            : baseQuery.in("campaign_id", spSelectionCampaignIds);
+        const { data, error } = await filteredQuery;
+        if (error) {
+          throw new Error(error.message);
+        }
+        return (data ?? []) as Array<Record<string, unknown>>;
+      },
+    });
   }
 
   const spCampaignAgg = aggregateCampaignRows(
@@ -1172,30 +1345,29 @@ export async function GET(request: Request, { params }: Ctx) {
   );
   let spMappedCampaignSpendTotal = 0;
   if (spSelectionCampaignIds.length > 0) {
-    const { data: spCampaignSpendRows, error: spCampaignSpendError } = await supabaseAdmin
-      .from("sp_campaign_daily_fact_latest")
-      .select("spend")
-      .eq("account_id", env.accountId)
-      .in("campaign_id", spSelectionCampaignIds)
-      .gte("date", effectiveStart)
-      .lte("date", effectiveEnd)
-      .limit(200000);
-    if (spCampaignSpendError) {
-      warnings.push(
-        `Failed loading SP mapped campaign spend total for attribution bridge: ${spCampaignSpendError.message}`
-      );
-    } else {
-      const spCampaignRows = spCampaignSpendRows ?? [];
-      if (spCampaignRows.length === 0) {
-        warnings.push(
-          `SP campaign baseline has no rows in ${effectiveStart}..${effectiveEnd}; continuing.`
-        );
-      }
-      spMappedCampaignSpendTotal = spCampaignRows.reduce(
-        (total, row) => total + num(row.spend),
-        0
-      );
+    const spCampaignRows = await loadRowsByDateChunks<Record<string, unknown>>({
+      label: "SP mapped campaign spend total for attribution bridge",
+      allChunksFailedSuffix:
+        "SP mapped campaign spend is incomplete/unknown for this window; attribution bridge values may appear as 0.",
+      runChunk: async (chunkStart, chunkEnd) => {
+        const { data, error } = await supabaseAdmin
+          .from("sp_campaign_daily_fact_latest")
+          .select("spend")
+          .eq("account_id", env.accountId)
+          .in("campaign_id", spSelectionCampaignIds)
+          .gte("date", chunkStart)
+          .lte("date", chunkEnd)
+          .limit(200000);
+        if (error) {
+          throw new Error(error.message);
+        }
+        return (data ?? []) as Array<Record<string, unknown>>;
+      },
+    });
+    if (spCampaignRows.length === 0) {
+      warnings.push(`SP campaign baseline has no rows in ${effectiveStart}..${effectiveEnd}; continuing.`);
     }
+    spMappedCampaignSpendTotal = spCampaignRows.reduce((total, row) => total + num(row.spend), 0);
   }
   const ppcAttributionBridge = computePpcAttributionBridge({
     siPpcCostTotal,
@@ -1220,20 +1392,25 @@ export async function GET(request: Request, { params }: Ctx) {
 
   let sbCampaignFactRows: Array<Record<string, unknown>> = [];
   if (sbCandidateCampaignIds.length > 0) {
-    const { data, error } = await supabaseAdmin
-      .from("sb_campaign_daily_fact_latest")
-      .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders")
-      .eq("account_id", env.accountId)
-      .in("campaign_id", sbCandidateCampaignIds)
-      .gte("date", effectiveStart)
-      .lte("date", effectiveEnd)
-      .limit(50000);
-    if (error) {
-      return new Response(`Failed loading SB campaign baseline: ${error.message}`, {
-        status: 500,
-      });
-    }
-    sbCampaignFactRows = (data ?? []) as Array<Record<string, unknown>>;
+    sbCampaignFactRows = await loadRowsByDateChunks<Record<string, unknown>>({
+      label: "SB campaign baseline",
+      allChunksFailedSuffix:
+        "SB campaign baseline is incomplete/unknown for this window; campaign and target sections may appear as empty.",
+      runChunk: async (chunkStart, chunkEnd) => {
+        const { data, error } = await supabaseAdmin
+          .from("sb_campaign_daily_fact_latest")
+          .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders")
+          .eq("account_id", env.accountId)
+          .in("campaign_id", sbCandidateCampaignIds)
+          .gte("date", chunkStart)
+          .lte("date", chunkEnd)
+          .limit(50000);
+        if (error) {
+          throw new Error(error.message);
+        }
+        return (data ?? []) as Array<Record<string, unknown>>;
+      },
+    });
   }
 
   const sbCampaignAgg = aggregateCampaignRows(
@@ -1246,21 +1423,29 @@ export async function GET(request: Request, { params }: Ctx) {
 
   let sbTargetAgg: TargetAggregate[] = [];
   if (sbCampaignIds.length > 0) {
-    const { data: sbTargetRows, error: sbTargetError } = await supabaseAdmin
-      .from("sb_keyword_daily_fact_latest")
-      .select("target_id,campaign_id,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders")
-      .eq("account_id", env.accountId)
-      .gte("date", effectiveStart)
-      .lte("date", effectiveEnd)
-      .in("campaign_id", sbCampaignIds)
-      .limit(50000);
-    if (sbTargetError) {
-      return new Response(`Failed loading SB target baseline: ${sbTargetError.message}`, {
-        status: 500,
-      });
-    }
+    const sbTargetRows = await loadRowsByDateChunks<Record<string, unknown>>({
+      label: "SB target baseline",
+      allChunksFailedSuffix:
+        "SB target baseline is incomplete/unknown for this window; target metrics may appear as empty.",
+      runChunk: async (chunkStart, chunkEnd) => {
+        const { data, error } = await supabaseAdmin
+          .from("sb_keyword_daily_fact_latest")
+          .select(
+            "target_id,campaign_id,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders"
+          )
+          .eq("account_id", env.accountId)
+          .gte("date", chunkStart)
+          .lte("date", chunkEnd)
+          .in("campaign_id", sbCampaignIds)
+          .limit(50000);
+        if (error) {
+          throw new Error(error.message);
+        }
+        return (data ?? []) as Array<Record<string, unknown>>;
+      },
+    });
     sbTargetAgg = aggregateTargetRows(
-      (sbTargetRows ?? []) as Array<
+      sbTargetRows as Array<
         MetricRow & {
           target_id: string;
           campaign_id: string;
@@ -1274,19 +1459,25 @@ export async function GET(request: Request, { params }: Ctx) {
 
   let sdCampaignFactRows: Array<Record<string, unknown>> = [];
   if (sdCandidateCampaignIds.length > 0) {
-    const { data, error } = await supabaseAdmin
-      .from("sd_campaign_daily_fact_latest")
-      .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders,units")
-      .eq("account_id", env.accountId)
-      .in("campaign_id", sdCandidateCampaignIds)
-      .gte("date", effectiveStart)
-      .lte("date", effectiveEnd)
-      .limit(50000);
-    if (error) {
-      warnings.push(`Failed loading SD campaign baseline rows: ${error.message}`);
-    } else {
-      sdCampaignFactRows = (data ?? []) as Array<Record<string, unknown>>;
-    }
+    sdCampaignFactRows = await loadRowsByDateChunks<Record<string, unknown>>({
+      label: "SD campaign baseline rows",
+      allChunksFailedSuffix:
+        "SD campaign baseline is incomplete/unknown for this window; campaign metrics may appear as empty.",
+      runChunk: async (chunkStart, chunkEnd) => {
+        const { data, error } = await supabaseAdmin
+          .from("sd_campaign_daily_fact_latest")
+          .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders,units")
+          .eq("account_id", env.accountId)
+          .in("campaign_id", sdCandidateCampaignIds)
+          .gte("date", chunkStart)
+          .lte("date", chunkEnd)
+          .limit(50000);
+        if (error) {
+          throw new Error(error.message);
+        }
+        return (data ?? []) as Array<Record<string, unknown>>;
+      },
+    });
   }
   const sdCampaignAgg = aggregateCampaignRows(
     sdCampaignFactRows as Array<
@@ -1298,34 +1489,41 @@ export async function GET(request: Request, { params }: Ctx) {
 
   let sdTargetAgg: SdTargetAggregate[] = [];
   if (sdCampaignIds.length > 0) {
-    const { data: sdTargetRows, error: sdTargetError } = await supabaseAdmin
-      .from("sd_targeting_daily_fact_latest")
-      .select(
-        "target_key,target_id,campaign_id,ad_group_id,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders,units"
-      )
-      .eq("account_id", env.accountId)
-      .gte("date", effectiveStart)
-      .lte("date", effectiveEnd)
-      .in("campaign_id", sdCampaignIds)
-      .limit(50000);
-    if (sdTargetError) {
-      warnings.push(`Failed loading SD target baseline rows: ${sdTargetError.message}`);
-    } else {
-      sdTargetAgg = aggregateSdTargetRows(
-        (sdTargetRows ?? []) as Array<
-          MetricRow & {
-            target_key: string;
-            target_id: string | null;
-            campaign_id: string;
-            ad_group_id: string;
-            targeting_raw: string;
-            targeting_norm: string;
-            match_type_norm: string | null;
-            units: number | string | null;
-          }
-        >
-      ).slice(0, SD_TARGET_LIMIT);
-    }
+    const sdTargetRows = await loadRowsByDateChunks<Record<string, unknown>>({
+      label: "SD target baseline rows",
+      allChunksFailedSuffix:
+        "SD target baseline is incomplete/unknown for this window; target metrics may appear as empty.",
+      runChunk: async (chunkStart, chunkEnd) => {
+        const { data, error } = await supabaseAdmin
+          .from("sd_targeting_daily_fact_latest")
+          .select(
+            "target_key,target_id,campaign_id,ad_group_id,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders,units"
+          )
+          .eq("account_id", env.accountId)
+          .gte("date", chunkStart)
+          .lte("date", chunkEnd)
+          .in("campaign_id", sdCampaignIds)
+          .limit(50000);
+        if (error) {
+          throw new Error(error.message);
+        }
+        return (data ?? []) as Array<Record<string, unknown>>;
+      },
+    });
+    sdTargetAgg = aggregateSdTargetRows(
+      sdTargetRows as Array<
+        MetricRow & {
+          target_key: string;
+          target_id: string | null;
+          campaign_id: string;
+          ad_group_id: string;
+          targeting_raw: string;
+          targeting_norm: string;
+          match_type_norm: string | null;
+          units: number | string | null;
+        }
+      >
+    ).slice(0, SD_TARGET_LIMIT);
   }
 
   let spBulkCampaignRows: Array<Record<string, unknown>> = [];
@@ -1427,38 +1625,54 @@ export async function GET(request: Request, { params }: Ctx) {
 
   let spPlacementPerformanceRows: Array<Record<string, unknown>> = [];
   if (spCampaignIds.length > 0) {
-    const { data, error } = await supabaseAdmin
-      .from("ads_campaign_placement_daily_fact_latest")
-      .select("campaign_id,placement_code,placement_raw,placement_raw_norm,impressions,clicks,spend,sales,orders,units")
-      .eq("account_id", env.accountId)
-      .eq("channel", "sp")
-      .in("campaign_id", spCampaignIds)
-      .gte("date", effectiveStart)
-      .lte("date", effectiveEnd)
-      .limit(50000);
-    if (error) {
-      warnings.push(`Failed loading SP placement performance rows: ${error.message}`);
-    } else {
-      spPlacementPerformanceRows = (data ?? []) as Array<Record<string, unknown>>;
-    }
+    spPlacementPerformanceRows = await loadRowsByDateChunks<Record<string, unknown>>({
+      label: "SP placement performance rows",
+      allChunksFailedSuffix:
+        "SP placement performance is incomplete/unknown for this window; placement metrics may appear as empty.",
+      runChunk: async (chunkStart, chunkEnd) => {
+        const { data, error } = await supabaseAdmin
+          .from("ads_campaign_placement_daily_fact_latest")
+          .select(
+            "campaign_id,placement_code,placement_raw,placement_raw_norm,impressions,clicks,spend,sales,orders,units"
+          )
+          .eq("account_id", env.accountId)
+          .eq("channel", "sp")
+          .in("campaign_id", spCampaignIds)
+          .gte("date", chunkStart)
+          .lte("date", chunkEnd)
+          .limit(50000);
+        if (error) {
+          throw new Error(error.message);
+        }
+        return (data ?? []) as Array<Record<string, unknown>>;
+      },
+    });
   }
 
   let sbPlacementPerformanceRows: Array<Record<string, unknown>> = [];
   if (sbCampaignIds.length > 0) {
-    const { data, error } = await supabaseAdmin
-      .from("ads_campaign_placement_daily_fact_latest")
-      .select("campaign_id,placement_code,placement_raw,placement_raw_norm,impressions,clicks,spend,sales,orders,units")
-      .eq("account_id", env.accountId)
-      .eq("channel", "sb")
-      .in("campaign_id", sbCampaignIds)
-      .gte("date", effectiveStart)
-      .lte("date", effectiveEnd)
-      .limit(50000);
-    if (error) {
-      warnings.push(`Failed loading SB placement performance rows: ${error.message}`);
-    } else {
-      sbPlacementPerformanceRows = (data ?? []) as Array<Record<string, unknown>>;
-    }
+    sbPlacementPerformanceRows = await loadRowsByDateChunks<Record<string, unknown>>({
+      label: "SB placement performance rows",
+      allChunksFailedSuffix:
+        "SB placement performance is incomplete/unknown for this window; placement metrics may appear as empty.",
+      runChunk: async (chunkStart, chunkEnd) => {
+        const { data, error } = await supabaseAdmin
+          .from("ads_campaign_placement_daily_fact_latest")
+          .select(
+            "campaign_id,placement_code,placement_raw,placement_raw_norm,impressions,clicks,spend,sales,orders,units"
+          )
+          .eq("account_id", env.accountId)
+          .eq("channel", "sb")
+          .in("campaign_id", sbCampaignIds)
+          .gte("date", chunkStart)
+          .lte("date", chunkEnd)
+          .limit(50000);
+        if (error) {
+          throw new Error(error.message);
+        }
+        return (data ?? []) as Array<Record<string, unknown>>;
+      },
+    });
   }
 
   const spPlacementPerformanceByCampaign = new Map<string, PlacementAggregate[]>();
