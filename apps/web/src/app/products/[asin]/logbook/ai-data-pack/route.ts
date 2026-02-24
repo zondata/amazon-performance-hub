@@ -14,6 +14,9 @@ import {
   selectSpRowsForCoverage,
   sumSpSpend,
 } from "@/lib/logbook/aiPack/spCoverageSelection";
+import { computeBoundedRange } from "@/lib/ads/boundedDateRange";
+import { buildAdsReconciliationDaily } from "@/lib/ads/buildAdsReconciliationDaily";
+import { computePpcAttributionBridge } from "@/lib/logbook/aiPack/ppcAttributionBridge";
 import { env } from "@/lib/env";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -21,6 +24,7 @@ export const dynamic = "force-dynamic";
 
 const CAMPAIGN_LIMIT = 50;
 const SB_TARGET_LIMIT = 200;
+const SD_TARGET_LIMIT = 200;
 const SP_TARGET_LIMIT = 500;
 const SP_COVERAGE_THRESHOLD = 0.95;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -53,6 +57,35 @@ type TargetAggregate = {
   spend: number;
   sales: number;
   orders: number;
+  clicks: number;
+  impressions: number;
+};
+
+type SdTargetAggregate = {
+  target_key: string;
+  target_id: string | null;
+  campaign_id: string;
+  ad_group_id: string;
+  targeting_raw: string;
+  targeting_norm: string;
+  match_type_norm: string | null;
+  spend: number;
+  sales: number;
+  orders: number;
+  units: number;
+  clicks: number;
+  impressions: number;
+};
+
+type PlacementAggregate = {
+  campaign_id: string;
+  placement_code: string;
+  placement_raw: string;
+  placement_raw_norm: string;
+  spend: number;
+  sales: number;
+  orders: number;
+  units: number;
   clicks: number;
   impressions: number;
 };
@@ -91,6 +124,9 @@ const formatPct = (value: number | null) =>
 
 const calcAcos = (spend: number, sales: number) => (sales > 0 ? spend / sales : null);
 const calcCpc = (spend: number, clicks: number) => (clicks > 0 ? spend / clicks : null);
+const calcCtr = (clicks: number, impressions: number) =>
+  impressions > 0 ? clicks / impressions : null;
+const calcRoas = (spend: number, sales: number) => (spend > 0 ? sales / spend : null);
 
 const sanitizeFileSegment = (value: string): string =>
   value
@@ -183,6 +219,96 @@ const aggregateTargetRows = (
     byId.set(key, prev);
   }
   return [...byId.values()].sort((a, b) => b.spend - a.spend);
+};
+
+const aggregateSdTargetRows = (
+  rows: Array<
+    MetricRow & {
+      target_key: string;
+      target_id: string | null;
+      campaign_id: string;
+      ad_group_id: string;
+      targeting_raw: string;
+      targeting_norm: string;
+      match_type_norm: string | null;
+      units: number | string | null;
+    }
+  >
+): SdTargetAggregate[] => {
+  const byKey = new Map<string, SdTargetAggregate>();
+  for (const row of rows) {
+    const key = row.target_key;
+    if (!key) continue;
+    const prev =
+      byKey.get(key) ??
+      ({
+        target_key: row.target_key,
+        target_id: row.target_id,
+        campaign_id: row.campaign_id,
+        ad_group_id: row.ad_group_id,
+        targeting_raw: row.targeting_raw,
+        targeting_norm: row.targeting_norm,
+        match_type_norm: row.match_type_norm,
+        spend: 0,
+        sales: 0,
+        orders: 0,
+        units: 0,
+        clicks: 0,
+        impressions: 0,
+      } as SdTargetAggregate);
+    prev.spend += num(row.spend);
+    prev.sales += num(row.sales);
+    prev.orders += num(row.orders);
+    prev.units += num(row.units);
+    prev.clicks += num(row.clicks);
+    prev.impressions += num(row.impressions);
+    byKey.set(key, prev);
+  }
+  return [...byKey.values()].sort((a, b) => b.spend - a.spend);
+};
+
+const aggregatePlacementRows = (
+  rows: Array<
+    MetricRow & {
+      campaign_id: string;
+      placement_code: string | null;
+      placement_raw: string | null;
+      placement_raw_norm: string | null;
+      units: number | string | null;
+    }
+  >
+): PlacementAggregate[] => {
+  const byKey = new Map<string, PlacementAggregate>();
+  for (const row of rows) {
+    const campaignId = row.campaign_id;
+    if (!campaignId) continue;
+    const placementCode = String(row.placement_code ?? "").trim();
+    const placementRawNorm = String(row.placement_raw_norm ?? "").trim();
+    const placementRaw = String(row.placement_raw ?? "").trim();
+    const key = `${campaignId}::${placementCode}::${placementRawNorm}`;
+    const prev =
+      byKey.get(key) ??
+      ({
+        campaign_id: campaignId,
+        placement_code: placementCode,
+        placement_raw: placementRaw,
+        placement_raw_norm: placementRawNorm,
+        spend: 0,
+        sales: 0,
+        orders: 0,
+        units: 0,
+        clicks: 0,
+        impressions: 0,
+      } as PlacementAggregate);
+    prev.spend += num(row.spend);
+    prev.sales += num(row.sales);
+    prev.orders += num(row.orders);
+    prev.units += num(row.units);
+    prev.clicks += num(row.clicks);
+    prev.impressions += num(row.impressions);
+    byKey.set(key, prev);
+  }
+  return [...byKey.values()].sort((a, b) => b.spend - a.spend);
 };
 
 const loadDateBounds = async (
@@ -288,12 +414,17 @@ export async function GET(request: Request, { params }: Ctx) {
   }
 
   const url = new URL(request.url);
-  const requestedRange = normalizeBaselineRange(url.searchParams.get("range"));
+  const requestedRangeParam = url.searchParams.get("range");
+  const requestedRange = normalizeBaselineRange(requestedRangeParam);
   const excludeLastDays = normalizeExcludeLastDays(url.searchParams.get("exclude_last_days"));
   const todayMinusExcludeDays = computeTodayMinusExcludeDays(excludeLastDays);
   const endArg = url.searchParams.get("end");
   const userEnd = endArg && DATE_RE.test(endArg) ? endArg : null;
   const endCandidate = computeEndCandidate(todayMinusExcludeDays, userEnd);
+  const { startBound, endBound } = computeBoundedRange({
+    requestedRange: requestedRangeParam ?? requestedRange,
+    endDate: endCandidate,
+  });
   const asinNamePattern = `%${asin.toLowerCase()}%`;
 
   const { data: productRow, error: productError } = await supabaseAdmin
@@ -400,7 +531,8 @@ export async function GET(request: Request, { params }: Ctx) {
           .eq("account_id", env.accountId)
           .eq("marketplace", env.marketplace)
           .eq("asin", asin)
-          .lte("date", endCandidate)
+          .gte("date", startBound)
+          .lte("date", endBound)
           .order("date", { ascending: true })
           .limit(1),
         supabaseAdmin
@@ -409,32 +541,12 @@ export async function GET(request: Request, { params }: Ctx) {
           .eq("account_id", env.accountId)
           .eq("marketplace", env.marketplace)
           .eq("asin", asin)
-          .lte("date", endCandidate)
+          .gte("date", startBound)
+          .lte("date", endBound)
           .order("date", { ascending: false })
           .limit(1)
       ),
-      spCandidateCampaignIds.length > 0
-        ? loadDateBounds(
-            "date",
-            "SP campaign baseline",
-            supabaseAdmin
-              .from("sp_campaign_hourly_fact_latest")
-              .select("date")
-              .eq("account_id", env.accountId)
-              .in("campaign_id", spCandidateCampaignIds)
-              .lte("date", endCandidate)
-              .order("date", { ascending: true })
-              .limit(1),
-            supabaseAdmin
-              .from("sp_campaign_hourly_fact_latest")
-              .select("date")
-              .eq("account_id", env.accountId)
-              .in("campaign_id", spCandidateCampaignIds)
-              .lte("date", endCandidate)
-              .order("date", { ascending: false })
-              .limit(1)
-          )
-        : Promise.resolve({ minDate: null, maxDate: null }),
+      Promise.resolve({ minDate: startBound, maxDate: endBound }),
       spBulkProductAdLookup.adGroupIds.length > 0
         ? loadDateBounds(
             "date",
@@ -444,7 +556,8 @@ export async function GET(request: Request, { params }: Ctx) {
               .select("date")
               .eq("account_id", env.accountId)
               .in("ad_group_id", spBulkProductAdLookup.adGroupIds)
-              .lte("date", endCandidate)
+              .gte("date", startBound)
+              .lte("date", endBound)
               .order("date", { ascending: true })
               .limit(1),
             supabaseAdmin
@@ -452,7 +565,8 @@ export async function GET(request: Request, { params }: Ctx) {
               .select("date")
               .eq("account_id", env.accountId)
               .in("ad_group_id", spBulkProductAdLookup.adGroupIds)
-              .lte("date", endCandidate)
+              .gte("date", startBound)
+              .lte("date", endBound)
               .order("date", { ascending: false })
               .limit(1)
           )
@@ -465,7 +579,8 @@ export async function GET(request: Request, { params }: Ctx) {
                 .select("date")
                 .eq("account_id", env.accountId)
                 .in("campaign_id", spCandidateCampaignIds)
-                .lte("date", endCandidate)
+                .gte("date", startBound)
+                .lte("date", endBound)
                 .order("date", { ascending: true })
                 .limit(1),
               supabaseAdmin
@@ -473,7 +588,8 @@ export async function GET(request: Request, { params }: Ctx) {
                 .select("date")
                 .eq("account_id", env.accountId)
                 .in("campaign_id", spCandidateCampaignIds)
-                .lte("date", endCandidate)
+                .gte("date", startBound)
+                .lte("date", endBound)
                 .order("date", { ascending: false })
                 .limit(1)
           )
@@ -487,7 +603,8 @@ export async function GET(request: Request, { params }: Ctx) {
               .select("date")
               .eq("account_id", env.accountId)
               .in("campaign_id", sbCandidateCampaignIds)
-              .lte("date", endCandidate)
+              .gte("date", startBound)
+              .lte("date", endBound)
               .order("date", { ascending: true })
               .limit(1),
             supabaseAdmin
@@ -495,7 +612,8 @@ export async function GET(request: Request, { params }: Ctx) {
               .select("date")
               .eq("account_id", env.accountId)
               .in("campaign_id", sbCandidateCampaignIds)
-              .lte("date", endCandidate)
+              .gte("date", startBound)
+              .lte("date", endBound)
               .order("date", { ascending: false })
               .limit(1)
           )
@@ -509,7 +627,8 @@ export async function GET(request: Request, { params }: Ctx) {
               .select("date")
               .eq("account_id", env.accountId)
               .in("campaign_id", sbCandidateCampaignIds)
-              .lte("date", endCandidate)
+              .gte("date", startBound)
+              .lte("date", endBound)
               .order("date", { ascending: true })
               .limit(1),
             supabaseAdmin
@@ -517,7 +636,8 @@ export async function GET(request: Request, { params }: Ctx) {
               .select("date")
               .eq("account_id", env.accountId)
               .in("campaign_id", sbCandidateCampaignIds)
-              .lte("date", endCandidate)
+              .gte("date", startBound)
+              .lte("date", endBound)
               .order("date", { ascending: false })
               .limit(1)
           )
@@ -531,7 +651,8 @@ export async function GET(request: Request, { params }: Ctx) {
           .eq("account_id", env.accountId)
           .eq("marketplace", env.marketplace)
           .eq("asin", asin)
-          .lte("observed_date", endCandidate)
+          .gte("observed_date", startBound)
+          .lte("observed_date", endBound)
           .order("observed_date", { ascending: true })
           .limit(1),
         supabaseAdmin
@@ -540,7 +661,8 @@ export async function GET(request: Request, { params }: Ctx) {
           .eq("account_id", env.accountId)
           .eq("marketplace", env.marketplace)
           .eq("asin", asin)
-          .lte("observed_date", endCandidate)
+          .gte("observed_date", startBound)
+          .lte("observed_date", endBound)
           .order("observed_date", { ascending: false })
           .limit(1)
       ),
@@ -554,7 +676,8 @@ export async function GET(request: Request, { params }: Ctx) {
           .eq("marketplace", env.marketplace)
           .eq("scope_type", "asin")
           .eq("scope_value", asin)
-          .lte("week_end", endCandidate)
+          .gte("week_end", startBound)
+          .lte("week_end", endBound)
           .order("week_end", { ascending: true })
           .limit(1),
         supabaseAdmin
@@ -564,7 +687,8 @@ export async function GET(request: Request, { params }: Ctx) {
           .eq("marketplace", env.marketplace)
           .eq("scope_type", "asin")
           .eq("scope_value", asin)
-          .lte("week_end", endCandidate)
+          .gte("week_end", startBound)
+          .lte("week_end", endBound)
           .order("week_end", { ascending: false })
           .limit(1)
       ),
@@ -647,6 +771,216 @@ export async function GET(request: Request, { params }: Ctx) {
   if (salesError) {
     return new Response(`Failed loading sales trend: ${salesError.message}`, { status: 500 });
   }
+  const siPpcCostTotal = (salesRows ?? []).reduce((total, row) => total + num(row.ppc_cost), 0);
+
+  let spAdvertisedAsinRows: Array<Record<string, unknown>> = [];
+  const { data: spAdvertisedData, error: spAdvertisedError } = await supabaseAdmin
+    .from("sp_advertised_product_daily_fact_latest")
+    .select("date,impressions,clicks,spend,sales,orders,units")
+    .eq("account_id", env.accountId)
+    .gte("date", effectiveStart)
+    .lte("date", effectiveEnd)
+    .eq("advertised_asin_norm", asin)
+    .limit(200000);
+  if (spAdvertisedError) {
+    warnings.push(`Failed loading SP advertised-product baseline rows: ${spAdvertisedError.message}`);
+  } else {
+    spAdvertisedAsinRows = (spAdvertisedData ?? []) as Array<Record<string, unknown>>;
+  }
+  const spAdvertisedAsinDailyByDate = new Map<
+    string,
+    {
+      date: string;
+      impressions: number;
+      clicks: number;
+      spend: number;
+      sales: number;
+      orders: number;
+      units: number;
+    }
+  >();
+  for (const row of spAdvertisedAsinRows) {
+    const date = parseDateField(row.date);
+    if (!date) continue;
+    const prev = spAdvertisedAsinDailyByDate.get(date) ?? {
+      date,
+      impressions: 0,
+      clicks: 0,
+      spend: 0,
+      sales: 0,
+      orders: 0,
+      units: 0,
+    };
+    prev.impressions += num(row.impressions);
+    prev.clicks += num(row.clicks);
+    prev.spend += num(row.spend);
+    prev.sales += num(row.sales);
+    prev.orders += num(row.orders);
+    prev.units += num(row.units);
+    spAdvertisedAsinDailyByDate.set(date, prev);
+  }
+  const spAdvertisedAsinDaily = [...spAdvertisedAsinDailyByDate.values()].sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
+  const spAdvertisedAsinTotals = spAdvertisedAsinDaily.reduce<{
+    impressions: number;
+    clicks: number;
+    spend: number;
+    sales: number;
+    orders: number;
+    units: number;
+  }>(
+    (totals, row) => {
+      totals.impressions += row.impressions;
+      totals.clicks += row.clicks;
+      totals.spend += row.spend;
+      totals.sales += row.sales;
+      totals.orders += row.orders;
+      totals.units += row.units;
+      return totals;
+    },
+    { impressions: 0, clicks: 0, spend: 0, sales: 0, orders: 0, units: 0 }
+  );
+
+  let sdCandidateCampaignIds: string[] = [];
+  let sdCandidateAdGroupIds: string[] = [];
+  let sdAdvertisedAsinRows: Array<Record<string, unknown>> = [];
+  const { data: sdAdvertisedData, error: sdAdvertisedError } = await supabaseAdmin
+    .from("sd_advertised_product_daily_fact_latest")
+    .select("date,campaign_id,ad_group_id,impressions,clicks,spend,sales,orders,units")
+    .eq("account_id", env.accountId)
+    .gte("date", effectiveStart)
+    .lte("date", effectiveEnd)
+    .eq("advertised_asin_norm", asin)
+    .limit(50000);
+  if (sdAdvertisedError) {
+    warnings.push(`Failed loading SD advertised-product baseline rows: ${sdAdvertisedError.message}`);
+  } else {
+    sdAdvertisedAsinRows = (sdAdvertisedData ?? []) as Array<Record<string, unknown>>;
+    sdCandidateCampaignIds = normalizeIds(sdAdvertisedAsinRows.map((row) => row.campaign_id));
+    sdCandidateAdGroupIds = normalizeIds(sdAdvertisedAsinRows.map((row) => row.ad_group_id));
+  }
+  const sdAdvertisedAsinTotals = sdAdvertisedAsinRows.reduce<{
+    impressions: number;
+    clicks: number;
+    spend: number;
+    sales: number;
+    orders: number;
+    units: number;
+  }>(
+    (totals, row) => {
+      totals.impressions += num(row.impressions);
+      totals.clicks += num(row.clicks);
+      totals.spend += num(row.spend);
+      totals.sales += num(row.sales);
+      totals.orders += num(row.orders);
+      totals.units += num(row.units);
+      return totals;
+    },
+    { impressions: 0, clicks: 0, spend: 0, sales: 0, orders: 0, units: 0 }
+  );
+
+  const reconciliationDaily = buildAdsReconciliationDaily({
+    siRows: (salesRows ?? []).map((row) => ({
+      date: row.date as string | null,
+      ppc_cost: row.ppc_cost as number | string | null,
+    })),
+    spRows: spAdvertisedAsinRows.map((row) => ({
+      date: (row.date as string | null) ?? null,
+      spend: row.spend as number | string | null,
+    })),
+    sbRows: [],
+    sdRows: sdAdvertisedAsinRows.map((row) => ({
+      date: (row.date as string | null) ?? null,
+      spend: row.spend as number | string | null,
+    })),
+    start: effectiveStart,
+    end: effectiveEnd,
+  });
+
+  const loadCampaignReconciliationSpendRows = async (params: {
+    channel: "sp" | "sb" | "sd";
+    campaignIds: string[];
+  }): Promise<Array<{ date: string | null; spend: number | string | null }>> => {
+    if (params.campaignIds.length === 0) {
+      warnings.push(
+        `No ${params.channel.toUpperCase()} candidate campaigns found for ASIN ${asin}; reconciliation ${params.channel} spend set to 0.`
+      );
+      return [];
+    }
+    const { data, error } = await supabaseAdmin
+      .from("ads_campaign_daily_fact_latest")
+      .select("date,spend")
+      .eq("account_id", env.accountId)
+      .eq("channel", params.channel)
+      .in("campaign_id", params.campaignIds)
+      .gte("date", effectiveStart)
+      .lte("date", effectiveEnd)
+      .limit(200000);
+    if (error) {
+      warnings.push(
+        `Failed loading ${params.channel.toUpperCase()} reconciliation rows: ${error.message}; defaulting to 0.`
+      );
+      return [];
+    }
+    return (data ?? []) as Array<{ date: string | null; spend: number | string | null }>;
+  };
+
+  const [spReconciliationCampaignRows, sbReconciliationCampaignRows, sdReconciliationCampaignRows] =
+    await Promise.all([
+      loadCampaignReconciliationSpendRows({
+        channel: "sp",
+        campaignIds: spSelectionCampaignIds,
+      }),
+      loadCampaignReconciliationSpendRows({
+        channel: "sb",
+        campaignIds: sbCandidateCampaignIds,
+      }),
+      loadCampaignReconciliationSpendRows({
+        channel: "sd",
+        campaignIds: sdCandidateCampaignIds,
+      }),
+    ]);
+
+  const reconciliationDailyCampaigns = buildAdsReconciliationDaily({
+    siRows: (salesRows ?? []).map((row) => ({
+      date: row.date as string | null,
+      ppc_cost: row.ppc_cost as number | string | null,
+    })),
+    spRows: spReconciliationCampaignRows,
+    sbRows: sbReconciliationCampaignRows,
+    sdRows: sdReconciliationCampaignRows,
+    start: effectiveStart,
+    end: effectiveEnd,
+  });
+
+  let sbSpendTotalAccount = 0;
+  const { data: sbSpendRows, error: sbSpendError } = await supabaseAdmin
+    .from("sb_campaign_daily_fact_latest")
+    .select("spend")
+    .eq("account_id", env.accountId)
+    .gte("date", effectiveStart)
+    .lte("date", effectiveEnd)
+    .limit(50000);
+  if (sbSpendError) {
+    warnings.push(`Failed loading SB spend total for attribution bridge: ${sbSpendError.message}`);
+  } else {
+    sbSpendTotalAccount = (sbSpendRows ?? []).reduce((total, row) => total + num(row.spend), 0);
+  }
+
+  let sdSpendTotalAccount = 0;
+  const { data: sdSpendRows, error: sdSpendError } = await supabaseAdmin
+    .from("sd_campaign_daily_fact_latest")
+    .select("spend")
+    .eq("account_id", env.accountId)
+    .gte("date", effectiveStart)
+    .lte("date", effectiveEnd)
+    .limit(50000);
+  if (sdSpendError) {
+    warnings.push(`Failed loading SD spend total for attribution bridge: ${sdSpendError.message}`);
+  } else {
+    sdSpendTotalAccount = (sdSpendRows ?? []).reduce((total, row) => total + num(row.spend), 0);
+  }
 
   let spTargetFactRows: Array<Record<string, unknown>> = [];
   if (spSelectionProductAdLookup.adGroupIds.length > 0 || spSelectionCampaignIds.length > 0) {
@@ -693,6 +1027,41 @@ export async function GET(request: Request, { params }: Ctx) {
       spend: number;
     }>
   );
+  let spMappedCampaignSpendTotal = 0;
+  if (spSelectionCampaignIds.length > 0) {
+    const { data: spCampaignSpendRows, error: spCampaignSpendError } = await supabaseAdmin
+      .from("sp_campaign_daily_fact_latest")
+      .select("spend")
+      .eq("account_id", env.accountId)
+      .in("campaign_id", spSelectionCampaignIds)
+      .gte("date", effectiveStart)
+      .lte("date", effectiveEnd)
+      .limit(200000);
+    if (spCampaignSpendError) {
+      warnings.push(
+        `Failed loading SP mapped campaign spend total for attribution bridge: ${spCampaignSpendError.message}`
+      );
+    } else {
+      const spCampaignRows = spCampaignSpendRows ?? [];
+      if (spCampaignRows.length === 0) {
+        warnings.push(
+          `SP campaign baseline has no rows in ${effectiveStart}..${effectiveEnd}; continuing.`
+        );
+      }
+      spMappedCampaignSpendTotal = spCampaignRows.reduce(
+        (total, row) => total + num(row.spend),
+        0
+      );
+    }
+  }
+  const ppcAttributionBridge = computePpcAttributionBridge({
+    siPpcCostTotal,
+    spAttributedSpendTotal: spMappedSpendTotal,
+    spAdvertisedAsinSpendTotal: spAdvertisedAsinTotals.spend,
+    spMappedCampaignSpendTotal,
+    sbSpendTotalUnattributed: sbSpendTotalAccount,
+    sdSpendTotalUnattributed: sdSpendTotalAccount,
+  });
   const spCoverageSelection = selectSpRowsForCoverage({
     mappedSpendTotal: spMappedSpendTotal,
     campaignRows: spCampaignAgg,
@@ -757,6 +1126,62 @@ export async function GET(request: Request, { params }: Ctx) {
         }
       >
     ).slice(0, SB_TARGET_LIMIT);
+  }
+
+  let sdCampaignFactRows: Array<Record<string, unknown>> = [];
+  if (sdCandidateCampaignIds.length > 0) {
+    const { data, error } = await supabaseAdmin
+      .from("sd_campaign_daily_fact_latest")
+      .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders,units")
+      .eq("account_id", env.accountId)
+      .in("campaign_id", sdCandidateCampaignIds)
+      .gte("date", effectiveStart)
+      .lte("date", effectiveEnd)
+      .limit(50000);
+    if (error) {
+      warnings.push(`Failed loading SD campaign baseline rows: ${error.message}`);
+    } else {
+      sdCampaignFactRows = (data ?? []) as Array<Record<string, unknown>>;
+    }
+  }
+  const sdCampaignAgg = aggregateCampaignRows(
+    sdCampaignFactRows as Array<
+      MetricRow & { campaign_id: string; campaign_name_raw: string; campaign_name_norm: string }
+    >
+  );
+  const sdTopCampaigns = sdCampaignAgg.slice(0, CAMPAIGN_LIMIT);
+  const sdCampaignIds = sdTopCampaigns.map((row) => row.campaign_id);
+
+  let sdTargetAgg: SdTargetAggregate[] = [];
+  if (sdCampaignIds.length > 0) {
+    const { data: sdTargetRows, error: sdTargetError } = await supabaseAdmin
+      .from("sd_targeting_daily_fact_latest")
+      .select(
+        "target_key,target_id,campaign_id,ad_group_id,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders,units"
+      )
+      .eq("account_id", env.accountId)
+      .gte("date", effectiveStart)
+      .lte("date", effectiveEnd)
+      .in("campaign_id", sdCampaignIds)
+      .limit(50000);
+    if (sdTargetError) {
+      warnings.push(`Failed loading SD target baseline rows: ${sdTargetError.message}`);
+    } else {
+      sdTargetAgg = aggregateSdTargetRows(
+        (sdTargetRows ?? []) as Array<
+          MetricRow & {
+            target_key: string;
+            target_id: string | null;
+            campaign_id: string;
+            ad_group_id: string;
+            targeting_raw: string;
+            targeting_norm: string;
+            match_type_norm: string | null;
+            units: number | string | null;
+          }
+        >
+      ).slice(0, SD_TARGET_LIMIT);
+    }
   }
 
   let spBulkCampaignRows: Array<Record<string, unknown>> = [];
@@ -854,6 +1279,76 @@ export async function GET(request: Request, { params }: Ctx) {
     const rows = sbPlacementsByCampaign.get(key) ?? [];
     rows.push(row);
     sbPlacementsByCampaign.set(key, rows);
+  }
+
+  let spPlacementPerformanceRows: Array<Record<string, unknown>> = [];
+  if (spCampaignIds.length > 0) {
+    const { data, error } = await supabaseAdmin
+      .from("ads_campaign_placement_daily_fact_latest")
+      .select("campaign_id,placement_code,placement_raw,placement_raw_norm,impressions,clicks,spend,sales,orders,units")
+      .eq("account_id", env.accountId)
+      .eq("channel", "sp")
+      .in("campaign_id", spCampaignIds)
+      .gte("date", effectiveStart)
+      .lte("date", effectiveEnd)
+      .limit(50000);
+    if (error) {
+      warnings.push(`Failed loading SP placement performance rows: ${error.message}`);
+    } else {
+      spPlacementPerformanceRows = (data ?? []) as Array<Record<string, unknown>>;
+    }
+  }
+
+  let sbPlacementPerformanceRows: Array<Record<string, unknown>> = [];
+  if (sbCampaignIds.length > 0) {
+    const { data, error } = await supabaseAdmin
+      .from("ads_campaign_placement_daily_fact_latest")
+      .select("campaign_id,placement_code,placement_raw,placement_raw_norm,impressions,clicks,spend,sales,orders,units")
+      .eq("account_id", env.accountId)
+      .eq("channel", "sb")
+      .in("campaign_id", sbCampaignIds)
+      .gte("date", effectiveStart)
+      .lte("date", effectiveEnd)
+      .limit(50000);
+    if (error) {
+      warnings.push(`Failed loading SB placement performance rows: ${error.message}`);
+    } else {
+      sbPlacementPerformanceRows = (data ?? []) as Array<Record<string, unknown>>;
+    }
+  }
+
+  const spPlacementPerformanceByCampaign = new Map<string, PlacementAggregate[]>();
+  for (const row of aggregatePlacementRows(
+    spPlacementPerformanceRows as Array<
+      MetricRow & {
+        campaign_id: string;
+        placement_code: string | null;
+        placement_raw: string | null;
+        placement_raw_norm: string | null;
+        units: number | string | null;
+      }
+    >
+  )) {
+    const rows = spPlacementPerformanceByCampaign.get(row.campaign_id) ?? [];
+    rows.push(row);
+    spPlacementPerformanceByCampaign.set(row.campaign_id, rows);
+  }
+
+  const sbPlacementPerformanceByCampaign = new Map<string, PlacementAggregate[]>();
+  for (const row of aggregatePlacementRows(
+    sbPlacementPerformanceRows as Array<
+      MetricRow & {
+        campaign_id: string;
+        placement_code: string | null;
+        placement_raw: string | null;
+        placement_raw_norm: string | null;
+        units: number | string | null;
+      }
+    >
+  )) {
+    const rows = sbPlacementPerformanceByCampaign.get(row.campaign_id) ?? [];
+    rows.push(row);
+    sbPlacementPerformanceByCampaign.set(row.campaign_id, rows);
   }
 
   let sqpLatestWeekEnd: string | null = null;
@@ -1009,6 +1504,42 @@ export async function GET(request: Request, { params }: Ctx) {
     return new Response(`Failed loading experiments: ${experimentsError.message}`, { status: 500 });
   }
 
+  const sdCampaignTotals = sdCampaignFactRows.reduce<{
+    impressions: number;
+    clicks: number;
+    spend: number;
+    sales: number;
+    orders: number;
+    units: number;
+  }>(
+    (totals, row) => {
+      totals.impressions += num(row.impressions);
+      totals.clicks += num(row.clicks);
+      totals.spend += num(row.spend);
+      totals.sales += num(row.sales);
+      totals.orders += num(row.orders);
+      totals.units += num(row.units);
+      return totals;
+    },
+    { impressions: 0, clicks: 0, spend: 0, sales: 0, orders: 0, units: 0 }
+  );
+
+  const formatPlacementPerformance = (rows: PlacementAggregate[]) =>
+    rows.map((row) => ({
+      placement_code: row.placement_code,
+      placement_raw: row.placement_raw,
+      placement_raw_norm: row.placement_raw_norm,
+      spend: row.spend,
+      sales: row.sales,
+      orders: row.orders,
+      clicks: row.clicks,
+      impressions: row.impressions,
+      acos: formatPct(calcAcos(row.spend, row.sales)),
+      roas: calcRoas(row.spend, row.sales),
+      cpc: calcCpc(row.spend, row.clicks),
+      ctr: formatPct(calcCtr(row.clicks, row.impressions)),
+    }));
+
   const output = {
     kind: "aph_product_baseline_data_pack_v2",
     generated_at: new Date().toISOString(),
@@ -1071,9 +1602,32 @@ export async function GET(request: Request, { params }: Ctx) {
       margin: num(row.margin),
     })),
     ads_baseline: {
+      notes: {
+        attribution_model:
+          "Scale Insights ppc_cost is an attributed cost to the ASIN (based on conversion attribution windows). It may be >0 on days where advertised-ASIN spend is 0, and may be < advertised spend on days where ads spend did not attribute purchases to this ASIN.",
+      },
       latest_bulk_snapshot_date: latestSnapshotDate,
       sp: {
         product_ads_snapshot_date: spSelectionProductAdLookup.snapshotDate,
+        advertised_product: {
+          daily: spAdvertisedAsinDaily.map((row) => ({
+            date: row.date,
+            impressions: row.impressions,
+            clicks: row.clicks,
+            spend: row.spend,
+            sales: row.sales,
+            orders: row.orders,
+            units: row.units,
+          })),
+          totals: {
+            impressions: spAdvertisedAsinTotals.impressions,
+            clicks: spAdvertisedAsinTotals.clicks,
+            spend: spAdvertisedAsinTotals.spend,
+            sales: spAdvertisedAsinTotals.sales,
+            orders: spAdvertisedAsinTotals.orders,
+            units: spAdvertisedAsinTotals.units,
+          },
+        },
         totals: {
           mapped_campaign_count: spCampaignAgg.length,
           mapped_target_count: spTargetAggAll.length,
@@ -1100,6 +1654,9 @@ export async function GET(request: Request, { params }: Ctx) {
           cpc: calcCpc(row.spend, row.clicks),
           current_bulk: spBulkCampaignById.get(row.campaign_id) ?? null,
           placement_modifiers: spPlacementsByCampaign.get(row.campaign_id) ?? [],
+          placement_performance: formatPlacementPerformance(
+            spPlacementPerformanceByCampaign.get(row.campaign_id) ?? []
+          ),
         })),
         targets: spTargetAgg.map((row) => ({
           target_id: row.target_id,
@@ -1129,6 +1686,9 @@ export async function GET(request: Request, { params }: Ctx) {
           cpc: calcCpc(row.spend, row.clicks),
           current_bulk: sbBulkCampaignById.get(row.campaign_id) ?? null,
           placement_modifiers: sbPlacementsByCampaign.get(row.campaign_id) ?? [],
+          placement_performance: formatPlacementPerformance(
+            sbPlacementPerformanceByCampaign.get(row.campaign_id) ?? []
+          ),
         })),
         targets: sbTargetAgg.map((row) => ({
           target_id: row.target_id,
@@ -1144,6 +1704,74 @@ export async function GET(request: Request, { params }: Ctx) {
           cpc: calcCpc(row.spend, row.clicks),
           current_bulk: sbBulkTargetById.get(row.target_id) ?? null,
         })),
+      },
+      sd: {
+        totals: {
+          candidate_campaign_count: sdCandidateCampaignIds.length,
+          candidate_ad_group_count: sdCandidateAdGroupIds.length,
+          campaign_count: sdCampaignAgg.length,
+          included_campaign_count: sdTopCampaigns.length,
+          target_count: sdTargetAgg.length,
+          spend_total: sdCampaignTotals.spend,
+          sales_total: sdCampaignTotals.sales,
+          orders_total: sdCampaignTotals.orders,
+          clicks_total: sdCampaignTotals.clicks,
+          impressions_total: sdCampaignTotals.impressions,
+          units_total: sdCampaignTotals.units,
+        },
+        campaigns: sdTopCampaigns.map((row) => ({
+          campaign_id: row.campaign_id,
+          campaign_name_raw: row.campaign_name_raw,
+          campaign_name_norm: row.campaign_name_norm,
+          spend: row.spend,
+          sales: row.sales,
+          orders: row.orders,
+          clicks: row.clicks,
+          impressions: row.impressions,
+          acos: formatPct(calcAcos(row.spend, row.sales)),
+          roas: calcRoas(row.spend, row.sales),
+          cpc: calcCpc(row.spend, row.clicks),
+          ctr: formatPct(calcCtr(row.clicks, row.impressions)),
+        })),
+        targets: sdTargetAgg.map((row) => ({
+          target_key: row.target_key,
+          target_id: row.target_id,
+          campaign_id: row.campaign_id,
+          ad_group_id: row.ad_group_id,
+          targeting_raw: row.targeting_raw,
+          targeting_norm: row.targeting_norm,
+          match_type_norm: row.match_type_norm,
+          spend: row.spend,
+          sales: row.sales,
+          orders: row.orders,
+          units: row.units,
+          clicks: row.clicks,
+          impressions: row.impressions,
+          acos: formatPct(calcAcos(row.spend, row.sales)),
+          roas: calcRoas(row.spend, row.sales),
+          cpc: calcCpc(row.spend, row.clicks),
+          ctr: formatPct(calcCtr(row.clicks, row.impressions)),
+        })),
+        advertised_product: {
+          campaign_count: sdCandidateCampaignIds.length,
+          ad_group_count: sdCandidateAdGroupIds.length,
+          impressions: sdAdvertisedAsinTotals.impressions,
+          clicks: sdAdvertisedAsinTotals.clicks,
+          spend: sdAdvertisedAsinTotals.spend,
+          sales: sdAdvertisedAsinTotals.sales,
+          orders: sdAdvertisedAsinTotals.orders,
+          units: sdAdvertisedAsinTotals.units,
+          acos: formatPct(calcAcos(sdAdvertisedAsinTotals.spend, sdAdvertisedAsinTotals.sales)),
+          roas: calcRoas(sdAdvertisedAsinTotals.spend, sdAdvertisedAsinTotals.sales),
+          cpc: calcCpc(sdAdvertisedAsinTotals.spend, sdAdvertisedAsinTotals.clicks),
+          ctr: formatPct(calcCtr(sdAdvertisedAsinTotals.clicks, sdAdvertisedAsinTotals.impressions)),
+        },
+      },
+      reconciliation_daily: reconciliationDaily,
+      reconciliation_daily_campaigns: reconciliationDailyCampaigns,
+      ppc_attribution_bridge: {
+        ...ppcAttributionBridge,
+        si_ppc_cost_attributed_total: ppcAttributionBridge.si_ppc_cost_total,
       },
     },
     sqp_baseline: {

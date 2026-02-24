@@ -64,6 +64,14 @@ export function getSpPlacementXlsx(dateFolder: string): string {
   return filePath;
 }
 
+export function getSpAdvertisedProductXlsx(dateFolder: string): string {
+  const filePath = path.join(dateFolder, "Sponsored_Products_Advertised_product_report.xlsx");
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing Sponsored Products Advertised Product report: ${filePath}`);
+  }
+  return filePath;
+}
+
 export function getSpTargetingXlsx(dateFolder: string): string {
   const filePath = path.join(dateFolder, "Sponsored_Products_Targeting_report.xlsx");
   if (!fs.existsSync(filePath)) {

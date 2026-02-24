@@ -16,6 +16,8 @@
     "ingest:sp:campaign:date": "ts-node src/cli/ingestSpCampaignDate.ts",
     "ingest:sp:placement": "ts-node src/cli/ingestSpPlacement.ts",
     "ingest:sp:placement:date": "ts-node src/cli/ingestSpPlacementDate.ts",
+    "ingest:sp:advertised": "ts-node src/cli/ingestSpAdvertisedProduct.ts",
+    "ingest:sp:advertised:date": "ts-node src/cli/ingestSpAdvertisedProductDate.ts",
     "ingest:sp:targeting": "ts-node src/cli/ingestSpTargeting.ts",
     "ingest:sp:targeting:date": "ts-node src/cli/ingestSpTargetingDate.ts",
     "ingest:sp:stis": "ts-node src/cli/ingestSpStis.ts",

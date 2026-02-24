@@ -20,4 +20,19 @@ describe('product baseline data pack route filters', () => {
     expect(source).toContain('.in("campaign_id", spCandidateCampaignIds)');
     expect(source).toContain('.in("campaign_id", sbCandidateCampaignIds)');
   });
+
+  it("does not query SP campaign baseline min/max availability", () => {
+    const source = fs.readFileSync(routePath, "utf-8");
+    expect(source).not.toContain('"SP campaign baseline"');
+    expect(source).not.toMatch(
+      /from\("sp_campaign_daily_fact_latest"\)[\s\S]{0,160}select\("date"\)/
+    );
+  });
+
+  it("includes attribution aliases and notes in ads_baseline output", () => {
+    const source = fs.readFileSync(routePath, "utf-8");
+    expect(source).toContain("si_ppc_cost_attributed_total");
+    expect(source).toContain("reconciliation_daily_campaigns");
+    expect(source).toContain("attribution_model");
+  });
 });

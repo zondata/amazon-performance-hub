@@ -4,6 +4,7 @@ import { findBulkXlsx } from "../fs/reportLocator";
 import { ingestBulk } from "../ingest/ingestBulk";
 import { ingestSpCampaignRaw } from "../ingest/ingestSpCampaignRaw";
 import { ingestSpPlacementRaw } from "../ingest/ingestSpPlacementRaw";
+import { ingestSpAdvertisedProductRaw } from "../ingest/ingestSpAdvertisedProductRaw";
 import { ingestSpTargetingRaw } from "../ingest/ingestSpTargetingRaw";
 import { ingestSpStisRaw } from "../ingest/ingestSpStisRaw";
 import { hashFileSha256 } from "../ingest/utils";
@@ -128,6 +129,10 @@ async function processFolder(folder: DateFolder, opts: BackfillOptions): Promise
 
   const campaignPath = fileIfExists(folder.folderPath, "Sponsored_Products_Campaign_report.csv");
   const placementPath = fileIfExists(folder.folderPath, "Sponsored_Products_Placement_report.xlsx");
+  const advertisedPath = fileIfExists(
+    folder.folderPath,
+    "Sponsored_Products_Advertised_product_report.xlsx"
+  );
   const targetingPath = fileIfExists(folder.folderPath, "Sponsored_Products_Targeting_report.xlsx");
   const stisPath = fileIfExists(
     folder.folderPath,
@@ -138,6 +143,7 @@ async function processFolder(folder: DateFolder, opts: BackfillOptions): Promise
     summary.ingests.bulk = { status: bulkPath ? "would-run" : "missing" };
     summary.ingests.sp_campaign = { status: campaignPath ? "would-run" : "missing" };
     summary.ingests.sp_placement = { status: placementPath ? "would-run" : "missing" };
+    summary.ingests.sp_advertised_product = { status: advertisedPath ? "would-run" : "missing" };
     summary.ingests.sp_targeting = { status: targetingPath ? "would-run" : "missing" };
     summary.ingests.sp_stis = { status: stisPath ? "would-run" : "missing" };
 
@@ -181,6 +187,18 @@ async function processFolder(folder: DateFolder, opts: BackfillOptions): Promise
     };
   } else {
     summary.ingests.sp_placement = { status: "missing" };
+  }
+
+  if (advertisedPath) {
+    const exportedAt = exportedAtDateFolder(folder.folderPath) ?? undefined;
+    const result = await ingestSpAdvertisedProductRaw(advertisedPath, opts.accountId, exportedAt);
+    summary.ingests.sp_advertised_product = {
+      status: result.status,
+      uploadId: result.uploadId,
+      rowCount: result.rowCount,
+    };
+  } else {
+    summary.ingests.sp_advertised_product = { status: "missing" };
   }
 
   if (targetingPath) {
