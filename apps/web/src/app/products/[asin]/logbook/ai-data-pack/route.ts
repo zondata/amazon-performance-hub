@@ -112,6 +112,23 @@ type QueryResult = {
   error?: QueryErrorLike;
 };
 
+type FetchDiagnosticEntry = {
+  chunksTotal: number;
+  chunksSucceeded: number;
+  chunksFailed: number;
+  retriesUsedMax: number;
+  failedRangesSampleCount: number;
+  failedRangesSample?: Array<{
+    chunkStart: string;
+    chunkEnd: string;
+    message: string;
+  }>;
+};
+
+type FetchDiagnostics = {
+  sp_reconciliation?: FetchDiagnosticEntry;
+};
+
 const num = (value: unknown): number => {
   const parsed = typeof value === "number" ? value : Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -517,12 +534,34 @@ export async function GET(request: Request, { params }: Ctx) {
 
   const warnings: string[] = [];
   warnings.push(`DEBUG accountId=${env.accountId}`);
+  const fetchDiagnostics: FetchDiagnostics = {};
 
   const summarizeChunkFailures = (result: FetchByDateChunksResult<unknown>): string => {
     const timeoutFailures = result.chunkErrors.filter((entry) => entry.timedOut).length;
     if (timeoutFailures === 0) return "non-timeout errors";
-    if (timeoutFailures === result.failedChunks) return "statement timeouts";
-    return `${timeoutFailures} statement timeouts + ${result.failedChunks - timeoutFailures} other errors`;
+    if (timeoutFailures === result.stats.chunksFailed) return "statement timeouts";
+    return `${timeoutFailures} statement timeouts + ${result.stats.chunksFailed - timeoutFailures} other errors`;
+  };
+
+  const summarizeShortChunkFailureKind = (result: FetchByDateChunksResult<unknown>): string => {
+    const timeoutFailures = result.chunkErrors.filter((entry) => entry.timedOut).length;
+    if (timeoutFailures === result.stats.chunksFailed) return "timeouts";
+    if (timeoutFailures === 0) return "errors";
+    return "mixed errors";
+  };
+
+  const toFetchDiagnosticEntry = (
+    result: FetchByDateChunksResult<unknown>
+  ): FetchDiagnosticEntry => {
+    const failedRangesSample = result.stats.failedRangesSample;
+    return {
+      chunksTotal: result.stats.chunksTotal,
+      chunksSucceeded: result.stats.chunksSucceeded,
+      chunksFailed: result.stats.chunksFailed,
+      retriesUsedMax: result.stats.retriesUsedMax,
+      failedRangesSampleCount: result.stats.failedRangesCount,
+      ...(failedRangesSample.length > 0 ? { failedRangesSample } : {}),
+    };
   };
 
   const appendChunkFailureWarnings = (
@@ -530,16 +569,16 @@ export async function GET(request: Request, { params }: Ctx) {
     result: FetchByDateChunksResult<unknown>,
     allChunksFailedSuffix: string
   ): void => {
-    if (result.failedChunks === 0) return;
+    if (result.stats.chunksFailed === 0) return;
     const failureSummary = summarizeChunkFailures(result);
-    if (result.failedChunks === result.totalChunks && result.totalChunks > 0) {
+    if (result.stats.chunksFailed === result.stats.chunksTotal && result.stats.chunksTotal > 0) {
       warnings.push(
-        `Failed loading ${label}: partial data due to chunk failures (all ${result.totalChunks} chunks failed; ${failureSummary}); ${allChunksFailedSuffix}`
+        `Failed loading ${label}: partial data due to chunk failures (all ${result.stats.chunksTotal} chunks failed; ${failureSummary}); ${allChunksFailedSuffix}`
       );
       return;
     }
     warnings.push(
-      `Failed loading ${label}: partial data due to chunk failures (${result.failedChunks}/${result.totalChunks} chunks failed; ${failureSummary}); using successful chunks only.`
+      `Failed loading ${label}: partial data due to chunk failures (${result.stats.chunksFailed}/${result.stats.chunksTotal} chunks failed; ${failureSummary}); using successful chunks only.`
     );
   };
 
@@ -888,6 +927,8 @@ export async function GET(request: Request, { params }: Ctx) {
   const loadRowsByDateChunks = async <T>(params: {
     label: string;
     allChunksFailedSuffix: string;
+    diagnosticsKey?: keyof FetchDiagnostics;
+    onChunkFailures?: (result: FetchByDateChunksResult<unknown>) => void;
     runChunk: (chunkStart: string, chunkEnd: string) => Promise<T[]>;
   }): Promise<T[]> => {
     const result = await fetchByDateChunks<T>({
@@ -895,11 +936,19 @@ export async function GET(request: Request, { params }: Ctx) {
       endDate: effectiveEnd,
       runChunk: params.runChunk,
     });
+    if (params.diagnosticsKey) {
+      fetchDiagnostics[params.diagnosticsKey] = toFetchDiagnosticEntry(
+        result as FetchByDateChunksResult<unknown>
+      );
+    }
     appendChunkFailureWarnings(
       params.label,
       result as FetchByDateChunksResult<unknown>,
       params.allChunksFailedSuffix
     );
+    if (result.stats.chunksFailed > 0) {
+      params.onChunkFailures?.(result as FetchByDateChunksResult<unknown>);
+    }
     return result.rows;
   };
 
@@ -1219,6 +1268,15 @@ export async function GET(request: Request, { params }: Ctx) {
       label,
       allChunksFailedSuffix:
         `reconciliation ${params.channel.toUpperCase()} spend is incomplete/unknown for this window; values may appear as 0.`,
+      diagnosticsKey: params.channel === "sp" ? "sp_reconciliation" : undefined,
+      onChunkFailures:
+        params.channel === "sp"
+          ? (result) => {
+              warnings.push(
+                `SP reconciliation partial: ${result.stats.chunksFailed}/${result.stats.chunksTotal} chunks failed (${summarizeShortChunkFailureKind(result)}). See meta.fetch_diagnostics.`
+              );
+            }
+          : undefined,
       runChunk: async (chunkStart, chunkEnd) => {
         const { data, error } = await supabaseAdmin
           .from("ads_campaign_daily_fact_latest")
@@ -1903,6 +1961,9 @@ export async function GET(request: Request, { params }: Ctx) {
     generated_at: new Date().toISOString(),
     account_id: env.accountId,
     marketplace: env.marketplace,
+    meta: {
+      fetch_diagnostics: fetchDiagnostics,
+    },
     metadata: {
       requested_range: requestedRange,
       effective_window: {

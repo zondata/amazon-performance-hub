@@ -9,14 +9,23 @@ export type FetchByDateChunksArgs<T> = {
   startDate: string;
   endDate: string;
   chunkDays?: number;
+  maxRetries?: number;
   runChunk: (chunkStart: string, chunkEnd: string) => Promise<T[]>;
+};
+
+export type FetchByDateChunksStats = {
+  chunksTotal: number;
+  chunksSucceeded: number;
+  chunksFailed: number;
+  retriesUsedMax: number;
+  failedRangesCount: number;
+  failedRangesSample: Array<Pick<ChunkError, "chunkStart" | "chunkEnd" | "message">>;
 };
 
 export type FetchByDateChunksResult<T> = {
   rows: T[];
   chunkErrors: ChunkError[];
-  totalChunks: number;
-  failedChunks: number;
+  stats: FetchByDateChunksStats;
 };
 
 type DateChunk = {
@@ -57,6 +66,12 @@ const normalizeChunkDays = (chunkDays: number | undefined): number => {
   if (typeof chunkDays !== "number" || !Number.isFinite(chunkDays)) return 7;
   const normalized = Math.floor(chunkDays);
   return normalized > 0 ? normalized : 7;
+};
+
+const normalizeMaxRetries = (maxRetries: number | undefined): number => {
+  if (typeof maxRetries !== "number" || !Number.isFinite(maxRetries)) return 1;
+  const normalized = Math.floor(maxRetries);
+  return normalized >= 0 ? normalized : 1;
 };
 
 const chooseChunkDays = (dayCountInclusive: number, requestedChunkDays: number): number => {
@@ -111,28 +126,54 @@ export async function fetchByDateChunks<T>(
   args: FetchByDateChunksArgs<T>
 ): Promise<FetchByDateChunksResult<T>> {
   const chunks = buildDateChunks(args.startDate, args.endDate, args.chunkDays ?? 7);
+  const maxRetries = normalizeMaxRetries(args.maxRetries);
   const rows: T[] = [];
   const chunkErrors: ChunkError[] = [];
+  let retriesUsedMax = 0;
 
   for (const chunk of chunks) {
-    try {
-      const chunkRows = await args.runChunk(chunk.start, chunk.end);
-      rows.push(...chunkRows);
-    } catch (error) {
-      const message = toErrorMessage(error);
-      chunkErrors.push({
-        chunkStart: chunk.start,
-        chunkEnd: chunk.end,
-        message,
-        timedOut: isStatementTimeoutMessage(message),
-      });
+    let attempt = 0;
+    while (attempt <= maxRetries) {
+      try {
+        const chunkRows = await args.runChunk(chunk.start, chunk.end);
+        rows.push(...chunkRows);
+        retriesUsedMax = Math.max(retriesUsedMax, attempt);
+        break;
+      } catch (error) {
+        const message = toErrorMessage(error);
+        const canRetry = attempt < maxRetries;
+        if (canRetry) {
+          attempt += 1;
+          continue;
+        }
+        retriesUsedMax = Math.max(retriesUsedMax, attempt);
+        chunkErrors.push({
+          chunkStart: chunk.start,
+          chunkEnd: chunk.end,
+          message,
+          timedOut: isStatementTimeoutMessage(message),
+        });
+        break;
+      }
     }
   }
+
+  const stats: FetchByDateChunksStats = {
+    chunksTotal: chunks.length,
+    chunksSucceeded: chunks.length - chunkErrors.length,
+    chunksFailed: chunkErrors.length,
+    retriesUsedMax,
+    failedRangesCount: chunkErrors.length,
+    failedRangesSample: chunkErrors.slice(0, 3).map((entry) => ({
+      chunkStart: entry.chunkStart,
+      chunkEnd: entry.chunkEnd,
+      message: entry.message,
+    })),
+  };
 
   return {
     rows,
     chunkErrors,
-    totalChunks: chunks.length,
-    failedChunks: chunkErrors.length,
+    stats,
   };
 }

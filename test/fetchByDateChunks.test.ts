@@ -26,8 +26,14 @@ describe("fetchByDateChunks", () => {
       "2026-01-15..2026-01-20",
     ]);
     expect(result.chunkErrors).toEqual([]);
-    expect(result.totalChunks).toBe(3);
-    expect(result.failedChunks).toBe(0);
+    expect(result.stats).toEqual({
+      chunksTotal: 3,
+      chunksSucceeded: 3,
+      chunksFailed: 0,
+      retriesUsedMax: 0,
+      failedRangesCount: 0,
+      failedRangesSample: [],
+    });
   });
 
   it("continues after chunk errors and returns successful rows", async () => {
@@ -52,8 +58,20 @@ describe("fetchByDateChunks", () => {
         timedOut: true,
       },
     ]);
-    expect(result.totalChunks).toBe(3);
-    expect(result.failedChunks).toBe(1);
+    expect(result.stats).toEqual({
+      chunksTotal: 3,
+      chunksSucceeded: 2,
+      chunksFailed: 1,
+      retriesUsedMax: 1,
+      failedRangesCount: 1,
+      failedRangesSample: [
+        {
+          chunkStart: "2026-01-08",
+          chunkEnd: "2026-01-14",
+          message: "canceling statement due to statement timeout",
+        },
+      ],
+    });
   });
 
   it("increases chunk size for very large windows to cap chunk count", async () => {
@@ -70,7 +88,7 @@ describe("fetchByDateChunks", () => {
 
     expect(calls[0]).toEqual({ start: "2024-01-01", end: "2024-01-30" });
     expect(calls[1]).toEqual({ start: "2024-01-31", end: "2024-02-29" });
-    expect(result.totalChunks).toBeLessThanOrEqual(60);
+    expect(result.stats.chunksTotal).toBeLessThanOrEqual(60);
     expect(result.chunkErrors).toEqual([]);
   });
 });
