@@ -10,13 +10,19 @@ import {
   loadSbCampaignIdsForAsin,
   loadSpCampaignIdsForAsin,
 } from "@/lib/logbook/aiPack/findAsinCampaignIds";
+import {
+  selectSpRowsForCoverage,
+  sumSpSpend,
+} from "@/lib/logbook/aiPack/spCoverageSelection";
 import { env } from "@/lib/env";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
 
 const CAMPAIGN_LIMIT = 50;
-const TARGET_LIMIT = 200;
+const SB_TARGET_LIMIT = 200;
+const SP_TARGET_LIMIT = 500;
+const SP_COVERAGE_THRESHOLD = 0.95;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 type MetricRow = {
@@ -54,6 +60,12 @@ type TargetAggregate = {
 type DateBounds = {
   minDate: string | null;
   maxDate: string | null;
+};
+
+type SpBulkProductAdLookup = {
+  snapshotDate: string | null;
+  adGroupIds: string[];
+  campaignIds: string[];
 };
 
 type QueryErrorLike = { message?: string } | null | undefined;
@@ -199,6 +211,73 @@ const loadDateBounds = async (
   return { minDate, maxDate };
 };
 
+const normalizeIds = (values: unknown[]): string[] => {
+  const unique = new Set<string>();
+  for (const value of values) {
+    const id = String(value ?? "").trim();
+    if (!id) continue;
+    unique.add(id);
+  }
+  return [...unique].sort((left, right) => left.localeCompare(right));
+};
+
+const loadSpBulkProductAdLookup = async (params: {
+  accountId: string;
+  asin: string;
+  endCandidate: string;
+}): Promise<SpBulkProductAdLookup> => {
+  const asin = params.asin.trim();
+  if (!asin) {
+    return { snapshotDate: null, adGroupIds: [], campaignIds: [] };
+  }
+
+  const { data: beforeRows, error: beforeError } = await supabaseAdmin
+    .from("bulk_product_ads")
+    .select("snapshot_date")
+    .eq("account_id", params.accountId)
+    .lte("snapshot_date", params.endCandidate)
+    .order("snapshot_date", { ascending: false })
+    .limit(1);
+  if (beforeError) {
+    throw new Error(`Failed loading SP product-ad snapshot date: ${beforeError.message}`);
+  }
+  let snapshotDate = parseDateField(beforeRows?.[0]?.snapshot_date) ?? null;
+
+  if (!snapshotDate) {
+    const { data: latestRows, error: latestError } = await supabaseAdmin
+      .from("bulk_product_ads")
+      .select("snapshot_date")
+      .eq("account_id", params.accountId)
+      .order("snapshot_date", { ascending: false })
+      .limit(1);
+    if (latestError) {
+      throw new Error(`Failed loading latest SP product-ad snapshot date: ${latestError.message}`);
+    }
+    snapshotDate = parseDateField(latestRows?.[0]?.snapshot_date) ?? null;
+  }
+
+  if (!snapshotDate) {
+    return { snapshotDate: null, adGroupIds: [], campaignIds: [] };
+  }
+
+  const { data: mapRows, error: mapError } = await supabaseAdmin
+    .from("bulk_product_ads")
+    .select("campaign_id,ad_group_id")
+    .eq("account_id", params.accountId)
+    .eq("snapshot_date", snapshotDate)
+    .ilike("asin_raw", asin)
+    .limit(10000);
+  if (mapError) {
+    throw new Error(`Failed loading SP product-ad mappings: ${mapError.message}`);
+  }
+
+  return {
+    snapshotDate,
+    campaignIds: normalizeIds((mapRows ?? []).map((row) => row.campaign_id)),
+    adGroupIds: normalizeIds((mapRows ?? []).map((row) => row.ad_group_id)),
+  };
+};
+
 type Ctx = { params: Promise<{ asin: string }> };
 
 export async function GET(request: Request, { params }: Ctx) {
@@ -256,16 +335,35 @@ export async function GET(request: Request, { params }: Ctx) {
   }
   const latestSnapshotDate = (latestUploadRows?.[0]?.snapshot_date as string | null) ?? null;
 
-  let spCandidateCampaignIds: string[] = [];
+  let spBulkProductAdLookup: SpBulkProductAdLookup = {
+    snapshotDate: null,
+    adGroupIds: [],
+    campaignIds: [],
+  };
+  try {
+    spBulkProductAdLookup = await loadSpBulkProductAdLookup({
+      accountId: env.accountId,
+      asin,
+      endCandidate,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed loading SP product-ad ASIN mappings.";
+    return new Response(message, { status: 500 });
+  }
+
+  let spCandidateCampaignIds: string[] = [...spBulkProductAdLookup.campaignIds];
   let sbCandidateCampaignIds: string[] = [];
   try {
-    [spCandidateCampaignIds, sbCandidateCampaignIds] = await Promise.all([
-      loadSpCampaignIdsForAsin({
-        asin,
-        accountId: env.accountId,
-        snapshotDate: latestSnapshotDate,
-        namePattern: asinNamePattern,
-      }),
+    const [spFallbackCampaignIds, sbCampaignIds] = await Promise.all([
+      spCandidateCampaignIds.length === 0
+        ? loadSpCampaignIdsForAsin({
+            asin,
+            accountId: env.accountId,
+            snapshotDate: latestSnapshotDate,
+            namePattern: asinNamePattern,
+          })
+        : Promise.resolve<string[]>([]),
       loadSbCampaignIdsForAsin({
         asin,
         accountId: env.accountId,
@@ -273,6 +371,10 @@ export async function GET(request: Request, { params }: Ctx) {
         namePattern: asinNamePattern,
       }),
     ]);
+    if (spCandidateCampaignIds.length === 0) {
+      spCandidateCampaignIds = spFallbackCampaignIds;
+    }
+    sbCandidateCampaignIds = sbCampaignIds;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed resolving ASIN campaign IDs.";
     return new Response(message, { status: 500 });
@@ -323,10 +425,17 @@ export async function GET(request: Request, { params }: Ctx) {
               .lte("date", endCandidate)
               .order("date", { ascending: true })
               .limit(1),
-            Promise.resolve({ data: [{ date: endCandidate }], error: null })
+            supabaseAdmin
+              .from("sp_campaign_hourly_fact_latest")
+              .select("date")
+              .eq("account_id", env.accountId)
+              .in("campaign_id", spCandidateCampaignIds)
+              .lte("date", endCandidate)
+              .order("date", { ascending: false })
+              .limit(1)
           )
         : Promise.resolve({ minDate: null, maxDate: null }),
-      spCandidateCampaignIds.length > 0
+      spBulkProductAdLookup.adGroupIds.length > 0
         ? loadDateBounds(
             "date",
             "SP targeting baseline",
@@ -334,11 +443,39 @@ export async function GET(request: Request, { params }: Ctx) {
               .from("sp_targeting_daily_fact_latest")
               .select("date")
               .eq("account_id", env.accountId)
-              .in("campaign_id", spCandidateCampaignIds)
+              .in("ad_group_id", spBulkProductAdLookup.adGroupIds)
               .lte("date", endCandidate)
               .order("date", { ascending: true })
               .limit(1),
-            Promise.resolve({ data: [{ date: endCandidate }], error: null })
+            supabaseAdmin
+              .from("sp_targeting_daily_fact_latest")
+              .select("date")
+              .eq("account_id", env.accountId)
+              .in("ad_group_id", spBulkProductAdLookup.adGroupIds)
+              .lte("date", endCandidate)
+              .order("date", { ascending: false })
+              .limit(1)
+          )
+        : spCandidateCampaignIds.length > 0
+          ? loadDateBounds(
+              "date",
+              "SP targeting baseline",
+              supabaseAdmin
+                .from("sp_targeting_daily_fact_latest")
+                .select("date")
+                .eq("account_id", env.accountId)
+                .in("campaign_id", spCandidateCampaignIds)
+                .lte("date", endCandidate)
+                .order("date", { ascending: true })
+                .limit(1),
+              supabaseAdmin
+                .from("sp_targeting_daily_fact_latest")
+                .select("date")
+                .eq("account_id", env.accountId)
+                .in("campaign_id", spCandidateCampaignIds)
+                .lte("date", endCandidate)
+                .order("date", { ascending: false })
+                .limit(1)
           )
         : Promise.resolve({ minDate: null, maxDate: null }),
       sbCandidateCampaignIds.length > 0
@@ -447,10 +584,17 @@ export async function GET(request: Request, { params }: Ctx) {
     return new Response(message, { status: 500 });
   }
 
+  const requiredAvailability: BaselineAvailabilityMap = {
+    sales: availability.sales,
+    sp_target: availability.sp_target,
+    sb_campaign: availability.sb_campaign,
+    sb_keyword: availability.sb_keyword,
+  };
+
   const window = computeBaselineWindow({
     requestedRange,
     endCandidate,
-    availability,
+    availability: requiredAvailability,
   });
 
   const warnings: string[] = [];
@@ -467,6 +611,26 @@ export async function GET(request: Request, { params }: Ctx) {
 
   const effectiveStart = window.effectiveStart;
   const effectiveEnd = window.effectiveEnd;
+  let spSelectionProductAdLookup: SpBulkProductAdLookup = {
+    snapshotDate: null,
+    adGroupIds: [],
+    campaignIds: [],
+  };
+  try {
+    spSelectionProductAdLookup = await loadSpBulkProductAdLookup({
+      accountId: env.accountId,
+      asin,
+      endCandidate: effectiveEnd,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed loading SP product-ad mappings for baseline window.";
+    return new Response(message, { status: 500 });
+  }
+  const spSelectionCampaignIds =
+    spSelectionProductAdLookup.campaignIds.length > 0
+      ? [...spSelectionProductAdLookup.campaignIds]
+      : [...spCandidateCampaignIds];
 
   const { data: salesRows, error: salesError } = await supabaseAdmin
     .from("si_sales_trend_daily_latest")
@@ -484,59 +648,62 @@ export async function GET(request: Request, { params }: Ctx) {
     return new Response(`Failed loading sales trend: ${salesError.message}`, { status: 500 });
   }
 
-  let spCampaignFactRows: Array<Record<string, unknown>> = [];
-  if (spCandidateCampaignIds.length > 0) {
-    const { data, error } = await supabaseAdmin
-      .from("sp_campaign_hourly_fact_latest")
-      .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders")
+  let spTargetFactRows: Array<Record<string, unknown>> = [];
+  if (spSelectionProductAdLookup.adGroupIds.length > 0 || spSelectionCampaignIds.length > 0) {
+    const baseQuery = supabaseAdmin
+      .from("sp_targeting_daily_fact_latest")
+      .select(
+        "target_id,campaign_id,ad_group_id,campaign_name_raw,campaign_name_norm,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders"
+      )
       .eq("account_id", env.accountId)
-      .in("campaign_id", spCandidateCampaignIds)
       .gte("date", effectiveStart)
       .lte("date", effectiveEnd)
-      .limit(50000);
+      .limit(200000);
+    const filteredQuery =
+      spSelectionProductAdLookup.adGroupIds.length > 0
+        ? baseQuery.in("ad_group_id", spSelectionProductAdLookup.adGroupIds)
+        : baseQuery.in("campaign_id", spSelectionCampaignIds);
+    const { data, error } = await filteredQuery;
     if (error) {
-      return new Response(`Failed loading SP campaign baseline: ${error.message}`, {
+      return new Response(`Failed loading SP target baseline: ${error.message}`, {
         status: 500,
       });
     }
-    spCampaignFactRows = (data ?? []) as Array<Record<string, unknown>>;
+    spTargetFactRows = (data ?? []) as Array<Record<string, unknown>>;
   }
 
   const spCampaignAgg = aggregateCampaignRows(
-    spCampaignFactRows as Array<
+    spTargetFactRows as Array<
       MetricRow & { campaign_id: string; campaign_name_raw: string; campaign_name_norm: string }
     >
   );
-  const spTopCampaigns = spCampaignAgg.slice(0, CAMPAIGN_LIMIT);
+  const spTargetAggAll = aggregateTargetRows(
+    spTargetFactRows as Array<
+      MetricRow & {
+        target_id: string;
+        campaign_id: string;
+        targeting_raw: string;
+        targeting_norm: string;
+        match_type_norm: string | null;
+      }
+    >
+  );
+  const spMappedSpendTotal = sumSpSpend(
+    spTargetFactRows as Array<{
+      spend: number;
+    }>
+  );
+  const spCoverageSelection = selectSpRowsForCoverage({
+    mappedSpendTotal: spMappedSpendTotal,
+    campaignRows: spCampaignAgg,
+    targetRows: spTargetAggAll,
+    campaignLimit: CAMPAIGN_LIMIT,
+    targetLimit: SP_TARGET_LIMIT,
+    coverageThreshold: SP_COVERAGE_THRESHOLD,
+  });
+  const spTopCampaigns = spCoverageSelection.campaigns;
   const spCampaignIds = spTopCampaigns.map((row) => row.campaign_id);
-
-  let spTargetAgg: TargetAggregate[] = [];
-  if (spCampaignIds.length > 0) {
-    const { data: spTargetRows, error: spTargetError } = await supabaseAdmin
-      .from("sp_targeting_daily_fact_latest")
-      .select("target_id,campaign_id,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders")
-      .eq("account_id", env.accountId)
-      .gte("date", effectiveStart)
-      .lte("date", effectiveEnd)
-      .in("campaign_id", spCampaignIds)
-      .limit(50000);
-    if (spTargetError) {
-      return new Response(`Failed loading SP target baseline: ${spTargetError.message}`, {
-        status: 500,
-      });
-    }
-    spTargetAgg = aggregateTargetRows(
-      (spTargetRows ?? []) as Array<
-        MetricRow & {
-          target_id: string;
-          campaign_id: string;
-          targeting_raw: string;
-          targeting_norm: string;
-          match_type_norm: string | null;
-        }
-      >
-    ).slice(0, TARGET_LIMIT);
-  }
+  const spTargetAgg = spCoverageSelection.targets;
 
   let sbCampaignFactRows: Array<Record<string, unknown>> = [];
   if (sbCandidateCampaignIds.length > 0) {
@@ -589,7 +756,7 @@ export async function GET(request: Request, { params }: Ctx) {
           match_type_norm: string | null;
         }
       >
-    ).slice(0, TARGET_LIMIT);
+    ).slice(0, SB_TARGET_LIMIT);
   }
 
   let spBulkCampaignRows: Array<Record<string, unknown>> = [];
@@ -906,6 +1073,21 @@ export async function GET(request: Request, { params }: Ctx) {
     ads_baseline: {
       latest_bulk_snapshot_date: latestSnapshotDate,
       sp: {
+        product_ads_snapshot_date: spSelectionProductAdLookup.snapshotDate,
+        totals: {
+          mapped_campaign_count: spCampaignAgg.length,
+          mapped_target_count: spTargetAggAll.length,
+          included_campaign_count: spTopCampaigns.length,
+          included_target_count: spTargetAgg.length,
+          mapped_spend_total: spMappedSpendTotal,
+          included_campaign_spend_total: spCoverageSelection.campaignIncludedSpend,
+          included_target_spend_total: spCoverageSelection.targetIncludedSpend,
+        },
+        coverage: {
+          mapped_spend_total: spMappedSpendTotal,
+          included_spend_total: spCoverageSelection.includedSpendTotal,
+          coverage_pct: formatPct(spCoverageSelection.coveragePct),
+        },
         campaigns: spTopCampaigns.map((row) => ({
           campaign_id: row.campaign_id,
           campaign_name_raw: row.campaign_name_raw,
