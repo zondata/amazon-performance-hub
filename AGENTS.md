@@ -951,6 +951,11 @@ Verification:
   - DB constraint: `uploads_account_id_not_us_chk` with rule `lower(account_id) <> 'us'`
   - CLI guard: `src/cli/_accountGuard.ts`, wired into common CLIs to throw on `--account-id US`
   - policy: `US` account_id is deprecated; use `sourbear` going forward
+- Product baseline AI data pack robustness: heavy date-range queries now fetch in date chunks (default ~7 days) and merge rows, to reduce query size and keep pack downloads stable as data grows.
+  - Why: prevents Supabase/Postgres `statement timeout` failures on large windows; baseline packs remain downloadable in web.
+  - Behavior: chunk failures are non-fatal (continue with successful chunks), emit concise partial-data warnings, and avoid silently defaulting spend to `0` as if complete.
+  - Where: helper `apps/web/src/lib/logbook/aiPack/fetchByDateChunks.ts`, used by `apps/web/src/app/products/[asin]/logbook/ai-data-pack/route.ts`.
+  - Tests: `test/fetchByDateChunks.test.ts` (+ route coverage in `test/productBaselineDataPackRoute.test.ts`).
 
 ### 2026-02-23
 - Added Logbook AI Prompt Pack templates with template selection in the Product Logbook AI workflow download area.
