@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 const REQUEST_TIMEOUT_MS = 120_000;
+const IS_DEV = process.env.NODE_ENV !== "production";
 
 const RANGE_OPTIONS = [
   { value: "30d", label: "Last 30 days" },
@@ -28,6 +29,14 @@ type ProductBaselineDataPackDownloadProps = {
   initialRange?: string;
 };
 
+type PackMessageLevel = "debug" | "info" | "warn" | "error";
+type PackMessage = {
+  level: PackMessageLevel;
+  code: string;
+  text: string;
+  meta?: Record<string, unknown>;
+};
+
 type FetchDiagnosticEntry = {
   chunksTotal?: number;
   chunksSucceeded?: number;
@@ -44,6 +53,7 @@ type FetchDiagnosticEntry = {
 type BaselinePackResponse = {
   metadata?: {
     warnings?: unknown;
+    messages?: unknown;
   };
   meta?: {
     fetch_diagnostics?: {
@@ -76,6 +86,32 @@ const asWarnings = (value: unknown): string[] => {
     .filter((entry) => entry.length > 0);
 };
 
+const asPackMessages = (value: unknown): PackMessage[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+      const candidate = entry as Record<string, unknown>;
+      const levelRaw = String(candidate.level ?? "").trim();
+      const code = String(candidate.code ?? "").trim();
+      const text = String(candidate.text ?? "").trim();
+      const level =
+        levelRaw === "debug" || levelRaw === "info" || levelRaw === "warn" || levelRaw === "error"
+          ? (levelRaw as PackMessageLevel)
+          : null;
+      if (!level || !code || !text) return null;
+      const meta =
+        candidate.meta && typeof candidate.meta === "object" && !Array.isArray(candidate.meta)
+          ? (candidate.meta as Record<string, unknown>)
+          : undefined;
+      return meta ? { level, code, text, meta } : { level, code, text };
+    })
+    .filter((entry): entry is PackMessage => entry !== null);
+};
+
+const toLegacyWarningMessages = (warnings: string[]): PackMessage[] =>
+  warnings.map((text) => ({ level: "warn", code: "LEGACY_WARNING", text }));
+
 const formatErrorMessage = (error: unknown): string => {
   if (error instanceof DOMException && error.name === "AbortError") {
     return "Request timed out. Try again; if it keeps failing, reduce date range.";
@@ -93,8 +129,9 @@ export default function ProductBaselineDataPackDownload({
   const [range, setRange] = useState<RangeValue>(normalizeRange(initialRange));
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [warningSummary, setWarningSummary] = useState<string | null>(null);
-  const [warningDetails, setWarningDetails] = useState<string[]>([]);
+  const [packMessages, setPackMessages] = useState<PackMessage[]>([]);
+  const [showInfoMessages, setShowInfoMessages] = useState(false);
+  const [showDebugMessages, setShowDebugMessages] = useState(false);
   const [failedRangesSample, setFailedRangesSample] = useState<
     Array<{ chunkStart: string; chunkEnd: string; message: string }>
   >([]);
@@ -109,8 +146,9 @@ export default function ProductBaselineDataPackDownload({
   const handleDownload = async () => {
     setIsLoading(true);
     setErrorMessage(null);
-    setWarningSummary(null);
-    setWarningDetails([]);
+    setPackMessages([]);
+    setShowInfoMessages(false);
+    setShowDebugMessages(false);
     setFailedRangesSample([]);
     setSuccessMessage(null);
 
@@ -138,33 +176,42 @@ export default function ProductBaselineDataPackDownload({
       }
 
       const warnings = asWarnings(payload?.metadata?.warnings);
+      const messages = asPackMessages(payload?.metadata?.messages);
       const spReconciliationDiagnostics = payload?.meta?.fetch_diagnostics?.sp_reconciliation;
       const chunksFailed = Number(spReconciliationDiagnostics?.chunksFailed ?? 0);
       const hasPartialChunkFailures = Number.isFinite(chunksFailed) && chunksFailed > 0;
 
-      if (warnings.length > 0 || hasPartialChunkFailures) {
-        if (hasPartialChunkFailures) {
-          setWarningSummary(
-            `Generated with warnings: SP reconciliation partial (${chunksFailed} chunk${chunksFailed === 1 ? "" : "s"} failed).`
-          );
-        } else {
-          setWarningSummary("Generated with warnings.");
-        }
-        setWarningDetails(warnings);
-        const sample = Array.isArray(spReconciliationDiagnostics?.failedRangesSample)
-          ? spReconciliationDiagnostics.failedRangesSample
-              .map((entry) => ({
-                chunkStart: String(entry.chunkStart ?? "").trim(),
-                chunkEnd: String(entry.chunkEnd ?? "").trim(),
-                message: String(entry.message ?? "").trim(),
-              }))
-              .filter(
-                (entry) => entry.chunkStart.length > 0 && entry.chunkEnd.length > 0 && entry.message.length > 0
-              )
-              .slice(0, 3)
-          : [];
-        setFailedRangesSample(sample);
+      const normalizedMessages = messages.length > 0 ? messages : toLegacyWarningMessages(warnings);
+      if (
+        hasPartialChunkFailures &&
+        !normalizedMessages.some(
+          (message) =>
+            message.code === "CHUNK_PARTIAL" ||
+            message.code === "CHUNK_FAILED" ||
+            message.text.includes("SP reconciliation partial")
+        )
+      ) {
+        normalizedMessages.push({
+          level: "warn",
+          code: "CHUNK_PARTIAL",
+          text: `SP reconciliation partial: ${chunksFailed} chunk${chunksFailed === 1 ? "" : "s"} failed. See meta.fetch_diagnostics.`,
+        });
       }
+      setPackMessages(normalizedMessages);
+
+      const sample = Array.isArray(spReconciliationDiagnostics?.failedRangesSample)
+        ? spReconciliationDiagnostics.failedRangesSample
+            .map((entry) => ({
+              chunkStart: String(entry.chunkStart ?? "").trim(),
+              chunkEnd: String(entry.chunkEnd ?? "").trim(),
+              message: String(entry.message ?? "").trim(),
+            }))
+            .filter(
+              (entry) => entry.chunkStart.length > 0 && entry.chunkEnd.length > 0 && entry.message.length > 0
+            )
+            .slice(0, 3)
+        : [];
+      setFailedRangesSample(sample);
 
       const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);
@@ -185,6 +232,28 @@ export default function ProductBaselineDataPackDownload({
       setIsLoading(false);
     }
   };
+
+  const errorMessages = packMessages.filter((message) => message.level === "error");
+  const warnMessages = packMessages.filter((message) => message.level === "warn");
+  const infoMessages = packMessages.filter((message) => message.level === "info");
+  const debugMessages = packMessages.filter((message) => message.level === "debug");
+  const hasWarnOrError = errorMessages.length > 0 || warnMessages.length > 0;
+  const hasDetailsContent =
+    hasWarnOrError || infoMessages.length > 0 || (IS_DEV && debugMessages.length > 0) || failedRangesSample.length > 0;
+  const showDetailsPanel =
+    hasWarnOrError || infoMessages.length > 0 || (IS_DEV && debugMessages.length > 0) || failedRangesSample.length > 0;
+  const titleText =
+    errorMessages.length > 0
+      ? "Generated with errors."
+      : warnMessages.length > 0
+        ? "Generated with warnings."
+        : "Generated successfully.";
+  const boxClassName =
+    errorMessages.length > 0
+      ? "rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700"
+      : warnMessages.length > 0
+        ? "rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+        : "rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground";
 
   return (
     <div className="space-y-2">
@@ -228,40 +297,105 @@ export default function ProductBaselineDataPackDownload({
         </div>
       ) : null}
 
-      {warningSummary ? (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          <div>{warningSummary}</div>
-          {(warningDetails.length > 0 || failedRangesSample.length > 0) && (
-            <details className="mt-2">
-              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide">
-                Details
-              </summary>
-              <div className="mt-2 space-y-2 text-xs">
-                {warningDetails.length > 0 ? (
-                  <div>
-                    <div className="font-semibold">Warnings</div>
-                    <ul className="list-disc pl-4">
-                      {warningDetails.map((warning, index) => (
-                        <li key={`${warning}-${index}`}>{warning}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {failedRangesSample.length > 0 ? (
-                  <div>
-                    <div className="font-semibold">SP failed chunk sample</div>
-                    <ul className="list-disc pl-4">
-                      {failedRangesSample.map((sample, index) => (
-                        <li key={`${sample.chunkStart}-${sample.chunkEnd}-${index}`}>
-                          {sample.chunkStart}..{sample.chunkEnd}: {sample.message}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            </details>
-          )}
+      {showDetailsPanel ? (
+        <div className={boxClassName}>
+          {hasWarnOrError ? <div>{titleText}</div> : null}
+          {errorMessages.length > 0 ? (
+            <ul className="mt-2 list-disc pl-4 text-xs">
+              {errorMessages.map((message, index) => (
+                <li key={`err-inline-${message.code}-${index}`}>{message.text}</li>
+              ))}
+            </ul>
+          ) : null}
+          {warnMessages.length > 0 ? (
+            <ul className="mt-2 list-disc pl-4 text-xs">
+              {warnMessages.map((message, index) => (
+                <li key={`warn-inline-${message.code}-${index}`}>{message.text}</li>
+              ))}
+            </ul>
+          ) : null}
+          <details className={hasWarnOrError ? "mt-2" : ""}>
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide">
+              Details
+            </summary>
+            <div className="mt-2 space-y-2 text-xs">
+              {errorMessages.length > 0 ? (
+                <div>
+                  <div className="font-semibold">Errors</div>
+                  <ul className="list-disc pl-4">
+                    {errorMessages.map((message, index) => (
+                      <li key={`${message.code}-${index}`}>{message.text}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {warnMessages.length > 0 ? (
+                <div>
+                  <div className="font-semibold">Warnings</div>
+                  <ul className="list-disc pl-4">
+                    {warnMessages.map((message, index) => (
+                      <li key={`${message.code}-${index}`}>{message.text}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {infoMessages.length > 0 ? (
+                <label className="inline-flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={showInfoMessages}
+                    onChange={(event) => setShowInfoMessages(event.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-border"
+                  />
+                  <span>Show info</span>
+                </label>
+              ) : null}
+              {IS_DEV && debugMessages.length > 0 ? (
+                <label className="inline-flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={showDebugMessages}
+                    onChange={(event) => setShowDebugMessages(event.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-border"
+                  />
+                  <span>Show debug</span>
+                </label>
+              ) : null}
+              {showInfoMessages && infoMessages.length > 0 ? (
+                <div>
+                  <div className="font-semibold">Info</div>
+                  <ul className="list-disc pl-4">
+                    {infoMessages.map((message, index) => (
+                      <li key={`${message.code}-${index}`}>{message.text}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {IS_DEV && showDebugMessages && debugMessages.length > 0 ? (
+                <div>
+                  <div className="font-semibold">Debug</div>
+                  <ul className="list-disc pl-4">
+                    {debugMessages.map((message, index) => (
+                      <li key={`${message.code}-${index}`}>{message.text}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {failedRangesSample.length > 0 ? (
+                <div>
+                  <div className="font-semibold">SP failed chunk sample</div>
+                  <ul className="list-disc pl-4">
+                    {failedRangesSample.map((sample, index) => (
+                      <li key={`${sample.chunkStart}-${sample.chunkEnd}-${index}`}>
+                        {sample.chunkStart}..{sample.chunkEnd}: {sample.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {!hasDetailsContent ? <div>No additional details.</div> : null}
+            </div>
+          </details>
         </div>
       ) : null}
 

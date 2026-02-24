@@ -18,6 +18,13 @@ import {
   fetchByDateChunks,
   type FetchByDateChunksResult,
 } from "@/lib/logbook/aiPack/fetchByDateChunks";
+import {
+  buildChunkFailureMessage,
+  buildNoChannelMessages,
+  legacyWarningsFromMessages,
+  type PackMessage,
+  type PackMessageLevel,
+} from "@/lib/logbook/aiPack/packMessages";
 import { computeBoundedRange } from "@/lib/ads/boundedDateRange";
 import { buildAdsReconciliationDaily } from "@/lib/ads/buildAdsReconciliationDaily";
 import { computePpcAttributionBridge } from "@/lib/logbook/aiPack/ppcAttributionBridge";
@@ -532,23 +539,37 @@ export async function GET(request: Request, { params }: Ctx) {
     return new Response(message, { status: 500 });
   }
 
-  const warnings: string[] = [];
-  warnings.push(`DEBUG accountId=${env.accountId}`);
+  const messages: PackMessage[] = [];
+  const messageDedup = new Set<string>();
+  const addMessage = (
+    level: PackMessageLevel,
+    code: string,
+    text: string,
+    meta?: Record<string, unknown>
+  ): void => {
+    messages.push(meta ? { level, code, text, meta } : { level, code, text });
+  };
+  const addMessageOnce = (
+    level: PackMessageLevel,
+    code: string,
+    text: string,
+    meta?: Record<string, unknown>
+  ): void => {
+    const dedupKey = `${level}:${code}:${text}`;
+    if (messageDedup.has(dedupKey)) return;
+    messageDedup.add(dedupKey);
+    addMessage(level, code, text, meta);
+  };
+
+  addMessage("debug", "DEBUG_ACCOUNT", `accountId=${env.accountId}`);
+  for (const message of buildNoChannelMessages({
+    hasSbCampaignCandidates: sbCandidateCampaignIds.length > 0,
+    hasSdCampaignCandidates: true,
+  })) {
+    addMessage(message.level, message.code, message.text, message.meta);
+  }
+
   const fetchDiagnostics: FetchDiagnostics = {};
-
-  const summarizeChunkFailures = (result: FetchByDateChunksResult<unknown>): string => {
-    const timeoutFailures = result.chunkErrors.filter((entry) => entry.timedOut).length;
-    if (timeoutFailures === 0) return "non-timeout errors";
-    if (timeoutFailures === result.stats.chunksFailed) return "statement timeouts";
-    return `${timeoutFailures} statement timeouts + ${result.stats.chunksFailed - timeoutFailures} other errors`;
-  };
-
-  const summarizeShortChunkFailureKind = (result: FetchByDateChunksResult<unknown>): string => {
-    const timeoutFailures = result.chunkErrors.filter((entry) => entry.timedOut).length;
-    if (timeoutFailures === result.stats.chunksFailed) return "timeouts";
-    if (timeoutFailures === 0) return "errors";
-    return "mixed errors";
-  };
 
   const toFetchDiagnosticEntry = (
     result: FetchByDateChunksResult<unknown>
@@ -564,22 +585,22 @@ export async function GET(request: Request, { params }: Ctx) {
     };
   };
 
-  const appendChunkFailureWarnings = (
+  const appendChunkFailureMessage = (
     label: string,
     result: FetchByDateChunksResult<unknown>,
     allChunksFailedSuffix: string
   ): void => {
-    if (result.stats.chunksFailed === 0) return;
-    const failureSummary = summarizeChunkFailures(result);
-    if (result.stats.chunksFailed === result.stats.chunksTotal && result.stats.chunksTotal > 0) {
-      warnings.push(
-        `Failed loading ${label}: partial data due to chunk failures (all ${result.stats.chunksTotal} chunks failed; ${failureSummary}); ${allChunksFailedSuffix}`
-      );
-      return;
-    }
-    warnings.push(
-      `Failed loading ${label}: partial data due to chunk failures (${result.stats.chunksFailed}/${result.stats.chunksTotal} chunks failed; ${failureSummary}); using successful chunks only.`
-    );
+    const timeoutFailures = result.chunkErrors.filter((entry) => entry.timedOut).length;
+    const message = buildChunkFailureMessage({
+      label,
+      chunksTotal: result.stats.chunksTotal,
+      chunksFailed: result.stats.chunksFailed,
+      timeoutFailures,
+      allChunksFailedSuffix,
+      isSpReconciliation: label === "SP reconciliation rows",
+    });
+    if (!message) return;
+    addMessage(message.level, message.code, message.text, message.meta);
   };
 
   const loadOptionalDateBounds = async (
@@ -590,7 +611,9 @@ export async function GET(request: Request, { params }: Ctx) {
       return await loader();
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown error";
-      warnings.push(`Failed loading ${label}: ${message}; treating availability as empty.`);
+      addMessage("warn", "AVAILABILITY_QUERY_FAILED", `Failed loading ${label}: ${message}; treating availability as empty.`, {
+        label,
+      });
       return { minDate: null, maxDate: null };
     }
   };
@@ -911,13 +934,49 @@ export async function GET(request: Request, { params }: Ctx) {
     availability: requiredAvailability,
   });
 
+  const expectedEmptyDatasets = new Set<string>([
+    "sales",
+    "sp_advertised_asin",
+    "ranking",
+    "sqp",
+  ]);
+  if (spBulkProductAdLookup.adGroupIds.length > 0 || spCandidateCampaignIds.length > 0) {
+    expectedEmptyDatasets.add("sp_target");
+  }
+  if (sbCandidateCampaignIds.length > 0) {
+    expectedEmptyDatasets.add("sb_campaign");
+    expectedEmptyDatasets.add("sb_keyword");
+    expectedEmptyDatasets.add("sb_attributed_purchases");
+    expectedEmptyDatasets.add("sb_allocated_asin_spend");
+  }
+
+  const datasetLabels: Record<string, string> = {
+    sales: "sales baseline",
+    sp_target: "SP targeting baseline",
+    sb_campaign: "SB campaign baseline",
+    sb_keyword: "SB keyword baseline",
+    sb_attributed_purchases: "SB attributed purchases baseline",
+    ranking: "ranking baseline",
+    sqp: "SQP baseline",
+    sp_advertised_asin: "SP advertised-product baseline",
+    sb_allocated_asin_spend: "SB allocated spend baseline",
+  };
+
   for (const [dataset, bounds] of Object.entries(availability)) {
-    if (!bounds.minDate || !bounds.maxDate) {
-      warnings.push(`Dataset "${dataset}" has no rows for this ASIN through ${endCandidate}.`);
+    if ((!bounds.minDate || !bounds.maxDate) && expectedEmptyDatasets.has(dataset)) {
+      const datasetLabel = datasetLabels[dataset] ?? dataset;
+      addMessage(
+        "info",
+        "DATASET_EMPTY",
+        `No ${datasetLabel} rows for this ASIN in the selected range.`,
+        { dataset, through_date: endCandidate }
+      );
     }
   }
   if (window.usedFallback) {
-    warnings.push(
+    addMessage(
+      "warn",
+      "WINDOW_FALLBACK",
       "Computed overlap window was empty; fallback window set to the last 60 days (capped by exclude_last_days)."
     );
   }
@@ -928,7 +987,6 @@ export async function GET(request: Request, { params }: Ctx) {
     label: string;
     allChunksFailedSuffix: string;
     diagnosticsKey?: keyof FetchDiagnostics;
-    onChunkFailures?: (result: FetchByDateChunksResult<unknown>) => void;
     runChunk: (chunkStart: string, chunkEnd: string) => Promise<T[]>;
   }): Promise<T[]> => {
     const result = await fetchByDateChunks<T>({
@@ -941,14 +999,11 @@ export async function GET(request: Request, { params }: Ctx) {
         result as FetchByDateChunksResult<unknown>
       );
     }
-    appendChunkFailureWarnings(
+    appendChunkFailureMessage(
       params.label,
       result as FetchByDateChunksResult<unknown>,
       params.allChunksFailedSuffix
     );
-    if (result.stats.chunksFailed > 0) {
-      params.onChunkFailures?.(result as FetchByDateChunksResult<unknown>);
-    }
     return result.rows;
   };
 
@@ -1258,9 +1313,26 @@ export async function GET(request: Request, { params }: Ctx) {
     campaignIds: string[];
   }): Promise<Array<{ date: string | null; spend: number | string | null }>> => {
     if (params.campaignIds.length === 0) {
-      warnings.push(
-        `No ${params.channel.toUpperCase()} candidate campaigns found for ASIN ${asin}; reconciliation ${params.channel} spend set to 0.`
-      );
+      if (params.channel === "sb") {
+        addMessageOnce(
+          "info",
+          "NO_SB_FOR_ASIN",
+          "No Sponsored Brands data for this ASIN in the selected range."
+        );
+      } else if (params.channel === "sd") {
+        for (const message of buildNoChannelMessages({
+          hasSbCampaignCandidates: true,
+          hasSdCampaignCandidates: false,
+        })) {
+          addMessageOnce(message.level, message.code, message.text, message.meta);
+        }
+      } else {
+        addMessage(
+          "info",
+          "NO_SP_FOR_ASIN",
+          "No Sponsored Products candidate campaigns for this ASIN in the selected range; reconciliation SP spend set to 0."
+        );
+      }
       return [];
     }
     const label = `${params.channel.toUpperCase()} reconciliation rows`;
@@ -1269,14 +1341,6 @@ export async function GET(request: Request, { params }: Ctx) {
       allChunksFailedSuffix:
         `reconciliation ${params.channel.toUpperCase()} spend is incomplete/unknown for this window; values may appear as 0.`,
       diagnosticsKey: params.channel === "sp" ? "sp_reconciliation" : undefined,
-      onChunkFailures:
-        params.channel === "sp"
-          ? (result) => {
-              warnings.push(
-                `SP reconciliation partial: ${result.stats.chunksFailed}/${result.stats.chunksTotal} chunks failed (${summarizeShortChunkFailureKind(result)}). See meta.fetch_diagnostics.`
-              );
-            }
-          : undefined,
       runChunk: async (chunkStart, chunkEnd) => {
         const { data, error } = await supabaseAdmin
           .from("ads_campaign_daily_fact_latest")
@@ -1300,9 +1364,13 @@ export async function GET(request: Request, { params }: Ctx) {
     spend: row.spend,
   }));
   if (sbReconciliationAttributedRows.length === 0) {
-    warnings.push(
-      `No SB allocated spend rows found for ASIN ${asin} in ${effectiveStart}..${effectiveEnd}; reconciliation SB spend set to 0.`
-    );
+    if (sbCandidateCampaignIds.length > 0) {
+      addMessage(
+        "info",
+        "SB_ALLOCATED_SPEND_EMPTY",
+        `No SB allocated spend rows found for ASIN ${asin} in ${effectiveStart}..${effectiveEnd}; reconciliation SB spend set to 0.`
+      );
+    }
   }
 
   const [spReconciliationCampaignRows, sdReconciliationCampaignRows] = await Promise.all([
@@ -1423,7 +1491,11 @@ export async function GET(request: Request, { params }: Ctx) {
       },
     });
     if (spCampaignRows.length === 0) {
-      warnings.push(`SP campaign baseline has no rows in ${effectiveStart}..${effectiveEnd}; continuing.`);
+      addMessage(
+        "info",
+        "DATASET_EMPTY",
+        `No SP campaign baseline rows in ${effectiveStart}..${effectiveEnd}; continuing.`
+      );
     }
     spMappedCampaignSpendTotal = spCampaignRows.reduce((total, row) => total + num(row.spend), 0);
   }
@@ -1956,6 +2028,8 @@ export async function GET(request: Request, { params }: Ctx) {
       ctr: formatPct(calcCtr(row.clicks, row.impressions)),
     }));
 
+  const warnings = legacyWarningsFromMessages(messages);
+
   const output = {
     kind: "aph_product_baseline_data_pack_v2",
     generated_at: new Date().toISOString(),
@@ -1983,6 +2057,7 @@ export async function GET(request: Request, { params }: Ctx) {
         ])
       ),
       warnings,
+      messages,
       window_candidates: {
         start_candidate: window.startCandidate,
         end_candidate: window.endCandidate,

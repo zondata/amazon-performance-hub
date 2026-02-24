@@ -35,4 +35,11 @@ describe('product baseline data pack route filters', () => {
     expect(source).toContain("reconciliation_daily_campaigns");
     expect(source).toContain("attribution_model");
   });
+
+  it("keeps warnings backward-compatible while adding severity-coded messages", () => {
+    const source = fs.readFileSync(routePath, "utf-8");
+    expect(source).toContain("const warnings = legacyWarningsFromMessages(messages)");
+    expect(source).toContain("messages,");
+    expect(source).toContain("warnings,");
+  });
 });
