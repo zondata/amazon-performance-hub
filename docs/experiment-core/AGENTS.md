@@ -48,12 +48,29 @@
 ## Build Checklist
 - [x] Phase 0: spec scaffolding (`docs/experiment-core/AGENTS.md`, `docs/skills/README.md`, root AGENTS reference)
 - [x] Phase 1: product intent/notes propagation into AI packs + helper + tests
-- [ ] Phase 2: experiment-core execution contracts (future)
+- [x] Phase 2: memory + interruption-aware evaluation contracts + tests
 - [ ] Phase 3: stop-loss and maintenance/experiment orchestration (future)
 - [ ] Phase 4: advanced analytics and automation (future)
 
 ## Phase 1 (Lint/Build Hygiene)
 - `npm run web:build` passes.
 - `npm run web:lint` passes.
+
+## Phase 2 (Memory v1 + Timeline Signals)
+- Effective date derivation now uses explicit fallback priority:
+  - `scope.start_date/end_date` when both valid.
+  - `log_change_validations.validated_snapshot_date` min/max when scope dates are missing.
+  - linked `log_changes.occurred_at` min/max as final fallback.
+- Experiment context now includes interruption visibility and phase summaries:
+  - interruption types are exact-match on `manual_intervention`, `guardrail_breach`, `stop_loss`, `rollback`.
+  - `major_actions` keeps newest actions but always includes interruption changes.
+  - `phases` provides run-based summaries (`run_id`, `change_count`, `validation_summary`, `latest_occurred_at`) while keeping `run_groups` unchanged.
+- Experiment evaluation data pack (`aph_experiment_evaluation_data_pack_v1`) now includes:
+  - interruption entries,
+  - phase summaries,
+  - `noise_flags` (`low_orders`, `missing_test_days`, `missing_baseline_days`, `zero_sales_test`) with warning-first messaging when present.
+- Product baseline data pack (`aph_product_baseline_data_pack_v2`) now includes Memory v1 per experiment:
+  - latest evaluation timestamp,
+  - normalized latest outcome (`score`, `label`, `summary`, `next_steps`) from `log_evaluations.metrics_json`.
 
 Only check phase boxes after `npm test` is green for the committed scope.

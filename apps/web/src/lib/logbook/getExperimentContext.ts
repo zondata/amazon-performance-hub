@@ -1,10 +1,10 @@
 import 'server-only';
 
 import { env } from '@/lib/env';
+import { deriveExperimentDateWindow } from '@/lib/logbook/experimentDateWindow';
+import { isInterruptionChange, pickMajorActions } from '@/lib/logbook/experimentTimeline';
 import { extractBulkgenPlans } from '@/lib/logbook/productExperimentPlans';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 type JsonObject = Record<string, unknown>;
 
@@ -38,6 +38,7 @@ export type ExperimentContextChangeEntity = {
 export type ExperimentContextChange = {
   change_id: string;
   occurred_at: string;
+  validated_snapshot_date: string | null;
   channel: string;
   change_type: string;
   summary: string;
@@ -81,7 +82,7 @@ export type ExperimentEvaluationRow = {
 export type ExperimentDateWindow = {
   startDate: string | null;
   endDate: string | null;
-  source: 'scope' | 'linked_changes' | 'missing';
+  source: 'scope' | 'validated_snapshot_dates' | 'linked_changes' | 'missing';
 };
 
 export type ExperimentPlanSummary = {
@@ -100,7 +101,14 @@ export type ExperimentContext = {
   outcome_summary: string | null;
   date_window: ExperimentDateWindow;
   linked_changes: ExperimentContextChange[];
+  interruptions: ExperimentContextChange[];
   run_groups: ExperimentChangeRunGroup[];
+  phases: Array<{
+    run_id: string;
+    change_count: number;
+    validation_summary: ExperimentValidationSummary;
+    latest_occurred_at: string | null;
+  }>;
   validation_summary: ExperimentValidationSummary;
   major_actions: ExperimentContextChange[];
   evaluations: ExperimentEvaluationRow[];
@@ -131,6 +139,7 @@ type ChangeRow = {
 type ValidationRow = {
   change_id: string;
   status: ExperimentValidationStatus;
+  validated_snapshot_date: string | null;
   checked_at: string;
 };
 
@@ -145,23 +154,9 @@ const asString = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-const parseDateOnly = (value: unknown): string | null => {
-  const text = asString(value);
-  if (!text || !DATE_RE.test(text)) return null;
-  const parsed = new Date(`${text}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return text;
-};
-
 const normalizeAsin = (value: unknown): string | null => {
   const text = asString(value);
   return text ? text.toUpperCase() : null;
-};
-
-const toDateOnlyFromIso = (value: string): string | null => {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString().slice(0, 10);
 };
 
 const compareDesc = (left: string, right: string) => right.localeCompare(left);
@@ -197,40 +192,6 @@ const resolveValidationStatus = (
   const status = validationByChangeId.get(changeId)?.status;
   if (status === 'validated' || status === 'mismatch' || status === 'not_found') return status;
   return 'pending';
-};
-
-const deriveDateWindow = (
-  scope: JsonObject | null,
-  changes: Array<{ occurred_at: string }>
-): ExperimentDateWindow => {
-  const scopeStart = parseDateOnly(scope?.start_date);
-  const scopeEnd = parseDateOnly(scope?.end_date);
-  if (scopeStart && scopeEnd) {
-    return {
-      startDate: scopeStart,
-      endDate: scopeEnd,
-      source: 'scope',
-    };
-  }
-
-  if (changes.length === 0) {
-    return { startDate: null, endDate: null, source: 'missing' };
-  }
-
-  const dates = changes
-    .map((row) => toDateOnlyFromIso(row.occurred_at))
-    .filter((value): value is string => Boolean(value))
-    .sort((a, b) => a.localeCompare(b));
-
-  if (dates.length === 0) {
-    return { startDate: null, endDate: null, source: 'missing' };
-  }
-
-  return {
-    startDate: dates[0],
-    endDate: dates[dates.length - 1],
-    source: 'linked_changes',
-  };
 };
 
 const summarizePlans = (scope: unknown): { sp: ExperimentPlanSummary; sb: ExperimentPlanSummary } => {
@@ -318,7 +279,7 @@ export const getExperimentContext = async (experimentId: string): Promise<Experi
         .limit(10000),
       supabaseAdmin
         .from('log_change_validations')
-        .select('change_id,status,checked_at')
+        .select('change_id,status,validated_snapshot_date,checked_at')
         .in('change_id', changeIds)
         .order('checked_at', { ascending: false })
         .limit(10000),
@@ -360,6 +321,7 @@ export const getExperimentContext = async (experimentId: string): Promise<Experi
             ...change,
             run_id: extractRunId(change),
             validation_status: status,
+            validated_snapshot_date: validationByChangeId.get(change.change_id)?.validated_snapshot_date ?? null,
             entities: entitiesByChangeId.get(change.change_id) ?? [],
           };
         })
@@ -393,6 +355,29 @@ export const getExperimentContext = async (experimentId: string): Promise<Experi
     return a.run_id.localeCompare(b.run_id);
   });
 
+  const interruptions = linkedChanges.filter((change) => isInterruptionChange(change.change_type));
+
+  const phases = runGroups.map((group) => {
+    const latestOccurredAt =
+      group.changes.reduce<string | null>((latest, change) => {
+        if (!latest || change.occurred_at.localeCompare(latest) > 0) return change.occurred_at;
+        return latest;
+      }, null) ?? null;
+
+    return {
+      run_id: group.run_id,
+      change_count: group.changes.length,
+      validation_summary: group.validation_summary,
+      latest_occurred_at: latestOccurredAt,
+    };
+  });
+
+  const pickedMajorActions = pickMajorActions(linkedChanges, 12);
+  const linkedChangesById = new Map(linkedChanges.map((change) => [change.change_id, change]));
+  const majorActions = pickedMajorActions.major
+    .map((changeId) => linkedChangesById.get(changeId))
+    .filter((change): change is ExperimentContextChange => Boolean(change));
+
   const { data: evaluationsData, error: evaluationsError } = await supabaseAdmin
     .from('log_evaluations')
     .select('evaluation_id,experiment_id,evaluated_at,window_start,window_end,metrics_json,notes,created_at')
@@ -419,11 +404,19 @@ export const getExperimentContext = async (experimentId: string): Promise<Experi
     product_asin: productAsin,
     expected_outcome: asString(scope?.expected_outcome),
     outcome_summary: asString(scope?.outcome_summary),
-    date_window: deriveDateWindow(scope, linkedChanges),
+    date_window: deriveExperimentDateWindow({
+      scope,
+      changes: linkedChanges.map((change) => ({
+        occurred_at: change.occurred_at,
+        validated_snapshot_date: change.validated_snapshot_date,
+      })),
+    }),
     linked_changes: linkedChanges,
+    interruptions,
     run_groups: runGroups,
+    phases,
     validation_summary: validationSummary,
-    major_actions: linkedChanges.slice(0, 12),
+    major_actions: majorActions,
     evaluations,
     latest_evaluation: latestEvaluation,
     plan_summary: summarizePlans(scope),

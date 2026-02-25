@@ -97,6 +97,17 @@ export async function GET(_request: Request, { params }: Ctx) {
     }
   }
 
+  const noiseFlags: string[] = [];
+  if (kpis) {
+    if (kpis.test.totals.orders < 10) noiseFlags.push('low_orders');
+    if (kpis.test.rowCount < kpis.windows.test.days) noiseFlags.push('missing_test_days');
+    if (kpis.baseline.rowCount < kpis.windows.baseline.days) noiseFlags.push('missing_baseline_days');
+    if (kpis.test.totals.sales === 0) noiseFlags.push('zero_sales_test');
+  }
+  if (noiseFlags.length > 0) {
+    warnings.push('Noise flags present; interpret outcome cautiously.');
+  }
+
   const payload = {
     kind: 'aph_experiment_evaluation_data_pack_v1',
     generated_at: new Date().toISOString(),
@@ -112,8 +123,9 @@ export async function GET(_request: Request, { params }: Ctx) {
       evaluation_lag_days: context.experiment.evaluation_lag_days ?? 0,
     },
     kpis,
+    noise_flags: noiseFlags,
     validation_summary: context.validation_summary,
-    major_actions: context.major_actions.slice(0, 12).map((change) => ({
+    major_actions: context.major_actions.map((change) => ({
       change_id: change.change_id,
       occurred_at: change.occurred_at,
       run_id: change.run_id,
@@ -122,6 +134,16 @@ export async function GET(_request: Request, { params }: Ctx) {
       summary: change.summary,
       validation_status: change.validation_status,
     })),
+    interruptions: context.interruptions.map((change) => ({
+      change_id: change.change_id,
+      occurred_at: change.occurred_at,
+      run_id: change.run_id,
+      channel: change.channel,
+      change_type: change.change_type,
+      summary: change.summary,
+      validation_status: change.validation_status,
+    })),
+    phases: context.phases,
     warnings,
   };
 

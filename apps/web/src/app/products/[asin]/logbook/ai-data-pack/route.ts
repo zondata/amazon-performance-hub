@@ -28,6 +28,7 @@ import {
 import { computeBoundedRange } from "@/lib/ads/boundedDateRange";
 import { buildAdsReconciliationDaily } from "@/lib/ads/buildAdsReconciliationDaily";
 import { computePpcAttributionBridge } from "@/lib/logbook/aiPack/ppcAttributionBridge";
+import { extractEvaluationOutcome } from "@/lib/logbook/evaluationOutcomeExtract";
 import { extractProductProfileContext } from "@/lib/products/productProfileContext";
 import { env } from "@/lib/env";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -1992,6 +1993,41 @@ export async function GET(request: Request, { params }: Ctx) {
     return new Response(`Failed loading experiments: ${experimentsError.message}`, { status: 500 });
   }
 
+  const experimentIds = (experimentsRows ?? [])
+    .map((row) => String(row.experiment_id ?? "").trim())
+    .filter((value) => value.length > 0);
+  const latestEvaluationByExperimentId = new Map<
+    string,
+    { experiment_id: string; evaluated_at: string; metrics_json: unknown | null }
+  >();
+
+  if (experimentIds.length > 0) {
+    const { data: evaluationsRows, error: evaluationsError } = await supabaseAdmin
+      .from("log_evaluations")
+      .select("experiment_id,evaluated_at,metrics_json")
+      .eq("account_id", env.accountId)
+      .eq("marketplace", env.marketplace)
+      .in("experiment_id", experimentIds)
+      .order("evaluated_at", { ascending: false })
+      .limit(5000);
+
+    if (evaluationsError) {
+      return new Response(`Failed loading experiment evaluations: ${evaluationsError.message}`, {
+        status: 500,
+      });
+    }
+
+    for (const row of evaluationsRows ?? []) {
+      const experimentId = String(row.experiment_id ?? "").trim();
+      if (!experimentId || latestEvaluationByExperimentId.has(experimentId)) continue;
+      latestEvaluationByExperimentId.set(experimentId, {
+        experiment_id: experimentId,
+        evaluated_at: String(row.evaluated_at ?? ""),
+        metrics_json: row.metrics_json ?? null,
+      });
+    }
+  }
+
   const sdCampaignTotals = sdCampaignFactRows.reduce<{
     impressions: number;
     clicks: number;
@@ -2352,11 +2388,14 @@ export async function GET(request: Request, { params }: Ctx) {
     },
     experiments: (experimentsRows ?? []).map((row) => {
       const scope = asRecord(row.scope);
+      const latestEvaluation = latestEvaluationByExperimentId.get(String(row.experiment_id));
       return {
         experiment_id: row.experiment_id,
         name: row.name,
         status: (scope.status as string | undefined) ?? "planned",
         created_at: row.created_at,
+        latest_evaluated_at: latestEvaluation?.evaluated_at ?? null,
+        latest_outcome: extractEvaluationOutcome(latestEvaluation?.metrics_json ?? null),
       };
     }),
   };

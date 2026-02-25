@@ -3,6 +3,7 @@
 import 'server-only';
 
 import { computeExperimentKpis } from '@/lib/logbook/computeExperimentKpis';
+import { deriveExperimentDateWindow } from '@/lib/logbook/experimentDateWindow';
 import { env } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
@@ -34,8 +35,6 @@ type ExperimentRow = {
   scope: unknown | null;
 };
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
 const asObject = (value: unknown): JsonObject | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as JsonObject;
@@ -52,31 +51,19 @@ const normalizeAsin = (value: unknown): string | null => {
   return text ? text.toUpperCase() : null;
 };
 
-const parseDateOnly = (value: unknown): string | null => {
-  const text = asString(value);
-  if (!text || !DATE_RE.test(text)) return null;
-  const parsed = new Date(`${text}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return text;
-};
-
-const toDateOnlyFromIso = (value: string): string | null => {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString().slice(0, 10);
-};
-
 const deriveDateWindowFromScopeOrChanges = async (
   experimentId: string,
   scope: JsonObject | null
-): Promise<{ startDate: string; endDate: string; source: 'scope' | 'linked_changes' }> => {
-  const scopeStart = parseDateOnly(scope?.start_date);
-  const scopeEnd = parseDateOnly(scope?.end_date);
-
-  if (scopeStart && scopeEnd) {
+): Promise<{
+  startDate: string;
+  endDate: string;
+  source: 'scope' | 'validated_snapshot_dates' | 'linked_changes';
+}> => {
+  const scopeWindow = deriveExperimentDateWindow({ scope, changes: [] });
+  if (scopeWindow.startDate && scopeWindow.endDate && scopeWindow.source === 'scope') {
     return {
-      startDate: scopeStart,
-      endDate: scopeEnd,
+      startDate: scopeWindow.startDate,
+      endDate: scopeWindow.endDate,
       source: 'scope',
     };
   }
@@ -95,32 +82,54 @@ const deriveDateWindowFromScopeOrChanges = async (
     throw new Error('Experiment is missing scope.start_date/end_date and has no linked changes to derive a KPI window.');
   }
 
-  const { data: changeRows, error: changesError } = await supabaseAdmin
-    .from('log_changes')
-    .select('occurred_at')
-    .eq('account_id', env.accountId)
-    .eq('marketplace', env.marketplace)
-    .in('change_id', changeIds)
-    .order('occurred_at', { ascending: true })
-    .limit(5000);
+  const [changesResult, validationsResult] = await Promise.all([
+    supabaseAdmin
+      .from('log_changes')
+      .select('change_id,occurred_at')
+      .eq('account_id', env.accountId)
+      .eq('marketplace', env.marketplace)
+      .in('change_id', changeIds)
+      .order('occurred_at', { ascending: true })
+      .limit(5000),
+    supabaseAdmin
+      .from('log_change_validations')
+      .select('change_id,validated_snapshot_date,checked_at')
+      .in('change_id', changeIds)
+      .order('checked_at', { ascending: false })
+      .limit(10000),
+  ]);
 
-  if (changesError) {
-    throw new Error(`Failed to load linked change dates: ${changesError.message}`);
+  if (changesResult.error) {
+    throw new Error(`Failed to load linked change dates: ${changesResult.error.message}`);
   }
 
-  const dates = (changeRows ?? [])
-    .map((row) => toDateOnlyFromIso(String(row.occurred_at)))
-    .filter((value): value is string => Boolean(value))
-    .sort((a, b) => a.localeCompare(b));
+  if (validationsResult.error) {
+    throw new Error(`Failed to load linked change validations: ${validationsResult.error.message}`);
+  }
 
-  if (dates.length === 0) {
+  const validationDateByChangeId = new Map<string, string | null>();
+  for (const row of validationsResult.data ?? []) {
+    const changeId = String(row.change_id ?? '').trim();
+    if (!changeId || validationDateByChangeId.has(changeId)) continue;
+    validationDateByChangeId.set(changeId, (row.validated_snapshot_date as string | null) ?? null);
+  }
+
+  const derived = deriveExperimentDateWindow({
+    scope,
+    changes: (changesResult.data ?? []).map((row) => ({
+      occurred_at: String(row.occurred_at ?? ''),
+      validated_snapshot_date: validationDateByChangeId.get(String(row.change_id ?? '')) ?? null,
+    })),
+  });
+
+  if (!derived.startDate || !derived.endDate || derived.source === 'missing') {
     throw new Error('Unable to derive KPI window from linked changes.');
   }
 
   return {
-    startDate: dates[0],
-    endDate: dates[dates.length - 1],
-    source: 'linked_changes',
+    startDate: derived.startDate,
+    endDate: derived.endDate,
+    source: derived.source,
   };
 };
 
