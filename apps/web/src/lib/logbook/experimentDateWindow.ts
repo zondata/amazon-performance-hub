@@ -35,11 +35,12 @@ export const toDateOnlyFromIso = (iso: string): string | null => {
 
 export const deriveExperimentDateWindow = (args: {
   scope: unknown | null;
+  phaseEffectiveDates?: Array<string | null | undefined>;
   changes: Array<{ occurred_at: string; validated_snapshot_date?: string | null }>;
 }): {
   startDate: string | null;
   endDate: string | null;
-  source: 'scope' | 'validated_snapshot_dates' | 'linked_changes' | 'missing';
+  source: 'scope' | 'phase_effective_dates' | 'validated_snapshot_dates' | 'linked_changes' | 'missing';
 } => {
   const scope = asObject(args.scope);
   const scopeStart = parseDateOnly(scope?.start_date);
@@ -49,6 +50,18 @@ export const deriveExperimentDateWindow = (args: {
       startDate: scopeStart,
       endDate: scopeEnd,
       source: 'scope',
+    };
+  }
+
+  const phaseDates = (args.phaseEffectiveDates ?? [])
+    .map((value) => parseDateOnly(value))
+    .filter((value): value is string => Boolean(value));
+  const phaseWindow = minMaxDates(phaseDates);
+  if (phaseWindow) {
+    return {
+      startDate: phaseWindow.min,
+      endDate: phaseWindow.max,
+      source: 'phase_effective_dates',
     };
   }
 

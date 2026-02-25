@@ -79,10 +79,41 @@ export type ExperimentEvaluationRow = {
   created_at: string;
 };
 
+export type ExperimentPhaseRow = {
+  id: string;
+  experiment_id: string;
+  run_id: string;
+  title: string | null;
+  notes: string | null;
+  effective_date: string | null;
+  uploaded_at: string | null;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type ExperimentEventType =
+  | 'uploaded_to_amazon'
+  | 'guardrail_breach'
+  | 'manual_intervention'
+  | 'stop_loss'
+  | 'rollback';
+
+export type ExperimentEventRow = {
+  id: string;
+  experiment_id: string;
+  run_id: string | null;
+  phase_id: string | null;
+  event_type: ExperimentEventType;
+  event_date: string | null;
+  occurred_at: string;
+  payload_json: unknown;
+  created_by: string | null;
+};
+
 export type ExperimentDateWindow = {
   startDate: string | null;
   endDate: string | null;
-  source: 'scope' | 'validated_snapshot_dates' | 'linked_changes' | 'missing';
+  source: 'scope' | 'phase_effective_dates' | 'validated_snapshot_dates' | 'linked_changes' | 'missing';
 };
 
 export type ExperimentPlanSummary = {
@@ -102,13 +133,16 @@ export type ExperimentContext = {
   date_window: ExperimentDateWindow;
   linked_changes: ExperimentContextChange[];
   interruptions: ExperimentContextChange[];
+  interruption_events: ExperimentEventRow[];
   run_groups: ExperimentChangeRunGroup[];
-  phases: Array<{
+  phases: ExperimentPhaseRow[];
+  phase_summaries: Array<{
     run_id: string;
     change_count: number;
     validation_summary: ExperimentValidationSummary;
     latest_occurred_at: string | null;
   }>;
+  events: ExperimentEventRow[];
   validation_summary: ExperimentValidationSummary;
   major_actions: ExperimentContextChange[];
   evaluations: ExperimentEvaluationRow[];
@@ -142,6 +176,13 @@ type ValidationRow = {
   validated_snapshot_date: string | null;
   checked_at: string;
 };
+
+const INTERRUPTION_EVENT_TYPES = new Set<ExperimentEventType>([
+  'guardrail_breach',
+  'manual_intervention',
+  'stop_loss',
+  'rollback',
+]);
 
 const asObject = (value: unknown): JsonObject | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -247,16 +288,38 @@ export const getExperimentContext = async (experimentId: string): Promise<Experi
   const experiment = experimentData as ExperimentContextRow;
   const scope = asObject(experiment.scope);
 
-  const { data: linkRows, error: linkError } = await supabaseAdmin
-    .from('log_experiment_changes')
-    .select('change_id')
-    .eq('experiment_id', experimentId);
+  const [linksResult, phasesResult, eventsResult] = await Promise.all([
+    supabaseAdmin.from('log_experiment_changes').select('change_id').eq('experiment_id', experimentId),
+    supabaseAdmin
+      .from('log_experiment_phases')
+      .select('id,experiment_id,run_id,title,notes,effective_date,uploaded_at,created_at,created_by')
+      .eq('experiment_id', experimentId)
+      .order('created_at', { ascending: false })
+      .limit(2000),
+    supabaseAdmin
+      .from('log_experiment_events')
+      .select('id,experiment_id,run_id,phase_id,event_type,event_date,occurred_at,payload_json,created_by')
+      .eq('experiment_id', experimentId)
+      .order('occurred_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(5000),
+  ]);
 
-  if (linkError) {
-    throw new Error(`Failed to load experiment links: ${linkError.message}`);
+  if (linksResult.error) {
+    throw new Error(`Failed to load experiment links: ${linksResult.error.message}`);
+  }
+  if (phasesResult.error) {
+    throw new Error(`Failed to load experiment phases: ${phasesResult.error.message}`);
+  }
+  if (eventsResult.error) {
+    throw new Error(`Failed to load experiment events: ${eventsResult.error.message}`);
   }
 
-  const changeIds = (linkRows as LinkRow[] | null)?.map((row) => row.change_id) ?? [];
+  const phases = (phasesResult.data ?? []) as ExperimentPhaseRow[];
+  const events = (eventsResult.data ?? []) as ExperimentEventRow[];
+  const interruptionEvents = events.filter((event) => INTERRUPTION_EVENT_TYPES.has(event.event_type));
+
+  const changeIds = (linksResult.data as LinkRow[] | null)?.map((row) => row.change_id) ?? [];
 
   const linkedChanges: ExperimentContextChange[] = [];
   const validationSummary = emptyValidationSummary();
@@ -357,7 +420,7 @@ export const getExperimentContext = async (experimentId: string): Promise<Experi
 
   const interruptions = linkedChanges.filter((change) => isInterruptionChange(change.change_type));
 
-  const phases = runGroups.map((group) => {
+  const phaseSummaries = runGroups.map((group) => {
     const latestOccurredAt =
       group.changes.reduce<string | null>((latest, change) => {
         if (!latest || change.occurred_at.localeCompare(latest) > 0) return change.occurred_at;
@@ -406,6 +469,7 @@ export const getExperimentContext = async (experimentId: string): Promise<Experi
     outcome_summary: asString(scope?.outcome_summary),
     date_window: deriveExperimentDateWindow({
       scope,
+      phaseEffectiveDates: phases.map((phase) => phase.effective_date),
       changes: linkedChanges.map((change) => ({
         occurred_at: change.occurred_at,
         validated_snapshot_date: change.validated_snapshot_date,
@@ -413,8 +477,11 @@ export const getExperimentContext = async (experimentId: string): Promise<Experi
     }),
     linked_changes: linkedChanges,
     interruptions,
+    interruption_events: interruptionEvents,
     run_groups: runGroups,
     phases,
+    phase_summaries: phaseSummaries,
+    events,
     validation_summary: validationSummary,
     major_actions: majorActions,
     evaluations,

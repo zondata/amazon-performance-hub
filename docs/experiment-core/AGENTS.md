@@ -49,7 +49,7 @@
 - [x] Phase 0: spec scaffolding (`docs/experiment-core/AGENTS.md`, `docs/skills/README.md`, root AGENTS reference)
 - [x] Phase 1: product intent/notes propagation into AI packs + helper + tests
 - [x] Phase 2: memory + interruption-aware evaluation contracts + tests
-- [ ] Phase 3: stop-loss and maintenance/experiment orchestration (future)
+- [x] Phase 3: stop-loss and maintenance/experiment orchestration
 - [ ] Phase 4: advanced analytics and automation (future)
 
 ## Phase 1 (Lint/Build Hygiene)
@@ -74,3 +74,39 @@
   - normalized latest outcome (`score`, `label`, `summary`, `next_steps`) from `log_evaluations.metrics_json`.
 
 Only check phase boxes after `npm test` is green for the committed scope.
+
+## Phase 3 (Operational Controls)
+- New logbook tables:
+  - `log_experiment_phases`: first-class experiment phase/run records keyed by `(experiment_id, run_id)`.
+  - `log_experiment_events`: append-only operational events linked to experiment and optional phase/run.
+- “Uploaded to Amazon” manual action:
+  - Route: `POST /logbook/experiments/[id]/phases/[runId]/mark-uploaded`
+  - Computes marketplace day from experiment marketplace timezone.
+  - Upserts phase `effective_date` + `uploaded_at`.
+  - Inserts `uploaded_to_amazon` event for audit.
+- Manual operational event logging:
+  - Route: `POST /logbook/experiments/[id]/events`
+  - Supports: `guardrail_breach`, `manual_intervention`, `stop_loss`, `rollback`.
+  - Fills marketplace `event_date` when omitted.
+- Experiment context enhancements:
+  - includes full `phases` and `events`.
+  - includes `interruption_events` filtered from operational events.
+  - date window fallback priority: `scope` -> `phase_effective_dates` -> `validated_snapshot_dates` -> `linked_changes`.
+- Evaluation data pack now includes phase/event context and interruption warnings.
+- Deterministic rollback pack:
+  - Helper: `buildRollbackOutputPack(...)` in `apps/web/src/lib/logbook/rollbackPlan.ts`.
+  - Route: `GET /logbook/experiments/[id]/rollback-pack[?run_id=...]`.
+  - Generates rollback actions from structured `before_json` + bulkgen metadata.
+  - Emits warnings for non-deterministic/non-rollable changes.
+- Minimal experiment-page controls:
+  - Phase run list with “Mark uploaded to Amazon”.
+  - Event form for guardrail/intervention/stop-loss/rollback logging.
+
+### Phase 3 Acceptance Checklist
+- [x] Multi-phase records persist in logbook tables.
+- [x] “Uploaded to Amazon” sets phase `effective_date` using marketplace day.
+- [x] Guardrail/intervention events are logged and visible in experiment eval pack.
+- [x] Deterministic rollback pack generation works and warns on non-rollable changes.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.

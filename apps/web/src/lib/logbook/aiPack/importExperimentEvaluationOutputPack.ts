@@ -57,7 +57,7 @@ const deriveDateWindowFromScopeOrChanges = async (
 ): Promise<{
   startDate: string;
   endDate: string;
-  source: 'scope' | 'validated_snapshot_dates' | 'linked_changes';
+  source: 'scope' | 'phase_effective_dates' | 'validated_snapshot_dates' | 'linked_changes';
 }> => {
   const scopeWindow = deriveExperimentDateWindow({ scope, changes: [] });
   if (scopeWindow.startDate && scopeWindow.endDate && scopeWindow.source === 'scope') {

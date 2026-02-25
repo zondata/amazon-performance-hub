@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 
 import ExperimentEvaluationOutputPackImport from '@/components/logbook/ExperimentEvaluationOutputPackImport';
+import ExperimentPhaseActions from '@/components/logbook/ExperimentPhaseActions';
 import InlineFilters from '@/components/InlineFilters';
 import PageHeader from '@/components/PageHeader';
 import Table from '@/components/Table';
@@ -228,6 +229,12 @@ export default async function ExperimentDetailPage({
   ]);
 
   const latestOutcome = extractOutcome(context.latest_evaluation?.metrics_json ?? null);
+  const phaseActionRunIds = Array.from(
+    new Set([
+      ...context.run_groups.map((group) => group.run_id),
+      ...context.phases.map((phase) => phase.run_id),
+    ])
+  );
 
   return (
     <div className="space-y-6">
@@ -256,6 +263,13 @@ export default async function ExperimentDetailPage({
               className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-2"
             >
               Download Eval Data Pack
+            </a>
+            <a
+              href={`/logbook/experiments/${context.experiment.experiment_id}/rollback-pack`}
+              download
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-2"
+            >
+              Download Rollback Pack
             </a>
             <Link
               href={`/logbook/changes/new?experiment_id=${context.experiment.experiment_id}`}
@@ -317,6 +331,11 @@ export default async function ExperimentDetailPage({
           experimentId={context.experiment.experiment_id}
         />
       </div>
+
+      <ExperimentPhaseActions
+        experimentId={context.experiment.experiment_id}
+        runIds={phaseActionRunIds}
+      />
 
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <div className="mb-3 text-sm font-semibold text-foreground">Evaluations</div>

@@ -82,6 +82,16 @@ export async function GET(_request: Request, { params }: Ctx) {
     warnings.push('Experiment window missing; KPI comparison unavailable.');
   }
 
+  if (context.interruption_events.length > 0) {
+    warnings.push(
+      `Experiment has ${context.interruption_events.length} interruption event(s); include stop-loss/intervention context in evaluation.`
+    );
+  } else if (context.interruptions.length > 0) {
+    warnings.push(
+      `Experiment has ${context.interruptions.length} interruption change(s); include stop-loss/intervention context in evaluation.`
+    );
+  }
+
   if (context.product_asin && context.date_window.startDate && context.date_window.endDate) {
     try {
       kpis = await computeExperimentKpis({
@@ -121,6 +131,9 @@ export async function GET(_request: Request, { params }: Ctx) {
       product_profile: productProfile,
       date_window: context.date_window,
       evaluation_lag_days: context.experiment.evaluation_lag_days ?? 0,
+      phases: context.phases,
+      events: context.events,
+      interruption_events: context.interruption_events,
     },
     kpis,
     noise_flags: noiseFlags,
@@ -143,7 +156,7 @@ export async function GET(_request: Request, { params }: Ctx) {
       summary: change.summary,
       validation_status: change.validation_status,
     })),
-    phases: context.phases,
+    phases: context.phase_summaries,
     warnings,
   };
 
