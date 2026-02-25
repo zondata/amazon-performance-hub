@@ -8,6 +8,7 @@ describe('extractProductProfileContext', () => {
       short_name: null,
       notes: null,
       intent: null,
+      skills: [],
     });
   });
 
@@ -21,6 +22,7 @@ describe('extractProductProfileContext', () => {
       short_name: 'Core Name',
       notes: 'Keep this concise.',
       intent: null,
+      skills: [],
     });
   });
 
@@ -39,6 +41,7 @@ describe('extractProductProfileContext', () => {
         mode: 'defensive',
         max_cpc: 1.25,
       },
+      skills: [],
     });
   });
 
@@ -47,11 +50,26 @@ describe('extractProductProfileContext', () => {
       short_name: null,
       notes: null,
       intent: null,
+      skills: [],
     });
     expect(extractProductProfileContext({ intent: 'bad' })).toEqual({
       short_name: null,
       notes: null,
       intent: null,
+      skills: [],
+    });
+  });
+
+  it('normalizes skills into a deduped id list', () => {
+    expect(
+      extractProductProfileContext({
+        skills: [' unit_economics_first ', 'placement_modifier_review', 'unit_economics_first', '', null],
+      })
+    ).toEqual({
+      short_name: null,
+      notes: null,
+      intent: null,
+      skills: ['unit_economics_first', 'placement_modifier_review'],
     });
   });
 });

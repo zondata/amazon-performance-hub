@@ -28,8 +28,10 @@ import {
 import { computeBoundedRange } from "@/lib/ads/boundedDateRange";
 import { buildAdsReconciliationDaily } from "@/lib/ads/buildAdsReconciliationDaily";
 import { computePpcAttributionBridge } from "@/lib/logbook/aiPack/ppcAttributionBridge";
+import { computeBaselineSummary } from "@/lib/logbook/computedSummary";
 import { extractEvaluationOutcome } from "@/lib/logbook/evaluationOutcomeExtract";
 import { extractProductProfileContext } from "@/lib/products/productProfileContext";
+import { resolveSkillsByIds } from "@/lib/skills/resolveSkills";
 import { env } from "@/lib/env";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -2065,8 +2067,9 @@ export async function GET(request: Request, { params }: Ctx) {
     }));
 
   const warnings = legacyWarningsFromMessages(messages);
+  const resolvedProductSkills = resolveSkillsByIds(profileContext.skills);
 
-  const output = {
+  const outputBase = {
     kind: "aph_product_baseline_data_pack_v2",
     generated_at: new Date().toISOString(),
     account_id: env.accountId,
@@ -2108,6 +2111,10 @@ export async function GET(request: Request, { params }: Ctx) {
       short_name: profileContext.short_name,
       notes: profileContext.notes,
       intent: profileContext.intent,
+      skills: {
+        ids: profileContext.skills,
+        resolved: resolvedProductSkills,
+      },
     },
     sales_trend_daily: (salesRows ?? []).map((row) => ({
       date: row.date,
@@ -2398,6 +2405,10 @@ export async function GET(request: Request, { params }: Ctx) {
         latest_outcome: extractEvaluationOutcome(latestEvaluation?.metrics_json ?? null),
       };
     }),
+  };
+  const output = {
+    ...outputBase,
+    computed_summary: computeBaselineSummary(outputBase),
   };
 
   const filename = `${sanitizeFileSegment(asin)}_product_baseline_data_pack.json`;

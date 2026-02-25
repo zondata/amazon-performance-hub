@@ -20,7 +20,7 @@
 
 ## Storage Map
 - `products`: canonical product identity (`product_id`, `asin`, account/marketplace scope).
-- `product_profile.profile_json`: product context (`short_name`, operator `notes`, structured `intent`).
+- `product_profile.profile_json`: product context (`short_name`, operator `notes`, structured `intent`, default `skills` IDs).
 - `log_experiments`: experiment metadata, scope, expected outcome.
 - `log_experiment_changes` + `log_changes` + `log_change_entities`: linked execution trail.
 - `log_evaluations`: post-window evaluation snapshots.
@@ -30,11 +30,14 @@
 
 ## Pack Contracts
 - `aph_product_baseline_data_pack_v2`
-  - `product` includes `asin`, `title`, `short_name`, `notes`, `intent`.
+  - `product` includes `asin`, `title`, `short_name`, `notes`, `intent`, `skills`.
+  - includes deterministic `computed_summary`.
 - `aph_product_experiment_pack_v1`
   - planning output must include deterministic run IDs and non-empty bulkgen actions.
 - `aph_experiment_evaluation_data_pack_v1`
   - `experiment` includes `expected_outcome` and nullable `product_profile` context.
+  - `experiment` includes merged `skills` (`product_ids`, `experiment_ids`, `resolved`).
+  - includes deterministic `computed_summary_eval`.
   - context load failures must append `warnings` and not hard-fail the route.
 
 ## Effective Date Rules
@@ -50,7 +53,7 @@
 - [x] Phase 1: product intent/notes propagation into AI packs + helper + tests
 - [x] Phase 2: memory + interruption-aware evaluation contracts + tests
 - [x] Phase 3: stop-loss and maintenance/experiment orchestration
-- [ ] Phase 4: advanced analytics and automation (future)
+- [x] Phase 4: Skills v1 + computed grouped summary guardrails
 
 ## Phase 1 (Lint/Build Hygiene)
 - `npm run web:build` passes.
@@ -107,6 +110,26 @@ Only check phase boxes after `npm test` is green for the committed scope.
 - [x] “Uploaded to Amazon” sets phase `effective_date` using marketplace day.
 - [x] Guardrail/intervention events are logged and visible in experiment eval pack.
 - [x] Deterministic rollback pack generation works and warns on non-rollable changes.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
+
+## Phase 4 (Skills v1 + Computed Grouped Summary)
+- Skills v1 contract:
+  - skill library markdown files live under `docs/skills/library/` with required frontmatter.
+  - product-level defaults are stored as `product_profile.profile_json.skills: string[]`.
+  - experiment overrides/extensions are stored as `log_experiments.scope.skills: string[]`.
+  - data packs contain IDs plus server-resolved skill content (no DB content duplication).
+- Non-bluffable grouped summary:
+  - product baseline pack includes `computed_summary`, derived from facts already present in the pack.
+  - experiment eval pack includes `computed_summary_eval`, derived from KPI comparison + interruption events.
+  - prompt templates require AI to reference computed summary counts first and to state `unknown due to missing data` when needed.
+
+### Phase 4 Acceptance Checklist
+- [x] Baseline pack includes `product.skills` (`ids`, `resolved`) and `computed_summary`.
+- [x] Evaluation pack includes `experiment.skills` (`product_ids`, `experiment_ids`, `resolved`) and `computed_summary_eval`.
+- [x] Unknown experiment-scope skill IDs produce warnings without failing the route.
+- [x] Partner prompt template enforces computed-summary-first analysis and unknown-data handling.
 - [x] `npm test` passes.
 - [x] `npm run web:lint` passes.
 - [x] `npm run web:build` passes.
