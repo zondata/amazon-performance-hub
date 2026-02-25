@@ -73,4 +73,34 @@ describe("product experiment output pack parser", () => {
       expect(result.error).toMatch(/campaign_id/i);
     }
   });
+
+  it('accepts optional kiv_items payload', () => {
+    const result = parseProductExperimentOutputPack(
+      JSON.stringify({
+        kind: PRODUCT_EXPERIMENT_OUTPUT_PACK_KIND,
+        product: { asin: 'B0TEST12345' },
+        experiment: {
+          name: 'Budget test',
+          objective: 'Grow sales',
+          scope: { status: 'planned' },
+        },
+        kiv_items: [
+          {
+            title: 'Investigate broad match expansion',
+            details: 'Needs ranking guardrails first',
+            tags: ['ranking', 'sp'],
+            priority: 2,
+            due_date: '2026-03-01',
+          },
+        ],
+      }),
+      'B0TEST12345'
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.kiv_items).toHaveLength(1);
+      expect(result.value.kiv_items[0].title).toContain('Investigate broad match');
+    }
+  });
 });

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 
+import ExperimentSkillsOverrideManager from '@/components/logbook/ExperimentSkillsOverrideManager';
 import ExperimentEvaluationOutputPackImport from '@/components/logbook/ExperimentEvaluationOutputPackImport';
 import ExperimentPhaseActions from '@/components/logbook/ExperimentPhaseActions';
 import InlineFilters from '@/components/InlineFilters';
@@ -11,6 +12,7 @@ import { getChanges } from '@/lib/logbook/getChanges';
 import { getExperimentContext } from '@/lib/logbook/getExperimentContext';
 import { linkChangesToExperiment } from '@/lib/logbook/linkChangesToExperiment';
 import { getOutcomePillClassName, normalizeOutcomeScorePercent } from '@/lib/logbook/outcomePill';
+import { listResolvedSkills } from '@/lib/skills/resolveSkills';
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return '—';
@@ -38,6 +40,21 @@ const asString = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const parseSkillIds = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of value) {
+    const skillId = asString(entry);
+    if (!skillId || seen.has(skillId)) continue;
+    seen.add(skillId);
+    out.push(skillId);
+  }
+
+  return out;
 };
 
 const extractOutcome = (metricsJson: unknown) => {
@@ -235,6 +252,12 @@ export default async function ExperimentDetailPage({
       ...context.phases.map((phase) => phase.run_id),
     ])
   );
+  const scope = asObject(context.scope);
+  const experimentSkillIds = parseSkillIds(scope?.skills);
+  const availableSkillOptions = listResolvedSkills().map((skill) => ({
+    id: skill.id,
+    title: skill.title,
+  }));
 
   return (
     <div className="space-y-6">
@@ -331,6 +354,12 @@ export default async function ExperimentDetailPage({
           experimentId={context.experiment.experiment_id}
         />
       </div>
+
+      <ExperimentSkillsOverrideManager
+        experimentId={context.experiment.experiment_id}
+        initialSkills={experimentSkillIds}
+        availableSkills={availableSkillOptions}
+      />
 
       <ExperimentPhaseActions
         experimentId={context.experiment.experiment_id}

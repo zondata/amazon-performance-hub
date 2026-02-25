@@ -10,8 +10,11 @@ import TrendChart from '@/components/TrendChart';
 import KeywordAiPackDownload from '@/components/keywords/KeywordAiPackDownload';
 import ProductExperimentPromptPackDownload from '@/components/logbook/ProductExperimentPromptPackDownload';
 import ExperimentEvaluationOutputPackImport from '@/components/logbook/ExperimentEvaluationOutputPackImport';
+import ProductDriverIntentManager from '@/components/logbook/ProductDriverIntentManager';
+import ProductKivBacklogManager from '@/components/logbook/ProductKivBacklogManager';
 import ProductBaselineDataPackDownload from '@/components/logbook/ProductBaselineDataPackDownload';
 import ProductLogbookAiPackImport from '@/components/logbook/ProductLogbookAiPackImport';
+import ProductProfileSkillsIntentEditor from '@/components/logbook/ProductProfileSkillsIntentEditor';
 import ProductRankingHeatmap from '@/components/ranking/ProductRankingHeatmap';
 import ProductSqpTable from '@/components/sqp/ProductSqpTable';
 import { runSbUpdateGenerator, runSpUpdateGenerator } from '@/lib/bulksheets/runGenerators';
@@ -33,6 +36,7 @@ import {
   normalizeOutcomeScorePercent,
 } from '@/lib/logbook/outcomePill';
 import { runManualBulkgenValidation } from '@/lib/logbook/runBulkgenValidation';
+import { deriveKivCarryForward } from '@/lib/logbook/kiv';
 import { ensureProductId } from '@/lib/products/ensureProductId';
 import { getProductDetailData } from '@/lib/products/getProductDetailData';
 import type {
@@ -46,6 +50,7 @@ import { getProductLogbookData } from '@/lib/products/getProductLogbookData';
 import { getProductRankingDaily } from '@/lib/ranking/getProductRankingDaily';
 import { getProductSqpWeekly } from '@/lib/sqp/getProductSqpWeekly';
 import { getProductSqpTrendSeries } from '@/lib/sqp/getProductSqpTrendSeries';
+import { listResolvedSkills } from '@/lib/skills/resolveSkills';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -152,6 +157,22 @@ const formatOutcomePercent = (score: number | null): string => {
   const normalized = normalizeOutcomeScorePercent(score);
   if (normalized === null) return '—';
   return `${normalized.toFixed(0)}%`;
+};
+
+const normalizeDriverChannel = (value: unknown): 'sp' | 'sb' | 'sd' => {
+  if (typeof value !== 'string') return 'sp';
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'sb') return 'sb';
+  if (normalized === 'sd') return 'sd';
+  return 'sp';
+};
+
+const normalizeKivStatus = (value: unknown): 'open' | 'done' | 'dismissed' => {
+  if (typeof value !== 'string') return 'open';
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'done') return 'done';
+  if (normalized === 'dismissed') return 'dismissed';
+  return 'open';
 };
 
 const formatEntityDetails = (entity: {
@@ -393,6 +414,29 @@ type EvaluationPackImportState = {
   evaluation_id?: string;
   outcome_score?: number;
   outcome_label?: string;
+};
+
+type ProductDriverIntentRow = {
+  id: string;
+  channel: 'sp' | 'sb' | 'sd';
+  campaign_id: string;
+  intent: string;
+  notes: string | null;
+  is_driver: boolean;
+  updated_at: string;
+};
+
+type ProductKivRow = {
+  kiv_id: string;
+  status: 'open' | 'done' | 'dismissed';
+  title: string;
+  details: string | null;
+  resolution_notes: string | null;
+  due_date: string | null;
+  priority: number | null;
+  created_at: string;
+  resolved_at: string | null;
+  tags: string[] | null;
 };
 
 const buildTabHref = (asin: string, tab: string, start: string, end: string) =>
@@ -1235,6 +1279,94 @@ export default async function ProductDetailPage({
   const title = data.productMeta.title?.trim();
   const displayName = shortName || title || asin;
   const showTitle = Boolean(shortName && title && title !== shortName);
+  const profileJson = asObject(data.productMeta.profile_json);
+  const profileSkills = scopeStringArray(profileJson, 'skills');
+  const profileIntent = asObject(profileJson?.intent);
+  const availableSkillOptions =
+    tab === 'overview'
+      ? listResolvedSkills().map((skill) => ({ id: skill.id, title: skill.title }))
+      : [];
+
+  let productDriverIntents: ProductDriverIntentRow[] = [];
+  let productKivOpenItems: ProductKivRow[] = [];
+  let productKivRecentlyClosedItems: ProductKivRow[] = [];
+
+  if (tab === 'overview') {
+    const [driverIntentResult, kivResult] = await Promise.all([
+      supabaseAdmin
+        .from('log_driver_campaign_intents')
+        .select('id,channel,campaign_id,intent,notes,is_driver,updated_at')
+        .eq('account_id', env.accountId)
+        .eq('marketplace', env.marketplace)
+        .eq('asin_norm', asin)
+        .order('updated_at', { ascending: false })
+        .limit(10000),
+      supabaseAdmin
+        .from('log_product_kiv_items')
+        .select(
+          'kiv_id,status,title,details,resolution_notes,due_date,priority,created_at,resolved_at,tags'
+        )
+        .eq('account_id', env.accountId)
+        .eq('marketplace', env.marketplace)
+        .eq('asin_norm', asin)
+        .order('created_at', { ascending: false })
+        .limit(10000),
+    ]);
+
+    if (driverIntentResult.error) {
+      console.error('product_driver_intents:load_error', {
+        asin,
+        error: driverIntentResult.error.message,
+      });
+    } else {
+      productDriverIntents = (driverIntentResult.data ?? []).map((row) => ({
+        id: String(row.id ?? ''),
+        channel: normalizeDriverChannel(row.channel),
+        campaign_id: String(row.campaign_id ?? ''),
+        intent: String(row.intent ?? ''),
+        notes: typeof row.notes === 'string' ? row.notes : null,
+        is_driver: row.is_driver === true,
+        updated_at: String(row.updated_at ?? ''),
+      }));
+    }
+
+    if (kivResult.error) {
+      console.error('product_kiv:load_error', {
+        asin,
+        error: kivResult.error.message,
+      });
+    } else {
+      const normalizedKivRows: ProductKivRow[] = (kivResult.data ?? []).map((row) => ({
+        kiv_id: String(row.kiv_id ?? ''),
+        status: normalizeKivStatus(row.status),
+        title: String(row.title ?? ''),
+        details: typeof row.details === 'string' ? row.details : null,
+        resolution_notes:
+          typeof row.resolution_notes === 'string' ? row.resolution_notes : null,
+        due_date: typeof row.due_date === 'string' ? row.due_date : null,
+        priority: (() => {
+          const raw =
+            typeof row.priority === 'number'
+              ? row.priority
+              : typeof row.priority === 'string'
+                ? Number(row.priority)
+                : null;
+          return raw !== null && Number.isFinite(raw) ? raw : null;
+        })(),
+        created_at: String(row.created_at ?? ''),
+        resolved_at: typeof row.resolved_at === 'string' ? row.resolved_at : null,
+        tags: Array.isArray(row.tags)
+          ? row.tags
+              .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+              .filter(Boolean)
+          : null,
+      }));
+
+      const groupedKiv = deriveKivCarryForward(normalizedKivRows);
+      productKivOpenItems = groupedKiv.open as ProductKivRow[];
+      productKivRecentlyClosedItems = groupedKiv.recently_closed as ProductKivRow[];
+    }
+  }
 
   const kpiItems = [
     {
@@ -1398,6 +1530,19 @@ export default async function ProductDetailPage({
               </div>
             </form>
           </section>
+          <ProductProfileSkillsIntentEditor
+            asin={asin}
+            initialNotes={data.productMeta.notes ?? ''}
+            initialSkills={profileSkills}
+            initialIntent={profileIntent}
+            availableSkills={availableSkillOptions}
+          />
+          <ProductDriverIntentManager asin={asin} initialRows={productDriverIntents} />
+          <ProductKivBacklogManager
+            asin={asin}
+            initialOpenItems={productKivOpenItems}
+            initialRecentlyClosedItems={productKivRecentlyClosedItems}
+          />
           <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
             <div className="mb-4">
               <div className="text-xs uppercase tracking-[0.3em] text-muted">

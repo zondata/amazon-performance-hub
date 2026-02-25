@@ -29,7 +29,9 @@ import { computeBoundedRange } from "@/lib/ads/boundedDateRange";
 import { buildAdsReconciliationDaily } from "@/lib/ads/buildAdsReconciliationDaily";
 import { computePpcAttributionBridge } from "@/lib/logbook/aiPack/ppcAttributionBridge";
 import { computeBaselineSummary } from "@/lib/logbook/computedSummary";
+import { type DriverIntent } from "@/lib/logbook/driverIntent";
 import { extractEvaluationOutcome } from "@/lib/logbook/evaluationOutcomeExtract";
+import { deriveKivCarryForward } from "@/lib/logbook/kiv";
 import { extractProductProfileContext } from "@/lib/products/productProfileContext";
 import { resolveSkillsByIds } from "@/lib/skills/resolveSkills";
 import { env } from "@/lib/env";
@@ -481,6 +483,47 @@ export async function GET(request: Request, { params }: Ctx) {
     .eq("product_id", productRow.product_id)
     .maybeSingle();
   const profileContext = extractProductProfileContext(profileRow?.profile_json ?? null);
+
+  const { data: driverIntentRows, error: driverIntentError } = await supabaseAdmin
+    .from("log_driver_campaign_intents")
+    .select("channel,campaign_id,intent,notes,constraints_json,updated_at")
+    .eq("account_id", env.accountId)
+    .eq("marketplace", env.marketplace)
+    .eq("asin_norm", asin)
+    .order("updated_at", { ascending: false })
+    .limit(10000);
+  if (driverIntentError) {
+    return new Response(`Failed loading driver campaign intents: ${driverIntentError.message}`, {
+      status: 500,
+    });
+  }
+
+  const driverCampaignIntents: DriverIntent[] = (driverIntentRows ?? []).map((row) => ({
+    channel: String(row.channel ?? "").trim().toLowerCase(),
+    campaign_id: String(row.campaign_id ?? "").trim(),
+    intent: String(row.intent ?? "").trim(),
+    notes: typeof row.notes === "string" ? row.notes : null,
+    constraints_json: asRecord(row.constraints_json),
+    updated_at: String(row.updated_at ?? ""),
+  }));
+
+  const { data: kivRows, error: kivError } = await supabaseAdmin
+    .from("log_product_kiv_items")
+    .select(
+      "kiv_id,created_at,status,title,details,source,source_experiment_id,tags,priority,due_date,resolved_at,resolution_notes"
+    )
+    .eq("account_id", env.accountId)
+    .eq("marketplace", env.marketplace)
+    .eq("asin_norm", asin)
+    .order("created_at", { ascending: false })
+    .limit(10000);
+  if (kivError) {
+    return new Response(`Failed loading KIV backlog: ${kivError.message}`, {
+      status: 500,
+    });
+  }
+
+  const kivBacklog = deriveKivCarryForward(kivRows ?? []);
 
   const { data: latestUploadRows, error: latestUploadError } = await supabaseAdmin
     .from("uploads")
@@ -2111,6 +2154,8 @@ export async function GET(request: Request, { params }: Ctx) {
       short_name: profileContext.short_name,
       notes: profileContext.notes,
       intent: profileContext.intent,
+      driver_campaign_intents: driverCampaignIntents,
+      kiv_backlog: kivBacklog,
       skills: {
         ids: profileContext.skills,
         resolved: resolvedProductSkills,

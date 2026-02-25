@@ -24,6 +24,14 @@ type ManualChange = {
   entities: ManualChangeEntity[];
 };
 
+type KivItem = {
+  title: string;
+  details?: string;
+  tags?: string[];
+  priority?: number;
+  due_date?: string;
+};
+
 export type ProductExperimentBulkgenPlan =
   | {
       channel: "SP";
@@ -54,6 +62,7 @@ export type ParsedProductExperimentOutputPack = {
     scope: JsonRecord & { product_id: string; status: string; bulkgen_plans?: ProductExperimentBulkgenPlan[] };
   };
   manual_changes: ManualChange[];
+  kiv_items: KivItem[];
 };
 
 export type ParseProductExperimentOutputPackResult =
@@ -86,6 +95,16 @@ const asFiniteNumber = (value: unknown): number | null => {
   return null;
 };
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const asDateOnlyString = (value: unknown): string | null => {
+  const text = trimString(value);
+  if (!text || !DATE_RE.test(text)) return null;
+  const parsed = new Date(`${text}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10) === text ? text : null;
+};
+
 const requiredString = (value: unknown, label: string, errors: string[]): string => {
   const parsed = trimString(value);
   if (!parsed) {
@@ -93,6 +112,21 @@ const requiredString = (value: unknown, label: string, errors: string[]): string
     return "";
   }
   return parsed;
+};
+
+const asStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const entry of value) {
+    const parsed = trimString(entry);
+    if (!parsed || seen.has(parsed)) continue;
+    seen.add(parsed);
+    out.push(parsed);
+  }
+
+  return out;
 };
 
 function parseSpAction(raw: unknown, label: string, errors: string[]): SpUpdateAction | null {
@@ -411,6 +445,52 @@ export const parseProductExperimentOutputPack = (
     });
   }
 
+  const kivItemsRaw = root.kiv_items;
+  const kivItems: KivItem[] = [];
+  if (Array.isArray(kivItemsRaw)) {
+    kivItemsRaw.forEach((raw, index) => {
+      const label = `kiv_items[${index}]`;
+      const row = asRecord(raw);
+      if (!row) {
+        errors.push(`${label} must be an object`);
+        return;
+      }
+
+      const title = requiredString(row.title, `${label}.title`, errors);
+      const details = trimString(row.details) ?? undefined;
+      const tags = asStringArray(row.tags);
+      const priorityRaw = row.priority;
+      let priority: number | undefined;
+      if (priorityRaw !== undefined && priorityRaw !== null && priorityRaw !== '') {
+        const parsedPriority = asFiniteNumber(priorityRaw);
+        if (parsedPriority === null) {
+          errors.push(`${label}.priority must be a number`);
+        } else {
+          priority = Math.floor(parsedPriority);
+        }
+      }
+
+      const dueDateRaw = row.due_date;
+      let dueDate: string | undefined;
+      if (dueDateRaw !== undefined && dueDateRaw !== null && dueDateRaw !== '') {
+        const parsedDueDate = asDateOnlyString(dueDateRaw);
+        if (!parsedDueDate) {
+          errors.push(`${label}.due_date must be YYYY-MM-DD`);
+        } else {
+          dueDate = parsedDueDate;
+        }
+      }
+
+      kivItems.push({
+        title,
+        details,
+        ...(tags.length > 0 ? { tags } : {}),
+        ...(priority !== undefined ? { priority } : {}),
+        ...(dueDate ? { due_date: dueDate } : {}),
+      });
+    });
+  }
+
   if (errors.length > 0) {
     return { ok: false, error: `Output pack validation failed:\n- ${errors.join("\n- ")}` };
   }
@@ -444,6 +524,7 @@ export const parseProductExperimentOutputPack = (
         scope,
       },
       manual_changes: manualChanges,
+      kiv_items: kivItems,
     },
   };
 };

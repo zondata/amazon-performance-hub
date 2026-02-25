@@ -1,6 +1,8 @@
 import { computeExperimentKpis } from '@/lib/logbook/computeExperimentKpis';
 import { computeEvaluationSummary } from '@/lib/logbook/computedSummary';
+import { type DriverIntent } from '@/lib/logbook/driverIntent';
 import { getExperimentContext } from '@/lib/logbook/getExperimentContext';
+import { deriveKivCarryForward } from '@/lib/logbook/kiv';
 import { extractProductProfileContext } from '@/lib/products/productProfileContext';
 import { isMissingSkill, resolveSkillsByIds } from '@/lib/skills/resolveSkills';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
@@ -60,6 +62,11 @@ export async function GET(_request: Request, { params }: Ctx) {
   let productProfile:
     | ReturnType<typeof extractProductProfileContext>
     | null = null;
+  let driverCampaignIntents: DriverIntent[] = [];
+  let kivBacklog: ReturnType<typeof deriveKivCarryForward> = {
+    open: [],
+    recently_closed: [],
+  };
 
   if (context.product_asin) {
     try {
@@ -87,6 +94,43 @@ export async function GET(_request: Request, { params }: Ctx) {
         } else {
           productProfile = extractProductProfileContext(profileRow?.profile_json ?? null);
           productSkillIds = productProfile.skills;
+        }
+
+        const { data: driverIntentRows, error: driverIntentError } = await supabaseAdmin
+          .from('log_driver_campaign_intents')
+          .select('channel,campaign_id,intent,notes,constraints_json,updated_at')
+          .eq('account_id', context.experiment.account_id)
+          .eq('marketplace', context.experiment.marketplace)
+          .eq('asin_norm', context.product_asin)
+          .order('updated_at', { ascending: false })
+          .limit(10000);
+        if (driverIntentError) {
+          warnings.push(`Failed loading driver campaign intents: ${driverIntentError.message}`);
+        } else {
+          driverCampaignIntents = (driverIntentRows ?? []).map((row) => ({
+            channel: String(row.channel ?? '').trim().toLowerCase(),
+            campaign_id: String(row.campaign_id ?? '').trim(),
+            intent: String(row.intent ?? '').trim(),
+            notes: typeof row.notes === 'string' ? row.notes : null,
+            constraints_json: asRecord(row.constraints_json) ?? {},
+            updated_at: String(row.updated_at ?? ''),
+          }));
+        }
+
+        const { data: kivRows, error: kivError } = await supabaseAdmin
+          .from('log_product_kiv_items')
+          .select(
+            'kiv_id,created_at,status,title,details,source,source_experiment_id,tags,priority,due_date,resolved_at,resolution_notes'
+          )
+          .eq('account_id', context.experiment.account_id)
+          .eq('marketplace', context.experiment.marketplace)
+          .eq('asin_norm', context.product_asin)
+          .order('created_at', { ascending: false })
+          .limit(10000);
+        if (kivError) {
+          warnings.push(`Failed loading KIV backlog: ${kivError.message}`);
+        } else {
+          kivBacklog = deriveKivCarryForward(kivRows ?? []);
         }
       }
     } catch (error) {
@@ -159,6 +203,11 @@ export async function GET(_request: Request, { params }: Ctx) {
   const payloadBase = {
     kind: 'aph_experiment_evaluation_data_pack_v1',
     generated_at: new Date().toISOString(),
+    product: {
+      asin: context.product_asin,
+      driver_campaign_intents: driverCampaignIntents,
+      kiv_backlog: kivBacklog,
+    },
     experiment: {
       experiment_id: context.experiment.experiment_id,
       name: context.experiment.name,

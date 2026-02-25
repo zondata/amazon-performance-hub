@@ -133,3 +133,21 @@ Only check phase boxes after `npm test` is green for the committed scope.
 - [x] `npm test` passes.
 - [x] `npm run web:lint` passes.
 - [x] `npm run web:build` passes.
+
+## Phase 5 (Skills Assignment + Driver Intent + KIV Persistence)
+- Product-level skills + notes + intent are editable from `/products/[asin]`, persisted to `product_profile.profile_json`.
+- Experiment-level skills override is editable from `/logbook/experiments/[id]`, persisted to `log_experiments.scope.skills`.
+- Driver campaign intents persist per product/campaign and are available to planning/evaluation packs.
+- KIV backlog persists per product, supports manual edits, AI carry-forward creation, and evaluation updates.
+- Baseline/evaluation data packs include driver intent + KIV sections with stable additive structure.
+
+### Phase 5 Acceptance Checklist
+- [x] Product/experiment skill assignment UI and routes are operational.
+- [x] Driver campaign intents are CRUD-capable and exported in both data packs.
+- [x] Product KIV backlog is CRUD-capable and exported in both data packs.
+- [x] Product AI output-pack import supports `kiv_items` (dedupe + warnings).
+- [x] Evaluation output-pack import supports `kiv_updates` (update/match/create + warnings).
+- [x] Prompt template guidance references skills, driver intents, and KIV carry-forward behavior.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.

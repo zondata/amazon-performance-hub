@@ -39,6 +39,10 @@ describe('computeBaselineSummary', () => {
         ],
       },
       product: {
+        kiv_backlog: {
+          open: [{ kiv_id: 'K1' }, { kiv_id: 'K2' }],
+          recently_closed: [{ kiv_id: 'K3' }],
+        },
         intent: {
           driver_campaigns: ['C1', 'C2'],
           suggestions: ['tighten placement tiers'],
@@ -55,7 +59,7 @@ describe('computeBaselineSummary', () => {
     expect(summary.ranking.falling_terms_count).toBe(1);
     expect(summary.intent_alignment.driver_campaigns_classified_count).toBe(2);
     expect(summary.intent_alignment.suggestions_count).toBe(1);
-    expect(summary.kiv.items_count).toBe(2);
+    expect(summary.kiv.items_count).toBe(3);
   });
 
   it('returns unknown profitability when baseline KPI profits are missing', () => {

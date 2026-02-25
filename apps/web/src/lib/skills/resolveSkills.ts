@@ -186,6 +186,9 @@ const normalizeSkillIds = (ids: string[]): string[] => {
 export const isMissingSkill = (skill: ResolvedSkill): boolean =>
   skill.title === MISSING_TITLE && skill.version === '0.0.0';
 
+export const listResolvedSkills = (): ResolvedSkill[] =>
+  Array.from(loadSkillLibrary().values()).sort((left, right) => left.id.localeCompare(right.id));
+
 export const resolveSkillsByIds = (ids: string[]): ResolvedSkill[] => {
   const skillLibrary = loadSkillLibrary();
   const normalizedIds = normalizeSkillIds(ids);

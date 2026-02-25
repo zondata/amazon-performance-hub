@@ -101,6 +101,15 @@ export const renderProductExperimentPromptPackMarkdown = ({
   lines.push(`        { "entity_type": "product", "product_id": "${asin}" }`);
   lines.push('      ]');
   lines.push('    }');
+  lines.push('  ],');
+  lines.push('  "kiv_items": [');
+  lines.push('    {');
+  lines.push('      "title": "string (required)",');
+  lines.push('      "details": "optional string",');
+  lines.push('      "tags": ["optional", "tags"],');
+  lines.push('      "priority": 1,');
+  lines.push('      "due_date": "YYYY-MM-DD"');
+  lines.push('    }');
   lines.push('  ]');
   lines.push('}');
   lines.push('```');
@@ -118,6 +127,9 @@ export const renderProductExperimentPromptPackMarkdown = ({
   lines.push('- If proposing SP/SB bulkgen plans, confirm campaign/target IDs exist in the Product Baseline Data Pack; otherwise ask clarifying questions.');
   lines.push('- If recommending keyword/query strategy, confirm SQP/ranking sections exist; otherwise ask clarifying questions.');
   lines.push('- If recommending pricing/coupons, confirm profits/margin/cogs fields exist; otherwise ask clarifying questions.');
+  lines.push('- Respect `product.driver_campaign_intents` and skill constraints in the data pack when proposing campaign actions.');
+  lines.push('- Keep execution set small and place remaining ideas into `kiv_items`.');
+  lines.push('- Re-rank and revisit the top 3 existing `product.kiv_backlog` items before adding net-new KIV entries.');
   lines.push('');
 
   lines.push('## Validation Checklist Before Final JSON');

@@ -4,10 +4,14 @@ import 'server-only';
 
 import { computeExperimentKpis } from '@/lib/logbook/computeExperimentKpis';
 import { deriveExperimentDateWindow } from '@/lib/logbook/experimentDateWindow';
+import { normalizeKivStatus } from '@/lib/logbook/kiv';
 import { env } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-import { parseExperimentEvaluationOutputPack } from './parseExperimentEvaluationOutputPack';
+import {
+  parseExperimentEvaluationOutputPack,
+  type ParsedExperimentEvaluationOutputPack,
+} from './parseExperimentEvaluationOutputPack';
 
 type JsonObject = Record<string, unknown>;
 
@@ -26,6 +30,7 @@ export type ImportExperimentEvaluationOutputPackResult = {
   outcome_label?: 'success' | 'mixed' | 'fail';
   test_window_start?: string;
   test_window_end?: string;
+  warnings?: string[];
   error?: string;
 };
 
@@ -33,6 +38,11 @@ type ExperimentRow = {
   experiment_id: string;
   evaluation_lag_days: number | null;
   scope: unknown | null;
+};
+
+type OpenKivRow = {
+  kiv_id: string;
+  title: string;
 };
 
 const asObject = (value: unknown): JsonObject | null => {
@@ -49,6 +59,149 @@ const asString = (value: unknown): string | null => {
 const normalizeAsin = (value: unknown): string | null => {
   const text = asString(value);
   return text ? text.toUpperCase() : null;
+};
+
+const normalizeKivTitle = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+
+const loadOpenKivByTitle = async (asinNorm: string) => {
+  const { data: rows, error } = await supabaseAdmin
+    .from('log_product_kiv_items')
+    .select('kiv_id,title')
+    .eq('account_id', env.accountId)
+    .eq('marketplace', env.marketplace)
+    .eq('asin_norm', asinNorm)
+    .eq('status', 'open')
+    .order('created_at', { ascending: false })
+    .limit(10000);
+
+  if (error) {
+    throw new Error(`Failed loading open KIV backlog: ${error.message}`);
+  }
+
+  const byTitle = new Map<string, OpenKivRow>();
+  for (const row of (rows ?? []) as OpenKivRow[]) {
+    const title = String(row.title ?? '').trim();
+    if (!title) continue;
+    const normalized = normalizeKivTitle(title);
+    if (byTitle.has(normalized)) continue;
+    byTitle.set(normalized, row);
+  }
+  return byTitle;
+};
+
+const applyKivUpdates = async (params: {
+  asinNorm: string;
+  experimentId: string;
+  updates: ParsedExperimentEvaluationOutputPack['evaluation']['kiv_updates'];
+  warnings: string[];
+}) => {
+  const { asinNorm, experimentId, updates, warnings } = params;
+  if (updates.length === 0) return;
+
+  const openByTitle = await loadOpenKivByTitle(asinNorm);
+
+  for (const update of updates) {
+    const nextStatus = normalizeKivStatus(update.status);
+    const nowIso = new Date().toISOString();
+
+    const updateExisting = async (kivId: string, titleForMap?: string) => {
+      const patch: Record<string, unknown> = {
+        status: nextStatus,
+        resolved_at: nextStatus === 'open' ? null : nowIso,
+      };
+      if (update.resolution_notes !== undefined) {
+        patch.resolution_notes = update.resolution_notes;
+      }
+
+      const { error: updateError } = await supabaseAdmin
+        .from('log_product_kiv_items')
+        .update(patch)
+        .eq('account_id', env.accountId)
+        .eq('marketplace', env.marketplace)
+        .eq('asin_norm', asinNorm)
+        .eq('kiv_id', kivId);
+
+      if (updateError) {
+        throw new Error(`Failed updating KIV item ${kivId}: ${updateError.message}`);
+      }
+
+      if (!titleForMap) return;
+      const normalizedTitle = normalizeKivTitle(titleForMap);
+      if (nextStatus === 'open') {
+        openByTitle.set(normalizedTitle, { kiv_id: kivId, title: titleForMap });
+      } else {
+        openByTitle.delete(normalizedTitle);
+      }
+    };
+
+    if (update.kiv_id) {
+      const { data: existingRow, error: existingError } = await supabaseAdmin
+        .from('log_product_kiv_items')
+        .select('kiv_id,title')
+        .eq('account_id', env.accountId)
+        .eq('marketplace', env.marketplace)
+        .eq('asin_norm', asinNorm)
+        .eq('kiv_id', update.kiv_id)
+        .maybeSingle();
+
+      if (existingError) {
+        throw new Error(`Failed loading KIV item ${update.kiv_id}: ${existingError.message}`);
+      }
+
+      if (!existingRow?.kiv_id) {
+        warnings.push(`KIV update skipped; kiv_id not found: ${update.kiv_id}`);
+        continue;
+      }
+
+      await updateExisting(existingRow.kiv_id as string, String(existingRow.title ?? ''));
+      continue;
+    }
+
+    const title = (update.title ?? '').trim();
+    if (!title) {
+      warnings.push('KIV update skipped; title is required when kiv_id is not provided.');
+      continue;
+    }
+
+    const normalizedTitle = normalizeKivTitle(title);
+    const matched = openByTitle.get(normalizedTitle);
+    if (matched?.kiv_id) {
+      await updateExisting(matched.kiv_id, matched.title);
+      continue;
+    }
+
+    const { data: insertedRow, error: insertError } = await supabaseAdmin
+      .from('log_product_kiv_items')
+      .insert({
+        account_id: env.accountId,
+        marketplace: env.marketplace,
+        asin_norm: asinNorm,
+        title,
+        source: 'ai',
+        source_experiment_id: experimentId,
+        status: nextStatus,
+        resolution_notes: update.resolution_notes ?? null,
+        resolved_at: nextStatus === 'open' ? null : nowIso,
+      })
+      .select('kiv_id,title')
+      .single();
+
+    if (insertError) {
+      throw new Error(`Failed creating KIV item from evaluation update: ${insertError.message}`);
+    }
+
+    warnings.push(`Created new KIV item from evaluation update (no open title match): ${title}`);
+    if (nextStatus === 'open' && insertedRow?.kiv_id) {
+      openByTitle.set(normalizedTitle, {
+        kiv_id: insertedRow.kiv_id as string,
+        title: String(insertedRow.title ?? title),
+      });
+    }
+  }
 };
 
 const deriveDateWindowFromScopeOrChanges = async (
@@ -149,6 +302,7 @@ export const importExperimentEvaluationOutputPack = async (
   }
 
   try {
+    const warnings: string[] = [];
     const payload = parsed.value;
 
     const { data: experimentData, error: experimentError } = await supabaseAdmin
@@ -241,6 +395,13 @@ export const importExperimentEvaluationOutputPack = async (
       }
     }
 
+    await applyKivUpdates({
+      asinNorm: scopeAsin,
+      experimentId: payload.experiment_id,
+      updates: payload.evaluation.kiv_updates,
+      warnings,
+    });
+
     return {
       ok: true,
       evaluation_id: evaluationData.evaluation_id as string,
@@ -250,6 +411,7 @@ export const importExperimentEvaluationOutputPack = async (
       outcome_label: payload.evaluation.outcome.label,
       test_window_start: kpis.windows.test.startDate,
       test_window_end: kpis.windows.test.endDate,
+      warnings,
     };
   } catch (error) {
     return {

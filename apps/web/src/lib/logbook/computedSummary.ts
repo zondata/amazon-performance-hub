@@ -245,14 +245,24 @@ const countArrayIfPresent = (value: unknown): number | null => {
   return value.length;
 };
 
+const countKivBacklogItems = (value: unknown): number | null => {
+  if (Array.isArray(value)) return value.length;
+  const record = asRecord(value);
+  if (!record) return null;
+  const open = countArrayIfPresent(record.open) ?? 0;
+  const recentlyClosed = countArrayIfPresent(record.recently_closed) ?? 0;
+  return open + recentlyClosed;
+};
+
 const countIntentAlignment = (packRecord: Record<string, unknown>) => {
   const product = asRecord(packRecord.product);
+  const kivBacklogCount = countKivBacklogItems(product?.kiv_backlog);
   const intent = asRecord(product?.intent);
   if (!intent) {
     return {
       driverCount: 0,
       suggestionsCount: 0,
-      kivItemsCount: 0,
+      kivItemsCount: kivBacklogCount ?? 0,
       hasIntent: false,
     };
   }
@@ -276,6 +286,7 @@ const countIntentAlignment = (packRecord: Record<string, unknown>) => {
     suggestionArrayCount ??
     0;
   const kivItemsCount =
+    kivBacklogCount ??
     asFiniteNumber(intent.kiv_count) ??
     asFiniteNumber(intent.items_count) ??
     kivArrayCount ??

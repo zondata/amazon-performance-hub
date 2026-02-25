@@ -48,6 +48,8 @@ You are evaluating an Amazon experiment outcome.
 2. Produce a concise, evidence-based summary.
 3. Score the result 0-100 with confidence 0-1.
 4. Propose next steps that are executable and ID-safe.
+5. Respect resolved skills, driver campaign intents, and current KIV backlog context from the evaluation data pack.
+6. Keep immediate execution small and express deferred work in \`evaluation.kiv_updates\`.
 
 ## Hard Rules
 - Do not invent IDs or dates.
@@ -70,7 +72,15 @@ You are evaluating an Amazon experiment outcome.
     },
     "why": ["string"],
     "next_steps": ["string"],
-    "notes": "optional string"
+    "notes": "optional string",
+    "kiv_updates": [
+      {
+        "kiv_id": "optional uuid",
+        "title": "optional string (required when kiv_id is missing)",
+        "status": "open | done | dismissed",
+        "resolution_notes": "optional string"
+      }
+    ]
   }
 }
 \`\`\`

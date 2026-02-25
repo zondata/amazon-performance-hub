@@ -18,8 +18,15 @@ export type ImportProductExperimentOutputPackResult = {
   ok: boolean;
   created_experiment_id?: string;
   created_change_ids_count: number;
+  warnings?: string[];
   error?: string;
 };
+
+const normalizeKivTitle = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
 
 const toEntityRows = (params: {
   changeId: string;
@@ -51,6 +58,7 @@ export const importProductExperimentOutputPack = async ({
   }
 
   try {
+    const warnings: string[] = [];
     const experimentPayload = parsed.value.experiment;
     const { data: experimentRow, error: experimentError } = await supabaseAdmin
       .from("log_experiments")
@@ -118,10 +126,64 @@ export const importProductExperimentOutputPack = async ({
       }
     }
 
+    if (parsed.value.kiv_items.length > 0) {
+      const asinNorm = parsed.value.product_asin;
+      const { data: openKivRows, error: openKivError } = await supabaseAdmin
+        .from('log_product_kiv_items')
+        .select('kiv_id,title')
+        .eq('account_id', env.accountId)
+        .eq('marketplace', env.marketplace)
+        .eq('asin_norm', asinNorm)
+        .eq('status', 'open')
+        .order('created_at', { ascending: false })
+        .limit(10000);
+
+      if (openKivError) {
+        throw new Error(`Failed loading existing KIV backlog: ${openKivError.message}`);
+      }
+
+      const existingOpenTitles = new Set<string>();
+      for (const row of openKivRows ?? []) {
+        const title = String(row.title ?? '').trim();
+        if (!title) continue;
+        existingOpenTitles.add(normalizeKivTitle(title));
+      }
+
+      for (const item of parsed.value.kiv_items) {
+        const normalizedTitle = normalizeKivTitle(item.title);
+        if (existingOpenTitles.has(normalizedTitle)) {
+          warnings.push(`Skipped duplicate KIV item (already open): ${item.title}`);
+          continue;
+        }
+
+        const { error: kivInsertError } = await supabaseAdmin
+          .from('log_product_kiv_items')
+          .insert({
+            account_id: env.accountId,
+            marketplace: env.marketplace,
+            asin_norm: asinNorm,
+            title: item.title,
+            details: item.details ?? null,
+            source: 'ai',
+            source_experiment_id: experimentId,
+            tags: item.tags ?? [],
+            priority: item.priority ?? null,
+            due_date: item.due_date ?? null,
+          });
+
+        if (kivInsertError) {
+          throw new Error(`Failed inserting KIV item: ${kivInsertError.message}`);
+        }
+
+        existingOpenTitles.add(normalizedTitle);
+      }
+    }
+
     return {
       ok: true,
       created_experiment_id: experimentId,
       created_change_ids_count: createdChanges,
+      warnings,
     };
   } catch (error) {
     return {
