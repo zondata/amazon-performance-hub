@@ -41,3 +41,6 @@ blueprint.docx
 
 # local artifacts
 /tmp/
+
+# Codex local state
+.codex-home/
