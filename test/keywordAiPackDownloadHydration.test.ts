@@ -4,14 +4,17 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('KeywordAiPackDownload hydration safety', () => {
-  it('uses hydration gate before switching to selected template id', () => {
+  it('uses localStorage external store with render-time fallback logic', () => {
     const filePath = join(
       process.cwd(),
       'apps/web/src/components/keywords/KeywordAiPackDownload.tsx'
     );
     const src = readFileSync(filePath, 'utf8');
 
-    expect(src).toMatch(/useEffect\(\(\) => \{[\s\S]{0,120}setHydrated\(true\)[\s\S]{0,120}\}, \[\]\)/);
-    expect(src).toMatch(/hydrated\s*\?\s*selectedTemplateId\s*:\s*defaultId/);
+    expect(src).toMatch(/useLocalStorageString/);
+    expect(src).toMatch(/useLocalStorageString\(STORAGE_KEY,\s*''\)/);
+    expect(src).toMatch(/effectiveSelectedTemplateId/);
+    expect(src).not.toMatch(/setHydrated/);
+    expect(src).not.toMatch(/useEffect\(/);
   });
 });

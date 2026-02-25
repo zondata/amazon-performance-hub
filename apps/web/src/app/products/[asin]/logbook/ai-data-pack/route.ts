@@ -28,6 +28,7 @@ import {
 import { computeBoundedRange } from "@/lib/ads/boundedDateRange";
 import { buildAdsReconciliationDaily } from "@/lib/ads/buildAdsReconciliationDaily";
 import { computePpcAttributionBridge } from "@/lib/logbook/aiPack/ppcAttributionBridge";
+import { extractProductProfileContext } from "@/lib/products/productProfileContext";
 import { env } from "@/lib/env";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -46,6 +47,11 @@ type MetricRow = {
   orders: number | string | null;
   clicks: number | string | null;
   impressions?: number | string | null;
+};
+
+type SbAllocatedSpendRow = {
+  date: string | null;
+  allocated_spend: number | string | null;
 };
 
 type CampaignAggregate = {
@@ -471,13 +477,7 @@ export async function GET(request: Request, { params }: Ctx) {
     .select("profile_json")
     .eq("product_id", productRow.product_id)
     .maybeSingle();
-  const shortName =
-    profileRow?.profile_json &&
-    typeof profileRow.profile_json === "object" &&
-    !Array.isArray(profileRow.profile_json) &&
-    typeof (profileRow.profile_json as Record<string, unknown>).short_name === "string"
-      ? ((profileRow.profile_json as Record<string, unknown>).short_name as string).trim()
-      : null;
+  const profileContext = extractProductProfileContext(profileRow?.profile_json ?? null);
 
   const { data: latestUploadRows, error: latestUploadError } = await supabaseAdmin
     .from("uploads")
@@ -1205,7 +1205,7 @@ export async function GET(request: Request, { params }: Ctx) {
   // NOTE: SB Attributed Purchases report does not include spend in many exports.
   // We derive ASIN-level SB spend by allocating SB campaign spend to purchased ASIN
   // using attributed purchases (sales/orders/units) as weights (see sb_allocated_asin_spend_daily_v3).
-  const sbAllocatedSpendRows = await loadRowsByDateChunks<Record<string, unknown>>({
+  const sbAllocatedSpendRows = await loadRowsByDateChunks<SbAllocatedSpendRow>({
     label: "SB allocated spend rows",
     allChunksFailedSuffix:
       "SB allocated spend is incomplete/unknown for this window; totals may appear as 0.",
@@ -1221,7 +1221,7 @@ export async function GET(request: Request, { params }: Ctx) {
       if (error) {
         throw new Error(error.message);
       }
-      return (data ?? []) as Array<Record<string, unknown>>;
+      return (data ?? []) as SbAllocatedSpendRow[];
     },
   });
 
@@ -1230,7 +1230,7 @@ export async function GET(request: Request, { params }: Ctx) {
     const date = parseDateField(row.date);
     if (!date) continue;
     const prev = sbAllocatedSpendDailyByDate.get(date) ?? { date, spend: 0 };
-    prev.spend += num((row as any).allocated_spend);
+    prev.spend += num(row.allocated_spend);
     sbAllocatedSpendDailyByDate.set(date, prev);
   }
   const sbAllocatedSpendDaily = [...sbAllocatedSpendDailyByDate.values()].sort((a, b) =>
@@ -1396,7 +1396,7 @@ export async function GET(request: Request, { params }: Ctx) {
     end: effectiveEnd,
   });
 
-  let sbSpendTotalAccount = sbAllocatedSpendTotals.spend;
+  const sbSpendTotalAccount = sbAllocatedSpendTotals.spend;
 
   let sdSpendTotalAccount = 0;
   const sdSpendRows = await loadRowsByDateChunks<Record<string, unknown>>({
@@ -2069,7 +2069,9 @@ export async function GET(request: Request, { params }: Ctx) {
     product: {
       asin,
       title: productRow.title,
-      short_name: shortName,
+      short_name: profileContext.short_name,
+      notes: profileContext.notes,
+      intent: profileContext.intent,
     },
     sales_trend_daily: (salesRows ?? []).map((row) => ({
       date: row.date,

@@ -148,6 +148,10 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 5) Never commit real Amazon reports/bulksheets to Git. Never commit Supabase keys.
 6) Canonical SOPs live in `docs/sop/`.
 
+## Experiment Core Spec
+- Experiment-core scaffolding and phase checklist live in `docs/experiment-core/AGENTS.md`.
+- Use that document as the implementation contract for experiment-core phases.
+
 ## Schema discipline (required for SQL correctness)
 - Do not guess table/column names.
 - Before writing/debugging any SQL, request the latest `docs/schema_snapshot.md`.

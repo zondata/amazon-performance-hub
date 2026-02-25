@@ -1,5 +1,7 @@
 import { computeExperimentKpis } from '@/lib/logbook/computeExperimentKpis';
 import { getExperimentContext } from '@/lib/logbook/getExperimentContext';
+import { extractProductProfileContext } from '@/lib/products/productProfileContext';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +34,45 @@ export async function GET(_request: Request, { params }: Ctx) {
 
   const warnings: string[] = [];
   let kpis: Awaited<ReturnType<typeof computeExperimentKpis>> | null = null;
+  let productProfile:
+    | ReturnType<typeof extractProductProfileContext>
+    | null = null;
+
+  if (context.product_asin) {
+    try {
+      const { data: productRow, error: productError } = await supabaseAdmin
+        .from('products')
+        .select('product_id')
+        .eq('account_id', context.experiment.account_id)
+        .eq('marketplace', context.experiment.marketplace)
+        .eq('asin', context.product_asin)
+        .maybeSingle();
+
+      if (productError) {
+        warnings.push(`Failed loading product row for profile context: ${productError.message}`);
+      } else if (!productRow?.product_id) {
+        warnings.push('Product row not found for experiment ASIN; product profile context unavailable.');
+      } else {
+        const { data: profileRow, error: profileError } = await supabaseAdmin
+          .from('product_profile')
+          .select('profile_json')
+          .eq('product_id', productRow.product_id)
+          .maybeSingle();
+
+        if (profileError) {
+          warnings.push(`Failed loading product profile context: ${profileError.message}`);
+        } else {
+          productProfile = extractProductProfileContext(profileRow?.profile_json ?? null);
+        }
+      }
+    } catch (error) {
+      warnings.push(
+        error instanceof Error
+          ? `Failed loading product profile context: ${error.message}`
+          : 'Failed loading product profile context.'
+      );
+    }
+  }
 
   if (!context.product_asin) {
     warnings.push('scope.product_id missing; KPI comparison unavailable.');
@@ -66,6 +107,7 @@ export async function GET(_request: Request, { params }: Ctx) {
       status: context.status,
       asin: context.product_asin,
       expected_outcome: context.expected_outcome,
+      product_profile: productProfile,
       date_window: context.date_window,
       evaluation_lag_days: context.experiment.evaluation_lag_days ?? 0,
     },
