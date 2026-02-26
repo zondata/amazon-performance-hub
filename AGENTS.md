@@ -220,7 +220,7 @@ Windows:
 - `C:\Users\User\Dropbox\AmazonReports\YYYY-MM-DD\`
 
 WSL:
-- `/mnt/c/Users/User/Dropbox/AmazonReports/YYYY-MM-DD/`
+- `/mnt/d/Dropbox/AmazonReports/YYYY-MM-DD/`
 
 Known report filenames (stable):
 - `Sponsored_Products_Campaign_report.csv`  (hourly)
@@ -238,7 +238,7 @@ Bulksheet filename (varies):
 - `bulk-*.xlsx`
 
 Env var:
-- `.env.local` contains `AMAZON_REPORTS_ROOT=/mnt/c/Users/User/Dropbox/AmazonReports`
+- `.env.local` contains `AMAZON_REPORTS_ROOT=/mnt/d/Dropbox/AmazonReports`
 
 ## Bulksheet Snapshot Rules
 - Snapshot date inference:
@@ -463,7 +463,7 @@ Inspecting issues:
 Commands (example):
 - `npm run map:sp:all:date -- --account-id sourbear 2026-01-21`
 - Inspect issues in `sp_mapping_issues`, add overrides in `sp_manual_name_overrides`, re-run mapping.
-- `npm run pipeline:backfill:ads -- --account-id sourbear --root /mnt/c/Users/User/Dropbox/AmazonReports --from 2025-01-01 --to 2025-03-31`
+- `npm run pipeline:backfill:ads -- --account-id sourbear --root /mnt/d/Dropbox/AmazonReports --from 2025-01-01 --to 2025-03-31`
 
 Manual verification (category targeting exclusion):
 - Re-run `npm run map:sb:all:date -- --account-id <id> <YYYY-MM-DD or folder>` and `npm run map:sp:all:date -- --account-id <id> <YYYY-MM-DD or folder>`; confirm `issueRows` are `0`.

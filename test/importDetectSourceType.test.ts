@@ -17,6 +17,7 @@ describe("detectSourceTypeFromFilename", () => {
 
     expect(detectSourceTypeFromFilename("B0B2K57W5R SalesTrend - Retirement.csv")).toBe("si_sales_trend");
     expect(detectSourceTypeFromFilename("SalesTrend.csv")).toBe("si_sales_trend");
+    expect(detectSourceTypeFromFilename("Sales Trend.csv")).toBe("si_sales_trend");
     expect(detectSourceTypeFromFilename("helium10-kt-B0B2K57W5R-2026-02-26.csv")).toBe("h10_keyword_tracker");
     expect(detectSourceTypeFromFilename("bulk-a10515s1clzayc-20260226-1772090891793.xlsx")).toBe("bulk");
   });

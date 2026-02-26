@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { getSupabaseClient } from "../db/supabaseClient";
 import {
+  parseAsinFromFilename,
   buildScaleInsightsSalesTrendRawRows,
-  resolveSalesTrendAsinFromFilenameOrOverride,
   parseScaleInsightsSalesTrend,
 } from "../sales/parseScaleInsightsSalesTrend";
 import { chunkArray, hashFileSha256 } from "./utils";
@@ -29,8 +29,16 @@ export async function ingestScaleInsightsSalesTrendRaw(
   const client = getSupabaseClient();
   const fileHash = hashFileSha256(csvPath);
   const filename = path.basename(csvPath);
-
-  const asin = resolveSalesTrendAsinFromFilenameOrOverride(filename, asinOverride);
+  const override = (asinOverride ?? "").trim().toUpperCase();
+  if (override && !/^[A-Z0-9]{10}$/.test(override)) {
+    throw new Error(`Invalid --asin value "${asinOverride}". ASIN must be 10 alphanumeric characters.`);
+  }
+  const asin = override || parseAsinFromFilename(filename);
+  if (!asin) {
+    throw new Error(
+      "Provide --asin or rename file to start with ASIN, e.g. B0B2K57W5R SalesTrend - Name.csv"
+    );
+  }
 
   const { data: existingUpload, error: existingError } = await retryAsync(
     () =>

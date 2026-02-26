@@ -29,7 +29,7 @@ export const detectImportSourceTypeFromFilename = (
 
   if (/^helium10-kt-.*\.csv$/i.test(base)) return "h10_keyword_tracker";
   if (/search_query_performance/i.test(base) && lower.endsWith(".csv")) return "sqp";
-  if (/salestrend/i.test(base) && lower.endsWith(".csv")) return "si_sales_trend";
+  if (/sales\s*trend/i.test(base) && lower.endsWith(".csv")) return "si_sales_trend";
 
   return null;
 };

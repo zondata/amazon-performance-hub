@@ -40,6 +40,14 @@ const formatSourceTypeLabel = (value: string) =>
 const isSalesTrendCsv = (filename: string) =>
   /salestrend/i.test(filename) && filename.toLowerCase().endsWith('.csv');
 
+const formatBatchDate = (exportedAtIso?: string, runAtIso?: string) => {
+  const value = exportedAtIso ?? runAtIso;
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value.slice(0, 10);
+  return parsed.toISOString().slice(0, 10);
+};
+
 export default function ImportBatchUploader(props: ImportBatchUploaderProps) {
   const [state, formAction, isPending] = useActionState(runImportBatchAction, {
     ...INITIAL_STATE,
@@ -296,27 +304,37 @@ export default function ImportBatchUploader(props: ImportBatchUploaderProps) {
           </div>
 
           <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[980px] table-fixed text-left text-sm">
+            <table className="table-fixed w-full min-w-[1180px] text-left text-sm">
               <thead className="bg-surface-2 text-xs uppercase tracking-wide text-muted">
                 <tr>
-                  <th className="px-3 py-2">File</th>
-                  <th className="px-3 py-2">Source type</th>
-                  <th className="px-3 py-2">Ingest</th>
-                  <th className="px-3 py-2">Upload ID</th>
-                  <th className="px-3 py-2">Rows</th>
-                  <th className="px-3 py-2">Map</th>
-                  <th className="px-3 py-2">Fact rows</th>
-                  <th className="px-3 py-2">Issue rows</th>
-                  <th className="px-3 py-2">Error</th>
+                  <th className="w-[24%] px-3 py-2">File</th>
+                  <th className="w-28 px-3 py-2">Date</th>
+                  <th className="w-36 px-3 py-2">Source type</th>
+                  <th className="w-24 px-3 py-2">Ingest</th>
+                  <th className="w-44 px-3 py-2">Upload ID</th>
+                  <th className="w-20 px-3 py-2">Rows</th>
+                  <th className="w-28 px-3 py-2">Map</th>
+                  <th className="w-24 px-3 py-2">Fact rows</th>
+                  <th className="w-24 px-3 py-2">Issue rows</th>
+                  <th className="w-[26%] px-3 py-2">Error</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-surface">
                 {(state.summary.items ?? []).map((item, index) => (
-                  <tr key={`${item.original_filename}-${index}`}>
-                    <td className="px-3 py-2 text-foreground">{item.original_filename}</td>
+                  <tr key={`${item.original_filename}-${index}`} className="align-top">
+                    <td className="break-words whitespace-normal px-3 py-2 leading-5 text-foreground">
+                      {item.original_filename}
+                    </td>
+                    <td className="px-3 py-2 text-muted">
+                      {formatBatchDate(item.exported_at_iso, item.run_at_iso)}
+                    </td>
                     <td className="px-3 py-2 text-muted">{item.source_type}</td>
                     <td className="px-3 py-2 text-muted">{item.ingest.status}</td>
-                    <td className="px-3 py-2 text-xs text-muted">{item.ingest.upload_id ?? '—'}</td>
+                    <td className="px-3 py-2 text-xs text-muted">
+                      <span className="block truncate" title={item.ingest.upload_id ?? undefined}>
+                        {item.ingest.upload_id ?? '—'}
+                      </span>
+                    </td>
                     <td className="px-3 py-2 text-muted">
                       {item.ingest.row_count !== undefined ? item.ingest.row_count : '—'}
                     </td>
@@ -327,7 +345,7 @@ export default function ImportBatchUploader(props: ImportBatchUploaderProps) {
                     <td className="px-3 py-2 text-muted">
                       {item.map.issue_rows !== undefined ? item.map.issue_rows : '—'}
                     </td>
-                    <td className="px-3 py-2 text-xs text-rose-700">
+                    <td className="break-words whitespace-normal px-3 py-2 text-xs leading-5 text-rose-700">
                       {item.ingest.error ?? item.map.error ?? '—'}
                     </td>
                   </tr>

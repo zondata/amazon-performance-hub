@@ -24,6 +24,7 @@ import { mapUpload as mapSpUpload } from "../mapping/db";
 import { mapUpload as mapSbUpload } from "../mapping_sb/db";
 import { mapUpload as mapSdUpload } from "../mapping_sd/db";
 import { rejectDeprecatedAccountId } from "./_accountGuard";
+import { resolveSalesTrendAsinOverrideFromManifestItem } from "./importBatchManifestHelpers";
 
 type ManifestItem = {
   path: string;
@@ -54,6 +55,8 @@ type MapSummary = {
 type ItemSummary = {
   original_filename: string;
   source_type: DetectedSourceType | "unknown";
+  exported_at_iso?: string;
+  run_at_iso: string;
   ingest: IngestSummary;
   map: MapSummary;
 };
@@ -135,6 +138,15 @@ function resolveFilename(item: ManifestItem): string {
   const fromManifest = (item.original_filename ?? "").trim();
   if (fromManifest) return fromManifest;
   return path.basename(item.path);
+}
+
+function resolveExportedAtIso(filePath: string): string | undefined {
+  if (!filePath || !path.isAbsolute(filePath) || !fs.existsSync(filePath)) return undefined;
+  try {
+    return fs.statSync(filePath).mtime.toISOString();
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeRowCount(result: unknown): number | undefined {
@@ -240,12 +252,14 @@ async function ingestBySourceType(params: {
   }
 
   if (sourceType === "si_sales_trend") {
+    const exportedAtOverride = resolveExportedAtIso(item.path);
+    const asinOverride = resolveSalesTrendAsinOverrideFromManifestItem(item);
     const result = await ingestScaleInsightsSalesTrendRaw(
       item.path,
       accountId,
       marketplace,
-      undefined,
-      item.asin_override
+      exportedAtOverride,
+      asinOverride
     );
     return { status: result.status, uploadId: result.uploadId, rowCount: normalizeRowCount(result) };
   }
@@ -294,9 +308,11 @@ async function processItem(params: {
   item: ManifestItem;
   accountId: string;
   marketplace: string;
+  runAtIso: string;
 }): Promise<ItemSummary> {
-  const { item, accountId, marketplace } = params;
+  const { item, accountId, marketplace, runAtIso } = params;
   const originalFilename = resolveFilename(item);
+  const exportedAtIso = resolveExportedAtIso(item.path);
   const sourceType =
     detectSourceTypeFromFilename(originalFilename) ??
     detectSourceTypeFromFilename(path.basename(item.path));
@@ -305,6 +321,8 @@ async function processItem(params: {
     return {
       original_filename: originalFilename,
       source_type: sourceType ?? "unknown",
+      exported_at_iso: exportedAtIso,
+      run_at_iso: runAtIso,
       ingest: {
         status: "error",
         error: `Manifest item path must be absolute: ${item.path}`,
@@ -317,6 +335,8 @@ async function processItem(params: {
     return {
       original_filename: originalFilename,
       source_type: sourceType ?? "unknown",
+      exported_at_iso: exportedAtIso,
+      run_at_iso: runAtIso,
       ingest: {
         status: "error",
         error: `File not found: ${item.path}`,
@@ -329,6 +349,8 @@ async function processItem(params: {
     return {
       original_filename: originalFilename,
       source_type: "unknown",
+      exported_at_iso: exportedAtIso,
+      run_at_iso: runAtIso,
       ingest: {
         status: "error",
         error: `Could not detect source_type from filename: ${originalFilename}`,
@@ -355,6 +377,8 @@ async function processItem(params: {
       return {
         original_filename: originalFilename,
         source_type: sourceType,
+        exported_at_iso: exportedAtIso,
+        run_at_iso: runAtIso,
         ingest: ingestSummary,
         map: { status: "skipped" },
       };
@@ -365,6 +389,8 @@ async function processItem(params: {
       return {
         original_filename: originalFilename,
         source_type: sourceType,
+        exported_at_iso: exportedAtIso,
+        run_at_iso: runAtIso,
         ingest: {
           ...ingestSummary,
           status: "error",
@@ -379,6 +405,8 @@ async function processItem(params: {
       return {
         original_filename: originalFilename,
         source_type: sourceType,
+        exported_at_iso: exportedAtIso,
+        run_at_iso: runAtIso,
         ingest: ingestSummary,
         map: mapSummary,
       };
@@ -386,6 +414,8 @@ async function processItem(params: {
       return {
         original_filename: originalFilename,
         source_type: sourceType,
+        exported_at_iso: exportedAtIso,
+        run_at_iso: runAtIso,
         ingest: ingestSummary,
         map: {
           status: "error",
@@ -397,6 +427,8 @@ async function processItem(params: {
     return {
       original_filename: originalFilename,
       source_type: sourceType,
+      exported_at_iso: exportedAtIso,
+      run_at_iso: runAtIso,
       ingest: {
         status: "error",
         error: asErrorMessage(error),
@@ -426,9 +458,10 @@ async function main() {
   rejectDeprecatedAccountId(accountId);
 
   const items = Array.isArray(manifest.items) ? manifest.items : [];
+  const runAtIso = new Date().toISOString();
   const summaryItems: ItemSummary[] = [];
   for (const item of items) {
-    summaryItems.push(await processItem({ item, accountId, marketplace }));
+    summaryItems.push(await processItem({ item, accountId, marketplace, runAtIso }));
   }
 
   const summary: BatchSummary = { items: summaryItems };

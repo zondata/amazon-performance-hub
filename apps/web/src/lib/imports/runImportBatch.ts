@@ -19,6 +19,8 @@ const SUMMARY_PREFIX = 'IMPORT_BATCH_SUMMARY ';
 export type ImportBatchCliItemResult = {
   original_filename: string;
   source_type: ImportSourceType | 'unknown';
+  exported_at_iso?: string;
+  run_at_iso?: string;
   ingest: {
     status: 'ok' | 'already ingested' | 'error';
     upload_id?: string;

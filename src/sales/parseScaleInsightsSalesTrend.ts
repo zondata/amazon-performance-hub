@@ -181,7 +181,7 @@ function parseCsv(content: string): string[][] {
 
 export function parseAsinFromFilename(filename: string): string | null {
   const base = path.basename(filename);
-  const match = base.match(/^(B0[A-Z0-9]{8,})\s/i);
+  const match = base.match(/^(B0[A-Z0-9]{8,})(?:\s|_|-)/i);
   if (!match) return null;
   return match[1].toUpperCase();
 }

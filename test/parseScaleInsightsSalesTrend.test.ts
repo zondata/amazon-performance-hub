@@ -33,6 +33,8 @@ describe("parseScaleInsightsSalesTrend", () => {
   it("parses ASIN from filename prefix", () => {
     expect(parseAsinFromFilename("B0B2K57W5R SalesTrend - Retirement.csv")).toBe("B0B2K57W5R");
     expect(parseAsinFromFilename("b0fyprwpn1 SalesTrend.csv")).toBe("B0FYPRWPN1");
+    expect(parseAsinFromFilename("B0B2K57W5R_SalesTrend.csv")).toBe("B0B2K57W5R");
+    expect(parseAsinFromFilename("B0B2K57W5R-SalesTrend.csv")).toBe("B0B2K57W5R");
     expect(parseAsinFromFilename("SalesTrend.csv")).toBeNull();
   });
 

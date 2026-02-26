@@ -66,11 +66,13 @@ describe("reportLocator", () => {
     fs.mkdirSync(tmpDir, { recursive: true });
     const fileA = path.join(tmpDir, "B0B2K57W5R SalesTrend - Retirement.csv");
     const fileB = path.join(tmpDir, "B0FYPRWPN1 salestrend.csv");
+    const fileC = path.join(tmpDir, "B0ZXCVBNM1 Sales Trend.csv");
     fs.writeFileSync(fileA, "test");
     fs.writeFileSync(fileB, "test");
+    fs.writeFileSync(fileC, "test");
 
     const found = getScaleInsightsSalesTrendCsvFiles(tmpDir);
-    expect(found).toEqual([fileA, fileB]);
+    expect(found).toEqual([fileA, fileB, fileC]);
   });
 
   it("finds SQP weekly csv files", () => {

@@ -51,7 +51,7 @@ export function detectSourceTypeFromFilename(filename: string): DetectedSourceTy
 
   if (/^helium10-kt-.*\.csv$/i.test(base)) return "h10_keyword_tracker";
   if (/search_query_performance/i.test(base) && lower.endsWith(".csv")) return "sqp";
-  if (/salestrend/i.test(base) && lower.endsWith(".csv")) return "si_sales_trend";
+  if (/sales\s*trend/i.test(base) && lower.endsWith(".csv")) return "si_sales_trend";
 
   return null;
 }
@@ -226,7 +226,10 @@ export function getScaleInsightsSalesTrendCsvFiles(dateFolder: string): string[]
   }
   const entries = fs.readdirSync(dateFolder, { withFileTypes: true });
   const matches = entries
-    .filter((entry) => entry.isFile() && /salestrend/i.test(entry.name) && entry.name.toLowerCase().endsWith(".csv"))
+    .filter(
+      (entry) =>
+        entry.isFile() && /sales\s*trend/i.test(entry.name) && entry.name.toLowerCase().endsWith(".csv")
+    )
     .map((entry) => path.join(dateFolder, entry.name));
 
   if (!matches.length) {
