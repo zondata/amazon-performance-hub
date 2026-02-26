@@ -49,7 +49,7 @@ export default async function ExperimentsPage({ searchParams }: ExperimentsPageP
     return Array.isArray(value) ? value[0] : value;
   };
 
-  const experiments = await getExperiments();
+  const { experiments, warnings } = await getExperiments();
   const statusOptions = Array.from(
     new Set(experiments.map((experiment) => experiment.status))
   ).sort((left, right) => left.localeCompare(right));
@@ -148,6 +148,17 @@ export default async function ExperimentsPage({ searchParams }: ExperimentsPageP
           </div>
         }
       />
+
+      {warnings.length > 0 ? (
+        <section className="rounded-2xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm text-foreground">
+          <div className="font-semibold">Data warning</div>
+          <ul className="mt-2 list-disc pl-5 text-muted">
+            {warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <form className="space-y-4">
         <InlineFilters>

@@ -134,12 +134,36 @@ export default async function ExperimentDetailPage({
   }
 
   let context: Awaited<ReturnType<typeof getExperimentContext>> | null = null;
+  let recentChanges: Awaited<ReturnType<typeof getChanges>> = [];
   let loadError: string | null = null;
+  const pageWarnings: string[] = [];
 
-  try {
-    context = await getExperimentContext(experimentId);
-  } catch (error) {
-    loadError = error instanceof Error ? error.message : 'Unknown error';
+  const [contextResult, recentChangesResult] = await Promise.allSettled([
+    getExperimentContext(experimentId),
+    getChanges({ limit: 50, useDefaultRange: false }),
+  ]);
+
+  if (contextResult.status === 'fulfilled') {
+    context = contextResult.value;
+  } else {
+    loadError =
+      contextResult.reason instanceof Error
+        ? contextResult.reason.message
+        : 'Unknown error';
+  }
+
+  if (recentChangesResult.status === 'fulfilled') {
+    recentChanges = recentChangesResult.value;
+  } else {
+    const recentChangesError =
+      recentChangesResult.reason instanceof Error
+        ? recentChangesResult.reason.message
+        : 'Unknown error';
+    console.error('experiment_detail:recent_changes_load_error', {
+      experimentId,
+      error: recentChangesError,
+    });
+    pageWarnings.push(`Recent changes picker is unavailable: ${recentChangesError}`);
   }
 
   if (!context) {
@@ -163,8 +187,6 @@ export default async function ExperimentDetailPage({
       </div>
     );
   }
-
-  const recentChanges = await getChanges({ limit: 50, useDefaultRange: false });
 
   const linkSubmit = async (formData: FormData) => {
     'use server';
@@ -290,6 +312,17 @@ export default async function ExperimentDetailPage({
           </div>
         }
       />
+
+      {pageWarnings.length > 0 ? (
+        <section className="rounded-2xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm text-foreground">
+          <div className="font-semibold">Page warning</div>
+          <ul className="mt-2 list-disc pl-5 text-muted">
+            {pageWarnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
         <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">

@@ -1,5 +1,6 @@
 import { env } from '@/lib/env';
 import { getAdsCampaignsData } from '@/lib/ads/getAdsCampaignsData';
+import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
 import Tabs from '@/components/Tabs';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -10,15 +11,6 @@ const normalizeDate = (value?: string): string | undefined => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return undefined;
   return value;
-};
-
-const toDateString = (value: Date): string => value.toISOString().slice(0, 10);
-
-const defaultDateRange = () => {
-  const end = new Date();
-  const start = new Date(end);
-  start.setUTCDate(start.getUTCDate() - 30);
-  return { start: toDateString(start), end: toDateString(end) };
 };
 
 const formatCurrency = (value?: number | null) => {
@@ -69,7 +61,11 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
     return Array.isArray(value) ? value[0] : value;
   };
 
-  const defaults = defaultDateRange();
+  const defaults = getDefaultMarketplaceDateRange({
+    marketplace: env.marketplace,
+    daysBack: 31,
+    delayDays: 0,
+  });
   let start = normalizeDate(paramValue('start')) ?? defaults.start;
   let end = normalizeDate(paramValue('end')) ?? defaults.end;
   const asin = paramValue('asin') ?? 'all';

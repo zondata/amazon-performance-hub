@@ -167,6 +167,44 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Experiment-core scaffolding and phase checklist live in `docs/experiment-core/AGENTS.md`.
 - Use that document as the implementation contract for experiment-core phases.
 
+## Release Checklist (Phase 8 Final Hardening)
+- Scope: Phase 8 is the final hardening phase. Future work is bugfix-only.
+- Smoke test `/products`:
+  - Load page with default dates and custom date params.
+  - Confirm `warnings[]` are visible in-page (not console-only), including hard-cap truncation warning when triggered.
+  - Confirm paging/sort/search still work and no silent empty state.
+- Smoke test `/products/[asin]`:
+  - Overview loads Profile Context + Driver Intents + KIV panels.
+  - If optional panel fetch fails, confirm visible overview warning callout appears (with server logs still present).
+  - Confirm default date range follows marketplace-day semantics from `getDefaultMarketplaceDateRange(...)`.
+- Smoke test `/logbook/experiments`:
+  - List renders with filters and outcome badges.
+  - If list/link/evaluation hard cap is reached, confirm visible data warning banner appears.
+- Smoke test `/logbook/experiments/[id]`:
+  - Page renders phases table, events timeline, and interruption highlighting.
+  - If optional recent-changes load fails, confirm visible page warning callout appears.
+- Smoke test pack/event flows:
+  - Baseline pack download.
+  - Output pack upload.
+  - `Uploaded to Amazon` action.
+  - Quick log event presets.
+  - Eval pack download.
+  - Evaluation output pack upload and applied-changes summary.
+  - Rollback pack generation.
+  - For POST routes in these flows, verify response contract:
+    - success: `{ ok: true, ... }`
+    - failure: `{ ok: false, error: string, details?: object }`
+- Operator-visible signals to verify:
+  - Products/logbook warning banners are visible in UI.
+  - Evaluation import shows applied-changes summary counts and warning list.
+  - Interruptions are highlighted in timeline (`Interruptions only` filter works).
+- Supabase checks before release:
+  - Confirm logbook migrations/functions used by experiment-core are already applied in target environment.
+  - Validate required tables are queryable from web routes:
+    - `log_experiments`, `log_experiment_changes`, `log_experiment_phases`, `log_experiment_events`, `log_evaluations`
+    - `log_driver_campaign_intents`, `log_product_kiv_items`
+  - Spot-check one write action (`mark-uploaded`, `events`, `evaluation-import`) succeeds with `{ ok: true }`.
+
 ## Schema discipline (required for SQL correctness)
 - Do not guess table/column names.
 - Before writing/debugging any SQL, request the latest `docs/schema_snapshot.md`.

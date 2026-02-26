@@ -18,13 +18,29 @@ type PhaseRow = {
   uploaded_at: string | null;
 };
 
+const jsonFailure = (
+  status: number,
+  error: string,
+  details?: Record<string, unknown>
+) =>
+  Response.json(
+    {
+      ok: false,
+      error,
+      ...(details ? { details } : {}),
+    },
+    { status }
+  );
+
 export async function POST(_request: Request, { params }: Ctx) {
   const { id, runId: rawRunId } = await params;
   const experimentId = id?.trim();
   const runId = decodeURIComponent(rawRunId ?? '').trim();
 
   if (!experimentId || !runId) {
-    return new Response('Missing experiment id or run_id.', { status: 400 });
+    return jsonFailure(400, 'Missing experiment id or run_id.', {
+      code: 'missing_identifiers',
+    });
   }
 
   const { data: experimentData, error: experimentError } = await supabaseAdmin
@@ -36,11 +52,17 @@ export async function POST(_request: Request, { params }: Ctx) {
     .maybeSingle();
 
   if (experimentError) {
-    return new Response(`Failed loading experiment: ${experimentError.message}`, { status: 500 });
+    return jsonFailure(500, `Failed loading experiment: ${experimentError.message}`, {
+      code: 'experiment_load_failed',
+      experiment_id: experimentId,
+    });
   }
 
   if (!experimentData) {
-    return new Response('Experiment not found.', { status: 404 });
+    return jsonFailure(404, 'Experiment not found.', {
+      code: 'experiment_not_found',
+      experiment_id: experimentId,
+    });
   }
 
   const experiment = experimentData as ExperimentRow;
@@ -63,9 +85,15 @@ export async function POST(_request: Request, { params }: Ctx) {
     .single();
 
   if (phaseError || !phaseData) {
-    return new Response(`Failed writing phase upload marker: ${phaseError?.message ?? 'unknown error'}`, {
-      status: 500,
-    });
+    return jsonFailure(
+      500,
+      `Failed writing phase upload marker: ${phaseError?.message ?? 'unknown error'}`,
+      {
+        code: 'phase_upsert_failed',
+        experiment_id: experimentId,
+        run_id: runId,
+      }
+    );
   }
 
   const phase = phaseData as PhaseRow;
@@ -83,7 +111,11 @@ export async function POST(_request: Request, { params }: Ctx) {
   });
 
   if (eventError) {
-    return new Response(`Phase updated but event logging failed: ${eventError.message}`, { status: 500 });
+    return jsonFailure(500, `Phase updated but event logging failed: ${eventError.message}`, {
+      code: 'event_insert_failed',
+      experiment_id: experimentId,
+      run_id: runId,
+    });
   }
 
   return Response.json({

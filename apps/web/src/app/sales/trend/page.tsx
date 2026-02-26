@@ -2,6 +2,7 @@ import SalesTrendInteractive from '@/components/sales/SalesTrendInteractive';
 import { env } from '@/lib/env';
 import { getCalendarBuckets, type SalesGranularity } from '@/lib/sales/buckets/getCalendarBuckets';
 import { getSalesDaily } from '@/lib/sales/getSalesDaily';
+import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
 import { getPageSettings } from '@/lib/uiSettings/getPageSettings';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -12,15 +13,6 @@ const normalizeDate = (value?: string): string | undefined => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return undefined;
   return value;
-};
-
-const toDateString = (value: Date): string => value.toISOString().slice(0, 10);
-
-const defaultDateRange = () => {
-  const end = new Date();
-  const start = new Date(end);
-  start.setUTCDate(start.getUTCDate() - 30);
-  return { start: toDateString(start), end: toDateString(end) };
 };
 
 const GRANULARITIES: SalesGranularity[] = [
@@ -57,7 +49,11 @@ export default async function SalesTrendPage({ searchParams }: SalesTrendPagePro
     return Array.isArray(value) ? value[0] : value;
   };
 
-  const defaults = defaultDateRange();
+  const defaults = getDefaultMarketplaceDateRange({
+    marketplace: env.marketplace,
+    daysBack: 31,
+    delayDays: 0,
+  });
   const startParam = normalizeDate(paramValue('start'));
   const endParam = normalizeDate(paramValue('end'));
   let start = startParam ?? defaults.start;

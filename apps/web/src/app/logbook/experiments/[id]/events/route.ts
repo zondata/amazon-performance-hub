@@ -59,12 +59,28 @@ const parseDateTime = (value: unknown): Date | null => {
   return parsed;
 };
 
+const jsonFailure = (
+  status: number,
+  error: string,
+  details?: Record<string, unknown>
+) =>
+  Response.json(
+    {
+      ok: false,
+      error,
+      ...(details ? { details } : {}),
+    },
+    { status }
+  );
+
 export async function POST(request: Request, { params }: Ctx) {
   const { id } = await params;
   const experimentId = id?.trim();
 
   if (!experimentId) {
-    return new Response('Missing experiment id.', { status: 400 });
+    return jsonFailure(400, 'Missing experiment id.', {
+      code: 'missing_experiment_id',
+    });
   }
 
   const { data: experimentData, error: experimentError } = await supabaseAdmin
@@ -76,30 +92,44 @@ export async function POST(request: Request, { params }: Ctx) {
     .maybeSingle();
 
   if (experimentError) {
-    return new Response(`Failed loading experiment: ${experimentError.message}`, { status: 500 });
+    return jsonFailure(500, `Failed loading experiment: ${experimentError.message}`, {
+      code: 'experiment_load_failed',
+      experiment_id: experimentId,
+    });
   }
 
   if (!experimentData) {
-    return new Response('Experiment not found.', { status: 404 });
+    return jsonFailure(404, 'Experiment not found.', {
+      code: 'experiment_not_found',
+      experiment_id: experimentId,
+    });
   }
 
   let bodyRaw: unknown;
   try {
     bodyRaw = await request.json();
   } catch {
-    return new Response('Invalid JSON body.', { status: 400 });
+    return jsonFailure(400, 'Invalid JSON body.', {
+      code: 'invalid_json',
+    });
   }
 
   const body = asRecord(bodyRaw);
   if (!body) {
-    return new Response('Body must be a JSON object.', { status: 400 });
+    return jsonFailure(400, 'Body must be a JSON object.', {
+      code: 'body_not_object',
+    });
   }
 
   const eventTypeText = asString(body.event_type);
   if (!eventTypeText || !SUPPORTED_EVENT_TYPES.has(eventTypeText as SupportedEventType)) {
-    return new Response('event_type must be one of: guardrail_breach, manual_intervention, stop_loss, rollback.', {
-      status: 400,
-    });
+    return jsonFailure(
+      400,
+      'event_type must be one of: guardrail_breach, manual_intervention, stop_loss, rollback.',
+      {
+        code: 'invalid_event_type',
+      }
+    );
   }
   const eventType = eventTypeText as SupportedEventType;
 
@@ -107,13 +137,17 @@ export async function POST(request: Request, { params }: Ctx) {
   const notes = asString(body.notes);
   const payload = body.payload === undefined ? {} : asRecord(body.payload);
   if (body.payload !== undefined && !payload) {
-    return new Response('payload must be an object when provided.', { status: 400 });
+    return jsonFailure(400, 'payload must be an object when provided.', {
+      code: 'invalid_payload',
+    });
   }
 
   const experiment = experimentData as ExperimentRow;
   const occurredAtOverride = body.occurred_at === undefined ? null : parseDateTime(body.occurred_at);
   if (body.occurred_at !== undefined && !occurredAtOverride) {
-    return new Response('occurred_at must be a valid datetime when provided.', { status: 400 });
+    return jsonFailure(400, 'occurred_at must be a valid datetime when provided.', {
+      code: 'invalid_occurred_at',
+    });
   }
   const occurredAt = occurredAtOverride ?? new Date();
 
@@ -121,7 +155,9 @@ export async function POST(request: Request, { params }: Ctx) {
   const eventDate = body.event_date === undefined ? marketplaceDate : parseDateOnly(body.event_date);
 
   if (body.event_date !== undefined && !eventDate) {
-    return new Response('event_date must be YYYY-MM-DD when provided.', { status: 400 });
+    return jsonFailure(400, 'event_date must be YYYY-MM-DD when provided.', {
+      code: 'invalid_event_date',
+    });
   }
 
   let phaseId: string | null = null;
@@ -134,7 +170,11 @@ export async function POST(request: Request, { params }: Ctx) {
       .maybeSingle();
 
     if (phaseError) {
-      return new Response(`Failed resolving phase for run_id: ${phaseError.message}`, { status: 500 });
+      return jsonFailure(500, `Failed resolving phase for run_id: ${phaseError.message}`, {
+        code: 'phase_lookup_failed',
+        experiment_id: experimentId,
+        run_id: runId,
+      });
     }
 
     phaseId = (phaseRow as PhaseLookupRow | null)?.id ?? null;
@@ -162,9 +202,16 @@ export async function POST(request: Request, { params }: Ctx) {
     .single();
 
   if (insertError || !insertedRow) {
-    return new Response(`Failed inserting experiment event: ${insertError?.message ?? 'unknown error'}`, {
-      status: 500,
-    });
+    return jsonFailure(
+      500,
+      `Failed inserting experiment event: ${insertError?.message ?? 'unknown error'}`,
+      {
+        code: 'event_insert_failed',
+        experiment_id: experimentId,
+        run_id: runId ?? null,
+        event_type: eventType,
+      }
+    );
   }
 
   return Response.json({

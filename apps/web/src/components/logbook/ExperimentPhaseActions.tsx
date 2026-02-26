@@ -9,6 +9,16 @@ type Props = {
 };
 
 const readErrorText = async (response: Response): Promise<string> => {
+  try {
+    const payload = (await response.clone().json()) as {
+      error?: unknown;
+      details?: unknown;
+    };
+    if (typeof payload.error === 'string' && payload.error.trim()) {
+      return payload.error;
+    }
+  } catch {}
+
   const text = await response.text();
   return text.trim().length > 0 ? text : `Request failed (${response.status})`;
 };

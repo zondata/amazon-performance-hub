@@ -4,6 +4,7 @@ import SalesMonthlyChart from '@/components/SalesMonthlyChart';
 import Table from '@/components/Table';
 import { env } from '@/lib/env';
 import { getSalesMonthly } from '@/lib/sales/getSalesMonthly';
+import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -13,15 +14,6 @@ const normalizeDate = (value?: string): string | undefined => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return undefined;
   return value;
-};
-
-const toDateString = (value: Date): string => value.toISOString().slice(0, 10);
-
-const defaultDateRange = () => {
-  const end = new Date();
-  const start = new Date(end);
-  start.setUTCDate(start.getUTCDate() - 30);
-  return { start: toDateString(start), end: toDateString(end) };
 };
 
 const formatCurrency = (value?: number | null) => {
@@ -55,7 +47,11 @@ export default async function SalesMonthlyPage({ searchParams }: SalesMonthlyPag
     return Array.isArray(value) ? value[0] : value;
   };
 
-  const defaults = defaultDateRange();
+  const defaults = getDefaultMarketplaceDateRange({
+    marketplace: env.marketplace,
+    daysBack: 31,
+    delayDays: 0,
+  });
   let start = normalizeDate(paramValue('start')) ?? defaults.start;
   let end = normalizeDate(paramValue('end')) ?? defaults.end;
   const asin = paramValue('asin') ?? 'all';
@@ -103,38 +99,38 @@ export default async function SalesMonthlyPage({ searchParams }: SalesMonthlyPag
     <div className="space-y-8">
       <InlineFilters>
         <div>
-          <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+          <div className="text-xs uppercase tracking-[0.3em] text-muted">
             Monthly rollup
           </div>
-          <div className="mt-2 text-lg font-semibold text-slate-900">
+          <div className="mt-2 text-lg font-semibold text-foreground">
             {start} → {end}
           </div>
         </div>
         <form method="get" className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col text-xs uppercase tracking-wide text-slate-500">
+          <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
             Start
             <input
               type="date"
               name="start"
               defaultValue={start}
-              className="mt-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
             />
           </label>
-          <label className="flex flex-col text-xs uppercase tracking-wide text-slate-500">
+          <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
             End
             <input
               type="date"
               name="end"
               defaultValue={end}
-              className="mt-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
             />
           </label>
-          <label className="flex flex-col text-xs uppercase tracking-wide text-slate-500">
+          <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
             Product (ASIN)
             <select
               name="asin"
               defaultValue={asin}
-              className="mt-1 min-w-[220px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              className="mt-1 min-w-[220px] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
             >
               <option value="all">All products</option>
               {data.asinOptions.map((option) => (
@@ -146,7 +142,7 @@ export default async function SalesMonthlyPage({ searchParams }: SalesMonthlyPag
           </label>
           <button
             type="submit"
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Apply
           </button>
@@ -155,19 +151,19 @@ export default async function SalesMonthlyPage({ searchParams }: SalesMonthlyPag
 
       <KpiCards items={kpis} />
 
-      <section className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+            <div className="text-xs uppercase tracking-[0.3em] text-muted">
               Monthly trend
             </div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
+            <div className="mt-1 text-lg font-semibold text-foreground">
               {data.monthlySeries.length} months
             </div>
           </div>
         </div>
         {chartSeries.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+          <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
             No monthly data for this range.
           </div>
         ) : (
@@ -175,13 +171,13 @@ export default async function SalesMonthlyPage({ searchParams }: SalesMonthlyPag
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+            <div className="text-xs uppercase tracking-[0.3em] text-muted">
               Monthly detail
             </div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
+            <div className="mt-1 text-lg font-semibold text-foreground">
               {data.monthlySeries.length} months
             </div>
           </div>

@@ -157,3 +157,9 @@ Only check phase boxes after `npm test` is green for the committed scope.
 ## Phase 7 (Guardrail UX + Evaluation Import Summary)
 - Experiment detail includes Quick Log Event presets (`guardrail_breach`, `manual_intervention`, `stop_loss`, `rollback`) and successful logs appear immediately in the timeline via refresh.
 - Evaluation output-pack import returns/displays an applied-changes summary after upload, including KIV create/update/status-change counts and warnings.
+
+## Phase 8 (Final Release Hardening)
+- Phase 8 is the final phase for experiment-core release hardening.
+- Do not add new Phase 9+ milestones; follow bugfix-only updates after this point.
+- Canonical release smoke-test checklist location:
+  - `AGENTS.md` → `Release Checklist (Phase 8 Final Hardening)`

@@ -23,6 +23,11 @@ export type ExperimentListItem = {
   outcome_score: number | null;
 };
 
+export type ExperimentListData = {
+  experiments: ExperimentListItem[];
+  warnings: string[];
+};
+
 type ExperimentRow = Omit<ExperimentListItem, 'linked_changes_count' | 'status'>;
 
 type LinkRow = {
@@ -35,6 +40,13 @@ type EvaluationRow = {
   evaluated_at: string;
   metrics_json: unknown | null;
 };
+
+const EXPERIMENT_PAGE_SIZE = 200;
+const EXPERIMENT_HARD_CAP = 5000;
+const LINK_PAGE_SIZE = 2000;
+const LINK_HARD_CAP = 50000;
+const EVALUATION_PAGE_SIZE = 2000;
+const EVALUATION_HARD_CAP = 50000;
 
 const deriveStatus = (scope: unknown) => {
   if (!scope || typeof scope !== 'object') return 'planned';
@@ -50,50 +62,118 @@ const deriveProductId = (scope: unknown) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-export const getExperiments = async (): Promise<ExperimentListItem[]> => {
-  const { data, error } = await supabaseAdmin
-    .from('log_experiments')
-    .select(
-      'experiment_id,name,objective,hypothesis,evaluation_lag_days,evaluation_window_days,primary_metrics,guardrails,scope,created_at'
-    )
-    .eq('account_id', env.accountId)
-    .eq('marketplace', env.marketplace)
-    .order('created_at', { ascending: false })
-    .limit(200);
+export const getExperiments = async (): Promise<ExperimentListData> => {
+  const warnings: string[] = [];
+  const rows: ExperimentRow[] = [];
 
-  if (error) {
-    throw new Error(`Failed to load experiments: ${error.message}`);
+  for (let pageIndex = 0; ; pageIndex += 1) {
+    const from = pageIndex * EXPERIMENT_PAGE_SIZE;
+    const to = from + EXPERIMENT_PAGE_SIZE - 1;
+    const { data, error } = await supabaseAdmin
+      .from('log_experiments')
+      .select(
+        'experiment_id,name,objective,hypothesis,evaluation_lag_days,evaluation_window_days,primary_metrics,guardrails,scope,created_at'
+      )
+      .eq('account_id', env.accountId)
+      .eq('marketplace', env.marketplace)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      throw new Error(`Failed to load experiments: ${error.message}`);
+    }
+
+    const pageRows = (data ?? []) as ExperimentRow[];
+    rows.push(...pageRows);
+
+    if (rows.length >= EXPERIMENT_HARD_CAP) {
+      rows.length = EXPERIMENT_HARD_CAP;
+      warnings.push(
+        `Experiments list reached hard cap (${EXPERIMENT_HARD_CAP.toLocaleString('en-US')}). Results may be truncated.`
+      );
+      break;
+    }
+
+    if (pageRows.length < EXPERIMENT_PAGE_SIZE) {
+      break;
+    }
   }
 
-  const rows = (data ?? []) as ExperimentRow[];
-  if (rows.length === 0) return [];
+  if (rows.length === 0) {
+    return {
+      experiments: [],
+      warnings,
+    };
+  }
 
   const experimentIds = rows.map((row) => row.experiment_id);
-  const [linksResult, evaluationsResult] = await Promise.all([
-    supabaseAdmin
+  const links: LinkRow[] = [];
+  for (let pageIndex = 0; ; pageIndex += 1) {
+    const from = pageIndex * LINK_PAGE_SIZE;
+    const to = from + LINK_PAGE_SIZE - 1;
+    const { data, error } = await supabaseAdmin
       .from('log_experiment_changes')
       .select('experiment_id,change_id')
-      .in('experiment_id', experimentIds),
-    supabaseAdmin
+      .in('experiment_id', experimentIds)
+      .order('experiment_id', { ascending: true })
+      .order('change_id', { ascending: true })
+      .range(from, to);
+
+    if (error) {
+      throw new Error(`Failed to load experiment links: ${error.message}`);
+    }
+
+    const pageRows = (data ?? []) as LinkRow[];
+    links.push(...pageRows);
+
+    if (links.length >= LINK_HARD_CAP) {
+      links.length = LINK_HARD_CAP;
+      warnings.push(
+        `Experiment links reached hard cap (${LINK_HARD_CAP.toLocaleString('en-US')}). Linked-change counts may be truncated.`
+      );
+      break;
+    }
+
+    if (pageRows.length < LINK_PAGE_SIZE) {
+      break;
+    }
+  }
+
+  const evaluations: EvaluationRow[] = [];
+  for (let pageIndex = 0; ; pageIndex += 1) {
+    const from = pageIndex * EVALUATION_PAGE_SIZE;
+    const to = from + EVALUATION_PAGE_SIZE - 1;
+    const { data, error } = await supabaseAdmin
       .from('log_evaluations')
       .select('experiment_id,evaluated_at,metrics_json')
       .eq('account_id', env.accountId)
       .eq('marketplace', env.marketplace)
       .in('experiment_id', experimentIds)
       .order('evaluated_at', { ascending: false })
-      .limit(5000),
-  ]);
+      .range(from, to);
 
-  if (linksResult.error) {
-    throw new Error(`Failed to load experiment links: ${linksResult.error.message}`);
-  }
+    if (error) {
+      throw new Error(`Failed to load experiment evaluations: ${error.message}`);
+    }
 
-  if (evaluationsResult.error) {
-    throw new Error(`Failed to load experiment evaluations: ${evaluationsResult.error.message}`);
+    const pageRows = (data ?? []) as EvaluationRow[];
+    evaluations.push(...pageRows);
+
+    if (evaluations.length >= EVALUATION_HARD_CAP) {
+      evaluations.length = EVALUATION_HARD_CAP;
+      warnings.push(
+        `Experiment evaluations reached hard cap (${EVALUATION_HARD_CAP.toLocaleString('en-US')}). Outcome badges may use incomplete history.`
+      );
+      break;
+    }
+
+    if (pageRows.length < EVALUATION_PAGE_SIZE) {
+      break;
+    }
   }
 
   const countByExperiment = new Map<string, number>();
-  (linksResult.data as LinkRow[] | null)?.forEach((link) => {
+  links.forEach((link) => {
     countByExperiment.set(
       link.experiment_id,
       (countByExperiment.get(link.experiment_id) ?? 0) + 1
@@ -101,20 +181,26 @@ export const getExperiments = async (): Promise<ExperimentListItem[]> => {
   });
 
   const latestEvaluationByExperiment = new Map<string, EvaluationRow>();
-  (evaluationsResult.data as EvaluationRow[] | null)?.forEach((evaluation) => {
+  evaluations.forEach((evaluation) => {
     if (!latestEvaluationByExperiment.has(evaluation.experiment_id)) {
       latestEvaluationByExperiment.set(evaluation.experiment_id, evaluation);
     }
   });
 
-  return rows.map((row) => ({
-    ...row,
-    linked_changes_count: countByExperiment.get(row.experiment_id) ?? 0,
-    status: deriveStatus(row.scope),
-    product_id: deriveProductId(row.scope),
-    latest_evaluated_at: latestEvaluationByExperiment.get(row.experiment_id)?.evaluated_at ?? null,
-    outcome_score: normalizeOutcomeScorePercent(
-      extractOutcomeScore(latestEvaluationByExperiment.get(row.experiment_id)?.metrics_json ?? null)
-    ),
-  }));
+  return {
+    experiments: rows.map((row) => ({
+      ...row,
+      linked_changes_count: countByExperiment.get(row.experiment_id) ?? 0,
+      status: deriveStatus(row.scope),
+      product_id: deriveProductId(row.scope),
+      latest_evaluated_at:
+        latestEvaluationByExperiment.get(row.experiment_id)?.evaluated_at ?? null,
+      outcome_score: normalizeOutcomeScorePercent(
+        extractOutcomeScore(
+          latestEvaluationByExperiment.get(row.experiment_id)?.metrics_json ?? null
+        )
+      ),
+    })),
+    warnings,
+  };
 };

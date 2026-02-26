@@ -422,6 +422,9 @@ type ProductKivRow = {
   tags: string[] | null;
 };
 
+const OVERVIEW_DRIVER_INTENT_LIMIT = 10000;
+const OVERVIEW_KIV_LIMIT = 10000;
+
 const buildTabHref = (asin: string, tab: string, start: string, end: string) =>
   `/products/${asin}?start=${start}&end=${end}&tab=${tab}`;
 
@@ -992,26 +995,6 @@ export default async function ProductDetailPage({
     end = tmp;
   }
 
-  const data = await getProductDetailData({
-    accountId: env.accountId,
-    marketplace: env.marketplace,
-    asin,
-    start,
-    end,
-  });
-
-  const logbookData =
-    tab === 'logbook'
-      ? await getProductLogbookData({
-          accountId: env.accountId,
-          marketplace: env.marketplace,
-          asin,
-        })
-      : {
-          experiments: [],
-          unassigned_changes: [],
-        };
-
   const changesExplorerFilters: ProductChangesExplorerFilters = {
     channel: changesChannel,
     source: changesSource,
@@ -1019,9 +1002,36 @@ export default async function ProductDetailPage({
     q: changesQuery,
   };
 
-  const changesExplorerRows =
+  const [
+    data,
+    logbookData,
+    changesExplorerRows,
+    keywordGroups,
+    keywordTemplates,
+    promptTemplates,
+    rankingRows,
+    sqpWeekly,
+    sqpTrendResult,
+  ] = await Promise.all([
+    getProductDetailData({
+      accountId: env.accountId,
+      marketplace: env.marketplace,
+      asin,
+      start,
+      end,
+    }),
+    tab === 'logbook'
+      ? getProductLogbookData({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+          asin,
+        })
+      : Promise.resolve({
+          experiments: [],
+          unassigned_changes: [],
+        }),
     tab === 'changes'
-      ? await getProductChangesExplorerData({
+      ? getProductChangesExplorerData({
           accountId: env.accountId,
           marketplace: env.marketplace,
           asin,
@@ -1029,7 +1039,56 @@ export default async function ProductDetailPage({
           end,
           filters: changesExplorerFilters,
         })
-      : [];
+      : Promise.resolve([]),
+    tab === 'keywords' || tab === 'ranking' || tab === 'sqp'
+      ? getProductKeywordGroups({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+          asin,
+        })
+      : Promise.resolve(null),
+    tab === 'keywords'
+      ? getKeywordAiPackTemplates({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+        })
+      : Promise.resolve([]),
+    tab === 'logbook'
+      ? getProductExperimentPromptTemplates({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+        })
+      : Promise.resolve([]),
+    tab === 'ranking'
+      ? getProductRankingDaily({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+          asin,
+          start,
+          end,
+        })
+      : Promise.resolve([]),
+    tab === 'sqp'
+      ? getProductSqpWeekly({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+          asin,
+          start,
+          end,
+          weekEnd: sqpWeekEnd,
+        })
+      : Promise.resolve(null),
+    tab === 'sqp' && sqpTrendEnabled && sqpTrendQuery
+      ? getProductSqpTrendSeries({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+          asin,
+          searchQueryNorm: sqpTrendQuery,
+          fromWeekEnd: sqpTrendFromRaw,
+          toWeekEnd: sqpTrendToRaw,
+        })
+      : Promise.resolve(null),
+  ]);
 
   const planPreviewsByExperimentId = new Map<string, PlanPreview[]>();
   if (tab === 'logbook') {
@@ -1041,74 +1100,16 @@ export default async function ProductDetailPage({
     );
   }
 
-  const keywordGroups =
-    tab === 'keywords' || tab === 'ranking' || tab === 'sqp'
-      ? await getProductKeywordGroups({
-          accountId: env.accountId,
-          marketplace: env.marketplace,
-          asin,
-        })
-      : null;
-
   const keywordAiPackTemplateOptions =
-    tab === 'keywords'
-      ? toKeywordTemplateOptions(
-          await getKeywordAiPackTemplates({
-            accountId: env.accountId,
-            marketplace: env.marketplace,
-          })
-        )
-      : [];
+    tab === 'keywords' ? toKeywordTemplateOptions(keywordTemplates) : [];
 
   const productExperimentPromptTemplateOptions =
-    tab === 'logbook'
-      ? toProductExperimentPromptTemplateOptions(
-          await getProductExperimentPromptTemplates({
-            accountId: env.accountId,
-            marketplace: env.marketplace,
-          })
-        )
-      : [];
+    tab === 'logbook' ? toProductExperimentPromptTemplateOptions(promptTemplates) : [];
 
   const keywordGroupMemberships =
     (tab === 'ranking' || tab === 'sqp') && keywordGroups?.group_sets?.length
       ? await getProductKeywordGroupMemberships({
           groupSetIds: keywordGroups.group_sets.map((set) => set.group_set_id),
-        })
-      : null;
-
-  const rankingRows =
-    tab === 'ranking'
-      ? await getProductRankingDaily({
-          accountId: env.accountId,
-          marketplace: env.marketplace,
-          asin,
-          start,
-          end,
-        })
-      : [];
-
-  const sqpWeekly =
-    tab === 'sqp'
-      ? await getProductSqpWeekly({
-          accountId: env.accountId,
-          marketplace: env.marketplace,
-          asin,
-          start,
-          end,
-          weekEnd: sqpWeekEnd,
-        })
-      : null;
-
-  const sqpTrendResult =
-    tab === 'sqp' && sqpTrendEnabled && sqpTrendQuery
-      ? await getProductSqpTrendSeries({
-          accountId: env.accountId,
-          marketplace: env.marketplace,
-          asin,
-          searchQueryNorm: sqpTrendQuery,
-          fromWeekEnd: sqpTrendFromRaw,
-          toWeekEnd: sqpTrendToRaw,
         })
       : null;
 
@@ -1149,6 +1150,7 @@ export default async function ProductDetailPage({
   let productDriverIntents: ProductDriverIntentRow[] = [];
   let productKivOpenItems: ProductKivRow[] = [];
   let productKivRecentlyClosedItems: ProductKivRow[] = [];
+  const overviewWarnings: string[] = [];
 
   if (tab === 'overview') {
     const [driverIntentResult, kivResult] = await Promise.all([
@@ -1159,7 +1161,7 @@ export default async function ProductDetailPage({
         .eq('marketplace', env.marketplace)
         .eq('asin_norm', asin)
         .order('updated_at', { ascending: false })
-        .limit(10000),
+        .limit(OVERVIEW_DRIVER_INTENT_LIMIT),
       supabaseAdmin
         .from('log_product_kiv_items')
         .select(
@@ -1169,7 +1171,7 @@ export default async function ProductDetailPage({
         .eq('marketplace', env.marketplace)
         .eq('asin_norm', asin)
         .order('created_at', { ascending: false })
-        .limit(10000),
+        .limit(OVERVIEW_KIV_LIMIT),
     ]);
 
     if (driverIntentResult.error) {
@@ -1177,6 +1179,9 @@ export default async function ProductDetailPage({
         asin,
         error: driverIntentResult.error.message,
       });
+      overviewWarnings.push(
+        `Driver intents panel is unavailable: ${driverIntentResult.error.message}`
+      );
     } else {
       productDriverIntents = (driverIntentResult.data ?? []).map((row) => ({
         id: String(row.id ?? ''),
@@ -1187,6 +1192,12 @@ export default async function ProductDetailPage({
         is_driver: row.is_driver === true,
         updated_at: String(row.updated_at ?? ''),
       }));
+
+      if (productDriverIntents.length >= OVERVIEW_DRIVER_INTENT_LIMIT) {
+        overviewWarnings.push(
+          `Driver intents reached hard cap (${OVERVIEW_DRIVER_INTENT_LIMIT.toLocaleString('en-US')}). Results may be truncated.`
+        );
+      }
     }
 
     if (kivResult.error) {
@@ -1194,6 +1205,7 @@ export default async function ProductDetailPage({
         asin,
         error: kivResult.error.message,
       });
+      overviewWarnings.push(`KIV backlog panel is unavailable: ${kivResult.error.message}`);
     } else {
       const normalizedKivRows: ProductKivRow[] = (kivResult.data ?? []).map((row) => ({
         kiv_id: String(row.kiv_id ?? ''),
@@ -1224,6 +1236,12 @@ export default async function ProductDetailPage({
       const groupedKiv = deriveKivCarryForward(normalizedKivRows);
       productKivOpenItems = groupedKiv.open as ProductKivRow[];
       productKivRecentlyClosedItems = groupedKiv.recently_closed as ProductKivRow[];
+
+      if (normalizedKivRows.length >= OVERVIEW_KIV_LIMIT) {
+        overviewWarnings.push(
+          `KIV backlog reached hard cap (${OVERVIEW_KIV_LIMIT.toLocaleString('en-US')}). Results may be truncated.`
+        );
+      }
     }
   }
 
@@ -1335,43 +1353,55 @@ export default async function ProductDetailPage({
       <Tabs items={tabs} current={tab} />
 
       {tab === 'overview' ? (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <div className="space-y-6">
-            <KpiCards items={kpiItems} />
-            <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-              <div className="mb-4">
-                <div className="text-xs uppercase tracking-[0.3em] text-muted">
-                  Sales vs PPC cost
-                </div>
-                <div className="mt-1 text-lg font-semibold text-foreground">
-                  Daily trend
-                </div>
-              </div>
-              {trendSeries.length > 0 ? (
-                <TrendChart data={trendSeries} />
-              ) : (
-                <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
-                  No sales trend data for this range.
-                </div>
-              )}
+        <div className="space-y-4">
+          {overviewWarnings.length > 0 ? (
+            <section className="rounded-2xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm text-foreground">
+              <div className="font-semibold">Overview warning</div>
+              <ul className="mt-2 list-disc pl-5 text-muted">
+                {overviewWarnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
             </section>
-          </div>
-          <div className="space-y-6">
-            <ProductProfileSkillsIntentEditor
-              asin={asin}
-              initialShortName={shortName ?? ''}
-              initialNotes={data.productMeta.notes ?? ''}
-              initialSkills={profileSkills}
-              initialIntent={profileIntent}
-              availableSkills={availableSkillOptions}
-              resolvedSelectedSkills={resolvedProfileSkills}
-            />
-            <ProductDriverIntentManager asin={asin} initialRows={productDriverIntents} />
-            <ProductKivBacklogManager
-              asin={asin}
-              initialOpenItems={productKivOpenItems}
-              initialRecentlyClosedItems={productKivRecentlyClosedItems}
-            />
+          ) : null}
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            <div className="space-y-6">
+              <KpiCards items={kpiItems} />
+              <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+                <div className="mb-4">
+                  <div className="text-xs uppercase tracking-[0.3em] text-muted">
+                    Sales vs PPC cost
+                  </div>
+                  <div className="mt-1 text-lg font-semibold text-foreground">
+                    Daily trend
+                  </div>
+                </div>
+                {trendSeries.length > 0 ? (
+                  <TrendChart data={trendSeries} />
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
+                    No sales trend data for this range.
+                  </div>
+                )}
+              </section>
+            </div>
+            <div className="space-y-6">
+              <ProductProfileSkillsIntentEditor
+                asin={asin}
+                initialShortName={shortName ?? ''}
+                initialNotes={data.productMeta.notes ?? ''}
+                initialSkills={profileSkills}
+                initialIntent={profileIntent}
+                availableSkills={availableSkillOptions}
+                resolvedSelectedSkills={resolvedProfileSkills}
+              />
+              <ProductDriverIntentManager asin={asin} initialRows={productDriverIntents} />
+              <ProductKivBacklogManager
+                asin={asin}
+                initialOpenItems={productKivOpenItems}
+                initialRecentlyClosedItems={productKivRecentlyClosedItems}
+              />
+            </div>
           </div>
         </div>
       ) : null}
