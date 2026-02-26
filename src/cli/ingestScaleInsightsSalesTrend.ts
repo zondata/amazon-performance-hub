@@ -2,7 +2,7 @@ import { ingestScaleInsightsSalesTrendRaw } from "../ingest/ingestScaleInsightsS
 
 function usage() {
   console.log(
-    "Usage: npm run ingest:sales:si -- --account-id <id> --marketplace <marketplace> <csv> [--exported-at ISO]"
+    "Usage: npm run ingest:sales:si -- --account-id <id> --marketplace <marketplace> <csv> [--exported-at ISO] [--asin <ASIN>]"
   );
 }
 
@@ -30,6 +30,7 @@ async function main() {
   const accountId = getArg("--account-id");
   const marketplace = getArg("--marketplace");
   const exportedAtArg = getArg("--exported-at");
+  const asinArg = getArg("--asin");
   const positionals = getPositionalArgs();
   const csvPath = positionals[0];
 
@@ -38,7 +39,13 @@ async function main() {
     process.exit(1);
   }
 
-  const result = await ingestScaleInsightsSalesTrendRaw(csvPath, accountId, marketplace, exportedAtArg);
+  const result = await ingestScaleInsightsSalesTrendRaw(
+    csvPath,
+    accountId,
+    marketplace,
+    exportedAtArg,
+    asinArg
+  );
   if (result.status === "already ingested") {
     console.log("Already ingested (same account_id + file hash).");
     return;

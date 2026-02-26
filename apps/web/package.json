@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "pipeline:import:manifest": "cd ../.. && npm run pipeline:import:manifest --"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",

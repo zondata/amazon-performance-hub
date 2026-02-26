@@ -31,6 +31,8 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - New timeline component: `apps/web/src/components/logbook/ExperimentEventsTimeline.tsx`.
 - `/logbook/experiments/[id]` now includes Quick Log Event presets (`Guardrail breach`, `Manual intervention`, `Stop-loss`, `Rollback`) with immediate timeline refresh after logging.
 - Evaluation output-pack upload now shows an applied-changes summary after import (including KIV update counts and warnings).
+- Imports & Health (`/imports-health`) now includes a local-only Batch Import uploader (multi-file CSV/XLSX) that stages files to temp storage and runs the root manifest pipeline CLI.
+- Batch Import supports SalesTrend ASIN override for filenames like `SalesTrend.csv` (no filename rename required).
 
 **UI Layout System**
 ### Sidebar (global)
@@ -153,6 +155,7 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - `PENDING_RECONCILE_DIR` enables a local-only pending manifest count; if unset, UI shows "not configured".
 - Bulksheet Ops env vars: `BULKGEN_OUT_ROOT`, `BULKGEN_PENDING_RECONCILE_DIR`, `BULKGEN_RECONCILED_DIR`, `BULKGEN_FAILED_DIR`,
   `BULKGEN_TEMPLATE_SP_UPDATE`, `BULKGEN_TEMPLATE_SB_UPDATE`, `BULKGEN_TEMPLATE_SP_CREATE`, `ENABLE_BULKGEN_SPAWN`.
+- Batch Import UI is also gated by `ENABLE_BULKGEN_SPAWN=1` (local-only CLI spawn; keep disabled on Vercel/serverless).
 - Local-first caveat: Bulksheet Ops depends on local filesystem paths (Dropbox). This will not work on Vercel/serverless.
 
 ## Core Principles
@@ -392,6 +395,7 @@ Scale Insights SalesTrend raw ingestion (daily):
 - date-folder wrapper: `npm run ingest:sales:si:date -- --account-id <id> --marketplace <marketplace> <YYYY-MM-DD or folder>`
 Notes:
 - CSV filename must start with the ASIN followed by a space (e.g. `B0B2K57W5R SalesTrend - Name.csv`); ASIN is parsed from the filename only.
+- Ingestion also accepts an explicit ASIN override (`--asin` in CLI / Batch Import UI override field) when filename does not include ASIN.
 - Date-folder wrapper scans for any `.csv` containing `SalesTrend` (case-insensitive) and uses folder date at `T00:00:00Z`.
 - Prefer immutable exports per folder date (no master file edits or overwrites).
 

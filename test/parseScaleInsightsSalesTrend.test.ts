@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   parseAsinFromFilename,
+  resolveSalesTrendAsinFromFilenameOrOverride,
   parseScaleInsightsSalesTrend,
   buildScaleInsightsSalesTrendRawRows,
 } from "../src/sales/parseScaleInsightsSalesTrend";
@@ -33,6 +34,18 @@ describe("parseScaleInsightsSalesTrend", () => {
     expect(parseAsinFromFilename("B0B2K57W5R SalesTrend - Retirement.csv")).toBe("B0B2K57W5R");
     expect(parseAsinFromFilename("b0fyprwpn1 SalesTrend.csv")).toBe("B0FYPRWPN1");
     expect(parseAsinFromFilename("SalesTrend.csv")).toBeNull();
+  });
+
+  it("resolves ASIN from override when filename has no ASIN", () => {
+    expect(
+      resolveSalesTrendAsinFromFilenameOrOverride("SalesTrend.csv", "b0fyprwpn1")
+    ).toBe("B0FYPRWPN1");
+  });
+
+  it("throws when both filename ASIN and override are missing", () => {
+    expect(() =>
+      resolveSalesTrendAsinFromFilenameOrOverride("SalesTrend.csv")
+    ).toThrow(/Provide --asin or rename file to start with ASIN/);
   });
 
   it("builds raw rows for ingestion", () => {

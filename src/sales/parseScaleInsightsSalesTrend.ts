@@ -186,6 +186,26 @@ export function parseAsinFromFilename(filename: string): string | null {
   return match[1].toUpperCase();
 }
 
+export function resolveSalesTrendAsinFromFilenameOrOverride(
+  filename: string,
+  asinOverride?: string | null
+): string {
+  const override = (asinOverride ?? "").trim().toUpperCase();
+  if (override) {
+    if (!/^[A-Z0-9]{10}$/.test(override)) {
+      throw new Error(`Invalid --asin value "${asinOverride}". ASIN must be 10 alphanumeric characters.`);
+    }
+    return override;
+  }
+
+  const parsed = parseAsinFromFilename(filename);
+  if (parsed) return parsed;
+
+  throw new Error(
+    "Provide --asin or rename file to start with ASIN, e.g. B0B2K57W5R SalesTrend - Name.csv"
+  );
+}
+
 export function parseScaleInsightsSalesTrend(input: string): ScaleInsightsSalesTrendParseResult {
   const content = fs.existsSync(input) ? fs.readFileSync(input, "utf8") : input;
   const rows = parseCsv(content);

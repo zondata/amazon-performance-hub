@@ -79,6 +79,7 @@
     "pipeline:backfill:ads": "ts-node src/cli/backfillAds.ts",
     "pipeline:backfill:sb": "ts-node src/cli/backfillSb.ts",
     "pipeline:backfill:sd": "ts-node src/cli/backfillSd.ts",
+    "pipeline:import:manifest": "ts-node src/cli/importBatchFromManifest.ts",
     "pipeline:backfill:rank:h10": "ts-node src/cli/backfillHelium10KeywordTracker.ts",
     "pipeline:backfill:sqp": "ts-node src/cli/backfillSqpWeekly.ts",
     "schema:snapshot": "node -r dotenv/config ./node_modules/.bin/ts-node scripts/schema_snapshot.ts dotenv_config_path=.env.local",

@@ -1,7 +1,11 @@
 import { redirect } from 'next/navigation';
 
 import CopyButton from '@/components/CopyButton';
+import ImportBatchUploader from '@/components/imports/ImportBatchUploader';
+import { env } from '@/lib/env';
 import { getDataHealth, type DataHealthResult } from '@/lib/health/getDataHealth';
+import { getImportsHealthSettings } from '@/lib/imports/preferences';
+import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
 import { seedProductsFromSalesLatest } from '@/lib/products/seedProductsFromSalesLatest';
 
 const SOURCE_GROUPS: Array<{ title: string; sources: string[] }> = [
@@ -208,6 +212,13 @@ export default async function ImportsHealthPage({
   };
 
   const data = await getDataHealth();
+  const [asinOptions, importSettings] = await Promise.all([
+    fetchAsinOptions(data.accountId, data.marketplace),
+    getImportsHealthSettings({
+      accountId: data.accountId,
+      marketplace: data.marketplace,
+    }),
+  ]);
   const latestBySource = new Map(
     data.latestUploadsBySourceType.map((row) => [row.source_type ?? '', row])
   );
@@ -227,6 +238,12 @@ export default async function ImportsHealthPage({
 
   return (
     <div className="space-y-8">
+      <ImportBatchUploader
+        asinOptions={asinOptions}
+        spawnEnabled={env.enableBulkgenSpawn}
+        initialIgnoredSourceTypes={importSettings.ignored_source_types}
+      />
+
       <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

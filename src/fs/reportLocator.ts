@@ -4,6 +4,58 @@ import { config as loadEnv } from "dotenv";
 
 loadEnv({ path: ".env.local" });
 
+export type DetectedSourceType =
+  | "bulk"
+  | "sp_campaign"
+  | "sp_placement"
+  | "sp_targeting"
+  | "sp_stis"
+  | "sp_advertised_product"
+  | "sb_campaign"
+  | "sb_campaign_placement"
+  | "sb_keyword"
+  | "sb_stis"
+  | "sb_attributed_purchases"
+  | "sd_campaign"
+  | "sd_advertised_product"
+  | "sd_targeting"
+  | "sd_matched_target"
+  | "sd_purchased_product"
+  | "si_sales_trend"
+  | "h10_keyword_tracker"
+  | "sqp";
+
+export function detectSourceTypeFromFilename(filename: string): DetectedSourceType | null {
+  const base = path.basename(filename).trim();
+  const lower = base.toLowerCase();
+
+  if (/^bulk-.*\.xlsx$/i.test(base)) return "bulk";
+
+  if (lower === "sponsored_products_campaign_report.csv") return "sp_campaign";
+  if (lower === "sponsored_products_placement_report.xlsx") return "sp_placement";
+  if (lower === "sponsored_products_targeting_report.xlsx") return "sp_targeting";
+  if (lower === "sponsored_products_search_term_impression_share_report.csv") return "sp_stis";
+  if (lower === "sponsored_products_advertised_product_report.xlsx") return "sp_advertised_product";
+
+  if (lower === "sponsored_brands_campaign_report.xlsx") return "sb_campaign";
+  if (lower === "sponsored_brands_campaign_placement_report.xlsx") return "sb_campaign_placement";
+  if (lower === "sponsored_brands_keyword_report.xlsx") return "sb_keyword";
+  if (lower === "sponsored_brands_search_term_impression_share_report.csv") return "sb_stis";
+  if (lower === "sponsored_brands_attributed_purchases_report.csv") return "sb_attributed_purchases";
+
+  if (lower === "sponsored_display_campaign_report.xlsx") return "sd_campaign";
+  if (lower === "sponsored_display_advertised_product_report.xlsx") return "sd_advertised_product";
+  if (lower === "sponsored_display_targeting_report.xlsx") return "sd_targeting";
+  if (lower === "sponsored_display_matched_target_report.xlsx") return "sd_matched_target";
+  if (lower === "sponsored_display_purchased_product_report.xlsx") return "sd_purchased_product";
+
+  if (/^helium10-kt-.*\.csv$/i.test(base)) return "h10_keyword_tracker";
+  if (/search_query_performance/i.test(base) && lower.endsWith(".csv")) return "sqp";
+  if (/salestrend/i.test(base) && lower.endsWith(".csv")) return "si_sales_trend";
+
+  return null;
+}
+
 export function resolveDateFolder(inputPathOrDate: string): string {
   const isDate = /^\d{4}-\d{2}-\d{2}$/.test(inputPathOrDate);
   if (!isDate) {
