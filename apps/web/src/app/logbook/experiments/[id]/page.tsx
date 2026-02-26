@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache';
 
 import ExperimentSkillsOverrideManager from '@/components/logbook/ExperimentSkillsOverrideManager';
 import ExperimentEvaluationOutputPackImport from '@/components/logbook/ExperimentEvaluationOutputPackImport';
+import ExperimentEventsTimeline from '@/components/logbook/ExperimentEventsTimeline';
 import ExperimentPhaseActions from '@/components/logbook/ExperimentPhaseActions';
 import InlineFilters from '@/components/InlineFilters';
 import PageHeader from '@/components/PageHeader';
@@ -89,6 +90,14 @@ const extractOutcome = (metricsJson: unknown) => {
 const formatOutcomePercent = (score: number | null): string => {
   if (score === null || !Number.isFinite(score)) return '—';
   return `${Math.round(score)}%`;
+};
+
+const truncateText = (value?: string | null, max = 120): string => {
+  if (!value) return '—';
+  const normalized = value.trim();
+  if (!normalized) return '—';
+  if (normalized.length <= max) return normalized;
+  return `${normalized.slice(0, max).trim()}…`;
 };
 
 const isUuid = (value: string) =>
@@ -252,12 +261,41 @@ export default async function ExperimentDetailPage({
       ...context.phases.map((phase) => phase.run_id),
     ])
   );
+  const sortedPhases = [...context.phases].sort((left, right) => {
+    const leftSortKey = left.uploaded_at ?? left.created_at;
+    const rightSortKey = right.uploaded_at ?? right.created_at;
+    const compareByUpload = rightSortKey.localeCompare(leftSortKey);
+    if (compareByUpload !== 0) return compareByUpload;
+    return right.created_at.localeCompare(left.created_at);
+  });
+  const phaseRows = sortedPhases.map((phase) => [
+    <code key="run" className="text-xs text-foreground">
+      {phase.run_id}
+    </code>,
+    <span key="title" className="text-foreground">
+      {phase.title ?? '—'}
+    </span>,
+    <span key="effective" className="text-muted">
+      {formatDateOnly(phase.effective_date)}
+    </span>,
+    <span key="uploaded" className="text-muted">
+      {formatDateTime(phase.uploaded_at)}
+    </span>,
+    <span key="notes" className="text-muted" title={phase.notes ?? undefined}>
+      {truncateText(phase.notes, 96)}
+    </span>,
+    <span key="created" className="text-muted">
+      {formatDateTime(phase.created_at)}
+    </span>,
+  ]);
   const scope = asObject(context.scope);
   const experimentSkillIds = parseSkillIds(scope?.skills);
   const availableSkillOptions = listResolvedSkills().map((skill) => ({
     id: skill.id,
     title: skill.title,
   }));
+  const majorActionSignals = context.major_actions.slice(0, 12);
+  const interruptionSignals = context.interruptions.slice(0, 12);
 
   return (
     <div className="space-y-6">
@@ -361,10 +399,100 @@ export default async function ExperimentDetailPage({
         availableSkills={availableSkillOptions}
       />
 
+      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <div className="text-sm font-semibold text-foreground">Phases</div>
+          <div className="text-xs text-muted">{sortedPhases.length} rows</div>
+        </div>
+        <Table
+          headers={['run_id', 'Title', 'effective_date', 'uploaded_at', 'Notes', 'created_at']}
+          rows={phaseRows}
+          emptyMessage="No phase rows yet."
+        />
+      </div>
+
       <ExperimentPhaseActions
         experimentId={context.experiment.experiment_id}
         runIds={phaseActionRunIds}
       />
+
+      <ExperimentEventsTimeline
+        events={context.events.map((event) => ({
+          id: event.id,
+          run_id: event.run_id,
+          event_type: event.event_type,
+          event_date: event.event_date,
+          occurred_at: event.occurred_at,
+          payload_json: event.payload_json,
+        }))}
+        interruptionEventIds={context.interruption_events.map((event) => event.id)}
+      />
+
+      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div className="mb-4 text-sm font-semibold text-foreground">Timeline signals</div>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="space-y-3">
+            <div className="text-xs uppercase tracking-wider text-muted">
+              Major actions ({majorActionSignals.length})
+            </div>
+            {majorActionSignals.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted">
+                No major actions yet.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {majorActionSignals.map((change) => (
+                  <div key={`major-${change.change_id}`} className="rounded-lg border border-border bg-surface-2 p-3">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                      <span>{formatDateTime(change.occurred_at)}</span>
+                      <span className="rounded-full border border-border px-2 py-0.5 uppercase">
+                        {change.channel}
+                      </span>
+                      <span className="rounded-full border border-border px-2 py-0.5">
+                        {change.change_type}
+                      </span>
+                      <code className="rounded bg-surface px-1.5 py-0.5 text-[11px] text-foreground">
+                        {change.run_id}
+                      </code>
+                    </div>
+                    <div className="mt-2 text-sm text-foreground">{change.summary}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="space-y-3">
+            <div className="text-xs uppercase tracking-wider text-muted">
+              Interruptions ({interruptionSignals.length})
+            </div>
+            {interruptionSignals.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted">
+                No interruption-linked changes.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {interruptionSignals.map((change) => (
+                  <div key={`interruption-${change.change_id}`} className="rounded-lg border border-primary/50 bg-primary/10 p-3">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                      <span>{formatDateTime(change.occurred_at)}</span>
+                      <span className="rounded-full border border-primary/50 px-2 py-0.5 uppercase">
+                        {change.channel}
+                      </span>
+                      <span className="rounded-full border border-primary/50 px-2 py-0.5">
+                        {change.change_type}
+                      </span>
+                      <code className="rounded bg-surface px-1.5 py-0.5 text-[11px] text-foreground">
+                        {change.run_id}
+                      </code>
+                    </div>
+                    <div className="mt-2 text-sm text-foreground">{change.summary}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <div className="mb-3 text-sm font-semibold text-foreground">Evaluations</div>

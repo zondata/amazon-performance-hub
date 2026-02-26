@@ -82,26 +82,29 @@ export default async function ExperimentsPage({ searchParams }: ExperimentsPageP
   });
 
   const rows = filtered.map((experiment) => [
-    <span key="status" className="rounded-full bg-slate-100 px-2 py-1 text-xs uppercase">
+    <span
+      key="status"
+      className="rounded-full border border-border bg-surface-2 px-2 py-1 text-xs uppercase text-muted"
+    >
       {experiment.status}
     </span>,
     <Link
       key="name"
       href={`/logbook/experiments/${experiment.experiment_id}`}
-      className="font-medium text-slate-900 hover:underline"
+      className="font-medium text-foreground hover:underline"
     >
       {experiment.name}
     </Link>,
-    <span key="objective" className="text-slate-500" title={experiment.objective}>
+    <span key="objective" className="text-muted" title={experiment.objective}>
       {truncate(experiment.objective)}
     </span>,
-    <span key="product" className="font-mono text-xs text-slate-500">
+    <span key="product" className="font-mono text-xs text-muted">
       {experiment.product_id ?? '—'}
     </span>,
-    <span key="created" className="text-slate-500">
+    <span key="created" className="text-muted">
       {formatDate(experiment.created_at)}
     </span>,
-    <span key="outcome" className="text-slate-400">
+    <span key="outcome" className="text-muted">
       <span
         className={`rounded-full border px-2 py-1 text-xs font-semibold ${getOutcomePillClassName(
           experiment.outcome_score
@@ -110,7 +113,7 @@ export default async function ExperimentsPage({ searchParams }: ExperimentsPageP
         {experiment.outcome_score === null ? '—' : `${Math.round(experiment.outcome_score)}%`}
       </span>
     </span>,
-    <span key="linked" className="text-slate-500">
+    <span key="linked" className="text-muted">
       {experiment.linked_changes_count}
     </span>,
   ]);
@@ -138,7 +141,7 @@ export default async function ExperimentsPage({ searchParams }: ExperimentsPageP
             </a>
             <Link
               href="/logbook/experiments/new"
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
             >
               New experiment
             </Link>
@@ -149,11 +152,11 @@ export default async function ExperimentsPage({ searchParams }: ExperimentsPageP
       <form className="space-y-4">
         <InlineFilters>
           <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wider text-slate-400">Status</label>
+            <label className="text-xs uppercase tracking-wider text-muted">Status</label>
             <select
               name="status"
               defaultValue={statusFilter}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
             >
               <option value="all">all</option>
               {statusOptions.map((status) => (
@@ -164,13 +167,13 @@ export default async function ExperimentsPage({ searchParams }: ExperimentsPageP
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wider text-slate-400">
+            <label className="text-xs uppercase tracking-wider text-muted">
               Outcome band
             </label>
             <select
               name="outcome"
               defaultValue={outcomeBand}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
             >
               <option value="all">all</option>
               <option value="win">win (&gt;=70)</option>
@@ -180,19 +183,19 @@ export default async function ExperimentsPage({ searchParams }: ExperimentsPageP
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wider text-slate-400">Search</label>
+            <label className="text-xs uppercase tracking-wider text-muted">Search</label>
             <input
               type="text"
               name="q"
               defaultValue={paramValue('q') ?? ''}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
               placeholder="name, objective, product"
             />
           </div>
           <div className="flex items-end">
             <button
               type="submit"
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:border-slate-300"
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-2"
             >
               Apply
             </button>
@@ -200,7 +203,7 @@ export default async function ExperimentsPage({ searchParams }: ExperimentsPageP
         </InlineFilters>
       </form>
 
-      <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <Table
           headers={[
             'Status',

@@ -105,6 +105,7 @@ Only check phase boxes after `npm test` is green for the committed scope.
 - Minimal experiment-page controls:
   - Phase run list with “Mark uploaded to Amazon”.
   - Event form for guardrail/intervention/stop-loss/rollback logging.
+  - Experiment page now surfaces phases + events timeline; interruptions are first-class for evaluation context.
 
 ### Phase 3 Acceptance Checklist
 - [x] Multi-phase records persist in logbook tables.
