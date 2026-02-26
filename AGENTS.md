@@ -17,6 +17,15 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 **Overview**
 - Next.js App Router UI scaffold (read-only from Supabase).
 
+### Latest shipped / UI status
+- Products Center (`/products`) now shows headline KPIs and product rows from `si_sales_trend_daily_latest`.
+- Products Center supports server-side search/sort and safe paging via Supabase `.range()` page iteration (no single-query truncation assumptions).
+- Products Center warns when `SALES_HARD_CAP` is reached, so truncation is visible (no silent cut-off).
+- Marketplace-aware default ranges now use `getDefaultMarketplaceDateRange(...)` with marketplace day semantics.
+- `getDefaultMarketplaceDateRange(...)` derives `marketplaceToday` via `toMarketplaceDate(...)` and performs date-only `YYYY-MM-DD` math (no `toISOString()` defaults).
+- Product detail overview (`/products/[asin]`) includes Profile Context, Driver Intents, and KIV backlog panels.
+- Related overview components: `ProductProfileSkillsIntentEditor.tsx`, `ProductDriverIntentManager.tsx`, `ProductKivBacklogManager.tsx`.
+
 **UI Layout System**
 ### Sidebar (global)
 - Sidebar is sticky/locked and scrolls internally if long.

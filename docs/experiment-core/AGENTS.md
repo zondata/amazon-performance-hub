@@ -43,6 +43,7 @@
 ## Effective Date Rules
 - Operator-facing actions use Malaysia local day (`Asia/Kuala_Lumpur`) for planning cadence and notes.
 - Marketplace performance joins must respect marketplace report day boundaries (marketplace timezone/day semantics from source facts).
+- UI defaults use marketplace day via `getDefaultMarketplaceDateRange(...)` to avoid UTC boundary issues.
 - If Malaysia day and marketplace day differ around UTC boundaries, preserve both:
   - use marketplace day for KPI windows and comparisons
   - keep Malaysia-local timestamp/day in notes/audit context

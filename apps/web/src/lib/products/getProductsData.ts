@@ -47,6 +47,11 @@ type ProductKpiRow = {
   acos: number | null;
 };
 
+const SALES_PAGE_SIZE = 5000;
+const SALES_HARD_CAP = 250000;
+const PRODUCTS_PAGE_SIZE = 1000;
+const PRODUCT_PROFILE_CHUNK_SIZE = 500;
+
 const numberValue = (value: number | string | null | undefined): number => {
   if (value === null || value === undefined) return 0;
   const numeric = Number(value);
@@ -69,21 +74,37 @@ export const getProductsData = async ({
   end,
   asinFilter,
 }: ProductsFilters) => {
+  const warnings: string[] = [];
   const asinOptions = await fetchAsinOptions(accountId, marketplace);
   const productTitleByAsin = new Map<string, string>();
   const productShortNameByAsin = new Map<string, string>();
 
   try {
-    const { data: products, error } = await supabaseAdmin
-      .from('products')
-      .select('product_id,asin,title')
-      .eq('account_id', accountId)
-      .eq('marketplace', marketplace)
-      .order('asin', { ascending: true })
-      .limit(500);
+    const productRows: ProductRow[] = [];
+    for (let pageIndex = 0; ; pageIndex += 1) {
+      const from = pageIndex * PRODUCTS_PAGE_SIZE;
+      const to = from + PRODUCTS_PAGE_SIZE - 1;
+      const { data: pageData, error: pageError } = await supabaseAdmin
+        .from('products')
+        .select('product_id,asin,title')
+        .eq('account_id', accountId)
+        .eq('marketplace', marketplace)
+        .order('asin', { ascending: true })
+        .range(from, to);
 
-    if (!error && products && products.length > 0) {
-      const productRows = products as ProductRow[];
+      if (pageError) {
+        warnings.push(`Could not load full product metadata: ${pageError.message}`);
+        break;
+      }
+
+      const pageRows = (pageData ?? []) as ProductRow[];
+      productRows.push(...pageRows);
+      if (pageRows.length < PRODUCTS_PAGE_SIZE) {
+        break;
+      }
+    }
+
+    if (productRows.length > 0) {
       const productIds = productRows.map((row) => row.product_id);
 
       productRows.forEach((row) => {
@@ -91,29 +112,35 @@ export const getProductsData = async ({
         productTitleByAsin.set(row.asin, row.title ?? '');
       });
 
-      if (productIds.length > 0) {
+      const asinByProductId = new Map<string, string>();
+      productRows.forEach((row) => {
+        if (!row.asin) return;
+        asinByProductId.set(row.product_id, row.asin);
+      });
+
+      for (let index = 0; index < productIds.length; index += PRODUCT_PROFILE_CHUNK_SIZE) {
+        const chunk = productIds.slice(index, index + PRODUCT_PROFILE_CHUNK_SIZE);
+        if (chunk.length === 0) continue;
+
         try {
           const { data: profiles, error: profileError } = await supabaseAdmin
             .from('product_profile')
             .select('product_id,profile_json')
-            .in('product_id', productIds);
+            .in('product_id', chunk);
 
-          if (!profileError && profiles) {
-            const asinByProductId = new Map<string, string>();
-            productRows.forEach((row) => {
-              if (!row.asin) return;
-              asinByProductId.set(row.product_id, row.asin);
-            });
-
-            (profiles as ProfileRow[]).forEach((profile) => {
-              const asin = asinByProductId.get(profile.product_id);
-              if (!asin) return;
-              const shortName = parseShortName(profile.profile_json);
-              if (shortName) {
-                productShortNameByAsin.set(asin, shortName);
-              }
-            });
+          if (profileError) {
+            warnings.push(`Could not load full product profile metadata: ${profileError.message}`);
+            continue;
           }
+
+          (profiles as ProfileRow[] | null)?.forEach((profile) => {
+            const asin = asinByProductId.get(profile.product_id);
+            if (!asin) return;
+            const shortName = parseShortName(profile.profile_json);
+            if (shortName) {
+              productShortNameByAsin.set(asin, shortName);
+            }
+          });
         } catch {
           // ignore
         }
@@ -123,25 +150,52 @@ export const getProductsData = async ({
     // ignore and fallback to sales data
   }
 
-  let query = supabaseAdmin
-    .from('si_sales_trend_daily_latest')
-    .select('asin,sales,orders,units,ppc_cost,ppc_sales,avg_sales_price')
-    .eq('account_id', accountId)
-    .eq('marketplace', marketplace)
-    .gte('date', start)
-    .lte('date', end)
-    .limit(5000);
+  const rows: SalesRow[] = [];
+  let reachedSalesHardCap = false;
+  for (let pageIndex = 0; ; pageIndex += 1) {
+    const from = pageIndex * SALES_PAGE_SIZE;
+    const to = from + SALES_PAGE_SIZE - 1;
 
-  if (asinFilter !== 'all') {
-    query = query.eq('asin', asinFilter);
+    let query = supabaseAdmin
+      .from('si_sales_trend_daily_latest')
+      .select('asin,sales,orders,units,ppc_cost,ppc_sales,avg_sales_price')
+      .eq('account_id', accountId)
+      .eq('marketplace', marketplace)
+      .gte('date', start)
+      .lte('date', end)
+      .order('date', { ascending: true })
+      .order('asin', { ascending: true })
+      .range(from, to);
+
+    if (asinFilter !== 'all') {
+      query = query.eq('asin', asinFilter);
+    }
+
+    const { data: pageRowsData, error: pageError } = await query;
+    if (pageError) {
+      throw new Error(`Failed to load product KPIs: ${pageError.message}`);
+    }
+
+    const pageRows = (pageRowsData ?? []) as SalesRow[];
+    rows.push(...pageRows);
+
+    if (rows.length >= SALES_HARD_CAP) {
+      reachedSalesHardCap = true;
+      rows.length = SALES_HARD_CAP;
+      break;
+    }
+
+    if (pageRows.length < SALES_PAGE_SIZE) {
+      break;
+    }
   }
 
-  const { data, error } = await query;
-  if (error) {
-    throw new Error(`Failed to load product KPIs: ${error.message}`);
+  if (reachedSalesHardCap) {
+    warnings.push(
+      `Sales rows reached hard cap (${SALES_HARD_CAP.toLocaleString('en-US')}). Results may be truncated.`
+    );
   }
 
-  const rows = (data ?? []) as SalesRow[];
   const byAsin = new Map<
     string,
     {
@@ -215,6 +269,7 @@ export const getProductsData = async ({
   return {
     asinOptions,
     products: productRows,
+    warnings,
   };
 };
 

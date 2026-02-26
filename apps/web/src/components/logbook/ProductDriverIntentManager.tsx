@@ -240,53 +240,57 @@ export default function ProductDriverIntentManager({ asin, initialRows }: Props)
         )}
       </div>
 
-      <div className="space-y-2 rounded-lg border border-border bg-surface p-3">
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted">Add or upsert intent</div>
-        <div className="grid gap-2 md:grid-cols-[110px_1fr_1fr]">
-          <select
-            value={newChannel}
-            onChange={(event) => setNewChannel(event.target.value as Channel)}
-            className="rounded-lg border border-border bg-surface px-2 py-2 text-sm text-foreground"
-          >
-            {CHANNELS.map((channel) => (
-              <option key={channel} value={channel}>
-                {channel.toUpperCase()}
-              </option>
-            ))}
-          </select>
-          <input
-            type="text"
-            value={newCampaignId}
-            onChange={(event) => setNewCampaignId(event.target.value)}
-            placeholder="campaign_id"
-            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+      <details className="rounded-lg border border-border bg-surface p-3">
+        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted">
+          Add or upsert intent
+        </summary>
+        <div className="mt-3 space-y-2">
+          <div className="grid gap-2 md:grid-cols-[110px_1fr_1fr]">
+            <select
+              value={newChannel}
+              onChange={(event) => setNewChannel(event.target.value as Channel)}
+              className="rounded-lg border border-border bg-surface px-2 py-2 text-sm text-foreground"
+            >
+              {CHANNELS.map((channel) => (
+                <option key={channel} value={channel}>
+                  {channel.toUpperCase()}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={newCampaignId}
+              onChange={(event) => setNewCampaignId(event.target.value)}
+              placeholder="campaign_id"
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+            />
+            <input
+              type="text"
+              value={newIntent}
+              onChange={(event) => setNewIntent(event.target.value)}
+              placeholder="intent"
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+            />
+          </div>
+          <textarea
+            value={newNotes}
+            onChange={(event) => setNewNotes(event.target.value)}
+            rows={2}
+            placeholder="notes (optional)"
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground"
           />
-          <input
-            type="text"
-            value={newIntent}
-            onChange={(event) => setNewIntent(event.target.value)}
-            placeholder="intent"
-            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-          />
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleAdd}
+              disabled={isSubmitting}
+              className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSubmitting ? 'Saving…' : 'Save intent'}
+            </button>
+          </div>
         </div>
-        <textarea
-          value={newNotes}
-          onChange={(event) => setNewNotes(event.target.value)}
-          rows={2}
-          placeholder="notes (optional)"
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground"
-        />
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleAdd}
-            disabled={isSubmitting}
-            className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSubmitting ? 'Saving…' : 'Save intent'}
-          </button>
-        </div>
-      </div>
+      </details>
 
       <div className="min-h-5 text-xs">
         {notice ? <span className="text-emerald-700">{notice}</span> : null}

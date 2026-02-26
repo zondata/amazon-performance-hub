@@ -34,6 +34,12 @@ const formatDateTime = (value?: string | null) => {
   return parsed.toLocaleString();
 };
 
+const parseTagsInput = (value: string): string[] =>
+  value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
 export default function ProductKivBacklogManager({
   asin,
   initialOpenItems,
@@ -44,6 +50,9 @@ export default function ProductKivBacklogManager({
   const [recentlyClosedItems, setRecentlyClosedItems] = useState(initialRecentlyClosedItems);
   const [newTitle, setNewTitle] = useState('');
   const [newDetails, setNewDetails] = useState('');
+  const [newTags, setNewTags] = useState('');
+  const [newPriority, setNewPriority] = useState('');
+  const [newDueDate, setNewDueDate] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +78,11 @@ export default function ProductKivBacklogManager({
 
     setIsCreating(true);
     try {
+      const parsedPriority = newPriority.trim().length > 0 ? Number(newPriority) : null;
+      if (parsedPriority !== null && !Number.isFinite(parsedPriority)) {
+        throw new Error('Priority must be a number.');
+      }
+
       const response = await fetch(`/products/${encodeURIComponent(asin)}/kiv`, {
         method: 'POST',
         headers: {
@@ -77,6 +91,9 @@ export default function ProductKivBacklogManager({
         body: JSON.stringify({
           title: newTitle,
           details: newDetails,
+          tags: parseTagsInput(newTags),
+          priority: parsedPriority,
+          due_date: newDueDate.trim() || null,
         }),
       });
 
@@ -92,6 +109,9 @@ export default function ProductKivBacklogManager({
       setOpenItems((current) => [payload.item as KivItem, ...current]);
       setNewTitle('');
       setNewDetails('');
+      setNewTags('');
+      setNewPriority('');
+      setNewDueDate('');
       setNotice('KIV item added.');
       router.refresh();
     } catch (submitError) {
@@ -109,6 +129,15 @@ export default function ProductKivBacklogManager({
     const formData = new FormData(event.currentTarget);
     const status = String(formData.get('status') ?? 'open');
     const resolutionNotes = String(formData.get('resolution_notes') ?? '').trim();
+    const dueDate = String(formData.get('due_date') ?? '').trim();
+    const priorityRaw = String(formData.get('priority') ?? '').trim();
+    const tagsRaw = String(formData.get('tags') ?? '').trim();
+    const parsedPriority = priorityRaw.length > 0 ? Number(priorityRaw) : null;
+    if (parsedPriority !== null && !Number.isFinite(parsedPriority)) {
+      setError('Priority must be a number.');
+      return;
+    }
+    const parsedTags = parseTagsInput(tagsRaw);
 
     try {
       const response = await fetch(
@@ -121,6 +150,9 @@ export default function ProductKivBacklogManager({
           body: JSON.stringify({
             status,
             resolution_notes: resolutionNotes,
+            due_date: dueDate || null,
+            priority: parsedPriority,
+            tags: parsedTags,
           }),
         }
       );
@@ -165,33 +197,59 @@ export default function ProductKivBacklogManager({
         <div className="mt-1 text-lg font-semibold text-foreground">Keep-in-view items for {asin}</div>
       </div>
 
-      <form onSubmit={handleCreate} className="space-y-2 rounded-lg border border-border bg-surface p-3">
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted">Add item</div>
-        <input
-          type="text"
-          value={newTitle}
-          onChange={(event) => setNewTitle(event.target.value)}
-          placeholder="Title"
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-          required
-        />
-        <textarea
-          value={newDetails}
-          onChange={(event) => setNewDetails(event.target.value)}
-          rows={2}
-          placeholder="Details (optional)"
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-        />
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={isCreating}
-            className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isCreating ? 'Adding…' : 'Add KIV item'}
-          </button>
-        </div>
-      </form>
+      <details className="rounded-lg border border-border bg-surface p-3">
+        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted">
+          Add item
+        </summary>
+        <form onSubmit={handleCreate} className="mt-3 space-y-2">
+          <input
+            type="text"
+            value={newTitle}
+            onChange={(event) => setNewTitle(event.target.value)}
+            placeholder="Title"
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+            required
+          />
+          <textarea
+            value={newDetails}
+            onChange={(event) => setNewDetails(event.target.value)}
+            rows={2}
+            placeholder="Details (optional)"
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+          />
+          <div className="grid gap-2 md:grid-cols-3">
+            <input
+              type="text"
+              value={newTags}
+              onChange={(event) => setNewTags(event.target.value)}
+              placeholder="tags (comma separated)"
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground"
+            />
+            <input
+              type="number"
+              value={newPriority}
+              onChange={(event) => setNewPriority(event.target.value)}
+              placeholder="priority"
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground"
+            />
+            <input
+              type="date"
+              value={newDueDate}
+              onChange={(event) => setNewDueDate(event.target.value)}
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground"
+            />
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={isCreating}
+              className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isCreating ? 'Adding…' : 'Add KIV item'}
+            </button>
+          </div>
+        </form>
+      </details>
 
       <div className="space-y-3">
         <div className="text-sm font-semibold text-foreground">Open items</div>
@@ -211,6 +269,10 @@ export default function ProductKivBacklogManager({
                   <div className="text-sm font-semibold text-foreground">{item.title}</div>
                   {item.details ? <div className="text-xs text-muted">{item.details}</div> : null}
                   <div className="mt-1 text-[11px] text-muted">Created {formatDateTime(item.created_at)}</div>
+                  <div className="mt-1 text-[11px] text-muted">
+                    Due {item.due_date ?? '—'} · Priority {item.priority ?? '—'} · Tags{' '}
+                    {item.tags && item.tags.length > 0 ? item.tags.join(', ') : '—'}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <select
@@ -237,6 +299,28 @@ export default function ProductKivBacklogManager({
                 placeholder="Resolution notes"
                 className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground"
               />
+              <div className="grid gap-2 md:grid-cols-3">
+                <input
+                  type="text"
+                  name="tags"
+                  defaultValue={item.tags?.join(', ') ?? ''}
+                  placeholder="tags (comma separated)"
+                  className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground"
+                />
+                <input
+                  type="number"
+                  name="priority"
+                  defaultValue={item.priority ?? ''}
+                  placeholder="priority"
+                  className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground"
+                />
+                <input
+                  type="date"
+                  name="due_date"
+                  defaultValue={item.due_date ?? ''}
+                  className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground"
+                />
+              </div>
             </form>
           ))
         )}

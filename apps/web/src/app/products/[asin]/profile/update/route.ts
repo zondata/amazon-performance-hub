@@ -57,8 +57,10 @@ export async function POST(request: Request, { params }: Ctx) {
   const notesProvided = Object.prototype.hasOwnProperty.call(body, 'notes');
   const skillsProvided = Object.prototype.hasOwnProperty.call(body, 'skills');
   const intentProvided = Object.prototype.hasOwnProperty.call(body, 'intent');
+  const shortNameProvided = Object.prototype.hasOwnProperty.call(body, 'short_name');
 
   const notes = notesProvided ? asString(body.notes) : null;
+  const shortName = shortNameProvided ? asString(body.short_name) : null;
   const skills = skillsProvided ? asSkillIds(body.skills) : null;
   if (skillsProvided && skills === null) {
     return new Response('skills must be an array of strings when provided.', { status: 400 });
@@ -106,6 +108,14 @@ export async function POST(request: Request, { params }: Ctx) {
       nextProfile.notes = notes;
     } else {
       delete nextProfile.notes;
+    }
+  }
+
+  if (shortNameProvided) {
+    if (shortName) {
+      nextProfile.short_name = shortName;
+    } else {
+      delete nextProfile.short_name;
     }
   }
 
