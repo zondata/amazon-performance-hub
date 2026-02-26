@@ -51,6 +51,14 @@ const parseDateOnly = (value: unknown): string | null => {
   return parsed.toISOString().slice(0, 10) === text ? text : null;
 };
 
+const parseDateTime = (value: unknown): Date | null => {
+  const text = asString(value);
+  if (!text) return null;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+};
+
 export async function POST(request: Request, { params }: Ctx) {
   const { id } = await params;
   const experimentId = id?.trim();
@@ -103,8 +111,13 @@ export async function POST(request: Request, { params }: Ctx) {
   }
 
   const experiment = experimentData as ExperimentRow;
-  const now = new Date();
-  const marketplaceDate = toMarketplaceDate(now, experiment.marketplace);
+  const occurredAtOverride = body.occurred_at === undefined ? null : parseDateTime(body.occurred_at);
+  if (body.occurred_at !== undefined && !occurredAtOverride) {
+    return new Response('occurred_at must be a valid datetime when provided.', { status: 400 });
+  }
+  const occurredAt = occurredAtOverride ?? new Date();
+
+  const marketplaceDate = toMarketplaceDate(occurredAt, experiment.marketplace);
   const eventDate = body.event_date === undefined ? marketplaceDate : parseDateOnly(body.event_date);
 
   if (body.event_date !== undefined && !eventDate) {
@@ -143,7 +156,7 @@ export async function POST(request: Request, { params }: Ctx) {
       event_type: eventType,
       event_date: eventDate,
       payload_json: payloadJson,
-      occurred_at: now.toISOString(),
+      occurred_at: occurredAt.toISOString(),
     })
     .select('id')
     .single();

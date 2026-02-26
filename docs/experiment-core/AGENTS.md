@@ -153,3 +153,7 @@ Only check phase boxes after `npm test` is green for the committed scope.
 - [x] `npm test` passes.
 - [x] `npm run web:lint` passes.
 - [x] `npm run web:build` passes.
+
+## Phase 7 (Guardrail UX + Evaluation Import Summary)
+- Experiment detail includes Quick Log Event presets (`guardrail_breach`, `manual_intervention`, `stop_loss`, `rollback`) and successful logs appear immediately in the timeline via refresh.
+- Evaluation output-pack import returns/displays an applied-changes summary after upload, including KIV create/update/status-change counts and warnings.

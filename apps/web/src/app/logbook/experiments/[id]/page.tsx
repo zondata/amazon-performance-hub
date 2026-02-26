@@ -5,10 +5,10 @@ import ExperimentSkillsOverrideManager from '@/components/logbook/ExperimentSkil
 import ExperimentEvaluationOutputPackImport from '@/components/logbook/ExperimentEvaluationOutputPackImport';
 import ExperimentEventsTimeline from '@/components/logbook/ExperimentEventsTimeline';
 import ExperimentPhaseActions from '@/components/logbook/ExperimentPhaseActions';
+import ExperimentQuickLogEventPanel from '@/components/logbook/ExperimentQuickLogEventPanel';
 import InlineFilters from '@/components/InlineFilters';
 import PageHeader from '@/components/PageHeader';
 import Table from '@/components/Table';
-import { importExperimentEvaluationOutputPack } from '@/lib/logbook/aiPack/importExperimentEvaluationOutputPack';
 import { getChanges } from '@/lib/logbook/getChanges';
 import { getExperimentContext } from '@/lib/logbook/getExperimentContext';
 import { linkChangesToExperiment } from '@/lib/logbook/linkChangesToExperiment';
@@ -103,14 +103,6 @@ const truncateText = (value?: string | null, max = 120): string => {
 const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
-type EvaluationImportState = {
-  ok?: boolean;
-  error?: string | null;
-  evaluation_id?: string;
-  outcome_score?: number;
-  outcome_label?: string;
-};
-
 export default async function ExperimentDetailPage({
   params,
 }: {
@@ -182,50 +174,6 @@ export default async function ExperimentDetailPage({
     revalidatePath(`/logbook/experiments/${experimentId}`);
   };
 
-  const importEvaluationPackAction = async (
-    _prevState: EvaluationImportState,
-    formData: FormData
-  ): Promise<EvaluationImportState> => {
-    'use server';
-
-    const selectedExperimentId = String(formData.get('experiment_id') ?? '').trim();
-    const file = formData.get('file');
-
-    if (!selectedExperimentId) {
-      return { ok: false, error: 'Missing experiment id.' };
-    }
-
-    if (!file || !(file instanceof File) || file.size === 0) {
-      return { ok: false, error: 'JSON file is required.' };
-    }
-
-    const fileText = await file.text();
-    const result = await importExperimentEvaluationOutputPack({
-      fileText,
-      expectedExperimentId: selectedExperimentId,
-      currentAsin: context?.product_asin ?? undefined,
-    });
-
-    if (!result.ok) {
-      return {
-        ok: false,
-        error: result.error ?? 'Failed to import evaluation output pack.',
-      };
-    }
-
-    revalidatePath(`/logbook/experiments/${selectedExperimentId}`);
-    if (context?.product_asin) {
-      revalidatePath(`/products/${context.product_asin}`);
-    }
-
-    return {
-      ok: true,
-      evaluation_id: result.evaluation_id,
-      outcome_score: result.outcome_score,
-      outcome_label: result.outcome_label,
-    };
-  };
-
   const linkedRows = context.linked_changes.map((change) => [
     <span key="date" className="text-muted">
       {formatDateTime(change.occurred_at)}
@@ -255,6 +203,7 @@ export default async function ExperimentDetailPage({
   ]);
 
   const latestOutcome = extractOutcome(context.latest_evaluation?.metrics_json ?? null);
+  const phaseRunIds = Array.from(new Set(context.phases.map((phase) => phase.run_id)));
   const phaseActionRunIds = Array.from(
     new Set([
       ...context.run_groups.map((group) => group.run_id),
@@ -388,8 +337,8 @@ export default async function ExperimentDetailPage({
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <div className="mb-4 text-sm font-semibold text-foreground">Evaluation Output Upload</div>
         <ExperimentEvaluationOutputPackImport
-          action={importEvaluationPackAction}
           experimentId={context.experiment.experiment_id}
+          uploadUrl={`/logbook/experiments/${context.experiment.experiment_id}/evaluation-import`}
         />
       </div>
 
@@ -416,17 +365,23 @@ export default async function ExperimentDetailPage({
         runIds={phaseActionRunIds}
       />
 
-      <ExperimentEventsTimeline
-        events={context.events.map((event) => ({
-          id: event.id,
-          run_id: event.run_id,
-          event_type: event.event_type,
-          event_date: event.event_date,
-          occurred_at: event.occurred_at,
-          payload_json: event.payload_json,
-        }))}
-        interruptionEventIds={context.interruption_events.map((event) => event.id)}
-      />
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+        <ExperimentQuickLogEventPanel
+          experimentId={context.experiment.experiment_id}
+          runIds={phaseRunIds}
+        />
+        <ExperimentEventsTimeline
+          events={context.events.map((event) => ({
+            id: event.id,
+            run_id: event.run_id,
+            event_type: event.event_type,
+            event_date: event.event_date,
+            occurred_at: event.occurred_at,
+            payload_json: event.payload_json,
+          }))}
+          interruptionEventIds={context.interruption_events.map((event) => event.id)}
+        />
+      </div>
 
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <div className="mb-4 text-sm font-semibold text-foreground">Timeline signals</div>
@@ -508,6 +463,7 @@ export default async function ExperimentDetailPage({
               return (
                 <div
                   key={evaluation.evaluation_id}
+                  id={`evaluation-${evaluation.evaluation_id}`}
                   className="rounded-lg border border-border bg-surface-2 p-3"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">

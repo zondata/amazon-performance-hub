@@ -25,11 +25,27 @@ export type ImportExperimentEvaluationOutputPackResult = {
   ok: boolean;
   evaluation_id?: string;
   experiment_id?: string;
+  product_asin?: string;
   status_updated?: boolean;
   outcome_score?: number;
   outcome_label?: 'success' | 'mixed' | 'fail';
   test_window_start?: string;
   test_window_end?: string;
+  applied?: {
+    kiv: {
+      created: number;
+      updated: number;
+      status_changed: number;
+      matched_by_id: number;
+      matched_by_title: number;
+    };
+    events: {
+      created: number;
+    };
+    memory: {
+      updated: boolean;
+    };
+  };
   warnings?: string[];
   error?: string;
 };
@@ -43,6 +59,14 @@ type ExperimentRow = {
 type OpenKivRow = {
   kiv_id: string;
   title: string;
+};
+
+type KivApplySummary = {
+  created: number;
+  updated: number;
+  status_changed: number;
+  matched_by_id: number;
+  matched_by_title: number;
 };
 
 const asObject = (value: unknown): JsonObject | null => {
@@ -98,9 +122,17 @@ const applyKivUpdates = async (params: {
   experimentId: string;
   updates: ParsedExperimentEvaluationOutputPack['evaluation']['kiv_updates'];
   warnings: string[];
-}) => {
+}): Promise<KivApplySummary> => {
+  const summary: KivApplySummary = {
+    created: 0,
+    updated: 0,
+    status_changed: 0,
+    matched_by_id: 0,
+    matched_by_title: 0,
+  };
+
   const { asinNorm, experimentId, updates, warnings } = params;
-  if (updates.length === 0) return;
+  if (updates.length === 0) return summary;
 
   const openByTitle = await loadOpenKivByTitle(asinNorm);
 
@@ -108,7 +140,13 @@ const applyKivUpdates = async (params: {
     const nextStatus = normalizeKivStatus(update.status);
     const nowIso = new Date().toISOString();
 
-    const updateExisting = async (kivId: string, titleForMap?: string) => {
+    const updateExisting = async (args: {
+      kivId: string;
+      titleForMap?: string;
+      currentStatus?: string | null;
+      matchedBy: 'id' | 'title';
+    }) => {
+      const { kivId, titleForMap, currentStatus, matchedBy } = args;
       const patch: Record<string, unknown> = {
         status: nextStatus,
         resolved_at: nextStatus === 'open' ? null : nowIso,
@@ -129,6 +167,16 @@ const applyKivUpdates = async (params: {
         throw new Error(`Failed updating KIV item ${kivId}: ${updateError.message}`);
       }
 
+      summary.updated += 1;
+      if (matchedBy === 'id') {
+        summary.matched_by_id += 1;
+      } else {
+        summary.matched_by_title += 1;
+      }
+      if ((currentStatus ?? '') !== nextStatus) {
+        summary.status_changed += 1;
+      }
+
       if (!titleForMap) return;
       const normalizedTitle = normalizeKivTitle(titleForMap);
       if (nextStatus === 'open') {
@@ -141,7 +189,7 @@ const applyKivUpdates = async (params: {
     if (update.kiv_id) {
       const { data: existingRow, error: existingError } = await supabaseAdmin
         .from('log_product_kiv_items')
-        .select('kiv_id,title')
+        .select('kiv_id,title,status')
         .eq('account_id', env.accountId)
         .eq('marketplace', env.marketplace)
         .eq('asin_norm', asinNorm)
@@ -157,7 +205,12 @@ const applyKivUpdates = async (params: {
         continue;
       }
 
-      await updateExisting(existingRow.kiv_id as string, String(existingRow.title ?? ''));
+      await updateExisting({
+        kivId: existingRow.kiv_id as string,
+        titleForMap: String(existingRow.title ?? ''),
+        currentStatus: asString(existingRow.status),
+        matchedBy: 'id',
+      });
       continue;
     }
 
@@ -170,7 +223,12 @@ const applyKivUpdates = async (params: {
     const normalizedTitle = normalizeKivTitle(title);
     const matched = openByTitle.get(normalizedTitle);
     if (matched?.kiv_id) {
-      await updateExisting(matched.kiv_id, matched.title);
+      await updateExisting({
+        kivId: matched.kiv_id,
+        titleForMap: matched.title,
+        currentStatus: 'open',
+        matchedBy: 'title',
+      });
       continue;
     }
 
@@ -194,6 +252,7 @@ const applyKivUpdates = async (params: {
       throw new Error(`Failed creating KIV item from evaluation update: ${insertError.message}`);
     }
 
+    summary.created += 1;
     warnings.push(`Created new KIV item from evaluation update (no open title match): ${title}`);
     if (nextStatus === 'open' && insertedRow?.kiv_id) {
       openByTitle.set(normalizedTitle, {
@@ -202,6 +261,8 @@ const applyKivUpdates = async (params: {
       });
     }
   }
+
+  return summary;
 };
 
 const deriveDateWindowFromScopeOrChanges = async (
@@ -395,7 +456,7 @@ export const importExperimentEvaluationOutputPack = async (
       }
     }
 
-    await applyKivUpdates({
+    const kivSummary = await applyKivUpdates({
       asinNorm: scopeAsin,
       experimentId: payload.experiment_id,
       updates: payload.evaluation.kiv_updates,
@@ -406,11 +467,21 @@ export const importExperimentEvaluationOutputPack = async (
       ok: true,
       evaluation_id: evaluationData.evaluation_id as string,
       experiment_id: payload.experiment_id,
+      product_asin: scopeAsin,
       status_updated: statusUpdated,
       outcome_score: payload.evaluation.outcome.score,
       outcome_label: payload.evaluation.outcome.label,
       test_window_start: kpis.windows.test.startDate,
       test_window_end: kpis.windows.test.endDate,
+      applied: {
+        kiv: kivSummary,
+        events: {
+          created: 0,
+        },
+        memory: {
+          updated: statusUpdated,
+        },
+      },
       warnings,
     };
   } catch (error) {

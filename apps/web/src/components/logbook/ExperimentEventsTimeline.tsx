@@ -83,6 +83,7 @@ export default function ExperimentEventsTimeline({ events, interruptionEventIds 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-sm font-semibold text-foreground">Events timeline</div>
+          <div className="text-xs text-muted">Facts can be delayed; capture live actions as events.</div>
           <div className="text-xs text-muted">{visibleEvents.length} shown</div>
         </div>
         <div className="inline-flex rounded-lg border border-border bg-surface-2 p-1 text-xs">
@@ -126,12 +127,14 @@ export default function ExperimentEventsTimeline({ events, interruptionEventIds 
                 key={event.id}
                 className={`rounded-lg border p-3 ${
                   isInterruption
-                    ? 'border-primary/50 bg-primary/10'
+                    ? 'border-primary/40 bg-surface-2'
                     : 'border-border bg-surface-2'
                 }`}
               >
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                  <span>{formatDateTime(event.occurred_at)}</span>
+                  <span className="rounded border border-border bg-surface px-1.5 py-0.5">
+                    occurred_at {formatDateTime(event.occurred_at)}
+                  </span>
                   <span
                     className={`rounded-full border px-2 py-0.5 ${
                       isInterruption
@@ -143,7 +146,7 @@ export default function ExperimentEventsTimeline({ events, interruptionEventIds 
                   </span>
                   {event.run_id ? (
                     <code className="rounded bg-surface px-1.5 py-0.5 text-[11px] text-foreground">
-                      {event.run_id}
+                      run_id {event.run_id}
                     </code>
                   ) : null}
                   {event.event_date ? (
@@ -152,7 +155,7 @@ export default function ExperimentEventsTimeline({ events, interruptionEventIds 
                     </span>
                   ) : null}
                 </div>
-                <div className="mt-2 text-sm text-foreground">{extractNotes(event.payload_json)}</div>
+                <div className="mt-2 text-sm text-foreground">Notes: {extractNotes(event.payload_json)}</div>
               </div>
             );
           })}

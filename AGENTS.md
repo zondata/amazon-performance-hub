@@ -29,6 +29,8 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - `/logbook/experiments/[id]` now includes a Phases table (run_id, effective_date, uploaded_at, notes).
 - `/logbook/experiments/[id]` now includes an Events Timeline with `All events` vs `Interruptions only` filtering; interruption events are visually highlighted.
 - New timeline component: `apps/web/src/components/logbook/ExperimentEventsTimeline.tsx`.
+- `/logbook/experiments/[id]` now includes Quick Log Event presets (`Guardrail breach`, `Manual intervention`, `Stop-loss`, `Rollback`) with immediate timeline refresh after logging.
+- Evaluation output-pack upload now shows an applied-changes summary after import (including KIV update counts and warnings).
 
 **UI Layout System**
 ### Sidebar (global)

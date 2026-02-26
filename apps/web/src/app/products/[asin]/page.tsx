@@ -22,7 +22,6 @@ import { parseCsv } from '@/lib/csv/parseCsv';
 import { env } from '@/lib/env';
 import { getKeywordAiPackTemplates } from '@/lib/keywords/keywordAiPackTemplates';
 import { toTemplateOptions as toKeywordTemplateOptions } from '@/lib/keywords/keywordAiPackTemplatesModel';
-import { importExperimentEvaluationOutputPack } from '@/lib/logbook/aiPack/importExperimentEvaluationOutputPack';
 import { importProductExperimentOutputPack } from '@/lib/logbook/aiPack/importProductExperimentOutputPack';
 import { getProductExperimentPromptTemplates } from '@/lib/logbook/productExperimentPromptTemplates';
 import { toTemplateOptions as toProductExperimentPromptTemplateOptions } from '@/lib/logbook/productExperimentPromptTemplatesModel';
@@ -398,14 +397,6 @@ type LogbookAiPackImportState = {
   error?: string | null;
   created_experiment_id?: string;
   created_change_ids_count?: number;
-};
-
-type EvaluationPackImportState = {
-  ok?: boolean;
-  error?: string | null;
-  evaluation_id?: string;
-  outcome_score?: number;
-  outcome_label?: string;
 };
 
 type ProductDriverIntentRow = {
@@ -869,48 +860,6 @@ export default async function ProductDetailPage({
       ok: true,
       created_experiment_id: result.created_experiment_id,
       created_change_ids_count: result.created_change_ids_count,
-    };
-  };
-
-  const importExperimentEvaluationPackAction = async (
-    _prevState: EvaluationPackImportState,
-    formData: FormData
-  ): Promise<EvaluationPackImportState> => {
-    'use server';
-
-    const experimentId = String(formData.get('experiment_id') ?? '').trim();
-    const file = formData.get('file');
-
-    if (!experimentId) {
-      return { ok: false, error: 'Missing experiment id.' };
-    }
-
-    if (!file || !(file instanceof File) || file.size === 0) {
-      return { ok: false, error: 'JSON file is required.' };
-    }
-
-    const fileText = await file.text();
-    const result = await importExperimentEvaluationOutputPack({
-      fileText,
-      currentAsin: asin,
-      expectedExperimentId: experimentId,
-    });
-
-    if (!result.ok) {
-      return {
-        ok: false,
-        error: result.error ?? 'Failed to import evaluation output pack.',
-      };
-    }
-
-    revalidatePath(`/products/${asin}`);
-    revalidatePath(`/logbook/experiments/${experimentId}`);
-
-    return {
-      ok: true,
-      evaluation_id: result.evaluation_id,
-      outcome_score: result.outcome_score,
-      outcome_label: result.outcome_label,
     };
   };
 
@@ -2030,8 +1979,8 @@ export default async function ProductDetailPage({
                         </div>
 
                         <ExperimentEvaluationOutputPackImport
-                          action={importExperimentEvaluationPackAction}
                           experimentId={group.experiment.experiment_id}
+                          uploadUrl={`/logbook/experiments/${group.experiment.experiment_id}/evaluation-import`}
                         />
 
                         <div className="space-y-2">
