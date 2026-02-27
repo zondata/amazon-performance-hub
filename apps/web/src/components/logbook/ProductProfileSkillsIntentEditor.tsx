@@ -23,6 +23,7 @@ type Props = {
   initialSkills: string[];
   initialIntent: Record<string, unknown> | null;
   availableSkills: SkillOption[];
+  resolvedSkillLibrary: ResolvedSkillOption[];
   resolvedSelectedSkills: ResolvedSkillOption[];
 };
 
@@ -38,6 +39,7 @@ export default function ProductProfileSkillsIntentEditor({
   initialSkills,
   initialIntent,
   availableSkills,
+  resolvedSkillLibrary,
   resolvedSelectedSkills,
 }: Props) {
   const router = useRouter();
@@ -79,9 +81,21 @@ export default function ProductProfileSkillsIntentEditor({
     return map;
   }, [resolvedSelectedSkills]);
 
+  const skillLibraryById = useMemo(() => {
+    const map = new Map<string, ResolvedSkillOption>();
+    resolvedSkillLibrary.forEach((skill) => {
+      map.set(skill.id, skill);
+    });
+    return map;
+  }, [resolvedSkillLibrary]);
+
   const selectedSkillDetails = useMemo(
     () =>
       selectedSkills.map((id) => {
+        const fromLibrary = skillLibraryById.get(id);
+        if (fromLibrary) {
+          return fromLibrary;
+        }
         const resolved = resolvedSkillById.get(id);
         if (resolved) {
           return resolved;
@@ -94,7 +108,7 @@ export default function ProductProfileSkillsIntentEditor({
           content_md: '',
         };
       }),
-    [resolvedSkillById, selectedSkills, skillLabelById]
+    [resolvedSkillById, selectedSkills, skillLabelById, skillLibraryById]
   );
 
   const toggleSkill = (skillId: string) => {
@@ -247,7 +261,37 @@ export default function ProductProfileSkillsIntentEditor({
                     applies_to: {skill.applies_to.length > 0 ? skill.applies_to.join(', ') : '—'}
                   </div>
                   <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg border border-border bg-surface-2 p-3 font-mono text-xs text-foreground">
-                    {skill.content_md || 'No resolved SOP content. Save and refresh if this skill was just selected.'}
+                    {skill.content_md || 'No resolved SOP content.'}
+                  </pre>
+                </div>
+              </details>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-xs uppercase tracking-wide text-muted">Skill library</div>
+        {resolvedSkillLibrary.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border bg-surface-2 px-3 py-2 text-sm text-muted">
+            No skill definitions found in docs/skills/library.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {resolvedSkillLibrary.map((skill) => (
+              <details key={skill.id} className="rounded-lg border border-border bg-surface px-3 py-2">
+                <summary className="cursor-pointer text-sm font-semibold text-foreground">
+                  {skill.id} · {skill.title}
+                </summary>
+                <div className="mt-2 space-y-2 text-xs text-muted">
+                  <div>
+                    tags: {skill.tags.length > 0 ? skill.tags.join(', ') : '—'}
+                  </div>
+                  <div>
+                    applies_to: {skill.applies_to.length > 0 ? skill.applies_to.join(', ') : '—'}
+                  </div>
+                  <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg border border-border bg-surface-2 p-3 font-mono text-xs text-foreground">
+                    {skill.content_md || 'No skill content.'}
                   </pre>
                 </div>
               </details>

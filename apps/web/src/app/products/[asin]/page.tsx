@@ -1132,6 +1132,13 @@ export default async function ProductDetailPage({
   const profileSkills = scopeStringArray(profileJson, 'skills');
   const profileIntent = asObject(profileJson?.intent);
   const resolvedSkillLibrary = tab === 'overview' ? listResolvedSkills() : [];
+  const resolvedSkillLibraryEntries = resolvedSkillLibrary.map((skill) => ({
+    id: skill.id,
+    title: skill.title,
+    tags: skill.tags,
+    applies_to: skill.applies_to,
+    content_md: skill.content_md,
+  }));
   const availableSkillOptions = resolvedSkillLibrary.map((skill) => ({
     id: skill.id,
     title: skill.title,
@@ -1393,6 +1400,7 @@ export default async function ProductDetailPage({
                 initialSkills={profileSkills}
                 initialIntent={profileIntent}
                 availableSkills={availableSkillOptions}
+                resolvedSkillLibrary={resolvedSkillLibraryEntries}
                 resolvedSelectedSkills={resolvedProfileSkills}
               />
               <ProductDriverIntentManager asin={asin} initialRows={productDriverIntents} />

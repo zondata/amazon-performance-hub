@@ -125,15 +125,33 @@ const parseSkillFile = (filePath: string): ResolvedSkill | null => {
 };
 
 const resolveLibraryDir = (): string | null => {
-  const candidates = [
-    path.resolve(process.cwd(), 'docs/skills/library'),
-    path.resolve(process.cwd(), '../docs/skills/library'),
-  ];
+  const isDirectory = (candidate: string): boolean => {
+    try {
+      return fs.statSync(candidate).isDirectory();
+    } catch {
+      return false;
+    }
+  };
 
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+  const override = asString(process.env.APH_SKILLS_LIBRARY_DIR);
+  if (override) {
+    const overridePath = path.isAbsolute(override)
+      ? override
+      : path.resolve(process.cwd(), override);
+    if (isDirectory(overridePath)) {
+      return overridePath;
+    }
+  }
+
+  let cursor = process.cwd();
+  for (let level = 0; level <= 10; level += 1) {
+    const candidate = path.join(cursor, 'docs', 'skills', 'library');
+    if (isDirectory(candidate)) {
       return candidate;
     }
+    const parent = path.dirname(cursor);
+    if (parent === cursor) break;
+    cursor = parent;
   }
 
   return null;
