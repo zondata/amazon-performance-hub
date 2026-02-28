@@ -1,5 +1,6 @@
 import { ingestSpPlacementRaw } from "../ingest/ingestSpPlacementRaw";
 import { mapUpload } from "../mapping/db";
+import { deriveExportedAtFromPath } from "./spPlacementDateUtils";
 
 function usage() {
   console.log(
@@ -29,13 +30,18 @@ function getPositionalArgs(): string[] {
 
 async function main() {
   const accountId = getArg("--account-id");
-  const exportedAt = getArg("--exported-at");
+  const exportedAtArg = getArg("--exported-at");
   const positionals = getPositionalArgs();
   const xlsxPath = positionals[0];
 
   if (!accountId || !xlsxPath) {
     usage();
     process.exit(1);
+  }
+
+  const exportedAt = exportedAtArg ?? deriveExportedAtFromPath(xlsxPath);
+  if (!exportedAtArg && exportedAt) {
+    console.log(`Derived exported_at from path: ${exportedAt}`);
   }
 
   const ingestResult = await ingestSpPlacementRaw(xlsxPath, accountId, exportedAt, { force: true });

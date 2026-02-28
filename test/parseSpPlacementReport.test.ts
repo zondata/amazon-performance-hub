@@ -135,4 +135,19 @@ describe("parseSpPlacementReport", () => {
     expect(result.rows.length).toBe(1);
     expect(result.rows[0]?.sales).toBe(321.09);
   });
+
+  it("does not map spend to cost-per-click when both are present", () => {
+    const tmpDir = path.resolve(__dirname, "tmp");
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    const filePath = path.join(tmpDir, `placement-cost-vs-cpc-${Date.now()}.xlsx`);
+    writePlacementXlsx(filePath, [
+      ["Date", "Campaign Name", "Placement", "Clicks", "Cost per click", "Cost"],
+      ["2026-01-05", "Campaign Four", "Top of Search (first page)", "10", "1.23", "12.30"],
+    ]);
+
+    const result = parseSpPlacementReport(filePath);
+    expect(result.rows.length).toBe(1);
+    expect(result.rows[0]?.cpc).toBe(1.23);
+    expect(result.rows[0]?.spend).toBe(12.3);
+  });
 });

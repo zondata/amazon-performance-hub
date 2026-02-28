@@ -70,11 +70,18 @@ function headerMatchesAlias(normalizedHeader: string, alias: string): boolean {
   return normalizedHeader === alias || normalizedHeader.startsWith(`${alias} `);
 }
 
+function isCpcLikeHeader(normalizedHeader: string): boolean {
+  if (normalizedHeader.includes("cpc")) return true;
+  if (normalizedHeader.includes("click") && normalizedHeader.includes("cost")) return true;
+  return false;
+}
+
 function mapHeaders(headers: string[]): Record<string, number> {
   const normalized = headers.map((h) => normalizeHeader(h));
   const indexMap: Record<string, number> = {};
   for (const [field, aliases] of Object.entries(HEADER_ALIASES)) {
     for (let i = 0; i < normalized.length; i += 1) {
+      if (field === "spend" && isCpcLikeHeader(normalized[i])) continue;
       if (aliases.some((alias) => headerMatchesAlias(normalized[i], alias))) {
         indexMap[field] = i;
         break;

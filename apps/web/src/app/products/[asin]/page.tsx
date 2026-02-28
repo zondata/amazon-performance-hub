@@ -1395,6 +1395,7 @@ export default async function ProductDetailPage({
             <div className="space-y-6">
               <ProductProfileSkillsIntentEditor
                 asin={asin}
+                displayName={displayName}
                 initialShortName={shortName ?? ''}
                 initialNotes={data.productMeta.notes ?? ''}
                 initialSkills={profileSkills}

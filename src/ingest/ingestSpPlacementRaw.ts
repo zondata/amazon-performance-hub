@@ -27,7 +27,7 @@ export async function ingestSpPlacementRaw(
     () =>
       client
         .from("uploads")
-        .select("upload_id")
+        .select("upload_id,exported_at")
         .eq("account_id", accountId)
         .eq("file_hash_sha256", fileHash)
         .maybeSingle(),
@@ -72,7 +72,7 @@ export async function ingestSpPlacementRaw(
   }
 
   const stats = fs.statSync(xlsxPath);
-  const exportedAt = exportedAtOverride ?? stats.mtime.toISOString();
+  const exportedAt = exportedAtOverride ?? existingUpload?.exported_at ?? stats.mtime.toISOString();
 
   const { rows, coverageStart, coverageEnd } = parseSpPlacementReport(xlsxPath);
 

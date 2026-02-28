@@ -33,6 +33,7 @@ import {
   calcCtr,
   calcCvrOrdersPerClick,
   calcRoas,
+  classifySpPlacementSpendScaling,
   derivePlacementSpendReconciliation,
   mapPlacementModifierKey,
   weightedAvgTosIs,
@@ -174,6 +175,18 @@ const toFiniteNumberOrNull = (value: unknown): number | null => {
 
 const formatPct = (value: number | null) =>
   value === null || !Number.isFinite(value) ? null : Number(value.toFixed(6));
+
+const formatSignedPercent = (value: number | null): string | null => {
+  if (value === null || !Number.isFinite(value)) return null;
+  const sign = value >= 0 ? "+" : "";
+  return `${sign}${value.toFixed(2)}%`;
+};
+
+const formatSignedCurrency = (value: number | null): string | null => {
+  if (value === null || !Number.isFinite(value)) return null;
+  const sign = value >= 0 ? "+" : "-";
+  return `${sign}$${Math.abs(value).toFixed(2)}`;
+};
 
 const sanitizeFileSegment = (value: string): string =>
   value
@@ -2393,6 +2406,9 @@ export async function GET(request: Request, { params }: Ctx) {
       placementSpendReconciliation.spend_scale_factor !== null
     ) {
       const scaleFactor = placementSpendReconciliation.spend_scale_factor;
+      const scalingClassification = classifySpPlacementSpendScaling(placementSpendReconciliation);
+      const adjustmentPct = (scaleFactor - 1) * 100;
+      const spendGap = placementSpendReconciliation.spend_gap_reported;
       placementPerformance = placementPerformance.map((placementRow) => {
         const scaledSpend = num(placementRow.spend_reported) * scaleFactor;
         const sales = num(placementRow.sales);
@@ -2405,16 +2421,39 @@ export async function GET(request: Request, { params }: Ctx) {
           cpc: calcCpc(scaledSpend, clicks),
         };
       });
-      addMessage(
-        "warn",
-        "SP_PLACEMENT_SPEND_SCALED",
-        "SP placement spend was scaled to campaign spend because reported placement spend did not reconcile while clicks aligned.",
-        {
-          campaign_id: row.campaign_id,
-          campaign_name_norm: row.campaign_name_norm,
-          placement_spend_reconciliation: placementSpendReconciliation,
-        }
-      );
+      if (scalingClassification === "major_scaled") {
+        addMessage(
+          "warn",
+          "SP_PLACEMENT_SPEND_SCALED",
+          "SP placement spend was scaled to campaign spend because reported placement spend did not reconcile while clicks aligned.",
+          {
+            campaign_id: row.campaign_id,
+            campaign_name_norm: row.campaign_name_norm,
+            placement_spend_reconciliation: placementSpendReconciliation,
+            scaling_classification: scalingClassification,
+            spend_adjustment_pct: adjustmentPct,
+            spend_gap_reported: spendGap,
+          }
+        );
+      } else if (scalingClassification === "minor_scaled") {
+        const adjustmentPctText = formatSignedPercent(adjustmentPct) ?? "n/a";
+        const spendGapText = formatSignedCurrency(spendGap) ?? "n/a";
+        addMessage(
+          "info",
+          "SP_PLACEMENT_SPEND_SCALED_MINOR",
+          `Minor SP placement spend adjustment applied (${adjustmentPctText}, ${spendGapText}) to reconcile to campaign total.`,
+          {
+            campaign_id: row.campaign_id,
+            campaign_name_norm: row.campaign_name_norm,
+            placement_spend_reconciliation: placementSpendReconciliation,
+            scaling_classification: scalingClassification,
+            spend_adjustment_pct: adjustmentPct,
+            spend_gap_reported: spendGap,
+            spend_adjustment_pct_text: adjustmentPctText,
+            spend_gap_text: spendGapText,
+          }
+        );
+      }
     } else if (
       placementSpendReconciliation.status === "missing_reported_spend" ||
       placementSpendReconciliation.status === "mismatch"

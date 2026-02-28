@@ -50,4 +50,23 @@ describe("pack message helpers", () => {
 
     expect(legacyWarningsFromMessages(messages)).toEqual([(partial as PackMessage).text]);
   });
+
+  it("includes major scaled warning but excludes minor scaled info from legacy warnings", () => {
+    const messages: PackMessage[] = [
+      {
+        level: "info",
+        code: "SP_PLACEMENT_SPEND_SCALED_MINOR",
+        text: "Minor SP placement spend adjustment applied (+2.10%, +$0.45) to reconcile to campaign total.",
+      },
+      {
+        level: "warn",
+        code: "SP_PLACEMENT_SPEND_SCALED",
+        text: "SP placement spend was scaled to campaign spend because reported placement spend did not reconcile while clicks aligned.",
+      },
+    ];
+
+    const warnings = legacyWarningsFromMessages(messages);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toBe(messages[1]?.text);
+  });
 });

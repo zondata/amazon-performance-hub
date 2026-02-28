@@ -20,6 +20,8 @@ export type PlacementSpendReconciliation = {
   spend_scale_factor: number | null;
 };
 
+export type SpPlacementSpendScalingClassification = "ok" | "minor_scaled" | "major_scaled";
+
 const toFinite = (value: number): number => (Number.isFinite(value) ? value : 0);
 
 export const safeDivide = (numerator: number, denominator: number): number | null => {
@@ -110,6 +112,28 @@ export const derivePlacementSpendReconciliation = (input: {
     sales_ratio: salesRatio,
     spend_scale_factor: spendScaleFactor,
   };
+};
+
+const ratioNearOne = (ratio: number | null, tolerance: number): boolean => {
+  if (ratio === null) return false;
+  if (ratio === 1) return true;
+  return Math.abs(1 - ratio) <= tolerance;
+};
+
+export const classifySpPlacementSpendScaling = (
+  reconciliation: PlacementSpendReconciliation
+): SpPlacementSpendScalingClassification => {
+  if (reconciliation.status !== "scaled_to_campaign_total") return "ok";
+
+  const salesClose = ratioNearOne(reconciliation.sales_ratio, 0.001);
+  const clicksCloseByRatio = ratioNearOne(reconciliation.clicks_ratio, 0.05);
+  const clicksGapClose =
+    Math.abs(reconciliation.campaign_clicks - reconciliation.placement_clicks_sum) <= 1;
+  const spendGapClose = Math.abs(reconciliation.spend_gap_reported) <= 1;
+  const spendRatioClose = ratioNearOne(reconciliation.spend_ratio_reported, 0.03);
+
+  const isMinor = salesClose && (clicksCloseByRatio || clicksGapClose) && (spendGapClose || spendRatioClose);
+  return isMinor ? "minor_scaled" : "major_scaled";
 };
 
 export const weightedAvgTosIs = (

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   calcCvrOrdersPerClick,
+  classifySpPlacementSpendScaling,
   derivePlacementSpendReconciliation,
   mapPlacementModifierKey,
   weightedAvgTosIs,
@@ -99,5 +100,47 @@ describe("aiPackV3Helpers", () => {
 
     expect(reconciliation.status).toBe("mismatch");
     expect(reconciliation.spend_scale_factor).toBeNull();
+  });
+
+  it("classifies small scaled reconciliation as minor_scaled", () => {
+    const reconciliation = derivePlacementSpendReconciliation({
+      campaignSpend: 21.42,
+      campaignClicks: 47,
+      campaignSales: 100,
+      placementSpendReportedSum: 20.97,
+      placementClicksSum: 46,
+      placementSalesSum: 100,
+    });
+
+    expect(reconciliation.status).toBe("scaled_to_campaign_total");
+    expect(classifySpPlacementSpendScaling(reconciliation)).toBe("minor_scaled");
+  });
+
+  it("classifies large scaled reconciliation as major_scaled", () => {
+    const reconciliation = derivePlacementSpendReconciliation({
+      campaignSpend: 765.81,
+      campaignClicks: 100,
+      campaignSales: 500,
+      placementSpendReportedSum: 700,
+      placementClicksSum: 100,
+      placementSalesSum: 500,
+    });
+
+    expect(reconciliation.status).toBe("scaled_to_campaign_total");
+    expect(classifySpPlacementSpendScaling(reconciliation)).toBe("major_scaled");
+  });
+
+  it("classifies non-scaled reconciliation as ok", () => {
+    const reconciliation = derivePlacementSpendReconciliation({
+      campaignSpend: 100,
+      campaignClicks: 50,
+      campaignSales: 250,
+      placementSpendReportedSum: 100.0001,
+      placementClicksSum: 50,
+      placementSalesSum: 250,
+    });
+
+    expect(reconciliation.status).toBe("ok");
+    expect(classifySpPlacementSpendScaling(reconciliation)).toBe("ok");
   });
 });

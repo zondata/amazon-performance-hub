@@ -57,14 +57,29 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
     - CLI helper: `src/cli/backfillAdsGold.ts` (`npm run pipeline:backfill:ads:gold`).
 - `Fix`
   - SP placement parser now recognizes `14 Day Total Sales / Orders / Units` headers, including currency-suffixed variants.
+  - SP placement header matching now avoids mapping spend to CPC-like headers (`cpc`, `cost per click`, `cost/click`), preventing the `spend == cpc` corruption when `Cost per click` appears before `Cost`.
   - V3 SP campaigns now include `placement_spend_reconciliation` with statuses: `ok | scaled_to_campaign_total | missing_reported_spend | mismatch`.
   - When SP placement clicks align but spend does not, placement spend is scaled to campaign spend (`placement_performance[].spend_reported` preserved; spend-based KPIs recomputed).
+  - V3 SP placement spend scaling now classifies scaled reconciliations:
+    - `minor_scaled`: emit INFO (`SP_PLACEMENT_SPEND_SCALED_MINOR`) and do not add to `metadata.warnings[]`.
+    - `major_scaled`: keep WARN (`SP_PLACEMENT_SPEND_SCALED`) and warning behavior.
+  - Minor scaling thresholds: `status=scaled_to_campaign_total`, sales aligned (`|1-sales_ratio| <= 0.001`), clicks aligned (`|1-clicks_ratio| <= 0.05` or click gap `<= 1`), and spend close (`|spend_gap_reported| <= 1.00` or `|1-spend_ratio_reported| <= 0.03`).
   - When SP placement spend is missing/mismatched, placement spend + spend-based KPIs are nulled and warning messages are emitted (no unsafe placement decisions from bad spend data).
+  - SP placement reingest now keeps exported-at precedence stable: `override > existing upload exported_at > file mtime`.
   - `computed_summary` profitability now falls back to `sales_trend_daily[*].profits` when `kpis.baseline.totals.profits` is missing (requires complete window coverage).
 - `Ops`
   - `reingest:sp:placement` supports `--force` and runs SP placement reingest plus mapping in one step.
+  - New SP placement repair CLI for overlap windows:
+    - `npm run repair:sp:placement:range -- --account-id <id> --root <root> --from YYYY-MM-DD --to YYYY-MM-DD [--dry-run]`
+    - Intended for repairing historical “winning” uploads in `*_latest` after parser fixes by reingesting + remapping overlapping uploads from local date folders.
+    - Does not change latest-view semantics/order contract (still latest-by-`exported_at`, then tie-breakers).
 - `Perf/robustness`
   - SP targeting baseline max-date lookup now uses campaign-scoped latest-row selection (`order desc + limit 1`) with advertised-product fallback when campaign IDs are empty to reduce timeout risk.
+- `Tests`
+  - Added SP placement parser regression test for `Cost per click` + `Cost` coexistence (CPC appears first; spend must map to `Cost`).
+  - Added `ingestSpPlacementRaw` tests for exported-at selection precedence (`override > existing upload > mtime`).
+  - Added repair date-utils tests for UTC exported-at → folder date conversion and placement report path building.
+  - Added pack helper tests for minor vs major scaling classification and warning aggregation behavior (minor INFO excluded from `metadata.warnings[]`, major WARN included).
 - `Known issues / Next`
   - SP reconciliation can still timeout for very wide ranges (`All` / overlap), producing partial reconciliation chunks.
   - SP campaign/target `units` can still be `0` even when placement `units` exist (follow-up needed).
