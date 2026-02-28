@@ -465,6 +465,16 @@ async function insertIssues(
   await insertChunked("sb_mapping_issues", rows);
 }
 
+async function refreshSbCampaignDailyFactGold(uploadId: string) {
+  const client = getSupabaseClient();
+  const { error } = await client.rpc("refresh_sb_campaign_daily_fact_gold", {
+    p_upload_id: uploadId,
+  });
+  if (error) {
+    throw new Error(`Failed refreshing SB campaign gold rows: ${error.message}`);
+  }
+}
+
 export async function mapUpload(
   uploadId: string,
   reportType: "sb_campaign" | "sb_campaign_placement" | "sb_keyword" | "sb_stis"
@@ -527,6 +537,7 @@ export async function mapUpload(
       referenceDate,
     });
     await insertChunked("sb_campaign_daily_fact", facts, "sb_campaign");
+    await refreshSbCampaignDailyFactGold(uploadId);
     await insertIssues(upload.account_id, uploadId, reportType, issues);
     return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
   }

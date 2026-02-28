@@ -51,6 +51,14 @@ type FetchDiagnosticEntry = {
 };
 
 type BaselinePackResponse = {
+  ok?: boolean;
+  status?: string;
+  error?: string;
+  messages?: unknown;
+  fetch_diagnostics?: {
+    sp_reconciliation?: FetchDiagnosticEntry;
+    pack_incomplete?: FetchDiagnosticEntry;
+  };
   metadata?: {
     warnings?: unknown;
     messages?: unknown;
@@ -61,6 +69,22 @@ type BaselinePackResponse = {
     };
   };
 };
+
+const toFailedRangesSample = (
+  diagnostics: FetchDiagnosticEntry | undefined
+): Array<{ chunkStart: string; chunkEnd: string; message: string }> =>
+  Array.isArray(diagnostics?.failedRangesSample)
+    ? diagnostics.failedRangesSample
+        .map((entry) => ({
+          chunkStart: String(entry.chunkStart ?? "").trim(),
+          chunkEnd: String(entry.chunkEnd ?? "").trim(),
+          message: String(entry.message ?? "").trim(),
+        }))
+        .filter(
+          (entry) => entry.chunkStart.length > 0 && entry.chunkEnd.length > 0 && entry.message.length > 0
+        )
+        .slice(0, 3)
+    : [];
 
 const getFilenameFromContentDisposition = (headerValue: string | null): string | null => {
   if (!headerValue) return null;
@@ -161,12 +185,6 @@ export default function ProductBaselineDataPackDownload({
         signal: controller.signal,
       });
 
-      if (!response.ok) {
-        const bodyText = (await response.text()).trim();
-        const statusMessage = `${response.status} ${response.statusText}`.trim();
-        throw new Error(bodyText || statusMessage || "Request failed.");
-      }
-
       const cloned = response.clone();
       let payload: BaselinePackResponse | null = null;
       try {
@@ -175,9 +193,40 @@ export default function ProductBaselineDataPackDownload({
         payload = null;
       }
 
+      if (!response.ok) {
+        if (payload?.status === "pack_incomplete") {
+          const diagnostics =
+            payload.fetch_diagnostics?.pack_incomplete ?? payload.fetch_diagnostics?.sp_reconciliation;
+          const warnings = asWarnings(payload?.metadata?.warnings);
+          const topLevelMessages = asPackMessages(payload?.messages);
+          const metadataMessages = asPackMessages(payload?.metadata?.messages);
+          const messages = topLevelMessages.length > 0 ? topLevelMessages : metadataMessages;
+          const fallbackMessages: PackMessage[] = payload?.error
+            ? [{ level: "error", code: "PACK_INCOMPLETE", text: payload.error }]
+            : [];
+          const normalizedMessages: PackMessage[] =
+            messages.length > 0
+              ? messages
+              : warnings.length > 0
+                ? toLegacyWarningMessages(warnings)
+                : fallbackMessages;
+          setPackMessages(normalizedMessages);
+          setFailedRangesSample(toFailedRangesSample(diagnostics));
+          setErrorMessage(
+            `Failed to generate data pack: ${String(payload?.error ?? "Pack is incomplete.").trim()}`
+          );
+          return;
+        }
+        const bodyText = (await response.text()).trim();
+        const statusMessage = `${response.status} ${response.statusText}`.trim();
+        throw new Error(bodyText || statusMessage || "Request failed.");
+      }
+
       const warnings = asWarnings(payload?.metadata?.warnings);
       const messages = asPackMessages(payload?.metadata?.messages);
-      const spReconciliationDiagnostics = payload?.meta?.fetch_diagnostics?.sp_reconciliation;
+      const spReconciliationDiagnostics =
+        payload?.meta?.fetch_diagnostics?.sp_reconciliation ??
+        payload?.fetch_diagnostics?.sp_reconciliation;
       const chunksFailed = Number(spReconciliationDiagnostics?.chunksFailed ?? 0);
       const hasPartialChunkFailures = Number.isFinite(chunksFailed) && chunksFailed > 0;
 
@@ -199,19 +248,7 @@ export default function ProductBaselineDataPackDownload({
       }
       setPackMessages(normalizedMessages);
 
-      const sample = Array.isArray(spReconciliationDiagnostics?.failedRangesSample)
-        ? spReconciliationDiagnostics.failedRangesSample
-            .map((entry) => ({
-              chunkStart: String(entry.chunkStart ?? "").trim(),
-              chunkEnd: String(entry.chunkEnd ?? "").trim(),
-              message: String(entry.message ?? "").trim(),
-            }))
-            .filter(
-              (entry) => entry.chunkStart.length > 0 && entry.chunkEnd.length > 0 && entry.message.length > 0
-            )
-            .slice(0, 3)
-        : [];
-      setFailedRangesSample(sample);
+      setFailedRangesSample(toFailedRangesSample(spReconciliationDiagnostics));
 
       const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);

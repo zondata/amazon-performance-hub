@@ -436,6 +436,16 @@ async function insertIssues(
   await insertChunked("sp_mapping_issues", rows);
 }
 
+async function refreshSpCampaignHourlyFactGold(uploadId: string) {
+  const client = getSupabaseClient();
+  const { error } = await client.rpc("refresh_sp_campaign_hourly_fact_gold", {
+    p_upload_id: uploadId,
+  });
+  if (error) {
+    throw new Error(`Failed refreshing SP campaign gold rows: ${error.message}`);
+  }
+}
+
 export async function mapUpload(uploadId: string, reportType: "sp_campaign" | "sp_placement" | "sp_targeting" | "sp_stis") {
   const upload = await fetchUpload(uploadId);
   if (upload.source_type !== reportType) {
@@ -488,6 +498,7 @@ export async function mapUpload(uploadId: string, reportType: "sp_campaign" | "s
       referenceDate,
     });
     await insertChunked("sp_campaign_hourly_fact", facts);
+    await refreshSpCampaignHourlyFactGold(uploadId);
     await insertIssues(upload.account_id, uploadId, reportType, issues);
     return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
   }

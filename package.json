@@ -78,6 +78,7 @@
     "sp:create:reconcile": "ts-node src/cli/spCreateReconcile.ts",
     "sp:create:reconcile:pending": "ts-node src/cli/spCreateReconcilePending.ts",
     "pipeline:backfill:ads": "ts-node src/cli/backfillAds.ts",
+    "pipeline:backfill:ads:gold": "ts-node src/cli/backfillAdsGold.ts",
     "pipeline:backfill:sb": "ts-node src/cli/backfillSb.ts",
     "pipeline:backfill:sd": "ts-node src/cli/backfillSd.ts",
     "pipeline:import:manifest": "ts-node src/cli/importBatchFromManifest.ts",

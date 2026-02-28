@@ -39,6 +39,22 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
   - Product Baseline Data Pack V3 endpoint: `/products/[asin]/logbook/ai-data-pack-v3`.
   - V3 core pack includes campaign/placement/target KPIs plus current SP/SB settings.
   - STIS/STIR is delivered via export endpoint (separate download URL), not embedded in core JSON.
+  - Data Pack correctness (hard requirement):
+    - V3 packs MUST NOT return partial results.
+    - Pack endpoints return non-2xx with `status = "pack_incomplete"` and diagnostics (never partial success).
+    - Any chunk failure in required datasets must fail the pack (include diagnostics).
+    - No “use successful chunks only” behavior for pack-critical paths.
+  - Gold campaign cache architecture (pack-critical spend paths):
+    - Tables: `sp_campaign_hourly_fact_gold`, `sb_campaign_daily_fact_gold`, `sd_campaign_daily_fact_gold`.
+    - Views: `sp_campaign_hourly_fact_latest_gold`, `sp_campaign_daily_fact_latest_gold`, `sb_campaign_daily_fact_latest_gold`, `sd_campaign_daily_fact_latest_gold`.
+    - Pack routes use `*_latest_gold` (not legacy window-heavy latest views) for SP reconciliation and attribution-bridge mapped SP campaign spend totals.
+  - Gold cache update flow:
+    - Per-upload refresh RPCs: `refresh_sp_campaign_hourly_fact_gold(upload_id)`, `refresh_sb_campaign_daily_fact_gold(upload_id)`, `refresh_sd_campaign_daily_fact_gold(upload_id)`.
+  - Backfill / ops:
+    - Historical backfill uses service_role-only rebuild RPCs: `rebuild_sp_campaign_hourly_fact_gold(account_id, start_date, end_date)` (+ SB/SD equivalents).
+    - SQL Editor may not satisfy service_role checks; trigger via CLI/supabaseAdmin with `SUPABASE_SERVICE_ROLE_KEY`.
+    - SOP: `docs/sop/ads_gold_backfill.md`.
+    - CLI helper: `src/cli/backfillAdsGold.ts` (`npm run pipeline:backfill:ads:gold`).
 - `Fix`
   - SP placement parser now recognizes `14 Day Total Sales / Orders / Units` headers, including currency-suffixed variants.
 - `Ops`

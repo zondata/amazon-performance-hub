@@ -19,13 +19,14 @@ import {
   fetchByDateChunks,
   type FetchByDateChunksResult,
 } from "@/lib/logbook/aiPack/fetchByDateChunks";
+import { PackIncompleteError } from "@/lib/logbook/aiPack/PackIncompleteError";
 import {
-  buildChunkFailureMessage,
   buildNoChannelMessages,
   legacyWarningsFromMessages,
   type PackMessage,
   type PackMessageLevel,
 } from "@/lib/logbook/aiPack/packMessages";
+import { requireCompleteChunkFetch } from "@/lib/logbook/aiPack/requireCompleteChunkFetch";
 import { computeBoundedRange } from "@/lib/ads/boundedDateRange";
 import { buildAdsReconciliationDaily } from "@/lib/ads/buildAdsReconciliationDaily";
 import { computePpcAttributionBridge } from "@/lib/logbook/aiPack/ppcAttributionBridge";
@@ -45,6 +46,7 @@ const SB_TARGET_LIMIT = 200;
 const SD_TARGET_LIMIT = 200;
 const SP_TARGET_LIMIT = 500;
 const SP_COVERAGE_THRESHOLD = 0.95;
+const MAX_BASELINE_DAYS = 180;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 type MetricRow = {
@@ -144,9 +146,7 @@ type FetchDiagnosticEntry = {
   }>;
 };
 
-type FetchDiagnostics = {
-  sp_reconciliation?: FetchDiagnosticEntry;
-};
+type FetchDiagnostics = Partial<Record<string, FetchDiagnosticEntry>>;
 
 const num = (value: unknown): number => {
   const parsed = typeof value === "number" ? value : Number(value ?? 0);
@@ -179,6 +179,21 @@ const parseDateField = (value: unknown): string | null => {
   if (typeof value !== "string") return null;
   if (!DATE_RE.test(value)) return null;
   return value;
+};
+
+const toDateString = (value: Date): string => value.toISOString().slice(0, 10);
+
+const addUtcDays = (date: string, days: number): string => {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return toDateString(parsed);
+};
+
+const dayCountInclusive = (start: string, end: string): number => {
+  const startMs = new Date(`${start}T00:00:00Z`).getTime();
+  const endMs = new Date(`${end}T00:00:00Z`).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return 0;
+  return Math.floor((endMs - startMs) / (24 * 60 * 60 * 1000)) + 1;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> => {
@@ -444,6 +459,77 @@ const loadSpBulkProductAdLookup = async (params: {
   };
 };
 
+const sampleChunkErrors = (entries: Array<{ chunkStart: string; chunkEnd: string; message: string }>) =>
+  entries.slice(0, 3).map((entry) => ({
+    chunkStart: entry.chunkStart,
+    chunkEnd: entry.chunkEnd,
+    message: entry.message,
+  }));
+
+const buildPackIncompleteResponse = (params: {
+  error: PackIncompleteError;
+  messages: PackMessage[];
+  fetchDiagnostics: FetchDiagnostics;
+}) => {
+  const diagnosticEntry: FetchDiagnosticEntry = {
+    chunksTotal: params.error.stats?.chunksTotal ?? 0,
+    chunksSucceeded: params.error.stats?.chunksSucceeded ?? 0,
+    chunksFailed:
+      params.error.stats?.chunksFailed ?? params.error.chunkErrors.length,
+    retriesUsedMax: params.error.stats?.retriesUsedMax ?? 0,
+    failedRangesSampleCount:
+      params.error.stats?.failedRangesCount ?? params.error.chunkErrors.length,
+    ...(params.error.chunkErrors.length > 0
+      ? { failedRangesSample: sampleChunkErrors(params.error.chunkErrors) }
+      : {}),
+  };
+
+  const messages = [
+    ...params.messages,
+    {
+      level: "error" as const,
+      code: params.error.code,
+      text: params.error.message,
+      ...(params.error.context ? { meta: params.error.context } : {}),
+    },
+  ];
+
+  return new Response(
+    `${JSON.stringify(
+      {
+        ok: false,
+        status: "pack_incomplete",
+        error: params.error.message,
+        messages,
+        fetch_diagnostics: {
+          ...params.fetchDiagnostics,
+          pack_incomplete: {
+            label: params.error.label,
+            ...diagnosticEntry,
+            ...(params.error.context ? { context: params.error.context } : {}),
+          },
+        },
+      },
+      null,
+      2
+    )}\n`,
+    {
+      status: 409,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+      },
+    }
+  );
+};
+
+const chunkIds = (values: string[], size: number): string[][] => {
+  const chunks: string[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
+};
+
 type Ctx = { params: Promise<{ asin: string }> };
 
 export async function GET(request: Request, { params }: Ctx) {
@@ -453,6 +539,10 @@ export async function GET(request: Request, { params }: Ctx) {
     return new Response("Missing ASIN param.", { status: 400 });
   }
 
+  const fetchDiagnostics: FetchDiagnostics = {};
+  const packMessages: PackMessage[] = [];
+
+  try {
   const url = new URL(request.url);
   const requestedRangeParam = url.searchParams.get("range");
   const requestedRange = normalizeBaselineRange(requestedRangeParam);
@@ -590,7 +680,7 @@ export async function GET(request: Request, { params }: Ctx) {
     return new Response(message, { status: 500 });
   }
 
-  const messages: PackMessage[] = [];
+  const messages: PackMessage[] = packMessages;
   const messageDedup = new Set<string>();
   const addMessage = (
     level: PackMessageLevel,
@@ -620,8 +710,6 @@ export async function GET(request: Request, { params }: Ctx) {
     addMessage(message.level, message.code, message.text, message.meta);
   }
 
-  const fetchDiagnostics: FetchDiagnostics = {};
-
   const toFetchDiagnosticEntry = (
     result: FetchByDateChunksResult<unknown>
   ): FetchDiagnosticEntry => {
@@ -634,24 +722,6 @@ export async function GET(request: Request, { params }: Ctx) {
       failedRangesSampleCount: result.stats.failedRangesCount,
       ...(failedRangesSample.length > 0 ? { failedRangesSample } : {}),
     };
-  };
-
-  const appendChunkFailureMessage = (
-    label: string,
-    result: FetchByDateChunksResult<unknown>,
-    allChunksFailedSuffix: string
-  ): void => {
-    const timeoutFailures = result.chunkErrors.filter((entry) => entry.timedOut).length;
-    const message = buildChunkFailureMessage({
-      label,
-      chunksTotal: result.stats.chunksTotal,
-      chunksFailed: result.stats.chunksFailed,
-      timeoutFailures,
-      allChunksFailedSuffix,
-      isSpReconciliation: label === "SP reconciliation rows",
-    });
-    if (!message) return;
-    addMessage(message.level, message.code, message.text, message.meta);
   };
 
   const loadOptionalDateBounds = async (
@@ -721,7 +791,7 @@ export async function GET(request: Request, { params }: Ctx) {
             "date",
             "SB campaign baseline",
             supabaseAdmin
-              .from("sb_campaign_daily_fact_latest")
+              .from("sb_campaign_daily_fact_latest_gold")
               .select("date")
               .eq("account_id", env.accountId)
               .in("campaign_id", sbCandidateCampaignIds)
@@ -730,7 +800,7 @@ export async function GET(request: Request, { params }: Ctx) {
               .order("date", { ascending: true })
               .limit(1),
             supabaseAdmin
-              .from("sb_campaign_daily_fact_latest")
+              .from("sb_campaign_daily_fact_latest_gold")
               .select("date")
               .eq("account_id", env.accountId)
               .in("campaign_id", sbCandidateCampaignIds)
@@ -993,12 +1063,30 @@ export async function GET(request: Request, { params }: Ctx) {
     );
   }
 
-  const effectiveStart = window.effectiveStart;
+  let effectiveStart = window.effectiveStart;
   const effectiveEnd = window.effectiveEnd;
+  const baselineDays = dayCountInclusive(effectiveStart, effectiveEnd);
+  if (baselineDays > MAX_BASELINE_DAYS) {
+    const cappedStart = addUtcDays(effectiveEnd, -(MAX_BASELINE_DAYS - 1));
+    addMessage(
+      "warn",
+      "BASELINE_RANGE_CAPPED",
+      `Baseline window capped to ${MAX_BASELINE_DAYS} days: ${cappedStart}..${effectiveEnd} (requested ${effectiveStart}..${effectiveEnd}).`,
+      {
+        max_baseline_days: MAX_BASELINE_DAYS,
+        requested_start: effectiveStart,
+        requested_end: effectiveEnd,
+        effective_start: cappedStart,
+        effective_end: effectiveEnd,
+      }
+    );
+    effectiveStart = cappedStart;
+  }
   const loadRowsByDateChunks = async <T>(params: {
     label: string;
-    allChunksFailedSuffix: string;
-    diagnosticsKey?: keyof FetchDiagnostics;
+    allChunksFailedSuffix?: string;
+    diagnosticsKey?: string;
+    incompleteCode?: string;
     runChunk: (chunkStart: string, chunkEnd: string) => Promise<T[]>;
   }): Promise<T[]> => {
     const result = await fetchByDateChunks<T>({
@@ -1007,16 +1095,20 @@ export async function GET(request: Request, { params }: Ctx) {
       runChunk: params.runChunk,
     });
     if (params.diagnosticsKey) {
-      fetchDiagnostics[params.diagnosticsKey] = toFetchDiagnosticEntry(
-        result as FetchByDateChunksResult<unknown>
-      );
+      fetchDiagnostics[params.diagnosticsKey] = toFetchDiagnosticEntry(result as FetchByDateChunksResult<unknown>);
     }
-    appendChunkFailureMessage(
-      params.label,
-      result as FetchByDateChunksResult<unknown>,
-      params.allChunksFailedSuffix
-    );
-    return result.rows;
+    return requireCompleteChunkFetch({
+      label: params.label,
+      result,
+      code: params.incompleteCode ?? "CHUNK_FETCH_INCOMPLETE",
+      ...(params.allChunksFailedSuffix
+        ? {
+            context: {
+              impact: params.allChunksFailedSuffix,
+            },
+          }
+        : {}),
+    });
   };
 
   let spSelectionProductAdLookup: SpBulkProductAdLookup = {
@@ -1039,6 +1131,26 @@ export async function GET(request: Request, { params }: Ctx) {
     spSelectionProductAdLookup.campaignIds.length > 0
       ? [...spSelectionProductAdLookup.campaignIds]
       : [...spCandidateCampaignIds];
+
+  const hasSpCampaignFactRows = async (campaignIds: string[]): Promise<boolean> => {
+    for (const idChunk of chunkIds(campaignIds, 300)) {
+      const { data, error } = await supabaseAdmin
+        .from("sp_campaign_hourly_fact")
+        .select("campaign_id")
+        .eq("account_id", env.accountId)
+        .in("campaign_id", idChunk)
+        .gte("date", effectiveStart)
+        .lte("date", effectiveEnd)
+        .limit(1);
+      if (error) {
+        throw new Error(`Failed checking SP campaign fact-table existence: ${error.message}`);
+      }
+      if ((data ?? []).length > 0) {
+        return true;
+      }
+    }
+    return false;
+  };
 
   const { data: salesRows, error: salesError } = await supabaseAdmin
     .from("si_sales_trend_daily_latest")
@@ -1350,15 +1462,21 @@ export async function GET(request: Request, { params }: Ctx) {
     const label = `${params.channel.toUpperCase()} reconciliation rows`;
     return loadRowsByDateChunks<{ date: string | null; spend: number | string | null }>({
       label,
+      incompleteCode: `RECONCILIATION_${params.channel.toUpperCase()}_INCOMPLETE`,
       allChunksFailedSuffix:
         `reconciliation ${params.channel.toUpperCase()} spend is incomplete/unknown for this window; values may appear as 0.`,
       diagnosticsKey: params.channel === "sp" ? "sp_reconciliation" : undefined,
       runChunk: async (chunkStart, chunkEnd) => {
+        const sourceView =
+          params.channel === "sp"
+            ? "sp_campaign_daily_fact_latest_gold"
+            : params.channel === "sb"
+              ? "sb_campaign_daily_fact_latest_gold"
+              : "sd_campaign_daily_fact_latest_gold";
         const { data, error } = await supabaseAdmin
-          .from("ads_campaign_daily_fact_latest")
+          .from(sourceView)
           .select("date,spend")
           .eq("account_id", env.accountId)
-          .eq("channel", params.channel)
           .in("campaign_id", params.campaignIds)
           .gte("date", chunkStart)
           .lte("date", chunkEnd)
@@ -1395,6 +1513,26 @@ export async function GET(request: Request, { params }: Ctx) {
       campaignIds: sdCandidateCampaignIds,
     }),
   ]);
+  if (spSelectionCampaignIds.length > 0 && spReconciliationCampaignRows.length === 0) {
+    const hasUnderlyingFactRows = await hasSpCampaignFactRows(spSelectionCampaignIds);
+    if (hasUnderlyingFactRows) {
+      throw new PackIncompleteError(
+        {
+          label: "SP reconciliation rows",
+          code: "GOLD_NOT_BACKFILLED",
+          context: {
+            reason: "gold_empty_with_underlying_facts",
+            source_view: "sp_campaign_daily_fact_latest_gold",
+            source_fact_table: "sp_campaign_hourly_fact",
+            campaign_ids_count: spSelectionCampaignIds.length,
+            start: effectiveStart,
+            end: effectiveEnd,
+          },
+        },
+        "GOLD_NOT_BACKFILLED: SP campaign gold cache is empty while underlying fact rows exist."
+      );
+    }
+  }
 
   const reconciliationDailyCampaigns = buildAdsReconciliationDaily({
     siRows: (salesRows ?? []).map((row) => ({
@@ -1417,7 +1555,7 @@ export async function GET(request: Request, { params }: Ctx) {
       "SD spend total is incomplete/unknown for this window; attribution bridge values may appear as 0.",
     runChunk: async (chunkStart, chunkEnd) => {
       const { data, error } = await supabaseAdmin
-        .from("sd_campaign_daily_fact_latest")
+        .from("sd_campaign_daily_fact_latest_gold")
         .select("spend")
         .eq("account_id", env.accountId)
         .gte("date", chunkStart)
@@ -1485,11 +1623,12 @@ export async function GET(request: Request, { params }: Ctx) {
   if (spSelectionCampaignIds.length > 0) {
     const spCampaignRows = await loadRowsByDateChunks<Record<string, unknown>>({
       label: "SP mapped campaign spend total for attribution bridge",
+      incompleteCode: "SP_MAPPED_CAMPAIGN_SPEND_INCOMPLETE",
       allChunksFailedSuffix:
         "SP mapped campaign spend is incomplete/unknown for this window; attribution bridge values may appear as 0.",
       runChunk: async (chunkStart, chunkEnd) => {
         const { data, error } = await supabaseAdmin
-          .from("sp_campaign_daily_fact_latest")
+          .from("sp_campaign_daily_fact_latest_gold")
           .select("spend")
           .eq("account_id", env.accountId)
           .in("campaign_id", spSelectionCampaignIds)
@@ -1503,6 +1642,24 @@ export async function GET(request: Request, { params }: Ctx) {
       },
     });
     if (spCampaignRows.length === 0) {
+      const hasUnderlyingFactRows = await hasSpCampaignFactRows(spSelectionCampaignIds);
+      if (hasUnderlyingFactRows) {
+        throw new PackIncompleteError(
+          {
+            label: "SP mapped campaign spend total for attribution bridge",
+            code: "GOLD_NOT_BACKFILLED",
+            context: {
+              reason: "gold_empty_with_underlying_facts",
+              source_view: "sp_campaign_daily_fact_latest_gold",
+              source_fact_table: "sp_campaign_hourly_fact",
+              campaign_ids_count: spSelectionCampaignIds.length,
+              start: effectiveStart,
+              end: effectiveEnd,
+            },
+          },
+          "GOLD_NOT_BACKFILLED: SP campaign gold cache is empty while underlying fact rows exist."
+        );
+      }
       addMessage(
         "info",
         "DATASET_EMPTY",
@@ -1540,7 +1697,7 @@ export async function GET(request: Request, { params }: Ctx) {
         "SB campaign baseline is incomplete/unknown for this window; campaign and target sections may appear as empty.",
       runChunk: async (chunkStart, chunkEnd) => {
         const { data, error } = await supabaseAdmin
-          .from("sb_campaign_daily_fact_latest")
+          .from("sb_campaign_daily_fact_latest_gold")
           .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders")
           .eq("account_id", env.accountId)
           .in("campaign_id", sbCandidateCampaignIds)
@@ -1607,7 +1764,7 @@ export async function GET(request: Request, { params }: Ctx) {
         "SD campaign baseline is incomplete/unknown for this window; campaign metrics may appear as empty.",
       runChunk: async (chunkStart, chunkEnd) => {
         const { data, error } = await supabaseAdmin
-          .from("sd_campaign_daily_fact_latest")
+          .from("sd_campaign_daily_fact_latest_gold")
           .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders,units")
           .eq("account_id", env.accountId)
           .in("campaign_id", sdCandidateCampaignIds)
@@ -2429,4 +2586,16 @@ export async function GET(request: Request, { params }: Ctx) {
       "content-disposition": `attachment; filename="${filename}"`,
     },
   });
+  } catch (error) {
+    if (error instanceof PackIncompleteError) {
+      return buildPackIncompleteResponse({
+        error,
+        messages: packMessages,
+        fetchDiagnostics,
+      });
+    }
+    const message =
+      error instanceof Error ? error.message : "Failed generating product baseline data pack.";
+    return new Response(message, { status: 500 });
+  }
 }

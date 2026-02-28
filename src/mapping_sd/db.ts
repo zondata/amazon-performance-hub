@@ -353,6 +353,16 @@ async function insertIssues(
   await insertChunked("sd_mapping_issues", rows);
 }
 
+async function refreshSdCampaignDailyFactGold(uploadId: string) {
+  const client = getSupabaseClient();
+  const { error } = await client.rpc("refresh_sd_campaign_daily_fact_gold", {
+    p_upload_id: uploadId,
+  });
+  if (error) {
+    throw new Error(`Failed refreshing SD campaign gold rows: ${error.message}`);
+  }
+}
+
 export async function mapUpload(
   uploadId: string,
   reportType: SdReportType
@@ -411,6 +421,7 @@ export async function mapUpload(
       referenceDate,
     });
     await insertChunked("sd_campaign_daily_fact", facts, "sd_campaign");
+    await refreshSdCampaignDailyFactGold(uploadId);
     await insertIssues(upload.account_id, uploadId, reportType, issues);
     return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
   }
