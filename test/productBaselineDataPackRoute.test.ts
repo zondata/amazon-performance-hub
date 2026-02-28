@@ -7,6 +7,10 @@ const routePath = path.join(
   process.cwd(),
   'apps/web/src/app/products/[asin]/logbook/ai-data-pack/route.ts'
 );
+const spTargetingBoundsHelperPath = path.join(
+  process.cwd(),
+  "apps/web/src/lib/logbook/aiPack/spTargetingBaselineBounds.ts"
+);
 
 describe('product baseline data pack route filters', () => {
   it('does not use campaign_name_norm ilike scans', () => {
@@ -15,10 +19,17 @@ describe('product baseline data pack route filters', () => {
     expect(source).not.toContain(".ilike('campaign_name_norm'");
   });
 
-  it('uses campaign_id IN filters with candidate campaign IDs', () => {
-    const source = fs.readFileSync(routePath, 'utf-8');
-    expect(source).toContain('.in("campaign_id", spCandidateCampaignIds)');
-    expect(source).toContain('.in("campaign_id", sbCandidateCampaignIds)');
+  it('uses campaign-scoped SP targeting bounds helper and candidate-campaign filters', () => {
+    const routeSource = fs.readFileSync(routePath, "utf-8");
+    const helperSource = fs.readFileSync(spTargetingBoundsHelperPath, "utf-8");
+
+    expect(routeSource).toContain("loadSpTargetingBaselineDateBounds({");
+    expect(routeSource).toContain('.in("campaign_id", sbCandidateCampaignIds)');
+
+    expect(helperSource).toContain('.in("campaign_id", campaignIds)');
+    expect(helperSource).toContain('.order("date", { ascending: params.ascending }).limit(1)');
+    expect(helperSource).not.toContain("max(");
+    expect(helperSource).toContain('.from("sp_advertised_product_daily_fact_latest")');
   });
 
   it("does not query SP campaign baseline min/max availability", () => {

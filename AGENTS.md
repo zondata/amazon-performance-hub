@@ -34,6 +34,22 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Imports & Health (`/imports-health`) now includes a local-only Batch Import uploader (multi-file CSV/XLSX) that stages files to temp storage and runs the root manifest pipeline CLI.
 - Batch Import supports SalesTrend ASIN override for filenames like `SalesTrend.csv` (no filename rename required).
 
+#### Latest (2026-02-28)
+- `Shipped`
+  - Product Baseline Data Pack V3 endpoint: `/products/[asin]/logbook/ai-data-pack-v3`.
+  - V3 core pack includes campaign/placement/target KPIs plus current SP/SB settings.
+  - STIS/STIR is delivered via export endpoint (separate download URL), not embedded in core JSON.
+- `Fix`
+  - SP placement parser now recognizes `14 Day Total Sales / Orders / Units` headers, including currency-suffixed variants.
+- `Ops`
+  - `reingest:sp:placement` supports `--force` and runs SP placement reingest plus mapping in one step.
+- `Perf/robustness`
+  - SP targeting baseline max-date lookup now uses campaign-scoped latest-row selection (`order desc + limit 1`) with advertised-product fallback when campaign IDs are empty to reduce timeout risk.
+- `Known issues / Next`
+  - SP reconciliation can still timeout for very wide ranges (`All` / overlap), producing partial reconciliation chunks.
+  - SP campaign/target `units` can still be `0` even when placement `units` exist (follow-up needed).
+  - `computed_summary` still reports missing baseline profit totals (needs baseline totals aggregation).
+
 **UI Layout System**
 ### Sidebar (global)
 - Sidebar is sticky/locked and scrolls internally if long.

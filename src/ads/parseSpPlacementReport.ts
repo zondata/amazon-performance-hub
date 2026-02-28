@@ -51,21 +51,31 @@ const HEADER_ALIASES: Record<string, string[]> = {
   impressions: ["impressions"],
   clicks: ["clicks"],
   spend: ["spend", "cost"],
-  sales: ["sales", "attributed sales", "total sales"],
-  orders: ["orders", "total orders", "attributed orders"],
-  units: ["units", "units sold", "total units"],
+  sales: [
+    "sales",
+    "attributed sales",
+    "total sales",
+    "14 day total sales",
+    "7 day total sales",
+  ],
+  orders: ["orders", "total orders", "attributed orders", "14 day total orders", "7 day total orders"],
+  units: ["units", "units sold", "total units", "14 day total units", "7 day total units"],
   cpc: ["cpc", "cost per click"],
   ctr: ["ctr", "click through rate"],
   acos: ["acos"],
   roas: ["roas"],
 };
 
+function headerMatchesAlias(normalizedHeader: string, alias: string): boolean {
+  return normalizedHeader === alias || normalizedHeader.startsWith(`${alias} `);
+}
+
 function mapHeaders(headers: string[]): Record<string, number> {
   const normalized = headers.map((h) => normalizeHeader(h));
   const indexMap: Record<string, number> = {};
   for (const [field, aliases] of Object.entries(HEADER_ALIASES)) {
     for (let i = 0; i < normalized.length; i += 1) {
-      if (aliases.includes(normalized[i])) {
+      if (aliases.some((alias) => headerMatchesAlias(normalized[i], alias))) {
         indexMap[field] = i;
         break;
       }

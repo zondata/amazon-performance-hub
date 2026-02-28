@@ -16,7 +16,8 @@ export type SpPlacementIngestResult = {
 export async function ingestSpPlacementRaw(
   xlsxPath: string,
   accountId: string,
-  exportedAtOverride?: string
+  exportedAtOverride?: string,
+  opts?: { force?: boolean }
 ): Promise<SpPlacementIngestResult> {
   const client = getSupabaseClient();
   const fileHash = hashFileSha256(xlsxPath);
@@ -56,7 +57,17 @@ export async function ingestSpPlacementRaw(
       throw new Error(`Failed to check existing rows: ${countError.message}`);
     }
     if ((count ?? 0) > 0) {
-      return { status: "already ingested" };
+      if (opts?.force) {
+        const { error: deleteError } = await client
+          .from("sp_placement_daily_raw")
+          .delete()
+          .eq("upload_id", existingUpload.upload_id);
+        if (deleteError) {
+          throw new Error(`Failed to clear existing rows for force reingest: ${deleteError.message}`);
+        }
+      } else {
+        return { status: "already ingested" };
+      }
     }
   }
 

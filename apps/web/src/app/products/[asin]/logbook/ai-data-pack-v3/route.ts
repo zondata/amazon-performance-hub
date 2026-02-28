@@ -26,6 +26,15 @@ import {
   type PackMessage,
   type PackMessageLevel,
 } from "@/lib/logbook/aiPack/packMessages";
+import {
+  calcAcos,
+  calcCpc,
+  calcCtr,
+  calcCvrOrdersPerClick,
+  calcRoas,
+  mapPlacementModifierKey,
+  weightedAvgTosIs,
+} from "@/lib/logbook/aiPack/aiPackV3Helpers";
 import { computeBoundedRange } from "@/lib/ads/boundedDateRange";
 import { buildAdsReconciliationDaily } from "@/lib/ads/buildAdsReconciliationDaily";
 import { computePpcAttributionBridge } from "@/lib/logbook/aiPack/ppcAttributionBridge";
@@ -51,6 +60,7 @@ type MetricRow = {
   spend: number | string | null;
   sales: number | string | null;
   orders: number | string | null;
+  units?: number | string | null;
   clicks: number | string | null;
   impressions?: number | string | null;
 };
@@ -67,6 +77,7 @@ type CampaignAggregate = {
   spend: number;
   sales: number;
   orders: number;
+  units: number;
   clicks: number;
   impressions: number;
 };
@@ -80,6 +91,7 @@ type TargetAggregate = {
   spend: number;
   sales: number;
   orders: number;
+  units: number;
   clicks: number;
   impressions: number;
 };
@@ -162,12 +174,6 @@ const toFiniteNumberOrNull = (value: unknown): number | null => {
 const formatPct = (value: number | null) =>
   value === null || !Number.isFinite(value) ? null : Number(value.toFixed(6));
 
-const calcAcos = (spend: number, sales: number) => (sales > 0 ? spend / sales : null);
-const calcCpc = (spend: number, clicks: number) => (clicks > 0 ? spend / clicks : null);
-const calcCtr = (clicks: number, impressions: number) =>
-  impressions > 0 ? clicks / impressions : null;
-const calcRoas = (spend: number, sales: number) => (spend > 0 ? sales / spend : null);
-
 const sanitizeFileSegment = (value: string): string =>
   value
     .trim()
@@ -209,12 +215,14 @@ const aggregateCampaignRows = (
         spend: 0,
         sales: 0,
         orders: 0,
+        units: 0,
         clicks: 0,
         impressions: 0,
       } as CampaignAggregate);
     prev.spend += num(row.spend);
     prev.sales += num(row.sales);
     prev.orders += num(row.orders);
+    prev.units += num(row.units);
     prev.clicks += num(row.clicks);
     prev.impressions += num(row.impressions);
     byId.set(key, prev);
@@ -248,12 +256,14 @@ const aggregateTargetRows = (
         spend: 0,
         sales: 0,
         orders: 0,
+        units: 0,
         clicks: 0,
         impressions: 0,
       } as TargetAggregate);
     prev.spend += num(row.spend);
     prev.sales += num(row.sales);
     prev.orders += num(row.orders);
+    prev.units += num(row.units);
     prev.clicks += num(row.clicks);
     prev.impressions += num(row.impressions);
     byId.set(key, prev);
@@ -995,6 +1005,35 @@ export async function GET(request: Request, { params }: Ctx) {
 
   const effectiveStart = window.effectiveStart;
   const effectiveEnd = window.effectiveEnd;
+  try {
+    const [spResolvedCampaignIds, sbResolvedCampaignIds] = await Promise.all([
+      loadSpCampaignIdsForAsin({
+        asin,
+        accountId: env.accountId,
+        snapshotDate: latestSnapshotDate,
+        namePattern: asinNamePattern,
+        startDate: effectiveStart,
+        endDate: effectiveEnd,
+      }),
+      loadSbCampaignIdsForAsin({
+        asin,
+        accountId: env.accountId,
+        snapshotDate: latestSnapshotDate,
+        namePattern: asinNamePattern,
+        startDate: effectiveStart,
+        endDate: effectiveEnd,
+      }),
+    ]);
+    if (spBulkProductAdLookup.campaignIds.length === 0) {
+      spCandidateCampaignIds = spResolvedCampaignIds;
+    }
+    sbCandidateCampaignIds = sbResolvedCampaignIds;
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed resolving ASIN campaign IDs for effective window.";
+    return new Response(message, { status: 500 });
+  }
+
   const loadRowsByDateChunks = async <T>(params: {
     label: string;
     allChunksFailedSuffix: string;
@@ -1441,7 +1480,7 @@ export async function GET(request: Request, { params }: Ctx) {
         const baseQuery = supabaseAdmin
           .from("sp_targeting_daily_fact_latest")
           .select(
-            "target_id,campaign_id,ad_group_id,campaign_name_raw,campaign_name_norm,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders"
+            "target_id,campaign_id,ad_group_id,campaign_name_raw,campaign_name_norm,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders,units,top_of_search_impression_share"
           )
           .eq("account_id", env.accountId)
           .gte("date", chunkStart)
@@ -1531,6 +1570,21 @@ export async function GET(request: Request, { params }: Ctx) {
   const spTopCampaigns = spCoverageSelection.campaigns;
   const spCampaignIds = spTopCampaigns.map((row) => row.campaign_id);
   const spTargetAgg = spCoverageSelection.targets;
+  const spTargetTosIsByTargetId = new Map<string, number | null>();
+  const spTosRowsByTarget = new Map<string, Array<{ impressions: number; share: number | null }>>();
+  for (const row of spTargetFactRows) {
+    const targetId = String(row.target_id ?? "").trim();
+    if (!targetId) continue;
+    const rows = spTosRowsByTarget.get(targetId) ?? [];
+    rows.push({
+      impressions: num(row.impressions),
+      share: toFiniteNumberOrNull(row.top_of_search_impression_share),
+    });
+    spTosRowsByTarget.set(targetId, rows);
+  }
+  for (const [targetId, rows] of spTosRowsByTarget.entries()) {
+    spTargetTosIsByTargetId.set(targetId, weightedAvgTosIs(rows));
+  }
 
   let sbCampaignFactRows: Array<Record<string, unknown>> = [];
   if (sbCandidateCampaignIds.length > 0) {
@@ -1541,7 +1595,9 @@ export async function GET(request: Request, { params }: Ctx) {
       runChunk: async (chunkStart, chunkEnd) => {
         const { data, error } = await supabaseAdmin
           .from("sb_campaign_daily_fact_latest")
-          .select("campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders")
+          .select(
+            "campaign_id,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders,units"
+          )
           .eq("account_id", env.accountId)
           .in("campaign_id", sbCandidateCampaignIds)
           .gte("date", chunkStart)
@@ -1573,7 +1629,7 @@ export async function GET(request: Request, { params }: Ctx) {
         const { data, error } = await supabaseAdmin
           .from("sb_keyword_daily_fact_latest")
           .select(
-            "target_id,campaign_id,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders"
+            "target_id,campaign_id,targeting_raw,targeting_norm,match_type_norm,impressions,clicks,spend,sales,orders,units"
           )
           .eq("account_id", env.accountId)
           .gte("date", chunkStart)
@@ -1763,6 +1819,33 @@ export async function GET(request: Request, { params }: Ctx) {
     const rows = sbPlacementsByCampaign.get(key) ?? [];
     rows.push(row);
     sbPlacementsByCampaign.set(key, rows);
+  }
+
+  const buildPlacementModifierPctByKey = (
+    channel: "sp" | "sb",
+    rows: Array<Record<string, unknown>>
+  ): Map<string, number | null> => {
+    const byKey = new Map<string, number | null>();
+    for (const row of rows) {
+      const key = mapPlacementModifierKey(
+        channel,
+        String(row.placement_code ?? ""),
+        channel === "sp" ? String(row.placement_raw ?? "") : String(row.placement_raw_norm ?? "")
+      );
+      if (!key) continue;
+      byKey.set(key, toFiniteNumberOrNull(row.percentage));
+    }
+    return byKey;
+  };
+
+  const spPlacementModifiersByCampaign = new Map<string, Map<string, number | null>>();
+  for (const [campaignId, rows] of spPlacementsByCampaign.entries()) {
+    spPlacementModifiersByCampaign.set(campaignId, buildPlacementModifierPctByKey("sp", rows));
+  }
+
+  const sbPlacementModifiersByCampaign = new Map<string, Map<string, number | null>>();
+  for (const [campaignId, rows] of sbPlacementsByCampaign.entries()) {
+    sbPlacementModifiersByCampaign.set(campaignId, buildPlacementModifierPctByKey("sb", rows));
   }
 
   let spPlacementPerformanceRows: Array<Record<string, unknown>> = [];
@@ -2059,27 +2142,98 @@ export async function GET(request: Request, { params }: Ctx) {
     { impressions: 0, clicks: 0, spend: 0, sales: 0, orders: 0, units: 0 }
   );
 
-  const formatPlacementPerformance = (rows: PlacementAggregate[]) =>
-    rows.map((row) => ({
-      placement_code: row.placement_code,
-      placement_raw: row.placement_raw,
-      placement_raw_norm: row.placement_raw_norm,
+  const formatPlacementPerformance = (
+    channel: "sp" | "sb",
+    rows: PlacementAggregate[],
+    modifierByKey: Map<string, number | null>
+  ) =>
+    rows.map((row) => {
+      const modifierKey = mapPlacementModifierKey(channel, row.placement_code, row.placement_raw_norm);
+      return {
+        placement_code: row.placement_code,
+        placement_raw: row.placement_raw,
+        placement_raw_norm: row.placement_raw_norm,
+        modifier_pct_current: modifierKey ? (modifierByKey.get(modifierKey) ?? null) : null,
+        spend: row.spend,
+        sales: row.sales,
+        orders: row.orders,
+        units: row.units,
+        clicks: row.clicks,
+        impressions: row.impressions,
+        acos: formatPct(calcAcos(row.spend, row.sales)),
+        roas: calcRoas(row.spend, row.sales),
+        cpc: calcCpc(row.spend, row.clicks),
+        ctr: formatPct(calcCtr(row.clicks, row.impressions)),
+        cvr: formatPct(calcCvrOrdersPerClick(row.orders, row.clicks)),
+      };
+    });
+
+  const spCampaignRowsForOutput = spTopCampaigns.map((row) => {
+    const placementPerformance = formatPlacementPerformance(
+      "sp",
+      spPlacementPerformanceByCampaign.get(row.campaign_id) ?? [],
+      spPlacementModifiersByCampaign.get(row.campaign_id) ?? new Map<string, number | null>()
+    );
+    const placementSalesTotal = placementPerformance.reduce(
+      (sum, placementRow) => sum + num(placementRow.sales),
+      0
+    );
+    const isPlacementSalesMissing = row.sales > 0 && placementSalesTotal === 0;
+
+    if (isPlacementSalesMissing) {
+      addMessage(
+        "warn",
+        "SP_PLACEMENT_SALES_MISSING",
+        "SP placement report sales/orders appear missing (placement sales=0 while campaign sales>0). Do NOT treat placement sales=0 as waste; fix placement ingestion or reingest placement reports.",
+        {
+          campaign_id: row.campaign_id,
+          campaign_name_norm: row.campaign_name_norm,
+          campaign_sales: row.sales,
+          placement_sales_total: placementSalesTotal,
+        }
+      );
+    }
+
+    return {
+      campaign_id: row.campaign_id,
+      campaign_name_raw: row.campaign_name_raw,
+      campaign_name_norm: row.campaign_name_norm,
+      impressions: row.impressions,
+      units: row.units,
       spend: row.spend,
       sales: row.sales,
       orders: row.orders,
       clicks: row.clicks,
-      impressions: row.impressions,
+      ctr: formatPct(calcCtr(row.clicks, row.impressions)),
+      cvr: formatPct(calcCvrOrdersPerClick(row.orders, row.clicks)),
       acos: formatPct(calcAcos(row.spend, row.sales)),
       roas: calcRoas(row.spend, row.sales),
       cpc: calcCpc(row.spend, row.clicks),
-      ctr: formatPct(calcCtr(row.clicks, row.impressions)),
-    }));
+      current_bulk: spBulkCampaignById.get(row.campaign_id) ?? null,
+      placement_modifiers: spPlacementsByCampaign.get(row.campaign_id) ?? [],
+      placement_sales_attribution_status: isPlacementSalesMissing ? "missing" : "ok",
+      placement_performance: isPlacementSalesMissing
+        ? placementPerformance.map((placementRow) => ({
+            ...placementRow,
+            sales: null,
+            orders: null,
+            units: null,
+            acos: null,
+            roas: null,
+            cvr: null,
+          }))
+        : placementPerformance,
+    };
+  });
 
   const warnings = legacyWarningsFromMessages(messages);
   const resolvedProductSkills = resolveSkillsByIds(profileContext.skills);
+  const stisBasePath = `/products/${encodeURIComponent(asin)}/logbook/ai-data-pack-v3/stis`;
+  const buildStisDownloadUrl = (channel: "sp" | "sb") =>
+    `${stisBasePath}?channel=${channel}&start=${effectiveStart}&end=${effectiveEnd}&scope=included`;
 
   const outputBase = {
-    kind: "aph_product_baseline_data_pack_v2",
+    kind: "aph_product_baseline_data_pack_v3",
     generated_at: new Date().toISOString(),
     account_id: env.accountId,
     marketplace: env.marketplace,
@@ -2161,6 +2315,13 @@ export async function GET(request: Request, { params }: Ctx) {
       latest_bulk_snapshot_date: latestSnapshotDate,
       sp: {
         product_ads_snapshot_date: spSelectionProductAdLookup.snapshotDate,
+        stis: {
+          export: {
+            start: effectiveStart,
+            end: effectiveEnd,
+            download_url: buildStisDownloadUrl("sp"),
+          },
+        },
         advertised_product: {
           daily: spAdvertisedAsinDaily.map((row) => ({
             date: row.date,
@@ -2194,38 +2355,38 @@ export async function GET(request: Request, { params }: Ctx) {
           included_spend_total: spCoverageSelection.includedSpendTotal,
           coverage_pct: formatPct(spCoverageSelection.coveragePct),
         },
-        campaigns: spTopCampaigns.map((row) => ({
-          campaign_id: row.campaign_id,
-          campaign_name_raw: row.campaign_name_raw,
-          campaign_name_norm: row.campaign_name_norm,
-          spend: row.spend,
-          sales: row.sales,
-          orders: row.orders,
-          clicks: row.clicks,
-          acos: formatPct(calcAcos(row.spend, row.sales)),
-          cpc: calcCpc(row.spend, row.clicks),
-          current_bulk: spBulkCampaignById.get(row.campaign_id) ?? null,
-          placement_modifiers: spPlacementsByCampaign.get(row.campaign_id) ?? [],
-          placement_performance: formatPlacementPerformance(
-            spPlacementPerformanceByCampaign.get(row.campaign_id) ?? []
-          ),
-        })),
+        campaigns: spCampaignRowsForOutput,
         targets: spTargetAgg.map((row) => ({
           target_id: row.target_id,
           campaign_id: row.campaign_id,
           targeting_raw: row.targeting_raw,
           targeting_norm: row.targeting_norm,
           match_type_norm: row.match_type_norm,
+          impressions: row.impressions,
+          units: row.units,
           spend: row.spend,
           sales: row.sales,
           orders: row.orders,
           clicks: row.clicks,
+          ctr: formatPct(calcCtr(row.clicks, row.impressions)),
+          cvr: formatPct(calcCvrOrdersPerClick(row.orders, row.clicks)),
           acos: formatPct(calcAcos(row.spend, row.sales)),
+          roas: calcRoas(row.spend, row.sales),
           cpc: calcCpc(row.spend, row.clicks),
+          top_of_search_impression_share: formatPct(
+            spTargetTosIsByTargetId.get(row.target_id) ?? null
+          ),
           current_bulk: spBulkTargetById.get(row.target_id) ?? null,
         })),
       },
       sb: {
+        stis: {
+          export: {
+            start: effectiveStart,
+            end: effectiveEnd,
+            download_url: buildStisDownloadUrl("sb"),
+          },
+        },
         attributed_purchases: {
           campaign_count: sbAttributedPurchaseCampaignIds.length,
           daily: sbAttributedPurchasesDaily,
@@ -2235,16 +2396,23 @@ export async function GET(request: Request, { params }: Ctx) {
           campaign_id: row.campaign_id,
           campaign_name_raw: row.campaign_name_raw,
           campaign_name_norm: row.campaign_name_norm,
+          impressions: row.impressions,
+          units: row.units,
           spend: row.spend,
           sales: row.sales,
           orders: row.orders,
           clicks: row.clicks,
+          ctr: formatPct(calcCtr(row.clicks, row.impressions)),
+          cvr: formatPct(calcCvrOrdersPerClick(row.orders, row.clicks)),
           acos: formatPct(calcAcos(row.spend, row.sales)),
+          roas: calcRoas(row.spend, row.sales),
           cpc: calcCpc(row.spend, row.clicks),
           current_bulk: sbBulkCampaignById.get(row.campaign_id) ?? null,
           placement_modifiers: sbPlacementsByCampaign.get(row.campaign_id) ?? [],
           placement_performance: formatPlacementPerformance(
-            sbPlacementPerformanceByCampaign.get(row.campaign_id) ?? []
+            "sb",
+            sbPlacementPerformanceByCampaign.get(row.campaign_id) ?? [],
+            sbPlacementModifiersByCampaign.get(row.campaign_id) ?? new Map<string, number | null>()
           ),
         })),
         targets: sbTargetAgg.map((row) => ({
@@ -2253,11 +2421,16 @@ export async function GET(request: Request, { params }: Ctx) {
           targeting_raw: row.targeting_raw,
           targeting_norm: row.targeting_norm,
           match_type_norm: row.match_type_norm,
+          impressions: row.impressions,
+          units: row.units,
           spend: row.spend,
           sales: row.sales,
           orders: row.orders,
           clicks: row.clicks,
+          ctr: formatPct(calcCtr(row.clicks, row.impressions)),
+          cvr: formatPct(calcCvrOrdersPerClick(row.orders, row.clicks)),
           acos: formatPct(calcAcos(row.spend, row.sales)),
+          roas: calcRoas(row.spend, row.sales),
           cpc: calcCpc(row.spend, row.clicks),
           current_bulk: sbBulkTargetById.get(row.target_id) ?? null,
         })),
@@ -2422,7 +2595,7 @@ export async function GET(request: Request, { params }: Ctx) {
     computed_summary: computeBaselineSummary(outputBase),
   };
 
-  const filename = `${sanitizeFileSegment(asin)}_product_baseline_data_pack.json`;
+  const filename = `${sanitizeFileSegment(asin)}_product_baseline_data_pack_v3.json`;
   return new Response(`${JSON.stringify(output, null, 2)}\n`, {
     headers: {
       "content-type": "application/json; charset=utf-8",

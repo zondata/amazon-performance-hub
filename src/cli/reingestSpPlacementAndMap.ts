@@ -1,8 +1,9 @@
 import { ingestSpPlacementRaw } from "../ingest/ingestSpPlacementRaw";
+import { mapUpload } from "../mapping/db";
 
 function usage() {
   console.log(
-    "Usage: npm run ingest:sp:placement -- --account-id US <xlsx> [--exported-at ISO] [--force]"
+    "Usage: npm run reingest:sp:placement -- --account-id US <xlsx> [--exported-at ISO]"
   );
 }
 
@@ -26,14 +27,9 @@ function getPositionalArgs(): string[] {
   return positionals;
 }
 
-function hasFlag(flag: string): boolean {
-  return process.argv.includes(flag);
-}
-
 async function main() {
   const accountId = getArg("--account-id");
   const exportedAt = getArg("--exported-at");
-  const force = hasFlag("--force");
   const positionals = getPositionalArgs();
   const xlsxPath = positionals[0];
 
@@ -42,18 +38,22 @@ async function main() {
     process.exit(1);
   }
 
-  const result = await ingestSpPlacementRaw(xlsxPath, accountId, exportedAt, { force });
-  if (result.status === "already ingested") {
-    console.log("Already ingested (same account_id + file hash).");
-    return;
+  const ingestResult = await ingestSpPlacementRaw(xlsxPath, accountId, exportedAt, { force: true });
+  if (ingestResult.status !== "ok" || !ingestResult.uploadId) {
+    throw new Error("Expected force reingest to return status=ok with uploadId.");
   }
 
-  console.log("Ingest complete.");
+  const mappingResult = await mapUpload(ingestResult.uploadId, "sp_placement");
+
+  console.log("Reingest + mapping complete.");
   console.log({
-    uploadId: result.uploadId,
-    rowCount: result.rowCount,
-    coverageStart: result.coverageStart,
-    coverageEnd: result.coverageEnd,
+    uploadId: ingestResult.uploadId,
+    ingest: {
+      rowCount: ingestResult.rowCount,
+      coverageStart: ingestResult.coverageStart,
+      coverageEnd: ingestResult.coverageEnd,
+    },
+    mapping: mappingResult,
   });
 }
 

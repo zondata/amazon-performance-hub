@@ -139,7 +139,7 @@ export default function ProductBaselineDataPackDownload({
 
   const href = useMemo(
     () =>
-      `/products/${encodeURIComponent(asin)}/logbook/ai-data-pack?range=${encodeURIComponent(range)}`,
+      `/products/${encodeURIComponent(asin)}/logbook/ai-data-pack-v3?range=${encodeURIComponent(range)}`,
     [asin, range]
   );
 
@@ -219,7 +219,7 @@ export default function ProductBaselineDataPackDownload({
       link.href = objectUrl;
       link.download =
         getFilenameFromContentDisposition(response.headers.get("content-disposition")) ??
-        `${asin}_product_baseline_data_pack.json`;
+        `${asin}_product_baseline_data_pack_v3.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
