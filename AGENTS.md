@@ -57,6 +57,10 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
     - CLI helper: `src/cli/backfillAdsGold.ts` (`npm run pipeline:backfill:ads:gold`).
 - `Fix`
   - SP placement parser now recognizes `14 Day Total Sales / Orders / Units` headers, including currency-suffixed variants.
+  - V3 SP campaigns now include `placement_spend_reconciliation` with statuses: `ok | scaled_to_campaign_total | missing_reported_spend | mismatch`.
+  - When SP placement clicks align but spend does not, placement spend is scaled to campaign spend (`placement_performance[].spend_reported` preserved; spend-based KPIs recomputed).
+  - When SP placement spend is missing/mismatched, placement spend + spend-based KPIs are nulled and warning messages are emitted (no unsafe placement decisions from bad spend data).
+  - `computed_summary` profitability now falls back to `sales_trend_daily[*].profits` when `kpis.baseline.totals.profits` is missing (requires complete window coverage).
 - `Ops`
   - `reingest:sp:placement` supports `--force` and runs SP placement reingest plus mapping in one step.
 - `Perf/robustness`
@@ -64,7 +68,7 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - `Known issues / Next`
   - SP reconciliation can still timeout for very wide ranges (`All` / overlap), producing partial reconciliation chunks.
   - SP campaign/target `units` can still be `0` even when placement `units` exist (follow-up needed).
-  - `computed_summary` still reports missing baseline profit totals (needs baseline totals aggregation).
+  - Placement report quality can still vary by export; when spend is mismatched/missing, pack now blocks spend-based placement KPIs and requires report reingest/validation.
 
 **UI Layout System**
 ### Sidebar (global)
