@@ -10,22 +10,33 @@ type QueryResult = {
   error?: QueryErrorLike;
 };
 
+type SupabaseQueryLike = {
+  eq: (column: string, value: unknown) => SupabaseQueryLike;
+  in: (column: string, values: unknown[]) => SupabaseQueryLike;
+  gte: (column: string, value: unknown) => SupabaseQueryLike;
+  lte: (column: string, value: unknown) => SupabaseQueryLike;
+  order: (column: string, opts: { ascending: boolean }) => SupabaseQueryLike;
+  limit: (count: number) => Promise<QueryResult>;
+};
+
 type SupabaseLike = {
   from: (table: string) => {
-    select: (columns: string) => any;
+    select: (columns: string) => SupabaseQueryLike;
   };
 };
 
 export type SpTargetingMaxDateStrategy = "targeting" | "advertised_fallback";
 
 type LoadSpTargetingBaselineBoundsParams = {
-  supabase: SupabaseLike;
+  supabase: unknown;
   accountId: string;
   campaignIds: string[];
   asinNorm: string;
   startDate?: string;
   endDate?: string;
 };
+
+const asSupabaseLike = (value: unknown): SupabaseLike => value as SupabaseLike;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -52,9 +63,9 @@ export const chooseSpTargetingMaxDateStrategy = (
 };
 
 const applyOptionalDateWindow = (
-  query: any,
+  query: SupabaseQueryLike,
   params: { startDate?: string; endDate?: string }
-): any => {
+): SupabaseQueryLike => {
   let next = query;
   if (params.startDate) {
     next = next.gte("date", params.startDate);
@@ -66,10 +77,10 @@ const applyOptionalDateWindow = (
 };
 
 const fetchSingleDate = async (
-  query: any,
+  query: SupabaseQueryLike,
   params: { label: string; ascending: boolean }
 ): Promise<string | null> => {
-  const result = (await query.order("date", { ascending: params.ascending }).limit(1)) as QueryResult;
+  const result = await query.order("date", { ascending: params.ascending }).limit(1);
   if (result.error?.message) {
     throw new Error(
       `Failed loading ${params.label} ${params.ascending ? "minimum" : "maximum"} date: ${result.error.message}`
@@ -83,9 +94,10 @@ const loadTargetingDateBounds = async (
   params: LoadSpTargetingBaselineBoundsParams,
   campaignIds: string[]
 ): Promise<DateBounds> => {
+  const supabase = asSupabaseLike(params.supabase);
   const buildQuery = () =>
     applyOptionalDateWindow(
-      params.supabase
+      supabase
         .from("sp_targeting_daily_fact_latest")
         .select("date")
         .eq("account_id", params.accountId)
@@ -104,9 +116,10 @@ const loadTargetingDateBounds = async (
 const loadAdvertisedFallbackDateBounds = async (
   params: LoadSpTargetingBaselineBoundsParams
 ): Promise<DateBounds> => {
+  const supabase = asSupabaseLike(params.supabase);
   const buildQuery = () =>
     applyOptionalDateWindow(
-      params.supabase
+      supabase
         .from("sp_advertised_product_daily_fact_latest")
         .select("date")
         .eq("account_id", params.accountId)

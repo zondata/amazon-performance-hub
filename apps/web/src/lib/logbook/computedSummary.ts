@@ -44,6 +44,7 @@ const HIGH_CVR_THRESHOLD = 0.2;
 const HIGH_CVR_MIN_CLICKS = 20;
 const STABLE_RANK_DELTA_MAX = 3;
 const FALLING_RANK_DELTA_MIN = 8;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -65,6 +66,13 @@ const asFiniteNumber = (value: unknown): number | null => {
   if (value === null || value === undefined || value === '') return null;
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const asDateString = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!DATE_RE.test(trimmed)) return null;
+  return trimmed;
 };
 
 const toRounded = (value: number, digits: number): number =>
@@ -147,34 +155,92 @@ const computeProfitability = (packRecord: Record<string, unknown>) => {
   const totals = asRecord(baseline?.totals);
   const profitValue = asFiniteNumber(totals?.profits ?? totals?.profit);
 
-  if (profitValue === null) {
+  if (profitValue !== null) {
+    if (profitValue > 0) {
+      return {
+        state: 'profit' as const,
+        evidence: [`kpis.baseline.totals.profits=${toRounded(profitValue, 2)}`],
+        missingSection: null as string | null,
+      };
+    }
+
+    if (profitValue < 0) {
+      return {
+        state: 'loss' as const,
+        evidence: [`kpis.baseline.totals.profits=${toRounded(profitValue, 2)}`],
+        missingSection: null as string | null,
+      };
+    }
+
     return {
       state: 'unknown' as const,
-      evidence: ['unknown due to missing data: kpis.baseline.totals.profits'],
-      hasProfitField: false,
+      evidence: ['kpis.baseline.totals.profits=0 (neutral baseline)'],
+      missingSection: null as string | null,
     };
   }
 
-  if (profitValue > 0) {
+  const window = asRecord(packRecord.window);
+  const start = asDateString(window?.start);
+  const end = asDateString(window?.end);
+  const salesTrendRows = asArray(packRecord.sales_trend_daily);
+  const profitsByDate = new Map<string, number>();
+
+  for (const rowRaw of salesTrendRows) {
+    const row = asRecord(rowRaw);
+    if (!row) continue;
+    const date = asDateString(row.date);
+    const profits = asFiniteNumber(row.profits);
+    if (!date || profits === null) continue;
+    profitsByDate.set(date, profits);
+  }
+
+  if (!start || !end || end < start) {
+    return {
+      state: 'unknown' as const,
+      evidence: [
+        'unknown due to missing data: sales_trend_daily[*].profits (complete window coverage required)',
+      ],
+      missingSection: 'sales_trend_daily[*].profits' as const,
+    };
+  }  const running = new Date(`${start}T00:00:00Z`);
+  const endDate = new Date(`${end}T00:00:00Z`);
+  let dailyProfitSum = 0;
+
+  while (running.getTime() <= endDate.getTime()) {
+    const dateKey = running.toISOString().slice(0, 10);
+    if (!profitsByDate.has(dateKey)) {
+      return {
+        state: 'unknown' as const,
+        evidence: [
+          'unknown due to missing data: sales_trend_daily[*].profits (complete window coverage required)',
+        ],
+        missingSection: 'sales_trend_daily[*].profits' as const,
+      };
+    }
+    dailyProfitSum += profitsByDate.get(dateKey) ?? 0;
+    running.setUTCDate(running.getUTCDate() + 1);
+  }
+
+  if (dailyProfitSum > 0) {
     return {
       state: 'profit' as const,
-      evidence: [`kpis.baseline.totals.profits=${toRounded(profitValue, 2)}`],
-      hasProfitField: true,
+      evidence: [`sales_trend_daily[*].profits_sum=${toRounded(dailyProfitSum, 2)} (fallback)`],
+      missingSection: null as string | null,
     };
   }
 
-  if (profitValue < 0) {
+  if (dailyProfitSum < 0) {
     return {
       state: 'loss' as const,
-      evidence: [`kpis.baseline.totals.profits=${toRounded(profitValue, 2)}`],
-      hasProfitField: true,
+      evidence: [`sales_trend_daily[*].profits_sum=${toRounded(dailyProfitSum, 2)} (fallback)`],
+      missingSection: null as string | null,
     };
   }
 
   return {
     state: 'unknown' as const,
-    evidence: ['kpis.baseline.totals.profits=0 (neutral baseline)'],
-    hasProfitField: true,
+    evidence: ['sales_trend_daily[*].profits_sum=0 (neutral baseline fallback)'],
+    missingSection: null as string | null,
   };
 };
 
@@ -302,14 +368,14 @@ const countIntentAlignment = (packRecord: Record<string, unknown>) => {
 
 const computeMissingSections = (input: {
   hasWarnings: boolean;
-  hasProfitField: boolean;
+  profitMissingSection: string | null;
   hasTargets: boolean;
   hasRanking: boolean;
   hasIntent: boolean;
 }): string[] => {
   const missing: string[] = [];
   if (!input.hasWarnings) missing.push('metadata.warnings');
-  if (!input.hasProfitField) missing.push('kpis.baseline.totals.profits');
+  if (input.profitMissingSection) missing.push(input.profitMissingSection);
   if (!input.hasTargets) missing.push('ads_baseline.*.targets');
   if (!input.hasRanking) missing.push('ranking_baseline.top_keyword_trends');
   if (!input.hasIntent) missing.push('product.intent');
@@ -351,7 +417,7 @@ export const computeBaselineSummary = (pack: unknown): ComputedSummary => {
       warnings_count: warnings.warnings.length,
       missing_sections: computeMissingSections({
         hasWarnings: warnings.hasSection,
-        hasProfitField: profitability.hasProfitField,
+        profitMissingSection: profitability.missingSection,
         hasTargets: targets.hasSection,
         hasRanking: ranking.hasSection,
         hasIntent: intentCounts.hasIntent,

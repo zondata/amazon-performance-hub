@@ -1,4 +1,24 @@
 export type PlacementChannel = "sp" | "sb";
+export type PlacementSpendReconciliationStatus =
+  | "ok"
+  | "scaled_to_campaign_total"
+  | "missing_reported_spend"
+  | "mismatch";
+
+export type PlacementSpendReconciliation = {
+  status: PlacementSpendReconciliationStatus;
+  campaign_spend: number;
+  campaign_clicks: number;
+  campaign_sales: number;
+  placement_spend_reported_sum: number;
+  placement_clicks_sum: number;
+  placement_sales_sum: number;
+  spend_gap_reported: number;
+  spend_ratio_reported: number | null;
+  clicks_ratio: number | null;
+  sales_ratio: number | null;
+  spend_scale_factor: number | null;
+};
 
 const toFinite = (value: number): number => (Number.isFinite(value) ? value : 0);
 
@@ -19,6 +39,78 @@ export const calcCpc = (spend: number, clicks: number): number | null => safeDiv
 export const calcAcos = (spend: number, sales: number): number | null => safeDivide(spend, sales);
 
 export const calcRoas = (spend: number, sales: number): number | null => safeDivide(sales, spend);
+
+const SPEND_ABS_TOLERANCE = 0.01;
+const SPEND_REL_TOLERANCE = 0.01;
+const RATIO_ALIGN_TOLERANCE = 0.05;
+
+const ratiosAligned = (ratio: number | null): boolean => {
+  if (ratio === null) return false;
+  return Math.abs(1 - ratio) <= RATIO_ALIGN_TOLERANCE;
+};
+
+const spendMatches = (campaignSpend: number, placementSpend: number): boolean => {
+  const gap = Math.abs(campaignSpend - placementSpend);
+  if (gap <= SPEND_ABS_TOLERANCE) return true;
+  const base = Math.max(Math.abs(campaignSpend), SPEND_ABS_TOLERANCE);
+  return gap / base <= SPEND_REL_TOLERANCE;
+};
+
+export const derivePlacementSpendReconciliation = (input: {
+  campaignSpend: number;
+  campaignClicks: number;
+  campaignSales: number;
+  placementSpendReportedSum: number;
+  placementClicksSum: number;
+  placementSalesSum: number;
+}): PlacementSpendReconciliation => {
+  const campaignSpend = toFinite(input.campaignSpend);
+  const campaignClicks = toFinite(input.campaignClicks);
+  const campaignSales = toFinite(input.campaignSales);
+  const placementSpendReportedSum = toFinite(input.placementSpendReportedSum);
+  const placementClicksSum = toFinite(input.placementClicksSum);
+  const placementSalesSum = toFinite(input.placementSalesSum);
+
+  const spendGapReported = campaignSpend - placementSpendReportedSum;
+  const spendRatioReported = safeDivide(placementSpendReportedSum, campaignSpend);
+  const clicksRatio = safeDivide(placementClicksSum, campaignClicks);
+  const salesRatio = safeDivide(placementSalesSum, campaignSales);
+
+  let status: PlacementSpendReconciliationStatus = "mismatch";
+  let spendScaleFactor: number | null = null;
+
+  const campaignHasSpend = campaignSpend > SPEND_ABS_TOLERANCE;
+  const placementHasSpend = placementSpendReportedSum > SPEND_ABS_TOLERANCE;
+  const clickAligned = ratiosAligned(clicksRatio);
+  const isSpendOk = spendMatches(campaignSpend, placementSpendReportedSum);
+
+  if (isSpendOk) {
+    status = "ok";
+    spendScaleFactor = 1;
+  } else if (campaignHasSpend && !placementHasSpend) {
+    status = "missing_reported_spend";
+  } else if (clickAligned && campaignHasSpend && placementHasSpend) {
+    status = "scaled_to_campaign_total";
+    spendScaleFactor = campaignSpend / placementSpendReportedSum;
+  } else {
+    status = "mismatch";
+  }
+
+  return {
+    status,
+    campaign_spend: campaignSpend,
+    campaign_clicks: campaignClicks,
+    campaign_sales: campaignSales,
+    placement_spend_reported_sum: placementSpendReportedSum,
+    placement_clicks_sum: placementClicksSum,
+    placement_sales_sum: placementSalesSum,
+    spend_gap_reported: spendGapReported,
+    spend_ratio_reported: spendRatioReported,
+    clicks_ratio: clicksRatio,
+    sales_ratio: salesRatio,
+    spend_scale_factor: spendScaleFactor,
+  };
+};
 
 export const weightedAvgTosIs = (
   rows: Array<{ impressions: number; share: number | null }>

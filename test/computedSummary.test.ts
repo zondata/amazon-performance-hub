@@ -65,12 +65,36 @@ describe('computeBaselineSummary', () => {
   it('returns unknown profitability when baseline KPI profits are missing', () => {
     const summary = computeBaselineSummary({
       metadata: { warnings: [] },
+      window: { start: '2026-02-01', end: '2026-02-03' },
+      sales_trend_daily: [
+        { date: '2026-02-01', profits: 10 },
+        { date: '2026-02-03', profits: 5 },
+      ],
       ads_baseline: { sp: { targets: [] } },
       ranking_baseline: { top_keyword_trends: [] },
     });
 
     expect(summary.profitability.state).toBe('unknown');
     expect(summary.profitability.evidence.join(' ')).toContain('unknown due to missing data');
-    expect(summary.data_quality.missing_sections).toContain('kpis.baseline.totals.profits');
+    expect(summary.data_quality.missing_sections).toContain('sales_trend_daily[*].profits');
+  });
+
+  it('falls back to sales_trend_daily profits when KPI profits are missing and coverage is complete', () => {
+    const summary = computeBaselineSummary({
+      metadata: { warnings: [] },
+      window: { start: '2026-02-01', end: '2026-02-03' },
+      sales_trend_daily: [
+        { date: '2026-02-01', profits: 10 },
+        { date: '2026-02-02', profits: 5.5 },
+        { date: '2026-02-03', profits: 4.5 },
+      ],
+      ads_baseline: { sp: { targets: [] } },
+      ranking_baseline: { top_keyword_trends: [] },
+      product: { intent: {} },
+    });
+
+    expect(summary.profitability.state).toBe('profit');
+    expect(summary.profitability.evidence.join(' ')).toContain('sales_trend_daily[*].profits_sum');
+    expect(summary.data_quality.missing_sections).not.toContain('sales_trend_daily[*].profits');
   });
 });

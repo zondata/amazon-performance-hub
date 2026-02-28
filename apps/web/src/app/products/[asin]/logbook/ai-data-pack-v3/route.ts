@@ -33,6 +33,7 @@ import {
   calcCtr,
   calcCvrOrdersPerClick,
   calcRoas,
+  derivePlacementSpendReconciliation,
   mapPlacementModifierKey,
   weightedAvgTosIs,
 } from "@/lib/logbook/aiPack/aiPackV3Helpers";
@@ -2326,16 +2327,122 @@ export async function GET(request: Request, { params }: Ctx) {
     });
 
   const spCampaignRowsForOutput = spTopCampaigns.map((row) => {
-    const placementPerformance = formatPlacementPerformance(
+    const placementPerformanceBase = formatPlacementPerformance(
       "sp",
       spPlacementPerformanceByCampaign.get(row.campaign_id) ?? [],
       spPlacementModifiersByCampaign.get(row.campaign_id) ?? new Map<string, number | null>()
     );
-    const placementSalesTotal = placementPerformance.reduce(
+
+    const placementSpendReportedSum = placementPerformanceBase.reduce(
+      (sum, placementRow) => sum + num(placementRow.spend),
+      0
+    );
+    const placementClicksSum = placementPerformanceBase.reduce(
+      (sum, placementRow) => sum + num(placementRow.clicks),
+      0
+    );
+    const placementSalesSum = placementPerformanceBase.reduce(
       (sum, placementRow) => sum + num(placementRow.sales),
       0
     );
-    const isPlacementSalesMissing = row.sales > 0 && placementSalesTotal === 0;
+
+    const placementSpendReconciliation = derivePlacementSpendReconciliation({
+      campaignSpend: row.spend,
+      campaignClicks: row.clicks,
+      campaignSales: row.sales,
+      placementSpendReportedSum,
+      placementClicksSum,
+      placementSalesSum,
+    });
+
+    type PlacementPerfOutRowBase = (typeof placementPerformanceBase)[number];
+    type PlacementPerfOutRow = Omit<
+      PlacementPerfOutRowBase,
+      "spend" | "acos" | "roas" | "cpc"
+    > & {
+      spend_reported: number;
+      spend: number | null;
+      acos: number | null;
+      roas: number | null;
+      cpc: number | null;
+    };
+
+    let placementPerformance: PlacementPerfOutRow[] = placementPerformanceBase.map(
+      (placementRow): PlacementPerfOutRow => ({
+        placement_code: placementRow.placement_code,
+        placement_raw: placementRow.placement_raw,
+        placement_raw_norm: placementRow.placement_raw_norm,
+        modifier_pct_current: placementRow.modifier_pct_current,
+        spend_reported: placementRow.spend,
+        spend: placementRow.spend,
+        sales: placementRow.sales,
+        orders: placementRow.orders,
+        units: placementRow.units,
+        clicks: placementRow.clicks,
+        impressions: placementRow.impressions,
+        acos: calcAcos(placementRow.spend, placementRow.sales),
+        roas: calcRoas(placementRow.spend, placementRow.sales),
+        cpc: calcCpc(placementRow.spend, placementRow.clicks),
+        ctr: placementRow.ctr,
+        cvr: placementRow.cvr,
+      })
+    );
+
+    if (
+      placementSpendReconciliation.status === "scaled_to_campaign_total" &&
+      placementSpendReconciliation.spend_scale_factor !== null
+    ) {
+      const scaleFactor = placementSpendReconciliation.spend_scale_factor;
+      placementPerformance = placementPerformance.map((placementRow) => {
+        const scaledSpend = num(placementRow.spend_reported) * scaleFactor;
+        const sales = num(placementRow.sales);
+        const clicks = num(placementRow.clicks);
+        return {
+          ...placementRow,
+          spend: scaledSpend,
+          acos: calcAcos(scaledSpend, sales),
+          roas: calcRoas(scaledSpend, sales),
+          cpc: calcCpc(scaledSpend, clicks),
+        };
+      });
+      addMessage(
+        "warn",
+        "SP_PLACEMENT_SPEND_SCALED",
+        "SP placement spend was scaled to campaign spend because reported placement spend did not reconcile while clicks aligned.",
+        {
+          campaign_id: row.campaign_id,
+          campaign_name_norm: row.campaign_name_norm,
+          placement_spend_reconciliation: placementSpendReconciliation,
+        }
+      );
+    } else if (
+      placementSpendReconciliation.status === "missing_reported_spend" ||
+      placementSpendReconciliation.status === "mismatch"
+    ) {
+      placementPerformance = placementPerformance.map((placementRow) => ({
+        ...placementRow,
+        spend: null,
+        acos: null,
+        roas: null,
+        cpc: null,
+      }));
+      addMessage(
+        "warn",
+        placementSpendReconciliation.status === "missing_reported_spend"
+          ? "SP_PLACEMENT_SPEND_MISSING"
+          : "SP_PLACEMENT_SPEND_MISMATCH",
+        placementSpendReconciliation.status === "missing_reported_spend"
+          ? "SP placement reported spend is missing for this campaign; placement spend KPIs were nulled to avoid incorrect recommendations."
+          : "SP placement spend does not reconcile with campaign totals; placement spend KPIs were nulled to avoid incorrect recommendations.",
+        {
+          campaign_id: row.campaign_id,
+          campaign_name_norm: row.campaign_name_norm,
+          placement_spend_reconciliation: placementSpendReconciliation,
+        }
+      );
+    }
+
+    const isPlacementSalesMissing = row.sales > 0 && placementSalesSum === 0;
 
     if (isPlacementSalesMissing) {
       addMessage(
@@ -2346,7 +2453,7 @@ export async function GET(request: Request, { params }: Ctx) {
           campaign_id: row.campaign_id,
           campaign_name_norm: row.campaign_name_norm,
           campaign_sales: row.sales,
-          placement_sales_total: placementSalesTotal,
+          placement_sales_total: placementSalesSum,
         }
       );
     }
@@ -2368,6 +2475,7 @@ export async function GET(request: Request, { params }: Ctx) {
       cpc: calcCpc(row.spend, row.clicks),
       current_bulk: spBulkCampaignById.get(row.campaign_id) ?? null,
       placement_modifiers: spPlacementsByCampaign.get(row.campaign_id) ?? [],
+      placement_spend_reconciliation: placementSpendReconciliation,
       placement_sales_attribution_status: isPlacementSalesMissing ? "missing" : "ok",
       placement_performance: isPlacementSalesMissing
         ? placementPerformance.map((placementRow) => ({
