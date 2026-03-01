@@ -12,6 +12,32 @@ export type ProductExperimentPromptTemplateOption = {
   is_default: boolean;
 };
 
+const OUTPUT_CONTRACT_V1_MARKER = 'scope.contract.ads_optimization_v1';
+
+export const ADS_OUTPUT_CONTRACT_V1_TEMPLATE_APPENDIX = [
+  '',
+  'Output Contract V1 requirement:',
+  '- When producing final JSON, include `experiment.scope.contract.ads_optimization_v1`.',
+  '- `baseline_ref` must include `data_available_through` and baseline `window` from the Product Baseline Data Pack (do not invent dates).',
+  '- `forecast` must include directional KPI movement (`directional_kpis`) plus `window_days`, `lag_days`, `assumptions`, and `confidence`.',
+  '- `ai_run_meta.workflow_mode` must be `manual` for web-based AI.',
+  '- Include `ai_run_meta.prompt_template_id` matching the selected template id.',
+  '- Include `ai_run_meta.model` and `ai_run_meta.run_at` if known; otherwise set `model` to \"unknown\" and `run_at` to null.',
+].join('\n');
+
+const appendOutputContractV1AppendixIfMissing = (
+  templateId: string,
+  instructionsMd: string
+): string => {
+  if (templateId !== 'formatting_only' && templateId !== 'experiment_partner') {
+    return instructionsMd;
+  }
+  if (instructionsMd.includes(OUTPUT_CONTRACT_V1_MARKER)) {
+    return instructionsMd;
+  }
+  return `${instructionsMd}${ADS_OUTPUT_CONTRACT_V1_TEMPLATE_APPENDIX}`;
+};
+
 export const PRODUCT_EXPERIMENT_PROMPT_DEFAULT_TEMPLATES: ProductExperimentPromptTemplate[] = [
   {
     id: 'formatting_only',
@@ -23,7 +49,7 @@ export const PRODUCT_EXPERIMENT_PROMPT_DEFAULT_TEMPLATES: ProductExperimentPromp
       'Keep responses minimal and focused on the schema contract.',
       'When you output your final answer, it must be JSON only.',
       'Do not output markdown, code fences, or prose in the final answer.',
-    ].join('\n'),
+    ].join('\n') + ADS_OUTPUT_CONTRACT_V1_TEMPLATE_APPENDIX,
     is_default: true,
   },
   {
@@ -59,7 +85,7 @@ export const PRODUCT_EXPERIMENT_PROMPT_DEFAULT_TEMPLATES: ProductExperimentPromp
       'When generating final JSON:',
       '- Output JSON only (no markdown/prose/code fences).',
       '- Follow the required schema exactly.',
-    ].join('\n'),
+    ].join('\n') + ADS_OUTPUT_CONTRACT_V1_TEMPLATE_APPENDIX,
     is_default: false,
   },
 ];
@@ -98,8 +124,10 @@ export const normalizeProductExperimentPromptTemplates = (
       id,
       name,
       description: typeof row.description === 'string' ? row.description : '',
-      instructions_md:
-        typeof row.instructions_md === 'string' ? row.instructions_md : '',
+      instructions_md: appendOutputContractV1AppendixIfMissing(
+        id,
+        typeof row.instructions_md === 'string' ? row.instructions_md : ''
+      ),
       is_default: row.is_default === true,
     });
   });

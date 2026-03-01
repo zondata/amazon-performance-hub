@@ -276,6 +276,7 @@ Likely integration points:
 - [x] Snapshot baseline_ref + forecast + ai_run_meta into evaluation `metrics_json` during evaluation import.
 - [x] Added experiment detail UI panel to show baseline cutoff, forecast summary, and AI run metadata with missing badges.
 - [x] Added/updated tests for contract parsing/normalization and wiring across import/eval/UI paths.
+- [x] Prompt templates updated: `formatting_only` + `experiment_partner` now require `scope.contract.ads_optimization_v1` metadata in final JSON instructions.
 
 ### Phase 1 (UI Review + Review Patch Pack + Final Plan) — DONE (2026-03-01)
 - [x] Added Review Patch Pack contract envelope (`aph_review_patch_pack_v1`) and parser/import path.
