@@ -4,6 +4,10 @@ import { env } from '@/lib/env';
 import { deriveExperimentDateWindow } from '@/lib/logbook/experimentDateWindow';
 import { isInterruptionChange, pickMajorActions } from '@/lib/logbook/experimentTimeline';
 import { extractBulkgenPlans } from '@/lib/logbook/productExperimentPlans';
+import {
+  extractAdsOptimizationContractV1FromScope,
+  type AdsOptimizationContractV1,
+} from '@/lib/logbook/contracts/adsOptimizationContractV1';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 type JsonObject = Record<string, unknown>;
@@ -126,6 +130,7 @@ export type ExperimentPlanSummary = {
 export type ExperimentContext = {
   experiment: ExperimentContextRow;
   scope: JsonObject | null;
+  contract_ads_optimization_v1: AdsOptimizationContractV1 | null;
   status: string;
   product_asin: string | null;
   expected_outcome: string | null;
@@ -463,6 +468,9 @@ export const getExperimentContext = async (experimentId: string): Promise<Experi
   return {
     experiment,
     scope,
+    contract_ads_optimization_v1: extractAdsOptimizationContractV1FromScope(scope, {
+      defaultWorkflowMode: true,
+    }),
     status,
     product_asin: productAsin,
     expected_outcome: asString(scope?.expected_outcome),

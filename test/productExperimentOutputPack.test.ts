@@ -103,4 +103,57 @@ describe("product experiment output pack parser", () => {
       expect(result.value.kiv_items[0].title).toContain('Investigate broad match');
     }
   });
+
+  it('accepts contract metadata under experiment.scope.contract.ads_optimization_v1', () => {
+    const result = parseProductExperimentOutputPack(
+      JSON.stringify({
+        kind: PRODUCT_EXPERIMENT_OUTPUT_PACK_KIND,
+        product: { asin: 'B0TEST12345' },
+        experiment: {
+          name: 'Budget test',
+          objective: 'Grow sales',
+          scope: {
+            status: 'planned',
+            contract: {
+              ads_optimization_v1: {
+                baseline_ref: {
+                  data_available_through: '2026-02-20',
+                },
+                forecast: {
+                  window_days: 14,
+                  directional_kpis: [
+                    { kpi: 'spend', direction: 'up' },
+                    { kpi: 'acos', direction: 'down' },
+                  ],
+                  assumptions: ['seasonality stable'],
+                },
+                ai_run_meta: {
+                  model: 'gpt-test',
+                },
+                extra_key_for_forward_compat: true,
+              },
+            },
+          },
+        },
+      }),
+      'B0TEST12345'
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const scope = result.value.experiment.scope as {
+        contract?: { ads_optimization_v1?: Record<string, unknown> };
+      };
+      const contract = scope.contract?.ads_optimization_v1;
+      expect(contract).toBeTruthy();
+      expect(contract?.baseline_ref).toEqual({
+        data_available_through: '2026-02-20',
+      });
+      expect(contract?.ai_run_meta).toMatchObject({
+        workflow_mode: 'manual',
+        model: 'gpt-test',
+      });
+      expect(contract?.extra_key_for_forward_compat).toBe(true);
+    }
+  });
 });

@@ -265,6 +265,12 @@ export default async function ExperimentDetailPage({
     id: skill.id,
     title: skill.title,
   }));
+  const proposalContract = context.contract_ads_optimization_v1;
+  const baselineDataAvailableThrough = proposalContract?.baseline_ref?.data_available_through ?? null;
+  const forecastWindowDays = proposalContract?.forecast?.window_days;
+  const forecastDirectionalKpis = proposalContract?.forecast?.directional_kpis ?? [];
+  const workflowMode = proposalContract?.ai_run_meta?.workflow_mode ?? null;
+  const workflowModel = proposalContract?.ai_run_meta?.model ?? null;
   const majorActionSignals = context.major_actions.slice(0, 12);
   const interruptionSignals = context.interruptions.slice(0, 12);
 
@@ -373,6 +379,76 @@ export default async function ExperimentDetailPage({
           experimentId={context.experiment.experiment_id}
           uploadUrl={`/logbook/experiments/${context.experiment.experiment_id}/evaluation-import`}
         />
+      </div>
+
+      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div className="mb-4 text-sm font-semibold text-foreground">Output Contract V1</div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted">Baseline cutoff</div>
+            <div className="mt-2 text-sm text-foreground">
+              {baselineDataAvailableThrough ? (
+                baselineDataAvailableThrough
+              ) : (
+                <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                  Missing
+                </span>
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted">Forecast</div>
+            <div className="mt-2 text-sm text-foreground">
+              {typeof forecastWindowDays === 'number' ? (
+                <>Window: {forecastWindowDays} day(s)</>
+              ) : (
+                <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                  Missing
+                </span>
+              )}
+            </div>
+            <div className="mt-2">
+              {forecastDirectionalKpis.length === 0 ? (
+                <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                  Missing KPI directions
+                </span>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {forecastDirectionalKpis.map((row, index) => (
+                    <span
+                      key={`${row.kpi}-${row.direction}-${index}`}
+                      className="rounded-full border border-border bg-surface-2 px-2 py-0.5 text-xs text-foreground"
+                    >
+                      {row.kpi}: {row.direction}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted">AI run metadata</div>
+            <div className="mt-2 text-sm text-foreground">
+              {workflowMode ? (
+                <>workflow_mode: {workflowMode}</>
+              ) : (
+                <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                  Missing
+                </span>
+              )}
+            </div>
+            <div className="mt-2 text-sm text-muted">
+              model:{' '}
+              {workflowModel ? (
+                workflowModel
+              ) : (
+                <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                  Missing
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       <ExperimentSkillsOverrideManager

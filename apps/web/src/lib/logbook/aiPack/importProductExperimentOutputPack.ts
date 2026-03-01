@@ -8,6 +8,7 @@ import {
   parseProductExperimentOutputPack,
   ParsedProductExperimentOutputPack,
 } from "./parseProductExperimentOutputPack";
+import { normalizeScopeWithAdsOptimizationContractV1 } from "../contracts/adsOptimizationContractV1";
 
 type ImportInput = {
   fileText: string;
@@ -60,6 +61,10 @@ export const importProductExperimentOutputPack = async ({
   try {
     const warnings: string[] = [];
     const experimentPayload = parsed.value.experiment;
+    const normalizedScope =
+      normalizeScopeWithAdsOptimizationContractV1(experimentPayload.scope, {
+        defaultWorkflowMode: true,
+      }) ?? experimentPayload.scope;
     const { data: experimentRow, error: experimentError } = await supabaseAdmin
       .from("log_experiments")
       .insert({
@@ -72,7 +77,7 @@ export const importProductExperimentOutputPack = async ({
         evaluation_window_days: experimentPayload.evaluation_window_days ?? null,
         primary_metrics: experimentPayload.primary_metrics ?? null,
         guardrails: experimentPayload.guardrails ?? null,
-        scope: experimentPayload.scope,
+        scope: normalizedScope,
       })
       .select("experiment_id")
       .single();

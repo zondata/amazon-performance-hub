@@ -3,6 +3,10 @@
 import 'server-only';
 
 import { computeExperimentKpis } from '@/lib/logbook/computeExperimentKpis';
+import {
+  extractAdsOptimizationContractV1FromScope,
+  snapshotAdsOptimizationContractV1,
+} from '@/lib/logbook/contracts/adsOptimizationContractV1';
 import { deriveExperimentDateWindow } from '@/lib/logbook/experimentDateWindow';
 import { normalizeKivStatus } from '@/lib/logbook/kiv';
 import { env } from '@/lib/env';
@@ -380,6 +384,10 @@ export const importExperimentEvaluationOutputPack = async (
 
     const experiment = experimentData as ExperimentRow;
     const scope = asObject(experiment.scope);
+    const proposalContract = extractAdsOptimizationContractV1FromScope(scope, {
+      defaultWorkflowMode: true,
+    });
+    const proposalContractSnapshot = snapshotAdsOptimizationContractV1(proposalContract);
     const scopeAsin = normalizeAsin(scope?.product_id);
 
     if (!scopeAsin) {
@@ -410,6 +418,10 @@ export const importExperimentEvaluationOutputPack = async (
       next_steps: payload.evaluation.next_steps,
       notes: payload.evaluation.notes,
       window_source: window.source,
+      proposal_contract: {
+        ads_optimization_v1: proposalContract,
+      },
+      proposal_contract_snapshot: proposalContractSnapshot,
     };
 
     const { data: evaluationData, error: evaluationError } = await supabaseAdmin

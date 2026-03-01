@@ -226,6 +226,9 @@ export async function GET(_request: Request, { params }: Ctx) {
         experiment_ids: experimentSkillIds,
         resolved: resolvedSkills,
       },
+      proposal_contract: {
+        ads_optimization_v1: context.contract_ads_optimization_v1,
+      },
     },
     kpis,
     noise_flags: noiseFlags,

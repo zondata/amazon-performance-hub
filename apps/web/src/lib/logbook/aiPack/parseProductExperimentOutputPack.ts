@@ -1,5 +1,6 @@
 import type { SbUpdateAction } from "../../../../../../src/bulksheet_gen_sb/types";
 import type { SpUpdateAction } from "../../../../../../src/bulksheet_gen_sp/types";
+import { normalizeScopeWithAdsOptimizationContractV1 } from "../contracts/adsOptimizationContractV1";
 
 const PACK_KIND = "aph_product_experiment_pack_v1";
 
@@ -348,6 +349,10 @@ export const parseProductExperimentOutputPack = (
   const evaluationWindowDays = asFiniteNumber(experiment.evaluation_window_days) ?? undefined;
 
   const scopeRaw = asRecord(experiment.scope) ?? {};
+  const scopeNormalized =
+    normalizeScopeWithAdsOptimizationContractV1(scopeRaw, {
+      defaultWorkflowMode: true,
+    }) ?? scopeRaw;
   const status = trimString(scopeRaw.status) ?? "planned";
   const plansRaw = scopeRaw.bulkgen_plans;
   const plans: ProductExperimentBulkgenPlan[] = [];
@@ -500,7 +505,7 @@ export const parseProductExperimentOutputPack = (
     status: string;
     bulkgen_plans?: ProductExperimentBulkgenPlan[];
   } = {
-    ...scopeRaw,
+    ...scopeNormalized,
     product_id: productAsin,
     status,
   };

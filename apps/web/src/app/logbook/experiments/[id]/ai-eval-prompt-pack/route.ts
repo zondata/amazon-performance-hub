@@ -31,6 +31,7 @@ export async function GET(_request: Request, { params }: Ctx) {
   }
 
   const asin = context.product_asin ?? 'UNKNOWN_ASIN';
+  const proposalContract = context.contract_ads_optimization_v1;
 
   const content = `# Experiment Evaluation Prompt Pack
 
@@ -42,14 +43,16 @@ You are evaluating an Amazon experiment outcome.
 - objective: ${context.experiment.objective}
 - expected_outcome: ${context.expected_outcome ?? 'not provided'}
 - guardrails: ${JSON.stringify(context.experiment.guardrails ?? {}, null, 0)}
+- proposal_contract.ads_optimization_v1: ${JSON.stringify(proposalContract ?? null, null, 0)}
 
 ## Task
 1. Evaluate actual KPI deltas against expected outcome and guardrails.
 2. Produce a concise, evidence-based summary.
 3. Score the result 0-100 with confidence 0-1.
 4. Propose next steps that are executable and ID-safe.
-5. Respect resolved skills, driver campaign intents, and current KIV backlog context from the evaluation data pack.
-6. Keep immediate execution small and express deferred work in \`evaluation.kiv_updates\`.
+5. Respect proposal contract metadata (baseline cutoff, forecast, ai run metadata) from the evaluation data pack.
+6. Respect resolved skills, driver campaign intents, and current KIV backlog context from the evaluation data pack.
+7. Keep immediate execution small and express deferred work in \`evaluation.kiv_updates\`.
 
 ## Hard Rules
 - Do not invent IDs or dates.

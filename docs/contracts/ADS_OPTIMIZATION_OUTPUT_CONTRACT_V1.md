@@ -261,11 +261,22 @@ Likely integration points:
   - `apps/web/src/lib/products/getProductLogbookData.ts`
 
 ## Open items / Next build steps
-- [ ] `APH-P0-001`: extend stored metadata for baseline cutoff + forecast KPIs and carry into eval.
+- [x] `APH-P0-001`: extend stored metadata for baseline cutoff + forecast KPIs and carry into eval.
 - [ ] `APH-P0-002`: semantic validation at AI import boundary.
 - [ ] `APH-P0-003`: make logbook experiments primary workflow UI.
 - [ ] `APH-P0-004`: CI.
 
+## Implementation Status
+
+### Phase 0 (Foundation) — DONE (2026-03-01)
+- [x] Added V1 contract types/parsing helpers in `apps/web/src/lib/logbook/contracts/adsOptimizationContractV1.ts`.
+- [x] Extended experiment output pack parsing/import to accept and persist `scope.contract.ads_optimization_v1`.
+- [x] Added normalization default for missing `ai_run_meta.workflow_mode` -> `manual` on stored metadata.
+- [x] Carried contract metadata into experiment evaluation data packs and evaluation prompt context.
+- [x] Snapshot baseline_ref + forecast + ai_run_meta into evaluation `metrics_json` during evaluation import.
+- [x] Added experiment detail UI panel to show baseline cutoff, forecast summary, and AI run metadata with missing badges.
+- [x] Added/updated tests for contract parsing/normalization and wiring across import/eval/UI paths.
+
 ## Changelog
 - 2026-03-01: V1 locked decisions (AI no XLSX; UI-first review; Review Patch Pack).
-
+- 2026-03-01: Implemented Phase 0: persisted baseline cutoff + forecast + ai_run metadata; carried into evaluation data pack/context and evaluation snapshots.
