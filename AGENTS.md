@@ -165,8 +165,9 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
   Analysis mini bar sparklines have instant hover tooltip (2 lines: date/period + formatted value).
 - Sales Trend (KPI cards): collapsible and default to closed.
 - Imports & Health: `/imports-health` (data heartbeat).
-- Bulksheet Ops: `/bulksheet-ops/sp-update`, `/bulksheet-ops/sb-update`, `/bulksheet-ops/sp-create`, `/bulksheet-ops/reconcile`
-  (local-first generators + reconcile queue).
+- Bulksheet Ops: `/bulksheet-ops/sp-update`, `/bulksheet-ops/sb-update`, `/bulksheet-ops/sp-create`, `/bulksheet-ops/templates`, `/bulksheet-ops/reconcile`
+  (local-first generators + template management + reconcile queue).
+- If templates are missing: create bucket `bulkgen-templates` in Supabase Storage and upload templates in Bulksheet Ops → Templates.
 
 ### Products Ranking Tab
 - Ranking heatmap is implemented on the product detail page (`tab=ranking`).
@@ -205,7 +206,17 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - `ENABLE_SPEND_RECONCILIATION` (default `0`) toggles spend reconciliation query.
 - `PENDING_RECONCILE_DIR` enables a local-only pending manifest count; if unset, UI shows "not configured".
 - Bulksheet Ops env vars: `BULKGEN_OUT_ROOT`, `BULKGEN_PENDING_RECONCILE_DIR`, `BULKGEN_RECONCILED_DIR`, `BULKGEN_FAILED_DIR`,
-  `BULKGEN_TEMPLATE_SP_UPDATE`, `BULKGEN_TEMPLATE_SB_UPDATE`, `BULKGEN_TEMPLATE_SP_CREATE`, `ENABLE_BULKGEN_SPAWN`.
+  `BULKGEN_TEMPLATE_BUCKET` (default `bulkgen-templates`), `ENABLE_BULKGEN_SPAWN`.
+- Bulksheet templates are storage-first and managed at `/bulksheet-ops/templates`:
+  - bucket: `bulkgen-templates` (or `BULKGEN_TEMPLATE_BUCKET` override)
+  - object paths:
+    - `<account_id>/<marketplace>/sp-update.xlsx`
+    - `<account_id>/<marketplace>/sb-update.xlsx`
+    - `<account_id>/<marketplace>/sp-create.xlsx`
+- Optional local fallback env vars (only when storage template is missing):
+  - `BULKGEN_TEMPLATE_SP_UPDATE`
+  - `BULKGEN_TEMPLATE_SB_UPDATE`
+  - `BULKGEN_TEMPLATE_SP_CREATE`
 - Batch Import UI is also gated by `ENABLE_BULKGEN_SPAWN=1` (local-only CLI spawn; keep disabled on Vercel/serverless).
 - Local-first caveat: Bulksheet Ops depends on local filesystem paths (Dropbox). This will not work on Vercel/serverless.
 

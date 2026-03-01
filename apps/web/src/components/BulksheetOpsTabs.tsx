@@ -7,6 +7,7 @@ const TABS = [
   { label: 'SP Update', href: '/bulksheet-ops/sp-update' },
   { label: 'SB Update', href: '/bulksheet-ops/sb-update' },
   { label: 'SP Create', href: '/bulksheet-ops/sp-create' },
+  { label: 'Templates', href: '/bulksheet-ops/templates' },
   { label: 'Reconcile', href: '/bulksheet-ops/reconcile' },
 ];
 

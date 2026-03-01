@@ -1,13 +1,33 @@
+import Link from 'next/link';
+
 import { env } from '@/lib/env';
 import { getExperimentOptions } from '@/lib/logbook/getExperimentOptions';
 import SpUpdateRunner from '@/components/bulksheets/SpUpdateRunner';
 import { runSpUpdateGenerator } from '@/lib/bulksheets/runGenerators';
+import { downloadTemplateToLocalPath, getTemplateStatus } from '@/lib/bulksheets/templateStore';
 import type { SpUpdateAction } from '../../../../../../src/bulksheet_gen_sp/types';
+
+const formatDateTime = (value: string | null) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString('en-US');
+};
 
 export default async function SpUpdatePage() {
   const experiments = await getExperimentOptions();
-  const missingConfig = !env.bulkgenOutRoot || !env.bulkgenTemplateSpUpdate;
+  const templateStatus = await getTemplateStatus();
+  const spTemplateStatus = templateStatus.templates.sp_update;
+  const missingConfig = !env.bulkgenOutRoot;
   const spawnDisabled = !env.enableBulkgenSpawn;
+  const templateMissing = spTemplateStatus.source === 'missing';
+  const templateUpdatedAt = formatDateTime(spTemplateStatus.updatedAt);
+  const templateStatusLine =
+    spTemplateStatus.source === 'storage'
+      ? `Stored in system${templateUpdatedAt ? ` (updated ${templateUpdatedAt})` : ''}`
+      : spTemplateStatus.source === 'local_fallback'
+        ? `Using local fallback (${spTemplateStatus.localFallbackPath ?? 'configured env path'})`
+        : 'Missing (upload in Templates tab)';
 
   const action = async (
     _prevState: { result?: unknown; error?: string | null },
@@ -21,9 +41,10 @@ export default async function SpUpdatePage() {
         throw new Error('Actions JSON is required.');
       }
       const actions = JSON.parse(actionsRaw) as SpUpdateAction[];
+      const templatePath = await downloadTemplateToLocalPath('sp_update');
 
       const result = await runSpUpdateGenerator({
-        templatePath: String(formData.get('template_path') ?? ''),
+        templatePath,
         outRoot: String(formData.get('out_root') ?? ''),
         notes: String(formData.get('notes') ?? ''),
         runId: String(formData.get('run_id') ?? ''),
@@ -46,8 +67,21 @@ export default async function SpUpdatePage() {
     <div className="space-y-4">
       {missingConfig ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
-          Bulksheet Ops requires local paths. Set BULKGEN_OUT_ROOT and
-          BULKGEN_TEMPLATE_SP_UPDATE in apps/web/.env.local.
+          Bulksheet Ops requires BULKGEN_OUT_ROOT in apps/web/.env.local.
+        </div>
+      ) : null}
+      {templateMissing ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
+          Template is missing. Upload SP Update at{' '}
+          <Link href="/bulksheet-ops/templates" className="underline">
+            Bulksheet Ops → Templates
+          </Link>
+          .
+        </div>
+      ) : null}
+      {spTemplateStatus.error ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
+          Template storage warning: {spTemplateStatus.error}
         </div>
       ) : null}
       {spawnDisabled ? (
@@ -58,7 +92,7 @@ export default async function SpUpdatePage() {
       <SpUpdateRunner
         action={action}
         experiments={experiments}
-        defaultTemplatePath={env.bulkgenTemplateSpUpdate}
+        templateStatusLine={templateStatusLine}
         defaultOutRoot={env.bulkgenOutRoot}
       />
     </div>

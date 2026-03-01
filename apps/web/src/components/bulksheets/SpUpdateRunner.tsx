@@ -46,7 +46,7 @@ type SpUpdateState = {
 export default function SpUpdateRunner(props: {
   action: (prevState: SpUpdateState, formData: FormData) => Promise<SpUpdateState>;
   experiments: ExperimentOption[];
-  defaultTemplatePath?: string | null;
+  templateStatusLine: string;
   defaultOutRoot?: string | null;
 }) {
   const [state, formAction] = React.useActionState(props.action, { result: null, error: null });
@@ -92,14 +92,10 @@ export default function SpUpdateRunner(props: {
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2 md:col-span-2">
-              <label className="text-xs uppercase tracking-wider text-slate-400">Template path</label>
-              <input
-                name="template_path"
-                defaultValue={props.defaultTemplatePath ?? ''}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                placeholder="/path/to/sp-update-template.xlsx"
-                required
-              />
+              <label className="text-xs uppercase tracking-wider text-slate-400">Template</label>
+              <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                {props.templateStatusLine}
+              </div>
             </div>
             <div className="space-y-2 md:col-span-2">
               <label className="text-xs uppercase tracking-wider text-slate-400">Output root</label>

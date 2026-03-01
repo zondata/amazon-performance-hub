@@ -32,6 +32,18 @@ const buildAllowedRoots = (): AllowedRoot[] => {
   return roots;
 };
 
+const sanitizeDownloadFilename = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+  const cleaned = value
+    .replace(/[/\\]+/g, ' ')
+    .replace(/[^\w.\- ]+/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+  if (!cleaned) return null;
+  const bounded = cleaned.slice(0, 120).replace(/^[_\-.]+|[_\-.]+$/g, '');
+  return bounded.length > 0 ? bounded : null;
+};
+
 export const resolveDownloadPath = (relativePath: string) => {
   const cleaned = relativePath.replace(/^\/+/, '');
   const roots = buildAllowedRoots();
@@ -53,7 +65,10 @@ export const resolveDownloadPath = (relativePath: string) => {
   return safeJoin(outRoot.path, cleaned);
 };
 
-export const buildFileResponse = (absolutePath: string) => {
+export const buildFileResponse = (
+  absolutePath: string,
+  options?: { downloadFilename?: string | null }
+) => {
   if (!fs.existsSync(absolutePath) || !fs.statSync(absolutePath).isFile()) {
     return null;
   }
@@ -61,9 +76,11 @@ export const buildFileResponse = (absolutePath: string) => {
   const stream = fs.createReadStream(absolutePath);
   const headers = new Headers();
   headers.set('Content-Type', contentTypeFor(absolutePath));
+  const filename =
+    sanitizeDownloadFilename(options?.downloadFilename) ?? path.basename(absolutePath);
   headers.set(
     'Content-Disposition',
-    `attachment; filename="${path.basename(absolutePath)}"`
+    `attachment; filename="${filename}"`
   );
 
   return new Response(stream as unknown as BodyInit, { headers });

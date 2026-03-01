@@ -26,5 +26,6 @@ export const env = {
   bulkgenTemplateSpUpdate: process.env.BULKGEN_TEMPLATE_SP_UPDATE,
   bulkgenTemplateSbUpdate: process.env.BULKGEN_TEMPLATE_SB_UPDATE,
   bulkgenTemplateSpCreate: process.env.BULKGEN_TEMPLATE_SP_CREATE,
+  bulkgenTemplateBucket: process.env.BULKGEN_TEMPLATE_BUCKET?.trim() || 'bulkgen-templates',
   enableBulkgenSpawn: process.env.ENABLE_BULKGEN_SPAWN === '1',
 };

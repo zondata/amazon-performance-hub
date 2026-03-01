@@ -10,6 +10,8 @@ import ExperimentReviewPatchManager from '@/components/logbook/ExperimentReviewP
 import InlineFilters from '@/components/InlineFilters';
 import PageHeader from '@/components/PageHeader';
 import Table from '@/components/Table';
+import { env } from '@/lib/env';
+import { buildReviewProposedChangesDisplay } from '@/lib/logbook/buildReviewProposedChangesDisplay';
 import { getChanges } from '@/lib/logbook/getChanges';
 import { getExperimentContext } from '@/lib/logbook/getExperimentContext';
 import { linkChangesToExperiment } from '@/lib/logbook/linkChangesToExperiment';
@@ -18,8 +20,16 @@ import {
   buildProposalActionRefs,
   extractProposalBulkgenPlansFromScope,
   rankAndSortProposalActions,
+  selectBulkgenPlansForExecution,
 } from '@/lib/logbook/contracts/reviewPatchPlan';
+import {
+  RECOMMENDED_REVIEW_CHANGES_UI_SETTINGS,
+  REVIEW_CHANGES_PAGE_KEY,
+  type ReviewChangesUiSettings,
+  type ReviewSortMode,
+} from '@/lib/logbook/reviewProposedChangesDisplayModel';
 import { listResolvedSkills } from '@/lib/skills/resolveSkills';
+import { getPageSettings } from '@/lib/uiSettings/getPageSettings';
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return '—';
@@ -109,6 +119,29 @@ const truncateText = (value?: string | null, max = 120): string => {
 const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
+const normalizeReviewUiSettings = (value: unknown): ReviewChangesUiSettings => {
+  const row = asObject(value);
+  const sortModeCandidate = asString(row?.sortMode);
+  const sortMode: ReviewSortMode =
+    sortModeCandidate === 'damage_risk_first' || sortModeCandidate === 'objective_kpi_risk_high_first'
+      ? sortModeCandidate
+      : RECOMMENDED_REVIEW_CHANGES_UI_SETTINGS.sortMode;
+
+  const visibleColumnsRaw = Array.isArray(row?.visibleColumns) ? row?.visibleColumns : [];
+  const visibleColumns = visibleColumnsRaw
+    .map((item) => asString(item))
+    .filter((item): item is string => Boolean(item)) as ReviewChangesUiSettings['visibleColumns'];
+
+  return {
+    showIds: row?.showIds === true,
+    sortMode,
+    visibleColumns:
+      visibleColumns.length > 0
+        ? visibleColumns
+        : RECOMMENDED_REVIEW_CHANGES_UI_SETTINGS.visibleColumns,
+  };
+};
+
 export default async function ExperimentDetailPage({
   params,
 }: {
@@ -144,9 +177,14 @@ export default async function ExperimentDetailPage({
   let loadError: string | null = null;
   const pageWarnings: string[] = [];
 
-  const [contextResult, recentChangesResult] = await Promise.allSettled([
+  const [contextResult, recentChangesResult, reviewSettingsResult] = await Promise.allSettled([
     getExperimentContext(experimentId),
     getChanges({ limit: 50, useDefaultRange: false }),
+    getPageSettings({
+      accountId: env.accountId,
+      marketplace: env.marketplace,
+      pageKey: REVIEW_CHANGES_PAGE_KEY,
+    }),
   ]);
 
   if (contextResult.status === 'fulfilled') {
@@ -170,6 +208,22 @@ export default async function ExperimentDetailPage({
       error: recentChangesError,
     });
     pageWarnings.push(`Recent changes picker is unavailable: ${recentChangesError}`);
+  }
+
+  const initialReviewUiSettings =
+    reviewSettingsResult.status === 'fulfilled'
+      ? normalizeReviewUiSettings(reviewSettingsResult.value)
+      : RECOMMENDED_REVIEW_CHANGES_UI_SETTINGS;
+  if (reviewSettingsResult.status !== 'fulfilled') {
+    const reviewSettingsError =
+      reviewSettingsResult.reason instanceof Error
+        ? reviewSettingsResult.reason.message
+        : 'Unknown error';
+    console.error('experiment_detail:review_settings_load_error', {
+      experimentId,
+      error: reviewSettingsError,
+    });
+    pageWarnings.push(`Review table settings unavailable: ${reviewSettingsError}`);
   }
 
   if (!context) {
@@ -280,7 +334,7 @@ export default async function ExperimentDetailPage({
   const proposalPackId = typeof proposalContract?.proposal_pack_id === 'string'
     ? proposalContract.proposal_pack_id
     : null;
-  
+
   const finalPlanPackId = proposalContract?.final_plan?.pack_id ?? null;
   const proposalPlans = extractProposalBulkgenPlansFromScope(context.scope);
   const reviewActions = rankAndSortProposalActions(
@@ -297,6 +351,21 @@ export default async function ExperimentDetailPage({
       override_new_value: row.override_new_value,
       note: row.note,
     })) ?? [];
+  const reviewDisplay = await buildReviewProposedChangesDisplay({
+    proposalPlans,
+    rankedActions: reviewActions,
+    objective: context.experiment.objective,
+  });
+  const finalPlanSelection = selectBulkgenPlansForExecution(context.scope);
+  const finalPlanGenerationEnabled = finalPlanSelection.source === 'final_plan';
+  const finalPlanBulkgenRows = finalPlanGenerationEnabled
+    ? finalPlanSelection.plans.map((plan) => ({
+        channel: plan.channel,
+        run_id: plan.run_id,
+        action_count: plan.actions.length,
+        notes: plan.notes ?? null,
+      }))
+    : [];
   const majorActionSignals = context.major_actions.slice(0, 12);
   const interruptionSignals = context.interruptions.slice(0, 12);
 
@@ -485,7 +554,7 @@ export default async function ExperimentDetailPage({
 
       <ExperimentReviewPatchManager
         experimentId={context.experiment.experiment_id}
-        actions={reviewActions}
+        rows={reviewDisplay.rows}
         initialDecisions={reviewInitialDecisions}
         workflowMode={workflowMode === 'api' ? 'api' : 'manual'}
         model={workflowModel}
@@ -496,6 +565,10 @@ export default async function ExperimentDetailPage({
         uploadUrl={`/logbook/experiments/${context.experiment.experiment_id}/review-patch-pack`}
         downloadUrl={`/logbook/experiments/${context.experiment.experiment_id}/review-patch-pack`}
         finalizeUrl={`/logbook/experiments/${context.experiment.experiment_id}/finalize-plan`}
+        finalPlanGenerationEnabled={finalPlanGenerationEnabled}
+        finalPlanBulkgenRows={finalPlanBulkgenRows}
+        reviewDisplayWarnings={reviewDisplay.warnings}
+        initialUiSettings={initialReviewUiSettings}
       />
 
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">

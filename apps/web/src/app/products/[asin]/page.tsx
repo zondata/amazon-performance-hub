@@ -18,6 +18,7 @@ import ProductProfileSkillsIntentEditor from '@/components/logbook/ProductProfil
 import ProductRankingHeatmap from '@/components/ranking/ProductRankingHeatmap';
 import ProductSqpTable from '@/components/sqp/ProductSqpTable';
 import { runSbUpdateGenerator, runSpUpdateGenerator } from '@/lib/bulksheets/runGenerators';
+import { downloadTemplateToLocalPath } from '@/lib/bulksheets/templateStore';
 import { parseCsv } from '@/lib/csv/parseCsv';
 import { env } from '@/lib/env';
 import { getKeywordAiPackTemplates } from '@/lib/keywords/keywordAiPackTemplates';
@@ -915,12 +916,10 @@ export default async function ProductDetailPage({
       }
 
       if (matchedPlan.channel === 'SP') {
-        if (!env.bulkgenTemplateSpUpdate) {
-          throw new Error('BULKGEN_TEMPLATE_SP_UPDATE is required.');
-        }
+        const templatePath = await downloadTemplateToLocalPath('sp_update');
 
         await runSpUpdateGenerator({
-          templatePath: env.bulkgenTemplateSpUpdate,
+          templatePath,
           outRoot: env.bulkgenOutRoot,
           notes: generatorNotes || null,
           runId: matchedPlan.run_id,
@@ -931,12 +930,10 @@ export default async function ProductDetailPage({
           actions: matchedPlan.actions as Record<string, unknown>[],
         });
       } else {
-        if (!env.bulkgenTemplateSbUpdate) {
-          throw new Error('BULKGEN_TEMPLATE_SB_UPDATE is required.');
-        }
+        const templatePath = await downloadTemplateToLocalPath('sb_update');
 
         await runSbUpdateGenerator({
-          templatePath: env.bulkgenTemplateSbUpdate,
+          templatePath,
           outRoot: env.bulkgenOutRoot,
           notes: generatorNotes || null,
           runId: matchedPlan.run_id,
@@ -1565,12 +1562,12 @@ export default async function ProductDetailPage({
                       {logbookExperiments.map((group) => (
                         <tr key={`summary-${group.experiment.experiment_id}`} className="hover:bg-surface-2/70">
                           <td className="px-3 py-2">
-                            <a
-                              href={`#experiment-${group.experiment.experiment_id}`}
+                            <Link
+                              href={`/logbook/experiments/${group.experiment.experiment_id}`}
                               className="font-semibold text-foreground hover:underline"
                             >
                               {group.experiment.name}
-                            </a>
+                            </Link>
                             <div className="text-xs text-muted">{group.experiment.objective}</div>
                           </td>
                           <td className="px-3 py-2 text-muted">
