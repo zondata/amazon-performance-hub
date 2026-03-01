@@ -6,6 +6,7 @@ import ExperimentEvaluationOutputPackImport from '@/components/logbook/Experimen
 import ExperimentEventsTimeline from '@/components/logbook/ExperimentEventsTimeline';
 import ExperimentPhaseActions from '@/components/logbook/ExperimentPhaseActions';
 import ExperimentQuickLogEventPanel from '@/components/logbook/ExperimentQuickLogEventPanel';
+import ExperimentReviewPatchManager from '@/components/logbook/ExperimentReviewPatchManager';
 import InlineFilters from '@/components/InlineFilters';
 import PageHeader from '@/components/PageHeader';
 import Table from '@/components/Table';
@@ -13,6 +14,11 @@ import { getChanges } from '@/lib/logbook/getChanges';
 import { getExperimentContext } from '@/lib/logbook/getExperimentContext';
 import { linkChangesToExperiment } from '@/lib/logbook/linkChangesToExperiment';
 import { getOutcomePillClassName, normalizeOutcomeScorePercent } from '@/lib/logbook/outcomePill';
+import {
+  buildProposalActionRefs,
+  extractProposalBulkgenPlansFromScope,
+  rankAndSortProposalActions,
+} from '@/lib/logbook/contracts/reviewPatchPlan';
 import { listResolvedSkills } from '@/lib/skills/resolveSkills';
 
 const formatDateTime = (value?: string | null) => {
@@ -271,6 +277,26 @@ export default async function ExperimentDetailPage({
   const forecastDirectionalKpis = proposalContract?.forecast?.directional_kpis ?? [];
   const workflowMode = proposalContract?.ai_run_meta?.workflow_mode ?? null;
   const workflowModel = proposalContract?.ai_run_meta?.model ?? null;
+  const proposalPackId = typeof proposalContract?.proposal_pack_id === 'string'
+    ? proposalContract.proposal_pack_id
+    : null;
+  
+  const finalPlanPackId = proposalContract?.final_plan?.pack_id ?? null;
+  const proposalPlans = extractProposalBulkgenPlansFromScope(context.scope);
+  const reviewActions = rankAndSortProposalActions(
+    buildProposalActionRefs(proposalPlans),
+    {
+      objective: context.experiment.objective,
+      forecast_kpis: (proposalContract?.forecast?.directional_kpis ?? []).map((row) => row.kpi),
+    }
+  );
+  const reviewInitialDecisions =
+    proposalContract?.review_patch?.patch?.decisions?.map((row) => ({
+      change_id: row.change_id,
+      decision: row.decision,
+      override_new_value: row.override_new_value,
+      note: row.note,
+    })) ?? [];
   const majorActionSignals = context.major_actions.slice(0, 12);
   const interruptionSignals = context.interruptions.slice(0, 12);
 
@@ -455,6 +481,21 @@ export default async function ExperimentDetailPage({
         experimentId={context.experiment.experiment_id}
         initialSkills={experimentSkillIds}
         availableSkills={availableSkillOptions}
+      />
+
+      <ExperimentReviewPatchManager
+        experimentId={context.experiment.experiment_id}
+        actions={reviewActions}
+        initialDecisions={reviewInitialDecisions}
+        workflowMode={workflowMode === 'api' ? 'api' : 'manual'}
+        model={workflowModel}
+        promptTemplateId={proposalContract?.ai_run_meta?.prompt_template_id ?? null}
+        proposalPackId={proposalPackId}
+        currentStatus={context.status}
+        finalPlanPackId={finalPlanPackId}
+        uploadUrl={`/logbook/experiments/${context.experiment.experiment_id}/review-patch-pack`}
+        downloadUrl={`/logbook/experiments/${context.experiment.experiment_id}/review-patch-pack`}
+        finalizeUrl={`/logbook/experiments/${context.experiment.experiment_id}/finalize-plan`}
       />
 
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">

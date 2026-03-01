@@ -24,6 +24,7 @@ export type GeneratorPayload<TAction> = {
   templatePath: string;
   outRoot?: string | null;
   notes?: string | null;
+  finalPlanPackId?: string | null;
   runId?: string | null;
   productId?: string | null;
   exportedAt?: string | null;
@@ -148,6 +149,7 @@ export const runSpUpdateGenerator = async (
     exported_at: exportedAt,
     product_id: payload.productId ?? undefined,
     notes: payload.notes ?? undefined,
+    final_plan_pack_id: payload.finalPlanPackId ?? undefined,
     actions: payload.actions,
   };
 
@@ -201,6 +203,7 @@ export const runSbUpdateGenerator = async (
     exported_at: exportedAt,
     product_id: payload.productId ?? undefined,
     notes: payload.notes ?? undefined,
+    final_plan_pack_id: payload.finalPlanPackId ?? undefined,
     actions: payload.actions,
   };
 

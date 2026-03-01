@@ -59,6 +59,7 @@ export async function POST(request: Request, { params }: Ctx) {
       return jsonFailure(400, result.error ?? 'Failed to import evaluation output pack.', {
         code: 'evaluation_import_failed',
         experiment_id: experimentId,
+        ...(result.details ? result.details : {}),
       });
     }
 

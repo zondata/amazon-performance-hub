@@ -197,6 +197,7 @@ function buildAfterJson(params: {
   runId: string;
   generator: string;
   outputPaths: BulkgenOutputPaths;
+  finalPlanPackId?: string;
   fields: Record<string, unknown>;
   dedupeKey: string;
 }): Record<string, unknown> {
@@ -207,6 +208,7 @@ function buildAfterJson(params: {
     upload_path: params.outputPaths.uploadPath,
     review_path: params.outputPaths.reviewPath,
     dedupe_key: params.dedupeKey,
+    ...(params.finalPlanPackId ? { final_plan_pack_id: params.finalPlanPackId } : {}),
   };
 }
 
@@ -234,6 +236,7 @@ export function buildSpBulkgenLogEntries(params: {
   generator: string;
   outputPaths: BulkgenOutputPaths;
   productId?: string;
+  finalPlanPackId?: string;
 }): BulkgenLogEntry[] {
   const entries: BulkgenLogEntry[] = [];
   const channelLabel = "SP";
@@ -328,6 +331,7 @@ export function buildSpBulkgenLogEntries(params: {
       runId: params.runId,
       generator: params.generator,
       outputPaths: params.outputPaths,
+      finalPlanPackId: params.finalPlanPackId,
       fields: afterFields,
       dedupeKey,
     });
@@ -374,6 +378,7 @@ export function buildSbBulkgenLogEntries(params: {
   generator: string;
   outputPaths: BulkgenOutputPaths;
   productId?: string;
+  finalPlanPackId?: string;
 }): BulkgenLogEntry[] {
   const entries: BulkgenLogEntry[] = [];
   const channelLabel = "SB";
@@ -465,6 +470,7 @@ export function buildSbBulkgenLogEntries(params: {
       runId: params.runId,
       generator: params.generator,
       outputPaths: params.outputPaths,
+      finalPlanPackId: params.finalPlanPackId,
       fields: afterFields,
       dedupeKey,
     });

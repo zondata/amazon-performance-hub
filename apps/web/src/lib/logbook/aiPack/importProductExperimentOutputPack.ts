@@ -9,6 +9,12 @@ import {
   ParsedProductExperimentOutputPack,
 } from "./parseProductExperimentOutputPack";
 import { normalizeScopeWithAdsOptimizationContractV1 } from "../contracts/adsOptimizationContractV1";
+import {
+  semanticValidationFailed,
+  summarizeSemanticFailure,
+  toSemanticErrorDetails,
+  validateExperimentPackSemanticBoundaries,
+} from "./semanticValidation";
 
 type ImportInput = {
   fileText: string;
@@ -21,6 +27,7 @@ export type ImportProductExperimentOutputPackResult = {
   created_change_ids_count: number;
   warnings?: string[];
   error?: string;
+  details?: Record<string, unknown>;
 };
 
 const normalizeKivTitle = (value: string): string =>
@@ -60,6 +67,25 @@ export const importProductExperimentOutputPack = async ({
 
   try {
     const warnings: string[] = [];
+    const semanticValidation = await validateExperimentPackSemanticBoundaries({
+      parsed: parsed.value,
+      accountId: env.accountId,
+      marketplace: env.marketplace,
+      currentAsin,
+    });
+    if (semanticValidationFailed(semanticValidation)) {
+      return {
+        ok: false,
+        created_change_ids_count: 0,
+        error: summarizeSemanticFailure(
+          semanticValidation,
+          "Semantic validation failed for product experiment output pack."
+        ),
+        details: toSemanticErrorDetails(semanticValidation),
+      };
+    }
+    warnings.push(...semanticValidation.warnings);
+
     const experimentPayload = parsed.value.experiment;
     const normalizedScope =
       normalizeScopeWithAdsOptimizationContractV1(experimentPayload.scope, {

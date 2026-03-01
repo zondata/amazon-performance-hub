@@ -205,6 +205,40 @@ const normalizeAsin = (value: unknown): string | null => {
   return text ? text.toUpperCase() : null;
 };
 
+const deriveExperimentStatus = (scope: JsonObject | null): string => {
+  const explicitStatus = asString(scope?.status);
+  const normalizedExplicit = explicitStatus?.toUpperCase();
+  if (
+    normalizedExplicit === 'COMPLETE' ||
+    normalizedExplicit === 'EVALUATED' ||
+    normalizedExplicit === 'VALIDATED' ||
+    normalizedExplicit === 'UPLOADED' ||
+    normalizedExplicit === 'ABANDONED' ||
+    normalizedExplicit === 'ROLLED_BACK'
+  ) {
+    return explicitStatus as string;
+  }
+
+  const contract = asObject(scope?.contract);
+  const adsContract = asObject(contract?.ads_optimization_v1);
+  const finalPlan = asObject(adsContract?.final_plan);
+  const reviewPatch = asObject(adsContract?.review_patch);
+  const proposalPlans = Array.isArray(scope?.bulkgen_plans) ? scope?.bulkgen_plans : [];
+
+  if (finalPlan && Array.isArray(finalPlan.bulkgen_plans) && finalPlan.bulkgen_plans.length > 0) {
+    return 'FINALIZED';
+  }
+  if (reviewPatch && asObject(reviewPatch.patch) && Array.isArray(asObject(reviewPatch.patch)?.decisions)) {
+    return 'REVIEWED';
+  }
+  if (proposalPlans.length > 0) {
+    if (!explicitStatus) return 'PROPOSED';
+    if (normalizedExplicit === 'PLANNED' || normalizedExplicit === 'DRAFT') return 'PROPOSED';
+    return explicitStatus;
+  }
+  return explicitStatus ?? 'planned';
+};
+
 const compareDesc = (left: string, right: string) => right.localeCompare(left);
 
 const emptyValidationSummary = (): ExperimentValidationSummary => ({
@@ -462,7 +496,7 @@ export const getExperimentContext = async (experimentId: string): Promise<Experi
   const evaluations = (evaluationsData ?? []) as ExperimentEvaluationRow[];
   const latestEvaluation = evaluations[0] ?? null;
 
-  const status = asString(scope?.status) ?? 'planned';
+  const status = deriveExperimentStatus(scope);
   const productAsin = normalizeAsin(scope?.product_id);
 
   return {

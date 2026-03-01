@@ -15,14 +15,12 @@ import {
   fetchCurrentSbData,
   fetchCurrentSpData,
 } from "@/lib/bulksheets/fetchCurrent";
+import {
+  selectBulkgenPlansForExecution,
+  type ExecutableBulkgenPlanV1,
+} from "@/lib/logbook/contracts/reviewPatchPlan";
 
-export type BulkgenPlan = {
-  channel: "SP" | "SB";
-  generator: "bulkgen:sp:update" | "bulkgen:sb:update";
-  run_id: string;
-  notes?: string;
-  actions: SpUpdateAction[] | SbUpdateAction[];
-};
+export type BulkgenPlan = ExecutableBulkgenPlanV1;
 
 export type PlanReviewRow = {
   action_type: string;
@@ -47,6 +45,9 @@ export type PlanPreview = {
   channel: "SP" | "SB";
   run_id: string;
   notes?: string;
+  plan_source: "final_plan" | "proposal" | "none";
+  plan_warning?: string;
+  final_plan_pack_id?: string | null;
   review_rows: PlanReviewRow[];
   bulksheet_rows: PlanBulksheetRow[];
   snapshot_date: string;
@@ -79,45 +80,6 @@ const normalizeText = (value: string) =>
     .toLowerCase()
     .trim()
     .replace(/\s+/g, " ");
-
-const parsePlans = (scope: unknown): BulkgenPlan[] => {
-  const scopeObj = asObject(scope);
-  const plansRaw = scopeObj?.bulkgen_plans;
-  if (!Array.isArray(plansRaw)) return [];
-
-  const plans: BulkgenPlan[] = [];
-  for (const planRaw of plansRaw) {
-    const planObj = asObject(planRaw);
-    if (!planObj) continue;
-    const channel = asString(planObj.channel)?.toUpperCase();
-    const generator = asString(planObj.generator);
-    const runId = asString(planObj.run_id);
-    const actions = Array.isArray(planObj.actions) ? planObj.actions : [];
-    if (!runId || actions.length === 0) continue;
-
-    if (channel === "SP" && generator === "bulkgen:sp:update") {
-      plans.push({
-        channel: "SP",
-        generator: "bulkgen:sp:update",
-        run_id: runId,
-        notes: asString(planObj.notes) ?? undefined,
-        actions: actions as SpUpdateAction[],
-      });
-      continue;
-    }
-
-    if (channel === "SB" && generator === "bulkgen:sb:update") {
-      plans.push({
-        channel: "SB",
-        generator: "bulkgen:sb:update",
-        run_id: runId,
-        notes: asString(planObj.notes) ?? undefined,
-        actions: actions as SbUpdateAction[],
-      });
-    }
-  }
-  return plans;
-};
 
 const targetEntity = (target: CurrentTarget | CurrentSbTarget) => {
   const isProductTargeting = target.match_type === "TARGETING_EXPRESSION";
@@ -631,7 +593,8 @@ const buildSbPreviewRows = (actions: SbUpdateAction[], current: FetchCurrentSbRe
 };
 
 export const buildPlanPreviewsForScope = async (scope: unknown): Promise<PlanPreview[]> => {
-  const plans = parsePlans(scope);
+  const selection = selectBulkgenPlansForExecution(scope);
+  const plans = selection.plans;
   const previews: PlanPreview[] = [];
 
   for (const plan of plans) {
@@ -643,6 +606,9 @@ export const buildPlanPreviewsForScope = async (scope: unknown): Promise<PlanPre
           channel: "SP",
           run_id: plan.run_id,
           notes: plan.notes,
+          plan_source: selection.source,
+          plan_warning: selection.warning,
+          final_plan_pack_id: selection.final_plan_pack_id ?? null,
           review_rows: built.review_rows,
           bulksheet_rows: built.bulksheet_rows,
           snapshot_date: current.snapshotDate,
@@ -652,6 +618,9 @@ export const buildPlanPreviewsForScope = async (scope: unknown): Promise<PlanPre
           channel: "SP",
           run_id: plan.run_id,
           notes: plan.notes,
+          plan_source: selection.source,
+          plan_warning: selection.warning,
+          final_plan_pack_id: selection.final_plan_pack_id ?? null,
           review_rows: [],
           bulksheet_rows: [],
           snapshot_date: "",
@@ -668,6 +637,9 @@ export const buildPlanPreviewsForScope = async (scope: unknown): Promise<PlanPre
         channel: "SB",
         run_id: plan.run_id,
         notes: plan.notes,
+        plan_source: selection.source,
+        plan_warning: selection.warning,
+        final_plan_pack_id: selection.final_plan_pack_id ?? null,
         review_rows: built.review_rows,
         bulksheet_rows: built.bulksheet_rows,
         snapshot_date: current.snapshotDate,
@@ -677,6 +649,9 @@ export const buildPlanPreviewsForScope = async (scope: unknown): Promise<PlanPre
         channel: "SB",
         run_id: plan.run_id,
         notes: plan.notes,
+        plan_source: selection.source,
+        plan_warning: selection.warning,
+        final_plan_pack_id: selection.final_plan_pack_id ?? null,
         review_rows: [],
         bulksheet_rows: [],
         snapshot_date: "",
@@ -688,7 +663,8 @@ export const buildPlanPreviewsForScope = async (scope: unknown): Promise<PlanPre
   return previews;
 };
 
-export const extractBulkgenPlans = (scope: unknown): BulkgenPlan[] => parsePlans(scope);
+export const extractBulkgenPlans = (scope: unknown): BulkgenPlan[] =>
+  selectBulkgenPlansForExecution(scope).plans;
 
 export const collectBulkgenPlanTags = (scope: unknown): string[] => {
   const scopeObj = asObject(scope);

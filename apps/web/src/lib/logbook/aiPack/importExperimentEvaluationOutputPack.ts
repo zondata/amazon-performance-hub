@@ -16,6 +16,12 @@ import {
   parseExperimentEvaluationOutputPack,
   type ParsedExperimentEvaluationOutputPack,
 } from './parseExperimentEvaluationOutputPack';
+import {
+  semanticValidationFailed,
+  summarizeSemanticFailure,
+  toSemanticErrorDetails,
+  validateEvaluationPackSemanticBoundaries,
+} from './semanticValidation';
 
 type JsonObject = Record<string, unknown>;
 
@@ -52,6 +58,7 @@ export type ImportExperimentEvaluationOutputPackResult = {
   };
   warnings?: string[];
   error?: string;
+  details?: Record<string, unknown>;
 };
 
 type ExperimentRow = {
@@ -399,6 +406,24 @@ export const importExperimentEvaluationOutputPack = async (
         `Pack ASIN (${payload.product_asin}) does not match experiment scope.product_id (${scopeAsin}).`
       );
     }
+
+    const semanticValidation = await validateEvaluationPackSemanticBoundaries({
+      parsed: payload,
+      accountId: env.accountId,
+      marketplace: env.marketplace,
+      asinNorm: scopeAsin,
+    });
+    if (semanticValidationFailed(semanticValidation)) {
+      return {
+        ok: false,
+        error: summarizeSemanticFailure(
+          semanticValidation,
+          'Semantic validation failed for evaluation output pack.'
+        ),
+        details: toSemanticErrorDetails(semanticValidation),
+      };
+    }
+    warnings.push(...semanticValidation.warnings);
 
     const window = await deriveDateWindowFromScopeOrChanges(payload.experiment_id, scope);
     const kpis = await computeExperimentKpis({

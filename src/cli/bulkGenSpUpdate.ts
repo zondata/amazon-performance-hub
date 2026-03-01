@@ -155,6 +155,7 @@ async function main() {
       generator: "bulkgen:sp:update",
       outputPaths: { uploadPath, reviewPath },
       productId: changes.product_id,
+      finalPlanPackId: changes.final_plan_pack_id,
     });
     const { created, skipped } = await writeBulkgenLogs({
       accountId,

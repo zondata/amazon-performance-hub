@@ -262,7 +262,7 @@ Likely integration points:
 
 ## Open items / Next build steps
 - [x] `APH-P0-001`: extend stored metadata for baseline cutoff + forecast KPIs and carry into eval.
-- [ ] `APH-P0-002`: semantic validation at AI import boundary.
+- [x] `APH-P0-002`: semantic validation at AI import boundary.
 - [ ] `APH-P0-003`: make logbook experiments primary workflow UI.
 - [ ] `APH-P0-004`: CI.
 
@@ -277,6 +277,28 @@ Likely integration points:
 - [x] Added experiment detail UI panel to show baseline cutoff, forecast summary, and AI run metadata with missing badges.
 - [x] Added/updated tests for contract parsing/normalization and wiring across import/eval/UI paths.
 
+### Phase 1 (UI Review + Review Patch Pack + Final Plan) — DONE (2026-03-01)
+- [x] Added Review Patch Pack contract envelope (`aph_review_patch_pack_v1`) and parser/import path.
+- [x] Added stable review `change_id` generation for proposed actions (deterministic hash fallback when IDs are missing).
+- [x] Added UI-first review section on experiment detail for accept/reject/modify decisions with numeric overrides.
+- [x] Added review patch download/upload routes and UI integration.
+- [x] Stored review patch at `scope.contract.ads_optimization_v1.review_patch`.
+- [x] Applied review patch to proposal and stored final snapshot at `scope.contract.ads_optimization_v1.final_plan`.
+- [x] Added explicit finalize action (`REVIEWED -> FINALIZED`) and status updates in scope JSON.
+- [x] Gated bulksheet generation to prefer `final_plan` and fallback to proposal with visible warning.
+- [x] Added final-plan lineage metadata (`final_plan_pack_id`) into bulkgen payload/log `after_json` metadata when available.
+- [x] Added tests for patch parser, patch application, plan selection/fallback, and wiring.
+
+### Phase 2 (Semantic boundary validation) — DONE (2026-03-01)
+- [x] Added shared semantic validation helpers in `apps/web/src/lib/logbook/aiPack/semanticValidation.ts` for campaign/ad group/target existence and ASIN scope checks.
+- [x] Enforced semantic validation in experiment output pack import (`importProductExperimentOutputPack`) before inserts.
+- [x] Enforced semantic validation in evaluation output pack import (`importExperimentEvaluationOutputPack`) for KIV ID existence/scope.
+- [x] Enforced semantic validation in review patch import (`importReviewPatchPack`) for patch `change_id` boundary checks.
+- [x] Normalized import failure details with `semantic_issues` + `semantic_warnings` in evaluation and review-patch routes.
+- [x] Added tests for semantic rejection paths and wiring.
+
 ## Changelog
 - 2026-03-01: V1 locked decisions (AI no XLSX; UI-first review; Review Patch Pack).
 - 2026-03-01: Implemented Phase 0: persisted baseline cutoff + forecast + ai_run metadata; carried into evaluation data pack/context and evaluation snapshots.
+- 2026-03-01: Implemented Review Patch Pack + UI-first review + Final Plan snapshot (Phase 1).
+- 2026-03-01: Implemented Phase 2: semantic boundary validation for product/evaluation/review-patch imports with actionable structured errors.

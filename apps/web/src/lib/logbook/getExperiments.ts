@@ -48,10 +48,44 @@ const LINK_HARD_CAP = 50000;
 const EVALUATION_PAGE_SIZE = 2000;
 const EVALUATION_HARD_CAP = 50000;
 
+const asObject = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
 const deriveStatus = (scope: unknown) => {
-  if (!scope || typeof scope !== 'object') return 'planned';
-  const status = (scope as { status?: unknown }).status;
-  return typeof status === 'string' && status.trim() ? status : 'planned';
+  const scopeObj = asObject(scope);
+  const status = typeof scopeObj?.status === 'string' ? scopeObj.status.trim() : '';
+  const normalizedStatus = status.toUpperCase();
+  if (
+    normalizedStatus === 'COMPLETE' ||
+    normalizedStatus === 'EVALUATED' ||
+    normalizedStatus === 'VALIDATED' ||
+    normalizedStatus === 'UPLOADED' ||
+    normalizedStatus === 'ABANDONED' ||
+    normalizedStatus === 'ROLLED_BACK'
+  ) {
+    return status;
+  }
+
+  const contract = asObject(scopeObj?.contract);
+  const adsContract = asObject(contract?.ads_optimization_v1);
+  const finalPlan = asObject(adsContract?.final_plan);
+  const reviewPatch = asObject(adsContract?.review_patch);
+  const proposalPlans = Array.isArray(scopeObj?.bulkgen_plans) ? scopeObj?.bulkgen_plans : [];
+
+  if (finalPlan && Array.isArray(finalPlan.bulkgen_plans) && finalPlan.bulkgen_plans.length > 0) {
+    return 'FINALIZED';
+  }
+  if (reviewPatch && asObject(reviewPatch.patch) && Array.isArray(asObject(reviewPatch.patch)?.decisions)) {
+    return 'REVIEWED';
+  }
+  if (proposalPlans.length > 0) {
+    if (!status) return 'PROPOSED';
+    if (normalizedStatus === 'PLANNED' || normalizedStatus === 'DRAFT') return 'PROPOSED';
+    return status;
+  }
+  return status || 'planned';
 };
 
 const deriveProductId = (scope: unknown) => {

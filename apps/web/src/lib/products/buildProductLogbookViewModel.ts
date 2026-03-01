@@ -121,6 +121,41 @@ const scopeDate = (scope: Record<string, unknown> | null, key: string): string |
   return value;
 };
 
+const deriveExperimentStatus = (scope: Record<string, unknown> | null): string => {
+  const explicit = scopeString(scope, 'status');
+  const normalized = explicit?.toUpperCase();
+  if (
+    normalized === 'COMPLETE' ||
+    normalized === 'EVALUATED' ||
+    normalized === 'VALIDATED' ||
+    normalized === 'UPLOADED' ||
+    normalized === 'ABANDONED' ||
+    normalized === 'ROLLED_BACK'
+  ) {
+    return explicit as string;
+  }
+
+  const contract = asObject(scope?.contract);
+  const adsContract = asObject(contract?.ads_optimization_v1);
+  const finalPlan = asObject(adsContract?.final_plan);
+  const reviewPatch = asObject(adsContract?.review_patch);
+  const proposalPlans = Array.isArray(scope?.bulkgen_plans) ? scope?.bulkgen_plans : [];
+
+  if (finalPlan && Array.isArray(finalPlan.bulkgen_plans) && finalPlan.bulkgen_plans.length > 0) {
+    return 'FINALIZED';
+  }
+  if (reviewPatch && asObject(reviewPatch.patch) && Array.isArray(asObject(reviewPatch.patch)?.decisions)) {
+    return 'REVIEWED';
+  }
+  if (proposalPlans.length > 0) {
+    if (!explicit) return 'PROPOSED';
+    if (normalized === 'PLANNED' || normalized === 'DRAFT') return 'PROPOSED';
+    return explicit;
+  }
+
+  return explicit ?? 'planned';
+};
+
 export const buildProductLogbookViewModel = ({
   changes,
   entities,
@@ -222,7 +257,7 @@ export const buildProductLogbookViewModel = ({
         });
 
       const scope = asObject(experiment.scope);
-      const status = scopeString(scope, 'status') ?? 'planned';
+      const status = deriveExperimentStatus(scope);
       const startDate = scopeDate(scope, 'start_date');
       const endDate = scopeDate(scope, 'end_date');
       const latestEvaluation = (evaluationsByExperimentId.get(experiment.experiment_id) ?? [])[0] ?? null;

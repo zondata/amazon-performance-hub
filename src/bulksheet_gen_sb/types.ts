@@ -62,5 +62,6 @@ export type SbUpdateChangesFile = {
   exported_at: string;
   product_id?: string;
   notes?: string;
+  final_plan_pack_id?: string;
   actions: SbUpdateAction[];
 };

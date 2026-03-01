@@ -27,9 +27,9 @@ import { getProductExperimentPromptTemplates } from '@/lib/logbook/productExperi
 import { toTemplateOptions as toProductExperimentPromptTemplateOptions } from '@/lib/logbook/productExperimentPromptTemplatesModel';
 import {
   buildPlanPreviewsForScope,
-  extractBulkgenPlans,
   PlanPreview,
 } from '@/lib/logbook/productExperimentPlans';
+import { selectBulkgenPlansForExecution } from '@/lib/logbook/contracts/reviewPatchPlan';
 import {
   getOutcomePillClassName,
   normalizeOutcomeScorePercent,
@@ -395,6 +395,7 @@ type KeywordSetActionState = {
 type LogbookAiPackImportState = {
   ok?: boolean;
   error?: string | null;
+  details?: Record<string, unknown> | null;
   created_experiment_id?: string;
   created_change_ids_count?: number;
 };
@@ -854,6 +855,7 @@ export default async function ProductDetailPage({
       return {
         ok: false,
         error: result.error ?? 'Failed to import AI pack.',
+        details: result.details ?? null,
       };
     }
 
@@ -894,11 +896,19 @@ export default async function ProductDetailPage({
         throw new Error('Experiment not found.');
       }
 
-      const plans = extractBulkgenPlans(experimentRow.scope);
+      const selection = selectBulkgenPlansForExecution(experimentRow.scope);
+      const plans = selection.plans;
       const matchedPlan = plans.find((plan) => plan.channel === channel && plan.run_id === runId);
       if (!matchedPlan) {
         throw new Error('Plan not found in experiment scope.');
       }
+      const planRefNote =
+        selection.source === 'final_plan' && selection.final_plan_pack_id
+          ? `final_plan_pack_id=${selection.final_plan_pack_id}`
+          : null;
+      const generatorNotes = [matchedPlan.notes ?? null, planRefNote]
+        .filter((value): value is string => Boolean(value && value.trim()))
+        .join(' | ');
 
       if (!env.bulkgenOutRoot) {
         throw new Error('BULKGEN_OUT_ROOT is required.');
@@ -912,10 +922,11 @@ export default async function ProductDetailPage({
         await runSpUpdateGenerator({
           templatePath: env.bulkgenTemplateSpUpdate,
           outRoot: env.bulkgenOutRoot,
-          notes: matchedPlan.notes ?? null,
+          notes: generatorNotes || null,
           runId: matchedPlan.run_id,
           productId: asin,
           experimentId: experimentId,
+          finalPlanPackId: selection.final_plan_pack_id ?? null,
           logEnabled: true,
           actions: matchedPlan.actions as Record<string, unknown>[],
         });
@@ -927,10 +938,11 @@ export default async function ProductDetailPage({
         await runSbUpdateGenerator({
           templatePath: env.bulkgenTemplateSbUpdate,
           outRoot: env.bulkgenOutRoot,
-          notes: matchedPlan.notes ?? null,
+          notes: generatorNotes || null,
           runId: matchedPlan.run_id,
           productId: asin,
           experimentId: experimentId,
+          finalPlanPackId: selection.final_plan_pack_id ?? null,
           logEnabled: true,
           actions: matchedPlan.actions as Record<string, unknown>[],
         });
@@ -940,7 +952,9 @@ export default async function ProductDetailPage({
 
       redirect(
         `/products/${asin}?start=${start}&end=${end}&tab=logbook&logbook_notice=${encodeURIComponent(
-          `Generated ${channel} bulksheet for run_id=${runId}.`
+          selection.source === 'proposal'
+            ? `Generated ${channel} bulksheet for run_id=${runId}. Warning: plan is not finalized; using proposal fallback.`
+            : `Generated ${channel} bulksheet for run_id=${runId}.`
         )}`
       );
     } catch (error) {
@@ -1781,9 +1795,20 @@ export default async function ProductDetailPage({
                                       <div className="text-xs text-muted">
                                         Snapshot {preview.snapshot_date || '—'}
                                       </div>
+                                      <div className="text-xs text-muted">
+                                        Source {preview.plan_source}
+                                        {preview.final_plan_pack_id
+                                          ? ` · final_plan_pack_id=${preview.final_plan_pack_id}`
+                                          : ''}
+                                      </div>
                                       {preview.notes ? (
                                         <div className="mt-1 text-xs text-muted">
                                           Notes: {preview.notes}
+                                        </div>
+                                      ) : null}
+                                      {preview.plan_warning ? (
+                                        <div className="mt-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700">
+                                          {preview.plan_warning}
                                         </div>
                                       ) : null}
                                     </div>
