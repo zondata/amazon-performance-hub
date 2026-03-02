@@ -734,13 +734,16 @@ export default function ExperimentReviewPatchManager(props: Props) {
           No proposal actions found. Import a product experiment output pack with `bulkgen_plans` first.
         </div>
       ) : (
-        <div className="mt-4 max-h-[560px] overflow-y-auto rounded-xl border border-border">
+        <div className="relative isolate mt-4 max-h-[560px] overflow-y-auto rounded-xl border border-border">
           <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
             <table className="w-full min-w-[2600px] table-fixed text-left text-xs">
-              <thead className="sticky top-0 bg-surface text-[11px] uppercase tracking-wider text-muted shadow-sm">
+              <thead className="bg-surface text-[11px] uppercase tracking-wider text-muted shadow-sm">
                 <tr>
                   {visibleColumns.map((column) => (
-                    <th key={column.key} className="px-2 py-2 align-bottom">
+                    <th
+                      key={column.key}
+                      className="sticky top-0 z-20 border-b border-border bg-surface px-2 py-2 align-bottom"
+                    >
                       {column.label}
                     </th>
                   ))}
