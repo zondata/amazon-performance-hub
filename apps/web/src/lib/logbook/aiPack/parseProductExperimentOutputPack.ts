@@ -158,29 +158,57 @@ function parseSpAction(raw: unknown, label: string, errors: string[]): SpUpdateA
   }
   if (type === "update_ad_group_state") {
     const adGroupId = requiredString(row.ad_group_id, `${label}.ad_group_id`, errors);
+    const campaignId = trimString(row.campaign_id) ?? undefined;
     const newState = requiredString(row.new_state, `${label}.new_state`, errors);
     if (!adGroupId || !newState) return null;
-    return { type, ad_group_id: adGroupId, new_state: newState };
+    return {
+      type,
+      ad_group_id: adGroupId,
+      ...(campaignId ? { campaign_id: campaignId } : {}),
+      new_state: newState,
+    };
   }
   if (type === "update_ad_group_default_bid") {
     const adGroupId = requiredString(row.ad_group_id, `${label}.ad_group_id`, errors);
+    const campaignId = trimString(row.campaign_id) ?? undefined;
     const newBid = asFiniteNumber(row.new_bid);
     if (newBid === null) errors.push(`${label}.new_bid must be a number`);
     if (!adGroupId || newBid === null) return null;
-    return { type, ad_group_id: adGroupId, new_bid: newBid };
+    return {
+      type,
+      ad_group_id: adGroupId,
+      ...(campaignId ? { campaign_id: campaignId } : {}),
+      new_bid: newBid,
+    };
   }
   if (type === "update_target_bid") {
     const targetId = requiredString(row.target_id, `${label}.target_id`, errors);
+    const campaignId = trimString(row.campaign_id) ?? undefined;
+    const adGroupId = trimString(row.ad_group_id) ?? undefined;
     const newBid = asFiniteNumber(row.new_bid);
     if (newBid === null) errors.push(`${label}.new_bid must be a number`);
     if (!targetId || newBid === null) return null;
-    return { type, target_id: targetId, new_bid: newBid };
+    return {
+      type,
+      target_id: targetId,
+      ...(campaignId ? { campaign_id: campaignId } : {}),
+      ...(adGroupId ? { ad_group_id: adGroupId } : {}),
+      new_bid: newBid,
+    };
   }
   if (type === "update_target_state") {
     const targetId = requiredString(row.target_id, `${label}.target_id`, errors);
+    const campaignId = trimString(row.campaign_id) ?? undefined;
+    const adGroupId = trimString(row.ad_group_id) ?? undefined;
     const newState = requiredString(row.new_state, `${label}.new_state`, errors);
     if (!targetId || !newState) return null;
-    return { type, target_id: targetId, new_state: newState };
+    return {
+      type,
+      target_id: targetId,
+      ...(campaignId ? { campaign_id: campaignId } : {}),
+      ...(adGroupId ? { ad_group_id: adGroupId } : {}),
+      new_state: newState,
+    };
   }
   if (type === "update_placement_modifier") {
     const campaignId = requiredString(row.campaign_id, `${label}.campaign_id`, errors);
@@ -223,29 +251,57 @@ function parseSbAction(raw: unknown, label: string, errors: string[]): SbUpdateA
   }
   if (type === "update_ad_group_state") {
     const adGroupId = requiredString(row.ad_group_id, `${label}.ad_group_id`, errors);
+    const campaignId = trimString(row.campaign_id) ?? undefined;
     const newState = requiredString(row.new_state, `${label}.new_state`, errors);
     if (!adGroupId || !newState) return null;
-    return { type, ad_group_id: adGroupId, new_state: newState };
+    return {
+      type,
+      ad_group_id: adGroupId,
+      ...(campaignId ? { campaign_id: campaignId } : {}),
+      new_state: newState,
+    };
   }
   if (type === "update_ad_group_default_bid") {
     const adGroupId = requiredString(row.ad_group_id, `${label}.ad_group_id`, errors);
+    const campaignId = trimString(row.campaign_id) ?? undefined;
     const newDefaultBid = asFiniteNumber(row.new_default_bid);
     if (newDefaultBid === null) errors.push(`${label}.new_default_bid must be a number`);
     if (!adGroupId || newDefaultBid === null) return null;
-    return { type, ad_group_id: adGroupId, new_default_bid: newDefaultBid };
+    return {
+      type,
+      ad_group_id: adGroupId,
+      ...(campaignId ? { campaign_id: campaignId } : {}),
+      new_default_bid: newDefaultBid,
+    };
   }
   if (type === "update_target_bid") {
     const targetId = requiredString(row.target_id, `${label}.target_id`, errors);
+    const campaignId = trimString(row.campaign_id) ?? undefined;
+    const adGroupId = trimString(row.ad_group_id) ?? undefined;
     const newBid = asFiniteNumber(row.new_bid);
     if (newBid === null) errors.push(`${label}.new_bid must be a number`);
     if (!targetId || newBid === null) return null;
-    return { type, target_id: targetId, new_bid: newBid };
+    return {
+      type,
+      target_id: targetId,
+      ...(campaignId ? { campaign_id: campaignId } : {}),
+      ...(adGroupId ? { ad_group_id: adGroupId } : {}),
+      new_bid: newBid,
+    };
   }
   if (type === "update_target_state") {
     const targetId = requiredString(row.target_id, `${label}.target_id`, errors);
+    const campaignId = trimString(row.campaign_id) ?? undefined;
+    const adGroupId = trimString(row.ad_group_id) ?? undefined;
     const newState = requiredString(row.new_state, `${label}.new_state`, errors);
     if (!targetId || !newState) return null;
-    return { type, target_id: targetId, new_state: newState };
+    return {
+      type,
+      target_id: targetId,
+      ...(campaignId ? { campaign_id: campaignId } : {}),
+      ...(adGroupId ? { ad_group_id: adGroupId } : {}),
+      new_state: newState,
+    };
   }
   if (type === "update_placement_modifier") {
     const campaignId = requiredString(row.campaign_id, `${label}.campaign_id`, errors);

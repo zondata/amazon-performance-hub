@@ -34,6 +34,22 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Imports & Health (`/imports-health`) now includes a local-only Batch Import uploader (multi-file CSV/XLSX) that stages files to temp storage and runs the root manifest pipeline CLI.
 - Batch Import supports SalesTrend ASIN override for filenames like `SalesTrend.csv` (no filename rename required).
 
+#### Latest (2026-03-02)
+- `Shipped`
+  - Output contract update: bulkgen actions must include parent identity chain for reliable review rendering.
+    - Campaign actions: `campaign_id`.
+    - Ad group actions: `campaign_id` + `ad_group_id`.
+    - Target actions: `campaign_id` + `ad_group_id` + `target_id` when ad group exists for the channel; otherwise `campaign_id` + `target_id`.
+  - Product Baseline Data Pack V3 now includes:
+    - `ads_baseline.sp.ad_groups[]`.
+    - `ads_baseline.sp.targets[].ad_group_id`.
+    - `ads_baseline.sb` ad-group mappings when available.
+- `Fix`
+  - Output-pack parser/importer now preserves `campaign_id`/`ad_group_id` on target/ad-group actions (no longer dropped during parse normalization).
+- `UI`
+  - Review table now shows row/action counts and declared-vs-actual action count validation warnings.
+  - Backward-compatible review name resolution fallback now handles older experiments missing parent IDs.
+
 #### Latest (2026-02-28)
 - `Shipped`
   - Product Baseline Data Pack V3 endpoint: `/products/[asin]/logbook/ai-data-pack-v3`.

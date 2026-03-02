@@ -22,5 +22,13 @@ describe('renderProductExperimentPromptPackMarkdown', () => {
     expect(content).toContain(`ASIN **${asin}**`);
     expect(content).toContain(`"asin": "${asin}"`);
     expect(content).toContain(`"product_id": "${asin}"`);
+    expect(content).toContain('"contract": {');
+    expect(content).toContain('"ads_optimization_v1": {');
+    expect(content).toContain('Identity chain requirements (for review rendering)');
+    expect(content).toContain('Campaign actions: `campaign_id`');
+    expect(content).toContain('Ad group actions: `campaign_id` + `ad_group_id`');
+    expect(content).toContain(
+      'Target actions: `campaign_id` + `ad_group_id` + `target_id` (if ad_group_id exists for that channel; otherwise `campaign_id` + `target_id`)'
+    );
   });
 });

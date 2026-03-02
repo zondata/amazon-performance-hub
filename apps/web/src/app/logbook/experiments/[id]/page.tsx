@@ -334,6 +334,17 @@ export default async function ExperimentDetailPage({
   const proposalPackId = typeof proposalContract?.proposal_pack_id === 'string'
     ? proposalContract.proposal_pack_id
     : null;
+  const proposalSummary = asObject(proposalContract?.proposal_summary);
+  const declaredActionCountRaw = proposalSummary?.declared_action_count;
+  const declaredActionCount =
+    typeof declaredActionCountRaw === 'number' && Number.isFinite(declaredActionCountRaw)
+      ? Math.max(0, Math.floor(declaredActionCountRaw))
+      : typeof declaredActionCountRaw === 'string' && declaredActionCountRaw.trim().length > 0
+        ? (() => {
+            const parsed = Number(declaredActionCountRaw);
+            return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : null;
+          })()
+        : null;
 
   const finalPlanPackId = proposalContract?.final_plan?.pack_id ?? null;
   const proposalPlans = extractProposalBulkgenPlansFromScope(context.scope);
@@ -355,6 +366,7 @@ export default async function ExperimentDetailPage({
     proposalPlans,
     rankedActions: reviewActions,
     objective: context.experiment.objective,
+    declaredActionCount,
   });
   const finalPlanSelection = selectBulkgenPlansForExecution(context.scope);
   const finalPlanGenerationEnabled = finalPlanSelection.source === 'final_plan';
@@ -568,6 +580,7 @@ export default async function ExperimentDetailPage({
         finalPlanGenerationEnabled={finalPlanGenerationEnabled}
         finalPlanBulkgenRows={finalPlanBulkgenRows}
         reviewDisplayWarnings={reviewDisplay.warnings}
+        reviewValidationSummary={reviewDisplay.validation_summary}
         initialUiSettings={initialReviewUiSettings}
       />
 

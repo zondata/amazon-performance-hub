@@ -1,6 +1,8 @@
 export type UpdateSbTargetBidAction = {
   type: "update_target_bid";
   target_id: string;
+  campaign_id?: string;
+  ad_group_id?: string;
   new_bid: number;
 };
 
@@ -25,18 +27,22 @@ export type UpdateSbCampaignBiddingStrategyAction = {
 export type UpdateSbTargetStateAction = {
   type: "update_target_state";
   target_id: string;
+  campaign_id?: string;
+  ad_group_id?: string;
   new_state: string;
 };
 
 export type UpdateSbAdGroupStateAction = {
   type: "update_ad_group_state";
   ad_group_id: string;
+  campaign_id?: string;
   new_state: string;
 };
 
 export type UpdateSbAdGroupDefaultBidAction = {
   type: "update_ad_group_default_bid";
   ad_group_id: string;
+  campaign_id?: string;
   new_default_bid: number;
 };
 

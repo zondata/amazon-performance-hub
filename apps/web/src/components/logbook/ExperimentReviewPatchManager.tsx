@@ -55,6 +55,19 @@ type FinalPlanBulkgenRow = {
   notes?: string | null;
 };
 
+type ReviewValidationSummary = {
+  actual_row_count: number;
+  actual_action_count: number;
+  declared_action_count: number | null;
+  declared_action_count_mismatch: boolean;
+  per_plan_action_counts: Array<{
+    plan_index: number;
+    channel: 'SP' | 'SB';
+    run_id: string;
+    action_count: number;
+  }>;
+};
+
 type Props = {
   experimentId: string;
   rows: ReviewProposedChangesDisplayRow[];
@@ -71,6 +84,7 @@ type Props = {
   finalPlanGenerationEnabled: boolean;
   finalPlanBulkgenRows: FinalPlanBulkgenRow[];
   reviewDisplayWarnings: string[];
+  reviewValidationSummary: ReviewValidationSummary;
   initialUiSettings: ReviewChangesUiSettings;
 };
 
@@ -371,6 +385,7 @@ export default function ExperimentReviewPatchManager(props: Props) {
 
     return sorted;
   }, [actionFilter, channelFilter, decisionFilter, props.rows, sortMode, stateById]);
+  const filteredActionCount = sortedFilteredRows.length;
 
   const updateDecision = (changeId: string, patch: Partial<DecisionState>) => {
     setStateById((prev) => ({
@@ -567,7 +582,7 @@ export default function ExperimentReviewPatchManager(props: Props) {
         </a>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-muted md:grid-cols-3">
+      <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-muted md:grid-cols-4">
         <div>
           Status: <span className="font-semibold text-foreground">{props.currentStatus}</span>
         </div>
@@ -578,7 +593,31 @@ export default function ExperimentReviewPatchManager(props: Props) {
           Final plan pack:{' '}
           <span className="font-semibold text-foreground">{props.finalPlanPackId ?? 'Missing'}</span>
         </div>
+        <div>
+          Rows: <span className="font-semibold text-foreground">{props.reviewValidationSummary.actual_row_count}</span>{' '}
+          (after filters: <span className="font-semibold text-foreground">{filteredActionCount}</span>)
+        </div>
       </div>
+
+      {props.reviewValidationSummary.declared_action_count_mismatch ? (
+        <div className="mt-3 rounded-xl border border-amber-400/80 bg-amber-100/80 p-3 text-xs text-amber-900">
+          <div className="font-semibold">Review validation warning: declared action count mismatch</div>
+          <div className="mt-1">
+            Declared: {props.reviewValidationSummary.declared_action_count ?? '—'} · Actual:{' '}
+            {props.reviewValidationSummary.actual_action_count}
+          </div>
+          <div className="mt-1">
+            {props.reviewValidationSummary.per_plan_action_counts.length > 0
+              ? props.reviewValidationSummary.per_plan_action_counts
+                  .map(
+                    (plan) =>
+                      `plan[${plan.plan_index}] ${plan.channel} run_id=${plan.run_id} actions=${plan.action_count}`
+                  )
+                  .join(' ; ')
+              : 'No proposal plans found.'}
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-4 rounded-xl border border-border bg-surface-2 p-3">
         <div className="flex flex-wrap items-center gap-2">

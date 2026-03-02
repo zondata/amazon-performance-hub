@@ -1897,9 +1897,11 @@ export async function GET(request: Request, { params }: Ctx) {
 
   let spBulkCampaignRows: Array<Record<string, unknown>> = [];
   let spBulkTargetRows: Array<Record<string, unknown>> = [];
+  let spBulkAdGroupRows: Array<Record<string, unknown>> = [];
   let spBulkPlacementRows: Array<Record<string, unknown>> = [];
   let sbBulkCampaignRows: Array<Record<string, unknown>> = [];
   let sbBulkTargetRows: Array<Record<string, unknown>> = [];
+  let sbBulkAdGroupRows: Array<Record<string, unknown>> = [];
   let sbBulkPlacementRows: Array<Record<string, unknown>> = [];
 
   if (latestSnapshotDate) {
@@ -1925,12 +1927,24 @@ export async function GET(request: Request, { params }: Ctx) {
     if (spTargetIds.length > 0) {
       const { data } = await supabaseAdmin
         .from("bulk_targets")
-        .select("target_id,state,bid,match_type,expression_raw")
+        .select("target_id,campaign_id,ad_group_id,state,bid,match_type,expression_raw")
         .eq("account_id", env.accountId)
         .eq("snapshot_date", latestSnapshotDate)
         .in("target_id", spTargetIds)
         .limit(5000);
       spBulkTargetRows = (data ?? []) as Array<Record<string, unknown>>;
+
+      const spTargetAdGroupIds = normalizeIds(spBulkTargetRows.map((row) => row.ad_group_id));
+      if (spTargetAdGroupIds.length > 0) {
+        const { data: adGroupData } = await supabaseAdmin
+          .from("bulk_ad_groups")
+          .select("ad_group_id,campaign_id,ad_group_name_raw,ad_group_name_norm,state,default_bid")
+          .eq("account_id", env.accountId)
+          .eq("snapshot_date", latestSnapshotDate)
+          .in("ad_group_id", spTargetAdGroupIds)
+          .limit(5000);
+        spBulkAdGroupRows = (adGroupData ?? []) as Array<Record<string, unknown>>;
+      }
     }
 
     if (sbCampaignIds.length > 0) {
@@ -1955,12 +1969,24 @@ export async function GET(request: Request, { params }: Ctx) {
     if (sbTargetIds.length > 0) {
       const { data } = await supabaseAdmin
         .from("bulk_sb_targets")
-        .select("target_id,state,bid,match_type,expression_raw")
+        .select("target_id,campaign_id,ad_group_id,state,bid,match_type,expression_raw")
         .eq("account_id", env.accountId)
         .eq("snapshot_date", latestSnapshotDate)
         .in("target_id", sbTargetIds)
         .limit(5000);
       sbBulkTargetRows = (data ?? []) as Array<Record<string, unknown>>;
+
+      const sbTargetAdGroupIds = normalizeIds(sbBulkTargetRows.map((row) => row.ad_group_id));
+      if (sbTargetAdGroupIds.length > 0) {
+        const { data: sbAdGroupData } = await supabaseAdmin
+          .from("bulk_sb_ad_groups")
+          .select("ad_group_id,campaign_id,ad_group_name_raw,ad_group_name_norm,state,default_bid")
+          .eq("account_id", env.accountId)
+          .eq("snapshot_date", latestSnapshotDate)
+          .in("ad_group_id", sbTargetAdGroupIds)
+          .limit(5000);
+        sbBulkAdGroupRows = (sbAdGroupData ?? []) as Array<Record<string, unknown>>;
+      }
     }
   }
 
@@ -1970,11 +1996,17 @@ export async function GET(request: Request, { params }: Ctx) {
   const spBulkTargetById = new Map(
     spBulkTargetRows.map((row) => [String(row.target_id), row] as const)
   );
+  const spBulkAdGroupById = new Map(
+    spBulkAdGroupRows.map((row) => [String(row.ad_group_id), row] as const)
+  );
   const sbBulkCampaignById = new Map(
     sbBulkCampaignRows.map((row) => [String(row.campaign_id), row] as const)
   );
   const sbBulkTargetById = new Map(
     sbBulkTargetRows.map((row) => [String(row.target_id), row] as const)
+  );
+  const sbBulkAdGroupById = new Map(
+    sbBulkAdGroupRows.map((row) => [String(row.ad_group_id), row] as const)
   );
 
   const spPlacementsByCampaign = new Map<string, Array<Record<string, unknown>>>();
@@ -2530,6 +2562,13 @@ export async function GET(request: Request, { params }: Ctx) {
     };
   });
 
+  const spTargetAdGroupIdsForOutput = normalizeIds(
+    spTargetAgg.map((row) => spBulkTargetById.get(row.target_id)?.ad_group_id)
+  );
+  const sbTargetAdGroupIdsForOutput = normalizeIds(
+    sbTargetAgg.map((row) => sbBulkTargetById.get(row.target_id)?.ad_group_id)
+  );
+
   const warnings = legacyWarningsFromMessages(messages);
   const resolvedProductSkills = resolveSkillsByIds(profileContext.skills);
   const stisBasePath = `/products/${encodeURIComponent(asin)}/logbook/ai-data-pack-v3/stis`;
@@ -2659,8 +2698,26 @@ export async function GET(request: Request, { params }: Ctx) {
           included_spend_total: spCoverageSelection.includedSpendTotal,
           coverage_pct: formatPct(spCoverageSelection.coveragePct),
         },
+        ad_groups: spTargetAdGroupIdsForOutput
+          .map((adGroupId) => {
+            const row = spBulkAdGroupById.get(adGroupId);
+            if (!row) return null;
+            return {
+              ad_group_id: adGroupId,
+              campaign_id: row.campaign_id ?? null,
+              ad_group_name_raw: row.ad_group_name_raw ?? null,
+              ad_group_name_norm: row.ad_group_name_norm ?? null,
+              state: row.state ?? null,
+              default_bid: toFiniteNumberOrNull(row.default_bid),
+            };
+          })
+          .filter((row): row is NonNullable<typeof row> => Boolean(row)),
         campaigns: spCampaignRowsForOutput,
         targets: spTargetAgg.map((row) => ({
+          ...(typeof spBulkTargetById.get(row.target_id)?.ad_group_id === "string" &&
+          String(spBulkTargetById.get(row.target_id)?.ad_group_id).trim().length > 0
+            ? { ad_group_id: String(spBulkTargetById.get(row.target_id)?.ad_group_id).trim() }
+            : { ad_group_id: null }),
           target_id: row.target_id,
           campaign_id: row.campaign_id,
           targeting_raw: row.targeting_raw,
@@ -2696,6 +2753,20 @@ export async function GET(request: Request, { params }: Ctx) {
           daily: sbAttributedPurchasesDaily,
           totals: sbAttributedPurchasesTotals,
         },
+        ad_groups: sbTargetAdGroupIdsForOutput
+          .map((adGroupId) => {
+            const row = sbBulkAdGroupById.get(adGroupId);
+            if (!row) return null;
+            return {
+              ad_group_id: adGroupId,
+              campaign_id: row.campaign_id ?? null,
+              ad_group_name_raw: row.ad_group_name_raw ?? null,
+              ad_group_name_norm: row.ad_group_name_norm ?? null,
+              state: row.state ?? null,
+              default_bid: toFiniteNumberOrNull(row.default_bid),
+            };
+          })
+          .filter((row): row is NonNullable<typeof row> => Boolean(row)),
         campaigns: sbTopCampaigns.map((row) => ({
           campaign_id: row.campaign_id,
           campaign_name_raw: row.campaign_name_raw,
@@ -2720,6 +2791,10 @@ export async function GET(request: Request, { params }: Ctx) {
           ),
         })),
         targets: sbTargetAgg.map((row) => ({
+          ...(typeof sbBulkTargetById.get(row.target_id)?.ad_group_id === "string" &&
+          String(sbBulkTargetById.get(row.target_id)?.ad_group_id).trim().length > 0
+            ? { ad_group_id: String(sbBulkTargetById.get(row.target_id)?.ad_group_id).trim() }
+            : { ad_group_id: null }),
           target_id: row.target_id,
           campaign_id: row.campaign_id,
           targeting_raw: row.targeting_raw,

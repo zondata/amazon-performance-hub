@@ -14,11 +14,26 @@ type BuildParams = {
   proposalPlans: ExecutableBulkgenPlanV1[];
   rankedActions: RankedProposalActionV1[];
   objective?: string | null;
+  declaredActionCount?: number | null;
+};
+
+type ReviewValidationSummary = {
+  actual_row_count: number;
+  actual_action_count: number;
+  declared_action_count: number | null;
+  declared_action_count_mismatch: boolean;
+  per_plan_action_counts: Array<{
+    plan_index: number;
+    channel: 'SP' | 'SB';
+    run_id: string;
+    action_count: number;
+  }>;
 };
 
 type BuildResult = {
   rows: ReviewProposedChangesDisplayRow[];
   warnings: string[];
+  validation_summary: ReviewValidationSummary;
 };
 
 const NOT_FOUND = '(not found)';
@@ -36,6 +51,12 @@ const asFiniteNumber = (value: unknown): number | null => {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
+};
+
+const asOptionalId = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 };
 
 const normalizeText = (value: string): string =>
@@ -268,11 +289,17 @@ export const buildReviewProposedChangesDisplay = async (params: BuildParams): Pr
     const snapshotDate = actionRef.channel === 'SP' ? spCurrent?.snapshotDate ?? null : sbCurrent?.snapshotDate ?? null;
 
     if (actionRef.channel === 'SP' && spCurrent) {
-      const campaign = campaignId ? spCurrent.campaignsById.get(campaignId) : null;
-      const adGroup = adGroupId ? spCurrent.adGroupsById.get(adGroupId) : null;
       const target = targetId ? spCurrent.targetsById.get(targetId) : null;
+      const resolvedAdGroupId = adGroupId ?? asOptionalId(target?.ad_group_id);
+      const adGroup = resolvedAdGroupId ? spCurrent.adGroupsById.get(resolvedAdGroupId) : null;
+      const resolvedCampaignId =
+        campaignId ??
+        asOptionalId(target?.campaign_id) ??
+        asOptionalId(adGroup?.campaign_id) ??
+        null;
+      const campaign = resolvedCampaignId ? spCurrent.campaignsById.get(resolvedCampaignId) : null;
       campaignName = campaign?.campaign_name_raw ?? NOT_FOUND;
-      adGroupName = adGroup?.ad_group_name_raw ?? (adGroupId ? NOT_FOUND : '—');
+      adGroupName = adGroup?.ad_group_name_raw ?? (resolvedAdGroupId ? NOT_FOUND : '—');
       if (target) {
         targetDisplay = `${target.expression_raw} [${target.match_type}]${target.is_negative ? ' (negative)' : ''}`;
       } else if (targetId) {
@@ -288,8 +315,8 @@ export const buildReviewProposedChangesDisplay = async (params: BuildParams): Pr
       if (actionRef.action_type === 'update_target_state') previousValue = target?.state ?? null;
       if (actionRef.action_type === 'update_placement_modifier') {
         const placement =
-          campaignId && placementCode
-            ? spCurrent.placementsByKey.get(spPlacementKey(campaignId, placementCode))
+          resolvedCampaignId && placementCode
+            ? spCurrent.placementsByKey.get(spPlacementKey(resolvedCampaignId, placementCode))
             : null;
         placementDisplay = placement?.placement_raw ?? placement?.placement_code ?? NOT_FOUND;
         previousValue = placement?.percentage ?? null;
@@ -297,11 +324,17 @@ export const buildReviewProposedChangesDisplay = async (params: BuildParams): Pr
     }
 
     if (actionRef.channel === 'SB' && sbCurrent) {
-      const campaign = campaignId ? sbCurrent.campaignsById.get(campaignId) : null;
-      const adGroup = adGroupId ? sbCurrent.adGroupsById.get(adGroupId) : null;
       const target = targetId ? sbCurrent.targetsById.get(targetId) : null;
+      const resolvedAdGroupId = adGroupId ?? asOptionalId(target?.ad_group_id);
+      const adGroup = resolvedAdGroupId ? sbCurrent.adGroupsById.get(resolvedAdGroupId) : null;
+      const resolvedCampaignId =
+        campaignId ??
+        asOptionalId(target?.campaign_id) ??
+        asOptionalId(adGroup?.campaign_id) ??
+        null;
+      const campaign = resolvedCampaignId ? sbCurrent.campaignsById.get(resolvedCampaignId) : null;
       campaignName = campaign?.campaign_name_raw ?? NOT_FOUND;
-      adGroupName = adGroup?.ad_group_name_raw ?? (adGroupId ? NOT_FOUND : '—');
+      adGroupName = adGroup?.ad_group_name_raw ?? (resolvedAdGroupId ? NOT_FOUND : '—');
       if (target) {
         targetDisplay = `${target.expression_raw} [${target.match_type}]${target.is_negative ? ' (negative)' : ''}`;
       } else if (targetId) {
@@ -396,5 +429,47 @@ export const buildReviewProposedChangesDisplay = async (params: BuildParams): Pr
     };
   });
 
-  return { rows, warnings };
+  const actualActionCount = params.proposalPlans.reduce((sum, plan) => sum + plan.actions.length, 0);
+  const declaredActionCount =
+    typeof params.declaredActionCount === 'number' && Number.isFinite(params.declaredActionCount)
+      ? Math.max(0, Math.floor(params.declaredActionCount))
+      : null;
+  const perPlanActionCounts = params.proposalPlans.map((plan, planIndex) => ({
+    plan_index: planIndex,
+    channel: plan.channel,
+    run_id: plan.run_id,
+    action_count: plan.actions.length,
+  }));
+  const declaredActionCountMismatch =
+    declaredActionCount !== null && declaredActionCount !== actualActionCount;
+
+  if (declaredActionCountMismatch) {
+    warnings.push(
+      `Declared action count mismatch: declared=${declaredActionCount}, actual=${actualActionCount}.`
+    );
+    warnings.push(
+      `Per-plan action counts: ${
+        perPlanActionCounts.length > 0
+          ? perPlanActionCounts
+              .map(
+                (plan) =>
+                  `plan[${plan.plan_index}] ${plan.channel} run_id=${plan.run_id} actions=${plan.action_count}`
+              )
+              .join('; ')
+          : '(none)'
+      }`
+    );
+  }
+
+  return {
+    rows,
+    warnings,
+    validation_summary: {
+      actual_row_count: rows.length,
+      actual_action_count: actualActionCount,
+      declared_action_count: declaredActionCount,
+      declared_action_count_mismatch: declaredActionCountMismatch,
+      per_plan_action_counts: perPlanActionCounts,
+    },
+  };
 };

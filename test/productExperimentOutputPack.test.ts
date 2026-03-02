@@ -74,6 +74,142 @@ describe("product experiment output pack parser", () => {
     }
   });
 
+  it("preserves optional parent IDs on ad-group and target actions", () => {
+    const result = parseProductExperimentOutputPack(
+      JSON.stringify({
+        kind: PRODUCT_EXPERIMENT_OUTPUT_PACK_KIND,
+        product: { asin: "B0TEST12345" },
+        experiment: {
+          name: "Identity chain test",
+          objective: "Keep rendering stable",
+          scope: {
+            status: "planned",
+            bulkgen_plans: [
+              {
+                channel: "SP",
+                generator: "bulkgen:sp:update",
+                run_id: "exp-sp-identity-001",
+                actions: [
+                  {
+                    type: "update_ad_group_state",
+                    campaign_id: "  C_SP_1  ",
+                    ad_group_id: " AG_SP_1 ",
+                    new_state: "enabled",
+                  },
+                  {
+                    type: "update_target_bid",
+                    campaign_id: " C_SP_1 ",
+                    ad_group_id: " AG_SP_1 ",
+                    target_id: " T_SP_1 ",
+                    new_bid: 1.15,
+                  },
+                ],
+              },
+              {
+                channel: "SB",
+                generator: "bulkgen:sb:update",
+                run_id: "exp-sb-identity-001",
+                actions: [
+                  {
+                    type: "update_ad_group_default_bid",
+                    campaign_id: " C_SB_1 ",
+                    ad_group_id: " AG_SB_1 ",
+                    new_default_bid: 0.85,
+                  },
+                  {
+                    type: "update_target_state",
+                    campaign_id: " C_SB_1 ",
+                    ad_group_id: " AG_SB_1 ",
+                    target_id: " T_SB_1 ",
+                    new_state: "paused",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+      "B0TEST12345"
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const plans = result.value.experiment.scope.bulkgen_plans ?? [];
+      const spPlan = plans.find((plan) => plan.channel === "SP");
+      const sbPlan = plans.find((plan) => plan.channel === "SB");
+      expect(spPlan).toBeTruthy();
+      expect(sbPlan).toBeTruthy();
+
+      const spAdGroupAction = spPlan?.actions[0] as
+        | { campaign_id?: string; ad_group_id?: string }
+        | undefined;
+      const spTargetAction = spPlan?.actions[1] as
+        | { campaign_id?: string; ad_group_id?: string; target_id?: string }
+        | undefined;
+      const sbAdGroupAction = sbPlan?.actions[0] as
+        | { campaign_id?: string; ad_group_id?: string }
+        | undefined;
+      const sbTargetAction = sbPlan?.actions[1] as
+        | { campaign_id?: string; ad_group_id?: string; target_id?: string }
+        | undefined;
+
+      expect(spAdGroupAction?.campaign_id).toBe("C_SP_1");
+      expect(spAdGroupAction?.ad_group_id).toBe("AG_SP_1");
+      expect(spTargetAction?.campaign_id).toBe("C_SP_1");
+      expect(spTargetAction?.ad_group_id).toBe("AG_SP_1");
+      expect(spTargetAction?.target_id).toBe("T_SP_1");
+      expect(sbAdGroupAction?.campaign_id).toBe("C_SB_1");
+      expect(sbAdGroupAction?.ad_group_id).toBe("AG_SB_1");
+      expect(sbTargetAction?.campaign_id).toBe("C_SB_1");
+      expect(sbTargetAction?.ad_group_id).toBe("AG_SB_1");
+      expect(sbTargetAction?.target_id).toBe("T_SB_1");
+    }
+  });
+
+  it("omits optional parent IDs when empty strings are provided", () => {
+    const result = parseProductExperimentOutputPack(
+      JSON.stringify({
+        kind: PRODUCT_EXPERIMENT_OUTPUT_PACK_KIND,
+        product: { asin: "B0TEST12345" },
+        experiment: {
+          name: "Identity chain empty IDs",
+          objective: "Keep compatibility",
+          scope: {
+            status: "planned",
+            bulkgen_plans: [
+              {
+                channel: "SP",
+                generator: "bulkgen:sp:update",
+                run_id: "exp-sp-empty-parent-ids",
+                actions: [
+                  {
+                    type: "update_target_state",
+                    campaign_id: " ",
+                    ad_group_id: "",
+                    target_id: "T_SP_2",
+                    new_state: "paused",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+      "B0TEST12345"
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const action = (result.value.experiment.scope.bulkgen_plans?.[0]?.actions?.[0] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      expect(action.target_id).toBe("T_SP_2");
+      expect("campaign_id" in action).toBe(false);
+      expect("ad_group_id" in action).toBe(false);
+    }
+  });
+
   it('accepts optional kiv_items payload', () => {
     const result = parseProductExperimentOutputPack(
       JSON.stringify({
