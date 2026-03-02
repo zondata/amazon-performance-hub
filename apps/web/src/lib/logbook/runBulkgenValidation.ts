@@ -3,27 +3,36 @@ import "server-only";
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { env } from "@/lib/env";
 
-const isRepoRoot = (dir: string) =>
-  fs.existsSync(path.join(dir, "package.json")) && fs.existsSync(path.join(dir, "src"));
+const hasScript = (dir: string, scriptName: string): boolean => {
+  const packageJsonPath = path.join(dir, "package.json");
+  if (!fs.existsSync(packageJsonPath)) return false;
 
-const resolveRepoRoot = () => {
-  const cwd = process.cwd();
-  const candidates = [
-    cwd,
-    path.resolve(cwd, ".."),
-    path.resolve(cwd, "..", ".."),
-    path.resolve(cwd, "..", "..", ".."),
-    "/home/albert/code/amazon-performance-hub",
-  ];
-  for (const candidate of candidates) {
-    if (isRepoRoot(candidate)) return candidate;
+  try {
+    const packageRaw = fs.readFileSync(packageJsonPath, "utf8");
+    const packageJson = JSON.parse(packageRaw) as {
+      scripts?: Record<string, unknown>;
+    };
+    return typeof packageJson.scripts?.[scriptName] === "string";
+  } catch {
+    return false;
   }
-  return cwd;
+};
+
+export const resolveRepoRoot = (startDir = process.cwd()): string => {
+  let current = path.resolve(startDir);
+  while (true) {
+    if (hasScript(current, "log:validate:bulkgen")) return current;
+
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return path.resolve(startDir);
 };
 
 export const runManualBulkgenValidation = async (changeId: string): Promise<void> => {
+  const { env } = await import("../env");
   const args = [
     "run",
     "log:validate:bulkgen",
