@@ -991,6 +991,11 @@ Account Baseline AI Packs:
   - recent experiments with status + latest outcome score (if present)
   - validation summary counts (`validated|mismatch|pending|not_found|none`)
   - ingestion heartbeat by `source_type` from `upload_stats`.
+- Baseline window / overlap policy:
+  - End date is derived from finalized Scale Insights data: latest `si_sales_trend_daily_latest.date` where `sessions is not null`.
+  - Fallback to legacy `exclude_last_days` end-date logic only when finalized SI end date is unavailable.
+  - Required overlap datasets = Sales + SP advertised-product daily (table: `sp_advertised_product_daily_fact_latest`; availability key: `sp_advertised_asin`).
+  - SQP/Ranking/SB do not constrain overlap; include them when available, but they must not cap `window.start`/`window.end`.
 - Prompt pack enforces:
   - objective-driven analysis
   - required “Missing Info Checklist” when data is insufficient

@@ -71,6 +71,7 @@ export const PRODUCT_EXPERIMENT_PROMPT_DEFAULT_TEMPLATES: ProductExperimentPromp
       '- Use `product.skills.resolved` and `experiment.skills.resolved` (when present) as explicit operating constraints. Read each skill\'s SOP, Why, and Risks sections and apply them throughout your analysis.',
       '- Do not conflate Scale Insights attributed `ppc_cost` with advertised-ASIN spend; treat them as different signals.',
       '- The data pack window already excludes recent unfinalised days (see `metadata.exclude_last_days`). Treat all dates within `window.start` to `window.end` as finalised.',
+      '- Treat SQP as optional weekly context that may lag daily baselines; use ranking as the primary recency signal and proceed even when SQP is missing.',
       '- End each analysis with a grouped checklist summary: assumptions, evidence, risks, and next actions.',
       '- Keep the immediate execution set small; move lower-confidence ideas to a KIV backlog.',
       '- Treat `product.driver_campaign_intents` as campaign-level constraints; do not propose conflicting actions without explicit override rationale.',

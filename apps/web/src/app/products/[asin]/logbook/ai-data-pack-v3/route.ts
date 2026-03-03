@@ -10,6 +10,7 @@ import {
   loadSbCampaignIdsForAsin,
   loadSpCampaignIdsForAsin,
 } from "@/lib/logbook/aiPack/findAsinCampaignIds";
+import { loadScaleInsightsFinalizedEndDate } from "@/lib/logbook/aiPack/loadScaleInsightsFinalizedEndDate";
 import { loadSpTargetingBaselineDateBounds } from "@/lib/logbook/aiPack/spTargetingBaselineBounds";
 import {
   selectSpRowsForCoverage,
@@ -572,9 +573,29 @@ export async function GET(request: Request, { params }: Ctx) {
   const requestedRange = normalizeBaselineRange(requestedRangeParam);
   const excludeLastDays = normalizeExcludeLastDays(url.searchParams.get("exclude_last_days"));
   const todayMinusExcludeDays = computeTodayMinusExcludeDays(excludeLastDays);
+  const todayUtc = computeTodayMinusExcludeDays(0);
   const endArg = url.searchParams.get("end");
   const userEnd = endArg && DATE_RE.test(endArg) ? endArg : null;
-  const endCandidate = computeEndCandidate(todayMinusExcludeDays, userEnd);
+  const capEnd = userEnd ? (userEnd <= todayUtc ? userEnd : todayUtc) : todayUtc;
+  let finalizedEnd: string | null = null;
+  let finalizedEndError: string | null = null;
+  try {
+    finalizedEnd = await loadScaleInsightsFinalizedEndDate({
+      supabase: supabaseAdmin,
+      accountId: env.accountId,
+      marketplace: env.marketplace,
+      asin,
+      endDateCap: capEnd,
+    });
+  } catch (error) {
+    finalizedEndError =
+      error instanceof Error ? error.message : "Failed loading finalized Scale Insights end date.";
+  }
+  const fallbackEndCandidate = computeEndCandidate(todayMinusExcludeDays, userEnd);
+  const endCandidate = finalizedEnd ?? fallbackEndCandidate;
+  const endCandidateSource = finalizedEnd
+    ? "scale_insights_sessions_not_null"
+    : "exclude_last_days_fallback";
   const { startBound, endBound } = computeBoundedRange({
     requestedRange: requestedRangeParam ?? requestedRange,
     endDate: endCandidate,
@@ -732,6 +753,31 @@ export async function GET(request: Request, { params }: Ctx) {
     hasSdCampaignCandidates: true,
   })) {
     addMessage(message.level, message.code, message.text, message.meta);
+  }
+  const endCandidateMeta = {
+    user_end: userEnd,
+    today_utc: todayUtc,
+    exclude_last_days: excludeLastDays,
+    today_minus_exclude_days: todayMinusExcludeDays,
+    finalized_end: finalizedEnd,
+    end_candidate: endCandidate,
+  };
+  if (endCandidateSource === "scale_insights_sessions_not_null") {
+    addMessage(
+      "info",
+      "END_CANDIDATE_FINALIZED",
+      "End candidate set from finalized Scale Insights data (sessions is not null).",
+      endCandidateMeta
+    );
+  } else {
+    addMessage(
+      finalizedEndError ? "warn" : "info",
+      "END_CANDIDATE_FALLBACK",
+      finalizedEndError
+        ? `Scale Insights finalized end-date lookup failed (${finalizedEndError}); falling back to exclude_last_days policy.`
+        : "Scale Insights finalized end date was not found; falling back to exclude_last_days policy.",
+      endCandidateMeta
+    );
   }
 
   const toFetchDiagnosticEntry = (
@@ -904,31 +950,33 @@ export async function GET(request: Request, { params }: Ctx) {
           .order("observed_date", { ascending: false })
           .limit(1)
       ),
-      loadDateBounds(
-        "week_end",
-        "SQP baseline",
-        supabaseAdmin
-          .from("sqp_weekly_latest_enriched")
-          .select("week_end")
-          .eq("account_id", env.accountId)
-          .eq("marketplace", env.marketplace)
-          .eq("scope_type", "asin")
-          .eq("scope_value", asin)
-          .gte("week_end", startBound)
-          .lte("week_end", endBound)
-          .order("week_end", { ascending: true })
-          .limit(1),
-        supabaseAdmin
-          .from("sqp_weekly_latest_enriched")
-          .select("week_end")
-          .eq("account_id", env.accountId)
-          .eq("marketplace", env.marketplace)
-          .eq("scope_type", "asin")
-          .eq("scope_value", asin)
-          .gte("week_end", startBound)
-          .lte("week_end", endBound)
-          .order("week_end", { ascending: false })
-          .limit(1)
+      loadOptionalDateBounds("SQP baseline", () =>
+        loadDateBounds(
+          "week_end",
+          "SQP baseline",
+          supabaseAdmin
+            .from("sqp_weekly_latest_enriched")
+            .select("week_end")
+            .eq("account_id", env.accountId)
+            .eq("marketplace", env.marketplace)
+            .eq("scope_type", "asin")
+            .eq("scope_value", asin)
+            .gte("week_end", startBound)
+            .lte("week_end", endBound)
+            .order("week_end", { ascending: true })
+            .limit(1),
+          supabaseAdmin
+            .from("sqp_weekly_latest_enriched")
+            .select("week_end")
+            .eq("account_id", env.accountId)
+            .eq("marketplace", env.marketplace)
+            .eq("scope_type", "asin")
+            .eq("scope_value", asin)
+            .gte("week_end", startBound)
+            .lte("week_end", endBound)
+            .order("week_end", { ascending: false })
+            .limit(1)
+        )
       ),
       loadOptionalDateBounds("SP advertised-product ASIN baseline", () =>
         loadDateBounds(
@@ -1024,14 +1072,7 @@ export async function GET(request: Request, { params }: Ctx) {
 
   const requiredAvailability: BaselineAvailabilityMap = {
     sales: availability.sales,
-    sp_target: availability.sp_target,
-    sb_campaign: availability.sb_campaign,
-    sb_keyword: availability.sb_keyword,
-    sb_attributed_purchases: availability.sb_attributed_purchases,
     sp_advertised_asin: availability.sp_advertised_asin,
-    sb_allocated_asin_spend: availability.sb_allocated_asin_spend,
-    ranking: availability.ranking,
-    sqp: availability.sqp,
   };
 
   const window = computeBaselineWindow({
@@ -1083,12 +1124,23 @@ export async function GET(request: Request, { params }: Ctx) {
     addMessage(
       "warn",
       "WINDOW_FALLBACK",
-      "Computed overlap window was empty; fallback window set to the last 60 days (capped by exclude_last_days)."
+      "Computed overlap window was empty; fallback window set to the last 60 days (capped by end_candidate)."
     );
   }
 
   let effectiveStart = window.effectiveStart;
   const effectiveEnd = window.effectiveEnd;
+  if (availability.sqp.maxDate && availability.sqp.maxDate < effectiveEnd) {
+    addMessage(
+      "info",
+      "SQP_LAGGING",
+      `SQP latest week_end (${availability.sqp.maxDate}) is behind effective window end (${effectiveEnd}); continuing with available SQP only.`,
+      {
+        sqp_max_date: availability.sqp.maxDate,
+        effective_end: effectiveEnd,
+      }
+    );
+  }
   const baselineDays = dayCountInclusive(effectiveStart, effectiveEnd);
   if (baselineDays > MAX_BASELINE_DAYS) {
     const cappedStart = addUtcDays(effectiveEnd, -(MAX_BASELINE_DAYS - 1));
@@ -2151,9 +2203,15 @@ export async function GET(request: Request, { params }: Ctx) {
     .order("week_end", { ascending: false })
     .limit(1);
   if (sqpWeekError) {
-    return new Response(`Failed loading SQP week baseline: ${sqpWeekError.message}`, { status: 500 });
+    addMessage(
+      "warn",
+      "SQP_FETCH_FAILED",
+      `Failed loading SQP week baseline: ${sqpWeekError.message}; continuing without SQP.`,
+      { stage: "week_baseline" }
+    );
+  } else {
+    sqpLatestWeekEnd = parseDateField(sqpWeekRows?.[0]?.week_end) ?? null;
   }
-  sqpLatestWeekEnd = parseDateField(sqpWeekRows?.[0]?.week_end) ?? null;
 
   if (sqpLatestWeekEnd) {
     const { data: sqpRows, error: sqpRowsError } = await supabaseAdmin
@@ -2169,33 +2227,48 @@ export async function GET(request: Request, { params }: Ctx) {
       .order("impressions_total", { ascending: false })
       .limit(50);
     if (sqpRowsError) {
-      return new Response(`Failed loading SQP snapshot rows: ${sqpRowsError.message}`, { status: 500 });
-    }
-    sqpSnapshotRows = (sqpRows ?? []) as Array<Record<string, unknown>>;
+      addMessage(
+        "warn",
+        "SQP_FETCH_FAILED",
+        `Failed loading SQP snapshot rows: ${sqpRowsError.message}; continuing without SQP.`,
+        { stage: "snapshot" }
+      );
+      sqpLatestWeekEnd = null;
+      sqpSnapshotRows = [];
+      sqpTrendRows = [];
+    } else {
+      sqpSnapshotRows = (sqpRows ?? []) as Array<Record<string, unknown>>;
 
-    const topSqpQueryNorms = sqpSnapshotRows
-      .map((row) => String(row.search_query_norm ?? "").trim())
-      .filter((value) => value.length > 0)
-      .slice(0, 10);
-    if (topSqpQueryNorms.length > 0) {
-      const { data: sqpTrendData, error: sqpTrendError } = await supabaseAdmin
-        .from("sqp_weekly_latest_enriched")
-        .select(
-          "week_start,week_end,search_query_raw,search_query_norm,search_query_volume,impressions_total,impressions_self,clicks_total,clicks_self,cart_adds_total,purchases_total,self_impression_share_calc,self_click_share_calc,self_purchase_share_calc,self_ctr_index,self_cvr_index,market_ctr,self_ctr,market_cvr,self_cvr"
-        )
-        .eq("account_id", env.accountId)
-        .eq("marketplace", env.marketplace)
-        .eq("scope_type", "asin")
-        .eq("scope_value", asin)
-        .in("search_query_norm", topSqpQueryNorms)
-        .gte("week_end", effectiveStart)
-        .lte("week_end", effectiveEnd)
-        .order("week_end", { ascending: true })
-        .limit(5000);
-      if (sqpTrendError) {
-        return new Response(`Failed loading SQP trend rows: ${sqpTrendError.message}`, { status: 500 });
+      const topSqpQueryNorms = sqpSnapshotRows
+        .map((row) => String(row.search_query_norm ?? "").trim())
+        .filter((value) => value.length > 0)
+        .slice(0, 10);
+      if (topSqpQueryNorms.length > 0) {
+        const { data: sqpTrendData, error: sqpTrendError } = await supabaseAdmin
+          .from("sqp_weekly_latest_enriched")
+          .select(
+            "week_start,week_end,search_query_raw,search_query_norm,search_query_volume,impressions_total,impressions_self,clicks_total,clicks_self,cart_adds_total,purchases_total,self_impression_share_calc,self_click_share_calc,self_purchase_share_calc,self_ctr_index,self_cvr_index,market_ctr,self_ctr,market_cvr,self_cvr"
+          )
+          .eq("account_id", env.accountId)
+          .eq("marketplace", env.marketplace)
+          .eq("scope_type", "asin")
+          .eq("scope_value", asin)
+          .in("search_query_norm", topSqpQueryNorms)
+          .gte("week_end", effectiveStart)
+          .lte("week_end", effectiveEnd)
+          .order("week_end", { ascending: true })
+          .limit(5000);
+        if (sqpTrendError) {
+          addMessage(
+            "warn",
+            "SQP_FETCH_FAILED",
+            `Failed loading SQP trend rows: ${sqpTrendError.message}; continuing with SQP snapshot only.`,
+            { stage: "trend" }
+          );
+        } else {
+          sqpTrendRows = (sqpTrendData ?? []) as Array<Record<string, unknown>>;
+        }
       }
-      sqpTrendRows = (sqpTrendData ?? []) as Array<Record<string, unknown>>;
     }
   }
 
@@ -2591,6 +2664,7 @@ export async function GET(request: Request, { params }: Ctx) {
       },
       exclude_last_days: excludeLastDays,
       today_minus_exclude_days: todayMinusExcludeDays,
+      today_utc: todayUtc,
       availability: Object.fromEntries(
         Object.entries(availability).map(([key, bounds]) => [
           key,
@@ -2606,6 +2680,8 @@ export async function GET(request: Request, { params }: Ctx) {
       window_candidates: {
         start_candidate: window.startCandidate,
         end_candidate: window.endCandidate,
+        end_candidate_source: endCandidateSource,
+        finalized_end: finalizedEnd,
         overlap_start: window.overlapStart,
         overlap_end: window.overlapEnd,
       },

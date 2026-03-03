@@ -150,7 +150,7 @@ export const renderProductExperimentPromptPackMarkdown = ({
 
   lines.push('## Data Coverage Checklist');
   lines.push('- If proposing SP/SB bulkgen plans, confirm campaign/target IDs exist in the Product Baseline Data Pack; otherwise ask clarifying questions.');
-  lines.push('- If recommending keyword/query strategy, confirm SQP/ranking sections exist; otherwise ask clarifying questions.');
+  lines.push('- For keyword/query strategy, use ranking as the primary recency signal. SQP is optional weekly context that may lag and should not block recommendations when missing.');
   lines.push('- If recommending pricing/coupons, confirm profits/margin/cogs fields exist; otherwise ask clarifying questions.');
   lines.push('- Respect `product.driver_campaign_intents` and skill constraints in the data pack when proposing campaign actions.');
   lines.push('- Keep execution set small and place remaining ideas into `kiv_items`.');
