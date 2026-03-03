@@ -1,5 +1,5 @@
 # Supabase Schema Snapshot
-Generated: 2026-02-21T07:44:17.464Z
+Generated: 2026-03-03T05:38:19.935Z
 
 ## accounts (BASE TABLE)
 | column | type | nullable |
@@ -62,6 +62,17 @@ Generated: 2026-02-21T07:44:17.464Z
 | portfolio_id | text | NO |
 | portfolio_name_raw | text | NO |
 | portfolio_name_norm | text | NO |
+
+## bulk_product_ads (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | NO |
+| snapshot_date | date | NO |
+| ad_id | text | NO |
+| ad_group_id | text | NO |
+| campaign_id | text | NO |
+| sku_raw | text | YES |
+| asin_raw | text | YES |
 
 ## bulk_sb_ad_groups (BASE TABLE)
 | column | type | nullable |
@@ -301,6 +312,24 @@ Generated: 2026-02-21T07:44:17.464Z
 | created_at | timestamp with time zone | NO |
 | dedupe_key | text | YES |
 
+## log_driver_campaign_intents (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| asin_norm | text | NO |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+| created_by | text | YES |
+| updated_by | text | YES |
+| channel | text | NO |
+| campaign_id | text | NO |
+| intent | text | NO |
+| is_driver | boolean | NO |
+| notes | text | YES |
+| constraints_json | jsonb | NO |
+
 ## log_evaluations (BASE TABLE)
 | column | type | nullable |
 |---|---|---|
@@ -323,6 +352,32 @@ Generated: 2026-02-21T07:44:17.464Z
 | change_id | uuid | NO |
 | created_at | timestamp with time zone | NO |
 
+## log_experiment_events (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| experiment_id | uuid | NO |
+| run_id | text | YES |
+| phase_id | uuid | YES |
+| event_type | text | NO |
+| event_date | date | YES |
+| occurred_at | timestamp with time zone | NO |
+| payload_json | jsonb | NO |
+| created_by | text | YES |
+
+## log_experiment_phases (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| experiment_id | uuid | NO |
+| run_id | text | NO |
+| title | text | YES |
+| notes | text | YES |
+| effective_date | date | YES |
+| uploaded_at | timestamp with time zone | YES |
+| created_at | timestamp with time zone | NO |
+| created_by | text | YES |
+
 ## log_experiments (BASE TABLE)
 | column | type | nullable |
 |---|---|---|
@@ -338,6 +393,26 @@ Generated: 2026-02-21T07:44:17.464Z
 | guardrails | jsonb | YES |
 | scope | jsonb | YES |
 | created_at | timestamp with time zone | NO |
+
+## log_product_kiv_items (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| kiv_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| asin_norm | text | NO |
+| created_at | timestamp with time zone | NO |
+| created_by | text | YES |
+| status | text | NO |
+| title | text | NO |
+| details | text | YES |
+| source | text | NO |
+| source_experiment_id | uuid | YES |
+| tags | ARRAY | NO |
+| priority | integer | YES |
+| due_date | date | YES |
+| resolved_at | timestamp with time zone | YES |
+| resolution_notes | text | YES |
 
 ## portfolio_name_history (BASE TABLE)
 | column | type | nullable |
@@ -416,6 +491,26 @@ Generated: 2026-02-21T07:44:17.464Z
 | valid_from | date | NO |
 | valid_to | date | YES |
 
+## sb_attributed_purchases_daily_fact (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | NO |
+| date | date | NO |
+| campaign_id | text | NO |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| purchased_sku_raw | text | YES |
+| purchased_sku_norm | text | YES |
+| purchased_asin_raw | text | NO |
+| purchased_asin_norm | text | NO |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| exported_at | timestamp with time zone | NO |
+
 ## sb_campaign_daily_fact (BASE TABLE)
 | column | type | nullable |
 |---|---|---|
@@ -435,6 +530,27 @@ Generated: 2026-02-21T07:44:17.464Z
 | orders | integer | YES |
 | units | integer | YES |
 | exported_at | timestamp with time zone | NO |
+
+## sb_campaign_daily_fact_gold (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | NO |
+| account_id | text | NO |
+| date | date | NO |
+| campaign_id | text | NO |
+| portfolio_id | text | YES |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | NO |
+| campaign_name_norm | text | NO |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| exported_at | timestamp with time zone | NO |
+| ingested_at | timestamp with time zone | NO |
 
 ## sb_campaign_daily_raw (BASE TABLE)
 | column | type | nullable |
@@ -774,6 +890,35 @@ Generated: 2026-02-21T07:44:17.464Z
 | conversion_rate | numeric | YES |
 | exported_at | timestamp with time zone | NO |
 
+## sd_campaign_daily_fact_gold (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | NO |
+| account_id | text | NO |
+| date | date | NO |
+| campaign_id | text | NO |
+| cost_type | text | YES |
+| cost_type_key | text | YES |
+| cost_type_is_null | boolean | YES |
+| portfolio_id | text | YES |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | NO |
+| campaign_name_norm | text | NO |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| cpc | numeric | YES |
+| ctr | numeric | YES |
+| acos | numeric | YES |
+| roas | numeric | YES |
+| conversion_rate | numeric | YES |
+| exported_at | timestamp with time zone | NO |
+| ingested_at | timestamp with time zone | NO |
+
 ## sd_campaign_daily_raw (BASE TABLE)
 | column | type | nullable |
 |---|---|---|
@@ -1074,6 +1219,28 @@ Generated: 2026-02-21T07:44:17.464Z
 | avg_sales_price | numeric | YES |
 | exported_at | timestamp with time zone | NO |
 
+## sp_advertised_product_daily_fact (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | NO |
+| date | date | NO |
+| campaign_id | text | NO |
+| ad_group_id | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| ad_group_name_raw | text | YES |
+| ad_group_name_norm | text | YES |
+| advertised_asin_raw | text | NO |
+| advertised_asin_norm | text | NO |
+| sku_raw | text | YES |
+| impressions | numeric | YES |
+| clicks | numeric | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | numeric | YES |
+| units | numeric | YES |
+| exported_at | timestamp with time zone | NO |
+
 ## sp_campaign_daily_raw (BASE TABLE)
 | column | type | nullable |
 |---|---|---|
@@ -1113,6 +1280,30 @@ Generated: 2026-02-21T07:44:17.464Z
 | orders | integer | YES |
 | units | integer | YES |
 | exported_at | timestamp with time zone | NO |
+
+## sp_campaign_hourly_fact_gold (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | NO |
+| account_id | text | NO |
+| date | date | NO |
+| start_time | time without time zone | YES |
+| start_time_key | time without time zone | YES |
+| start_time_is_null | boolean | YES |
+| campaign_id | text | NO |
+| portfolio_id | text | YES |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | NO |
+| campaign_name_norm | text | NO |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| exported_at | timestamp with time zone | NO |
+| ingested_at | timestamp with time zone | NO |
 
 ## sp_category_id_map (BASE TABLE)
 | column | type | nullable |
@@ -1409,6 +1600,60 @@ Generated: 2026-02-21T07:44:17.464Z
 | snapshot_date | date | YES |
 | notes | text | YES |
 
+## ads_campaign_daily_fact_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| channel | text | YES |
+| account_id | text | YES |
+| date | date | YES |
+| campaign_id | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| impressions | numeric | YES |
+| clicks | numeric | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | numeric | YES |
+| units | numeric | YES |
+
+## ads_campaign_placement_daily_fact_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| channel | text | YES |
+| account_id | text | YES |
+| date | date | YES |
+| campaign_id | text | YES |
+| placement_code | text | YES |
+| placement_raw | text | YES |
+| placement_raw_norm | text | YES |
+| impressions | bigint | YES |
+| clicks | bigint | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | bigint | YES |
+| units | bigint | YES |
+
+## ads_target_daily_fact_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| channel | text | YES |
+| account_id | text | YES |
+| date | date | YES |
+| campaign_id | text | YES |
+| ad_group_id | text | YES |
+| target_key | text | YES |
+| target_id | text | YES |
+| targeting_raw | text | YES |
+| targeting_norm | text | YES |
+| match_type_norm | text | YES |
+| impressions | bigint | YES |
+| clicks | bigint | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | bigint | YES |
+| units | bigint | YES |
+| top_of_search_impression_share | numeric | YES |
+
 ## bulk_targets_enriched (VIEW)
 | column | type | nullable |
 |---|---|---|
@@ -1505,7 +1750,77 @@ Generated: 2026-02-21T07:44:17.464Z
 | ingested_at | timestamp with time zone | YES |
 | rn | bigint | YES |
 
+## sb_allocated_asin_spend_daily_v1 (VIEW)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | YES |
+| date | date | YES |
+| campaign_id | text | YES |
+| purchased_asin_norm | text | YES |
+| allocated_spend | numeric | YES |
+
+## sb_allocated_asin_spend_daily_v2 (VIEW)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | YES |
+| date | date | YES |
+| campaign_name_norm | text | YES |
+| purchased_asin_norm | text | YES |
+| allocated_spend | numeric | YES |
+
+## sb_allocated_asin_spend_daily_v3 (VIEW)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | YES |
+| date | date | YES |
+| join_key | text | YES |
+| purchased_asin_norm | text | YES |
+| allocated_spend | numeric | YES |
+
+## sb_attributed_purchases_daily_fact_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | YES |
+| date | date | YES |
+| campaign_id | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| purchased_sku_raw | text | YES |
+| purchased_sku_norm | text | YES |
+| purchased_asin_raw | text | YES |
+| purchased_asin_norm | text | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| exported_at | timestamp with time zone | YES |
+| rn | bigint | YES |
+
 ## sb_campaign_daily_fact_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| date | date | YES |
+| campaign_id | text | YES |
+| portfolio_id | text | YES |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| exported_at | timestamp with time zone | YES |
+| ingested_at | timestamp with time zone | YES |
+| rn | bigint | YES |
+
+## sb_campaign_daily_fact_latest_gold (VIEW)
 | column | type | nullable |
 |---|---|---|
 | upload_id | uuid | YES |
@@ -1831,6 +2146,34 @@ Generated: 2026-02-21T07:44:17.464Z
 | ingested_at | timestamp with time zone | YES |
 | rn | bigint | YES |
 
+## sd_campaign_daily_fact_latest_gold (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| date | date | YES |
+| campaign_id | text | YES |
+| portfolio_id | text | YES |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| cost_type | text | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| cpc | numeric | YES |
+| ctr | numeric | YES |
+| acos | numeric | YES |
+| roas | numeric | YES |
+| conversion_rate | numeric | YES |
+| exported_at | timestamp with time zone | YES |
+| ingested_at | timestamp with time zone | YES |
+| rn | bigint | YES |
+
 ## sd_campaign_daily_latest (VIEW)
 | column | type | nullable |
 |---|---|---|
@@ -2102,7 +2445,91 @@ Generated: 2026-02-21T07:44:17.464Z
 | ingested_at | timestamp with time zone | YES |
 | rn | bigint | YES |
 
+## sp_advertised_product_daily_fact_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | YES |
+| date | date | YES |
+| campaign_id | text | YES |
+| ad_group_id | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| ad_group_name_raw | text | YES |
+| ad_group_name_norm | text | YES |
+| advertised_asin_raw | text | YES |
+| advertised_asin_norm | text | YES |
+| sku_raw | text | YES |
+| impressions | numeric | YES |
+| clicks | numeric | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | numeric | YES |
+| units | numeric | YES |
+| exported_at | timestamp with time zone | YES |
+| rn | bigint | YES |
+
+## sp_campaign_daily_fact_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | YES |
+| date | date | YES |
+| campaign_id | text | YES |
+| portfolio_id | text | YES |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| impressions | bigint | YES |
+| clicks | bigint | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | bigint | YES |
+| units | bigint | YES |
+| exported_at | timestamp with time zone | YES |
+
+## sp_campaign_daily_fact_latest_gold (VIEW)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | YES |
+| date | date | YES |
+| campaign_id | text | YES |
+| portfolio_id | text | YES |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| exported_at | timestamp with time zone | YES |
+
 ## sp_campaign_hourly_fact_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | YES |
+| account_id | text | YES |
+| date | date | YES |
+| start_time | time without time zone | YES |
+| campaign_id | text | YES |
+| portfolio_id | text | YES |
+| portfolio_name_raw | text | YES |
+| portfolio_name_norm | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| impressions | integer | YES |
+| clicks | integer | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | integer | YES |
+| units | integer | YES |
+| exported_at | timestamp with time zone | YES |
+| ingested_at | timestamp with time zone | YES |
+| rn | bigint | YES |
+
+## sp_campaign_hourly_fact_latest_gold (VIEW)
 | column | type | nullable |
 |---|---|---|
 | upload_id | uuid | YES |
