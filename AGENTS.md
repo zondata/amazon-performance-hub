@@ -36,6 +36,20 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 
 #### Latest (2026-03-04)
 - `Shipped`
+  - Added new skill `docs/skills/library/ads_kpi_scope_glossary.md`:
+    - defines STIS/STIR/TOS IS scope and interpretation boundaries.
+    - enforces non-additive handling (`do not average`) for STIS/STIR/TOS IS.
+  - Updated Partner mode prompt template (`apps/web/src/lib/logbook/productExperimentPromptTemplatesModel.ts`) to:
+    - reference `ads_kpi_scope_glossary` for KPI scope interpretation.
+    - enforce response formatting rules: start with `Required data preflight` table, use markdown tables for analysis/recommendations, and always include entity id + name references.
+  - Product Baseline Data Pack V3 now emits SP placement modifier change history at:
+    - `ads_baseline.sp.placement_modifier_change_log[]`.
+- `Data`
+  - Bulk ingestion now logs SP placement modifier changes by diffing current vs previous SP bulk snapshot (`campaign_id + placement_code`, `old_pct -> new_pct`) and storing rows in `sp_placement_modifier_change_log`.
+- `Ops`
+  - Added migration `20260304130000_sp_placement_modifier_change_log.sql`:
+    - creates table `sp_placement_modifier_change_log` plus supporting indexes and per-upload uniqueness on `(account_id, upload_id, campaign_id, placement_code)`.
+
   - Product Baseline Data Pack V3 STIS/STIR handling now has explicit confirm mode when both artifacts are available:
     - include STIS+STIR in-pack (`stis_mode=pack`), or
     - export STIS+STIR as two separate files (`stis_mode=export`).

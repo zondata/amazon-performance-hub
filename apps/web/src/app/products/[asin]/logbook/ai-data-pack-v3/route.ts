@@ -1291,7 +1291,7 @@ export async function GET(request: Request, { params }: Ctx) {
   const { data: salesRows, error: salesError } = await supabaseAdmin
     .from("si_sales_trend_daily_latest")
     .select(
-      "date,sales,orders,units,sessions,conversions,ppc_cost,ppc_sales,ppc_orders,ppc_units,ppc_impressions,ppc_clicks,cost_per_click,acos,tacos,referral_fees,fulfillment_fees,cost_of_goods,payout,profits,roi,margin"
+      "date,sales,orders,units,sessions,conversions,ppc_cost,ppc_sales,ppc_orders,ppc_units,ppc_impressions,ppc_clicks,cost_per_click,acos,tacos,referral_fees,fulfillment_fees,cost_of_goods,payout,profits,roi,margin,refund_units,refund_cost"
     )
     .eq("account_id", env.accountId)
     .eq("marketplace", env.marketplace)
@@ -1303,6 +1303,25 @@ export async function GET(request: Request, { params }: Ctx) {
   if (salesError) {
     return new Response(`Failed loading sales trend: ${salesError.message}`, { status: 500 });
   }
+  const includeSalesTrendRefundFields = (salesRows ?? []).some(
+    (row) => row.refund_units !== null || row.refund_cost !== null
+  );
+  const salesAdjustmentsDaily = (salesRows ?? [])
+    .map((row) => {
+      const refundCost = num(row.refund_cost);
+      const refundUnits = num(row.refund_units);
+      if (refundCost <= 0 && refundUnits <= 0) {
+        return null;
+      }
+      return {
+        date: row.date,
+        adjustment_type: "refund" as const,
+        amount: refundCost > 0 ? -refundCost : 0,
+        count: refundUnits,
+        source: "SI" as const,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
   const siPpcCostTotal = (salesRows ?? []).reduce((total, row) => total + num(row.ppc_cost), 0);
 
   const spAdvertisedAsinRows = await loadRowsByDateChunks<Record<string, unknown>>({
@@ -2334,6 +2353,63 @@ export async function GET(request: Request, { params }: Ctx) {
     sbPlacementModifiersByCampaign.set(campaignId, buildPlacementModifierPctByKey("sb", rows));
   }
 
+  let spPlacementModifierChangeLogRows: Array<Record<string, unknown>> = [];
+  if (spCampaignIds.length > 0) {
+    try {
+      for (const campaignChunk of chunkIds(spCampaignIds, 300)) {
+        const { data, error } = await supabaseAdmin
+          .from("sp_placement_modifier_change_log")
+          .select(
+            "snapshot_date,exported_at,upload_id,campaign_id,placement_code,placement_raw,old_pct,new_pct"
+          )
+          .eq("account_id", env.accountId)
+          .gte("snapshot_date", effectiveStart)
+          .lte("snapshot_date", effectiveEnd)
+          .in("campaign_id", campaignChunk)
+          .order("snapshot_date", { ascending: true })
+          .order("exported_at", { ascending: true })
+          .limit(50000);
+        if (error) {
+          throw new Error(error.message);
+        }
+        spPlacementModifierChangeLogRows.push(...((data ?? []) as Array<Record<string, unknown>>));
+      }
+      spPlacementModifierChangeLogRows.sort((left, right) => {
+        const bySnapshotDate = String(left.snapshot_date ?? "").localeCompare(
+          String(right.snapshot_date ?? "")
+        );
+        if (bySnapshotDate !== 0) return bySnapshotDate;
+        const byExportedAt = String(left.exported_at ?? "").localeCompare(
+          String(right.exported_at ?? "")
+        );
+        if (byExportedAt !== 0) return byExportedAt;
+        const byCampaign = String(left.campaign_id ?? "").localeCompare(String(right.campaign_id ?? ""));
+        if (byCampaign !== 0) return byCampaign;
+        return String(left.placement_code ?? "").localeCompare(String(right.placement_code ?? ""));
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "unknown error";
+      addMessage(
+        "warn",
+        "SP_PLACEMENT_MODIFIER_CHANGE_LOG_UNAVAILABLE",
+        `Failed loading SP placement modifier change log; proceeding with empty change log: ${message}`
+      );
+      spPlacementModifierChangeLogRows = [];
+    }
+  }
+  addMessage(
+    "info",
+    "SP_PLACEMENT_MODIFIER_CHANGE_LOG_COUNT",
+    `SP placement modifier change log rows in effective window: ${spPlacementModifierChangeLogRows.length}.`,
+    {
+      count: spPlacementModifierChangeLogRows.length,
+      start: effectiveStart,
+      end: effectiveEnd,
+      campaign_count: spCampaignIds.length,
+    }
+  );
+
   let spPlacementPerformanceRows: Array<Record<string, unknown>> = [];
   if (spCampaignIds.length > 0) {
     spPlacementPerformanceRows = await loadRowsByDateChunks<Record<string, unknown>>({
@@ -2955,7 +3031,14 @@ export async function GET(request: Request, { params }: Ctx) {
       profits: num(row.profits),
       roi: num(row.roi),
       margin: num(row.margin),
+      ...(includeSalesTrendRefundFields
+        ? {
+            refund_units: num(row.refund_units),
+            refund_cost: num(row.refund_cost),
+          }
+        : {}),
     })),
+    sales_adjustments_daily: salesAdjustmentsDaily,
     ads_baseline: {
       notes: {
         attribution_model:
@@ -3066,6 +3149,24 @@ export async function GET(request: Request, { params }: Ctx) {
           ),
           current_bulk: spBulkTargetById.get(row.target_id) ?? null,
         })),
+        placement_modifier_change_log: spPlacementModifierChangeLogRows
+          .map((row) => ({
+            snapshot_date: String(row.snapshot_date ?? ""),
+            exported_at: row.exported_at ? String(row.exported_at) : null,
+            upload_id: String(row.upload_id ?? ""),
+            campaign_id: String(row.campaign_id ?? ""),
+            placement_code: String(row.placement_code ?? ""),
+            placement_raw: row.placement_raw ? String(row.placement_raw) : null,
+            old_pct: toFiniteNumberOrNull(row.old_pct),
+            new_pct: num(row.new_pct),
+          }))
+          .filter(
+            (row) =>
+              row.snapshot_date &&
+              row.upload_id &&
+              row.campaign_id &&
+              row.placement_code
+          ),
       },
       sb: {
         stis: {

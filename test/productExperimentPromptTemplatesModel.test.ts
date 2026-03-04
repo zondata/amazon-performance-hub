@@ -107,4 +107,14 @@ describe('normalizeProductExperimentPromptTemplates', () => {
     expect(normalized[0]?.instructions_md).toBe(existingInstructions);
     expect(normalized[0]?.instructions_md).not.toContain('Output Contract V1 requirement:');
   });
+
+  it('includes partner-mode response formatting and KPI scope guardrails', () => {
+    const normalized = normalizeProductExperimentPromptTemplates(null);
+    const partner = normalized.find((template) => template.id === 'experiment_partner');
+
+    expect(partner?.instructions_md).toContain('Required data preflight');
+    expect(partner?.instructions_md).toContain('markdown tables');
+    expect(partner?.instructions_md).toContain('ads_kpi_scope_glossary');
+    expect(partner?.instructions_md).toContain('always include id + name');
+  });
 });

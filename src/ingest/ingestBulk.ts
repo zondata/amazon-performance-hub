@@ -106,6 +106,18 @@ type BulkSdTargetRow = {
   state: string | null;
 };
 
+type SpPlacementModifierChangeLogRow = {
+  account_id: string;
+  upload_id: string;
+  snapshot_date: string;
+  exported_at: string;
+  campaign_id: string;
+  placement_code: string;
+  placement_raw: string | null;
+  old_pct: number | null;
+  new_pct: number;
+};
+
 function normalizePlacementCode(raw: string): string {
   const norm = raw.trim().toLowerCase();
   if (norm === "top of search") return "TOS";
@@ -125,6 +137,12 @@ function inferCoverage(filename: string) {
     coverageEnd: meta.coverageEnd,
     exportTimestampMs: meta.exportTimestampMs,
   };
+}
+
+function toFiniteNumberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export async function ingestBulk(
@@ -177,11 +195,13 @@ export async function ingestBulk(
   }
 
   let uploadId: string | undefined = existingUpload?.upload_id ?? undefined;
+  let uploadExportedAt: string | null = null;
   if (!existingUpload?.upload_id) {
     const stats = fs.statSync(xlsxPath);
     const exportedAt = exportTimestampMs
       ? new Date(exportTimestampMs).toISOString()
       : stats.mtime.toISOString();
+    uploadExportedAt = exportedAt;
     const uploadPayload = {
       account_id: accountId,
       source_type: "bulk",
@@ -331,6 +351,104 @@ export async function ingestBulk(
       bulkPlacements,
       "account_id,snapshot_date,campaign_id,placement_code"
     );
+
+    if (!uploadId) {
+      throw new Error("Failed to emit SP placement modifier change log: missing upload_id.");
+    }
+    if (!uploadExportedAt) {
+      throw new Error("Failed to emit SP placement modifier change log: missing exported_at.");
+    }
+
+    const { data: previousUploadRows, error: previousUploadError } = await client
+      .from("uploads")
+      .select("snapshot_date")
+      .eq("account_id", accountId)
+      .eq("source_type", "bulk")
+      .lt("snapshot_date", snapshotDate)
+      .order("snapshot_date", { ascending: false })
+      .limit(1);
+    if (previousUploadError) {
+      throw new Error(
+        `Failed fetching previous bulk upload snapshot for SP placement modifier change log: ${previousUploadError.message}`
+      );
+    }
+
+    const previousSnapshotDate = String(previousUploadRows?.[0]?.snapshot_date ?? "").trim();
+    if (previousSnapshotDate) {
+      const { data: previousPlacementRows, error: previousPlacementError } = await client
+        .from("bulk_placements")
+        .select("campaign_id,placement_code,percentage")
+        .eq("account_id", accountId)
+        .eq("snapshot_date", previousSnapshotDate)
+        .limit(100000);
+      if (previousPlacementError) {
+        throw new Error(
+          `Failed loading previous SP bulk placements for change log: ${previousPlacementError.message}`
+        );
+      }
+
+      const { data: currentPlacementRows, error: currentPlacementError } = await client
+        .from("bulk_placements")
+        .select("campaign_id,placement_code,placement_raw,percentage")
+        .eq("account_id", accountId)
+        .eq("snapshot_date", snapshotDate)
+        .limit(100000);
+      if (currentPlacementError) {
+        throw new Error(
+          `Failed loading current SP bulk placements for change log: ${currentPlacementError.message}`
+        );
+      }
+
+      const previousPctByKey = new Map<string, number>();
+      for (const row of previousPlacementRows ?? []) {
+        const campaignId = String((row as any).campaign_id ?? "").trim();
+        const placementCode = String((row as any).placement_code ?? "").trim();
+        if (!campaignId || !placementCode) continue;
+        const pct = toFiniteNumberOrNull((row as any).percentage);
+        if (pct === null) continue;
+        previousPctByKey.set(`${campaignId}:${placementCode}`, pct);
+      }
+
+      const changeLogRows: SpPlacementModifierChangeLogRow[] = [];
+      for (const row of currentPlacementRows ?? []) {
+        const campaignId = String((row as any).campaign_id ?? "").trim();
+        const placementCode = String((row as any).placement_code ?? "").trim();
+        if (!campaignId || !placementCode) continue;
+
+        const oldPct = previousPctByKey.get(`${campaignId}:${placementCode}`);
+        if (oldPct === undefined) {
+          continue;
+        }
+        const newPct = toFiniteNumberOrNull((row as any).percentage);
+        if (newPct === null) continue;
+        if (oldPct === newPct) continue;
+
+        const placementRaw = String((row as any).placement_raw ?? "").trim();
+        changeLogRows.push({
+          account_id: accountId,
+          upload_id: uploadId,
+          snapshot_date: snapshotDate,
+          exported_at: uploadExportedAt,
+          campaign_id: campaignId,
+          placement_code: placementCode,
+          placement_raw: placementRaw || null,
+          old_pct: oldPct,
+          new_pct: newPct,
+        });
+      }
+
+      for (const chunk of chunkArray(changeLogRows, 500)) {
+        const { error } = await client
+          .from("sp_placement_modifier_change_log")
+          .upsert(chunk, {
+            onConflict: "account_id,upload_id,campaign_id,placement_code",
+          });
+        if (error) {
+          throw new Error(`Failed inserting SP placement modifier change log rows: ${error.message}`);
+        }
+      }
+    }
+
     await upsertChunked(
       "bulk_product_ads",
       bulkProductAds,

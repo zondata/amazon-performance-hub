@@ -40,4 +40,18 @@ describe('resolveSkillsByIds', () => {
       'unit_economics_first',
     ]);
   });
+
+  it('resolves ads_kpi_scope_glossary metadata', () => {
+    const [skill] = resolveSkillsByIds(['ads_kpi_scope_glossary']);
+
+    expect(skill).toMatchObject({
+      id: 'ads_kpi_scope_glossary',
+      title: 'Ads KPI Scope Glossary',
+      version: '1.0.0',
+    });
+    expect(skill.tags).toContain('stis');
+    expect(skill.tags).toContain('stir');
+    expect(skill.applies_to).toContain('analysis');
+    expect(skill.content_md).toContain('Do not average');
+  });
 });
