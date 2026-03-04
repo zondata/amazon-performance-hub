@@ -54,4 +54,11 @@ describe('resolveSkillsByIds', () => {
     expect(skill.applies_to).toContain('analysis');
     expect(skill.content_md).toContain('Do not average');
   });
+
+  it('keeps bid_placement_mechanics STIS wording aligned to STIS/STIR diagnostics rows', () => {
+    const [skill] = resolveSkillsByIds(['bid_placement_mechanics']);
+
+    expect(skill.content_md).not.toContain('top_of_search_impression_share (STIS)');
+    expect(skill.content_md).toMatch(/search_term_impression_share|search_term_impression_rank/);
+  });
 });

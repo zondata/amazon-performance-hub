@@ -116,5 +116,7 @@ describe('normalizeProductExperimentPromptTemplates', () => {
     expect(partner?.instructions_md).toContain('markdown tables');
     expect(partner?.instructions_md).toContain('ads_kpi_scope_glossary');
     expect(partner?.instructions_md).toContain('always include id + name');
+    expect(partner?.instructions_md).not.toContain('top_of_search_impression_share');
+    expect(partner?.instructions_md).toMatch(/ads_baseline\.sp\.stis|search_term_impression_share/);
   });
 });

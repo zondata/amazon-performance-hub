@@ -91,7 +91,7 @@ export const PRODUCT_EXPERIMENT_PROMPT_DEFAULT_TEMPLATES: ProductExperimentPromp
       '- Reconsider the top 3 items from `product.kiv_backlog` on every iteration before adding net-new work.',
       '- For any deferred work, output it as KIV backlog items rather than expanding the immediate execution set.',
       '- When no changes are warranted, output a monitoring experiment with empty `bulkgen_plans` and observations in `kiv_items`.',
-      '- If recommending bid or placement changes, confirm STIS data exists for relevant targets (`top_of_search_impression_share`); otherwise note the limitation.',
+      '- If recommending bid or placement changes, confirm STIS/STIR rows exist in `ads_baseline.sp.stis.rows[]` for the relevant campaign/target and use `search_term_impression_share` / `search_term_impression_rank`; otherwise note the limitation.',
       '- Validate feasibility against the baseline data pack IDs and fields.',
       '- Do not output final JSON yet.',
       '- ONLY output final JSON when the user explicitly says: "Generate JSON".',

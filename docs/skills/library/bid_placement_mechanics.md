@@ -33,9 +33,10 @@ applies_to:
    until the gap is understood.
 3. Cross-check placement `modifier_pct_current` against placement
    performance to assess whether modifiers are aligned with efficiency.
-4. Check `top_of_search_impression_share` (STIS) for the target keyword.
-   Low or declining STIS indicates the bid may already be near the
-   auction floor. Further bid reduction risks losing the auction entirely.
+4. Check STIS/STIR for the target keyword from `ads_baseline.sp.stis.rows[]`:
+   `search_term_impression_share` and `search_term_impression_rank`.
+   Low or declining competitiveness indicates the bid may already be near
+   the auction floor. Further bid reduction risks losing the auction entirely.
 5. Check impression volume trends. Falling impressions with unchanged
    bids suggest increased competition or market-driven bid inflation.
 6. Treat placement KPIs as campaign-level only. Do not attribute
