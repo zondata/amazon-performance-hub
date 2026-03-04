@@ -46,3 +46,37 @@ npm run dev
 ```bash
 npm run build
 ```
+
+## STIS/STIR Handling (Product Baseline Data Pack V3)
+
+`/products/[asin]/logbook/ai-data-pack-v3` supports `stis_mode=pack|export`:
+
+- `stis_mode=pack`:
+  - Includes STIS + STIR artifacts directly inside the pack JSON.
+- `stis_mode=export`:
+  - Excludes STIS/STIR from pack JSON and exports two separate files (`stis` and `stir`) for separate upload.
+
+UI flow:
+
+- When both STIS and STIR are available, the download action requires an explicit choice before pack generation.
+- Recommended default is `pack`.
+
+Non-interactive usage:
+
+- If `stis_mode` is not provided, non-interactive requests default to `pack` and log that fallback in pack messages/metadata.
+
+## Required Data Availability Preflight (Evaluation Import)
+
+`/logbook/experiments/[id]/evaluation-import` now runs a mandatory preflight check before importing evaluation output.
+
+- The UI always shows `Required data availability` first.
+- Required inputs for this analysis flow:
+  - Evaluation output pack JSON
+  - Product baseline data pack JSON
+  - STIS and STIR data, resolved from either:
+    - inside the baseline pack (`from pack`), or
+    - separate uploaded files (`separate upload`)
+- If any required item fails, import is blocked and no evaluation results are applied.
+- For missing STIS/STIR, remediation is:
+  - regenerate baseline pack and choose include mode, or
+  - regenerate with export mode and upload both STIS + STIR files with the evaluation import.

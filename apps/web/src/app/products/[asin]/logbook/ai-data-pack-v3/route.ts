@@ -46,6 +46,14 @@ import { computeBaselineSummary } from "@/lib/logbook/computedSummary";
 import { type DriverIntent } from "@/lib/logbook/driverIntent";
 import { extractEvaluationOutcome } from "@/lib/logbook/evaluationOutcomeExtract";
 import { deriveKivCarryForward } from "@/lib/logbook/kiv";
+import {
+  buildPack as buildStisStirPack,
+  chooseStisModeInteractivelyIfNeeded,
+  detectStisStirAvailability,
+  exportStisStirArtifacts,
+  normalizeStisMode,
+  type StisMode,
+} from "@/lib/logbook/aiPack/stisStirMode";
 import { extractProductProfileContext } from "@/lib/products/productProfileContext";
 import { resolveSkillsByIds } from "@/lib/skills/resolveSkills";
 import { env } from "@/lib/env";
@@ -139,6 +147,25 @@ type SpBulkProductAdLookup = {
   snapshotDate: string | null;
   adGroupIds: string[];
   campaignIds: string[];
+};
+
+type SpStisStirRow = {
+  date: string;
+  campaign_id: string;
+  ad_group_id: string | null;
+  target_id: string | null;
+  target_key: string | null;
+  targeting_norm: string | null;
+  match_type_norm: string | null;
+  customer_search_term_norm: string | null;
+  search_term_impression_share: number | null;
+  search_term_impression_rank: number | null;
+  impressions: number;
+  clicks: number;
+  spend: number;
+  sales: number;
+  orders: number;
+  units: number;
 };
 
 type QueryErrorLike = { message?: string } | null | undefined;
@@ -569,6 +596,10 @@ export async function GET(request: Request, { params }: Ctx) {
 
   try {
   const url = new URL(request.url);
+  const requestedStisMode =
+    normalizeStisMode(url.searchParams.get("stis_mode")) ??
+    normalizeStisMode(process.env.APH_STIS_MODE);
+  const interactiveStisConfirmRequested = url.searchParams.get("stis_confirm") === "1";
   const requestedRangeParam = url.searchParams.get("range");
   const requestedRange = normalizeBaselineRange(requestedRangeParam);
   const excludeLastDays = normalizeExcludeLastDays(url.searchParams.get("exclude_last_days"));
@@ -1809,6 +1840,206 @@ export async function GET(request: Request, { params }: Ctx) {
     spTargetTosIsByTargetId.set(targetId, weightedAvgTosIs(rows));
   }
 
+  const countSpStisMetricRows = async (metric: "stis" | "stir"): Promise<number> => {
+    if (spCampaignIds.length === 0) return 0;
+    const metricColumn =
+      metric === "stis" ? "search_term_impression_share" : "search_term_impression_rank";
+    let total = 0;
+    for (const campaignChunk of chunkIds(spCampaignIds, 300)) {
+      const { count, error } = await supabaseAdmin
+        .from("sp_stis_daily_fact_latest")
+        .select("target_key", { count: "exact", head: true })
+        .eq("account_id", env.accountId)
+        .gte("date", effectiveStart)
+        .lte("date", effectiveEnd)
+        .in("campaign_id", campaignChunk)
+        .not(metricColumn, "is", null);
+      if (error) {
+        throw new Error(`Failed checking SP ${metric.toUpperCase()} availability: ${error.message}`);
+      }
+      total += Number(count ?? 0);
+    }
+    return total;
+  };
+
+  const [spStisAvailableCount, spStirAvailableCount] = await Promise.all([
+    countSpStisMetricRows("stis"),
+    countSpStisMetricRows("stir"),
+  ]);
+  const stisStirAvailability = detectStisStirAvailability({
+    stisRowCount: spStisAvailableCount,
+    stirRowCount: spStirAvailableCount,
+    campaignCount: spCampaignIds.length,
+    start: effectiveStart,
+    end: effectiveEnd,
+  });
+
+  const stisModeDecision = chooseStisModeInteractivelyIfNeeded({
+    availability: stisStirAvailability,
+    requestedMode: requestedStisMode,
+    interactiveConfirmRequested: interactiveStisConfirmRequested,
+    defaultMode: "pack",
+  });
+
+  if (stisModeDecision.confirmationRequired) {
+    return new Response(
+      `${JSON.stringify(
+        {
+          ok: false,
+          status: "stis_mode_confirmation_required",
+          error:
+            "STIS and STIR are both available. Choose include-in-pack or export-as-separate-files before generating the pack.",
+          stis_stir: {
+            ...stisStirAvailability,
+            recommended_mode: "pack" as StisMode,
+            options: ["pack", "export"] as StisMode[],
+          },
+        },
+        null,
+        2
+      )}\n`,
+      {
+        status: 409,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+        },
+      }
+    );
+  }
+
+  if (stisModeDecision.source === "default_non_interactive") {
+    addMessage(
+      "info",
+      "STIS_MODE_DEFAULTED_TO_PACK",
+      "No stis_mode provided in non-interactive request while STIS/STIR were both available; defaulted to pack mode."
+    );
+  }
+  if (stisModeDecision.source === "single_or_missing") {
+    addMessage(
+      "info",
+      "STIS_STIR_PARTIAL_AVAILABILITY",
+      "STIS/STIR choice prompt skipped because one or both artifacts are missing in the selected window.",
+      {
+        stis_available: stisStirAvailability.stisAvailable,
+        stir_available: stisStirAvailability.stirAvailable,
+        stis_row_count: stisStirAvailability.stisRowCount,
+        stir_row_count: stisStirAvailability.stirRowCount,
+      }
+    );
+  }
+  addMessage(
+    "info",
+    "STIS_MODE_SELECTED",
+    `STIS/STIR mode selected: ${stisModeDecision.mode}.`,
+    {
+      mode: stisModeDecision.mode,
+      source: stisModeDecision.source,
+    }
+  );
+
+  const stisStirExportPaths = exportStisStirArtifacts({
+    outputDir: `/products/${encodeURIComponent(asin)}/logbook/ai-data-pack-v3`,
+    start: effectiveStart,
+    end: effectiveEnd,
+    channel: "sp",
+    scope: "included",
+    format: "ndjson.gz",
+  });
+
+  if (stisModeDecision.mode === "export") {
+    addMessage(
+      "info",
+      "STIS_STIR_EXPORT_REQUIRED",
+      "STIS/STIR will be exported as separate files. Upload the pack file plus the two exported files (STIS and STIR).",
+      {
+        stis_path: stisStirExportPaths.stisPath,
+        stir_path: stisStirExportPaths.stirPath,
+      }
+    );
+  }
+
+  let stisRowsForPack: SpStisStirRow[] = [];
+  let stirRowsForPack: SpStisStirRow[] = [];
+  if (
+    stisModeDecision.mode === "pack" &&
+    (stisStirAvailability.stisAvailable || stisStirAvailability.stirAvailable) &&
+    spCampaignIds.length > 0
+  ) {
+    const stisStirRowsRaw = await loadRowsByDateChunks<Record<string, unknown>>({
+      label: "SP STIS/STIR baseline rows",
+      diagnosticsKey: "sp_stis_stir",
+      incompleteCode: "SP_STIS_STIR_INCOMPLETE",
+      allChunksFailedSuffix:
+        "SP STIS/STIR data is incomplete/unknown for this window; include-in-pack mode cannot be completed safely.",
+      runChunk: async (chunkStart, chunkEnd) => {
+        const { data, error } = await supabaseAdmin
+          .from("sp_stis_daily_fact_latest")
+          .select(
+            "date,campaign_id,ad_group_id,target_id,target_key,targeting_norm,match_type_norm,customer_search_term_norm,search_term_impression_share,search_term_impression_rank,impressions,clicks,spend,sales,orders,units"
+          )
+          .eq("account_id", env.accountId)
+          .in("campaign_id", spCampaignIds)
+          .gte("date", chunkStart)
+          .lte("date", chunkEnd)
+          .limit(200000);
+        if (error) {
+          throw new Error(error.message);
+        }
+        return (data ?? []) as Array<Record<string, unknown>>;
+      },
+    });
+
+    const normalizedRows: SpStisStirRow[] = stisStirRowsRaw
+      .map((row) => {
+        const date = parseDateField(row.date);
+        const campaignId = String(row.campaign_id ?? "").trim();
+        if (!date || !campaignId) return null;
+        return {
+          date,
+          campaign_id: campaignId,
+          ad_group_id: String(row.ad_group_id ?? "").trim() || null,
+          target_id: String(row.target_id ?? "").trim() || null,
+          target_key: String(row.target_key ?? "").trim() || null,
+          targeting_norm: String(row.targeting_norm ?? "").trim() || null,
+          match_type_norm: String(row.match_type_norm ?? "").trim() || null,
+          customer_search_term_norm: String(row.customer_search_term_norm ?? "").trim() || null,
+          search_term_impression_share: toFiniteNumberOrNull(row.search_term_impression_share),
+          search_term_impression_rank: toFiniteNumberOrNull(row.search_term_impression_rank),
+          impressions: num(row.impressions),
+          clicks: num(row.clicks),
+          spend: num(row.spend),
+          sales: num(row.sales),
+          orders: num(row.orders),
+          units: num(row.units),
+        } satisfies SpStisStirRow;
+      })
+      .filter((row): row is SpStisStirRow => row !== null);
+
+    stisRowsForPack = normalizedRows.filter((row) => row.search_term_impression_share !== null);
+    stirRowsForPack = normalizedRows.filter((row) => row.search_term_impression_rank !== null);
+  }
+
+  const stisStirPack = buildStisStirPack({
+    includeStisStir: stisModeDecision.mode === "pack",
+    mode: stisModeDecision.mode,
+    decisionSource: stisModeDecision.source,
+    availability: stisStirAvailability,
+    stisRows: stisRowsForPack,
+    stirRows: stirRowsForPack,
+    exportPaths: stisStirExportPaths,
+  });
+  if (stisModeDecision.mode === "export") {
+    addMessage(
+      "info",
+      "STIS_STIR_EXPORT_PATHS",
+      "Export mode generated STIS/STIR artifact paths.",
+      {
+        stis_path: stisStirPack.manifest.stis.exported_paths[0] ?? null,
+        stir_path: stisStirPack.manifest.stir.exported_paths[0] ?? null,
+      }
+    );
+  }
+
   let sbCampaignFactRows: Array<Record<string, unknown>> = [];
   if (sbCandidateCampaignIds.length > 0) {
     sbCampaignFactRows = await loadRowsByDateChunks<Record<string, unknown>>({
@@ -2644,9 +2875,9 @@ export async function GET(request: Request, { params }: Ctx) {
 
   const warnings = legacyWarningsFromMessages(messages);
   const resolvedProductSkills = resolveSkillsByIds(profileContext.skills);
-  const stisBasePath = `/products/${encodeURIComponent(asin)}/logbook/ai-data-pack-v3/stis`;
-  const buildStisDownloadUrl = (channel: "sp" | "sb") =>
-    `${stisBasePath}?channel=${channel}&start=${effectiveStart}&end=${effectiveEnd}&scope=included`;
+  const sbStisDownloadUrl = `/products/${encodeURIComponent(
+    asin
+  )}/logbook/ai-data-pack-v3/stis?channel=sb&start=${effectiveStart}&end=${effectiveEnd}&scope=included`;
 
   const outputBase = {
     kind: "aph_product_baseline_data_pack_v3",
@@ -2685,6 +2916,7 @@ export async function GET(request: Request, { params }: Ctx) {
         overlap_start: window.overlapStart,
         overlap_end: window.overlapEnd,
       },
+      stis_stir: stisStirPack.manifest,
     },
     window: { start: effectiveStart, end: effectiveEnd },
     product: {
@@ -2735,10 +2967,29 @@ export async function GET(request: Request, { params }: Ctx) {
       sp: {
         product_ads_snapshot_date: spSelectionProductAdLookup.snapshotDate,
         stis: {
+          available: stisStirPack.manifest.stis.available,
+          included_in_pack: stisStirPack.manifest.stis.included_in_pack,
+          in_pack_row_count: stisStirPack.manifest.stis.in_pack_row_count,
+          in_pack_size_bytes: stisStirPack.manifest.stis.in_pack_size_bytes,
+          rows: stisStirPack.stisRowsInPack,
           export: {
             start: effectiveStart,
             end: effectiveEnd,
-            download_url: buildStisDownloadUrl("sp"),
+            download_url: stisStirExportPaths.stisPath,
+            exported_paths: stisStirPack.manifest.stis.exported_paths,
+          },
+        },
+        stir: {
+          available: stisStirPack.manifest.stir.available,
+          included_in_pack: stisStirPack.manifest.stir.included_in_pack,
+          in_pack_row_count: stisStirPack.manifest.stir.in_pack_row_count,
+          in_pack_size_bytes: stisStirPack.manifest.stir.in_pack_size_bytes,
+          rows: stisStirPack.stirRowsInPack,
+          export: {
+            start: effectiveStart,
+            end: effectiveEnd,
+            download_url: stisStirExportPaths.stirPath,
+            exported_paths: stisStirPack.manifest.stir.exported_paths,
           },
         },
         advertised_product: {
@@ -2821,7 +3072,7 @@ export async function GET(request: Request, { params }: Ctx) {
           export: {
             start: effectiveStart,
             end: effectiveEnd,
-            download_url: buildStisDownloadUrl("sb"),
+            download_url: sbStisDownloadUrl,
           },
         },
         attributed_purchases: {

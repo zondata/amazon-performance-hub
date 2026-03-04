@@ -91,7 +91,7 @@ describe("spTargetingBaselineBounds", () => {
 
     expect(result).toEqual({ minDate: "2026-01-01", maxDate: "2026-01-31" });
     expect(records).toHaveLength(2);
-    expect(records.every((record) => record.table === "sp_advertised_product_daily_fact_latest")).toBe(true);
+    expect(records.every((record) => record.table === "sp_advertised_product_daily_fact")).toBe(true);
     expect(records.every((record) => record.selectColumns === "date")).toBe(true);
     expect(records.some((record) => record.order?.ascending === false && record.limit === 1)).toBe(true);
     expect(records.every((record) => record.ins.length === 0)).toBe(true);
@@ -113,7 +113,7 @@ describe("spTargetingBaselineBounds", () => {
 
     expect(result).toEqual({ minDate: "2026-01-01", maxDate: "2026-01-31" });
     expect(records).toHaveLength(2);
-    expect(records.every((record) => record.table === "sp_targeting_daily_fact_latest")).toBe(true);
+    expect(records.every((record) => record.table === "sp_targeting_daily_fact")).toBe(true);
 
     const maxRecord = records.find((record) => record.order?.ascending === false);
     expect(maxRecord).toBeDefined();

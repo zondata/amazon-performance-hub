@@ -25,6 +25,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 type Channel = "sp" | "sb";
 type Scope = "included" | "all";
+type Metric = "stis" | "stir" | "both";
 
 type MetricRow = {
   spend: number | string | null;
@@ -423,8 +424,8 @@ const buildResolvedCampaignIds = async (params: {
   });
 };
 
-const toNdjsonLine = (channel: Channel, row: Record<string, unknown>): string =>
-  `${JSON.stringify({
+const toNdjsonLine = (channel: Channel, metric: Metric, row: Record<string, unknown>): string => {
+  const base = {
     channel,
     date: row.date ?? null,
     campaign_id: row.campaign_id ?? null,
@@ -434,18 +435,35 @@ const toNdjsonLine = (channel: Channel, row: Record<string, unknown>): string =>
     targeting_norm: row.targeting_norm ?? null,
     match_type_norm: row.match_type_norm ?? null,
     customer_search_term_norm: row.customer_search_term_norm ?? null,
-    search_term_impression_share: toFiniteNumberOrNull(row.search_term_impression_share),
-    search_term_impression_rank: toFiniteNumberOrNull(row.search_term_impression_rank),
     impressions: num(row.impressions),
     clicks: num(row.clicks),
     spend: num(row.spend),
     sales: num(row.sales),
     orders: num(row.orders),
     units: num(row.units),
+  };
+  if (metric === "stis") {
+    return `${JSON.stringify({
+      ...base,
+      search_term_impression_share: toFiniteNumberOrNull(row.search_term_impression_share),
+    })}\n`;
+  }
+  if (metric === "stir") {
+    return `${JSON.stringify({
+      ...base,
+      search_term_impression_rank: toFiniteNumberOrNull(row.search_term_impression_rank),
+    })}\n`;
+  }
+  return `${JSON.stringify({
+    ...base,
+    search_term_impression_share: toFiniteNumberOrNull(row.search_term_impression_share),
+    search_term_impression_rank: toFiniteNumberOrNull(row.search_term_impression_rank),
   })}\n`;
+};
 
 const buildNdjsonGenerator = (params: {
   channel: Channel;
+  metric: Metric;
   table: "sp_stis_daily_fact_latest" | "sb_stis_daily_fact_latest";
   accountId: string;
   start: string;
@@ -456,7 +474,7 @@ const buildNdjsonGenerator = (params: {
     if (params.campaignIds.length === 0) return;
     let from = 0;
     while (true) {
-      const query = supabaseAdmin
+      let query = supabaseAdmin
         .from(params.table)
         .select(
           "date,campaign_id,ad_group_id,target_id,target_key,targeting_norm,match_type_norm,customer_search_term_norm,search_term_impression_share,search_term_impression_rank,impressions,clicks,spend,sales,orders,units"
@@ -471,14 +489,20 @@ const buildNdjsonGenerator = (params: {
         .order("target_key", { ascending: true })
         .order("customer_search_term_norm", { ascending: true })
         .range(from, from + PAGE_SIZE - 1);
+      if (params.metric === "stis") {
+        query = query.not("search_term_impression_share", "is", null);
+      } else if (params.metric === "stir") {
+        query = query.not("search_term_impression_rank", "is", null);
+      }
       const { data, error } = await query;
       if (error) {
-        throw new Error(`Failed loading ${params.channel.toUpperCase()} STIS rows: ${error.message}`);
+        const metricLabel = params.metric === "stir" ? "STIR" : "STIS";
+        throw new Error(`Failed loading ${params.channel.toUpperCase()} ${metricLabel} rows: ${error.message}`);
       }
       const rows = (data ?? []) as Array<Record<string, unknown>>;
       if (rows.length === 0) break;
       for (const row of rows) {
-        yield toNdjsonLine(params.channel, row);
+        yield toNdjsonLine(params.channel, params.metric, row);
       }
       if (rows.length < PAGE_SIZE) break;
       from += PAGE_SIZE;
@@ -514,6 +538,15 @@ export async function GET(request: Request, { params }: Ctx) {
   const scopeRaw = String(url.searchParams.get("scope") ?? "all").trim().toLowerCase();
   const scope: Scope = scopeRaw === "included" ? "included" : "all";
 
+  const metricRaw = String(url.searchParams.get("metric") ?? "both").trim().toLowerCase();
+  const metric: Metric | null =
+    metricRaw === "stis" || metricRaw === "stir" || metricRaw === "both"
+      ? (metricRaw as Metric)
+      : null;
+  if (!metric) {
+    return new Response("Query param metric must be stis, stir, or both.", { status: 400 });
+  }
+
   const formatRaw = String(url.searchParams.get("format") ?? "ndjson").trim().toLowerCase();
   const isGzip = formatRaw === "ndjson.gz";
   if (formatRaw !== "ndjson" && formatRaw !== "ndjson.gz") {
@@ -538,11 +571,13 @@ export async function GET(request: Request, { params }: Ctx) {
 
   const table =
     channel === "sp" ? "sp_stis_daily_fact_latest" : ("sb_stis_daily_fact_latest" as const);
-  const filenameBase = `${sanitizeFileSegment(asin)}_${channel}_stis_${start}_${end}.ndjson`;
+  const metricName = metric === "both" ? "stis_stir" : metric;
+  const filenameBase = `${sanitizeFileSegment(asin)}_${channel}_${metricName}_${start}_${end}.ndjson`;
 
   const textStream = Readable.from(
     buildNdjsonGenerator({
       channel,
+      metric,
       table,
       accountId: env.accountId,
       start,

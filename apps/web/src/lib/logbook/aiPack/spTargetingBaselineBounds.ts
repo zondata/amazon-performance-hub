@@ -98,7 +98,7 @@ const loadTargetingDateBounds = async (
   const buildQuery = () =>
     applyOptionalDateWindow(
       supabase
-        .from("sp_targeting_daily_fact_latest")
+        .from("sp_targeting_daily_fact")
         .select("date")
         .eq("account_id", params.accountId)
         .in("campaign_id", campaignIds),
@@ -120,7 +120,7 @@ const loadAdvertisedFallbackDateBounds = async (
   const buildQuery = () =>
     applyOptionalDateWindow(
       supabase
-        .from("sp_advertised_product_daily_fact_latest")
+        .from("sp_advertised_product_daily_fact")
         .select("date")
         .eq("account_id", params.accountId)
         .eq("advertised_asin_norm", params.asinNorm),

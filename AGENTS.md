@@ -34,6 +34,22 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - Imports & Health (`/imports-health`) now includes a local-only Batch Import uploader (multi-file CSV/XLSX) that stages files to temp storage and runs the root manifest pipeline CLI.
 - Batch Import supports SalesTrend ASIN override for filenames like `SalesTrend.csv` (no filename rename required).
 
+#### Latest (2026-03-04)
+- `Shipped`
+  - Product Baseline Data Pack V3 STIS/STIR handling now has explicit confirm mode when both artifacts are available:
+    - include STIS+STIR in-pack (`stis_mode=pack`), or
+    - export STIS+STIR as two separate files (`stis_mode=export`).
+  - Evaluation analysis/import flow now runs a mandatory `Required data availability` preflight checklist before analysis results are shown/applied.
+  - Preflight accepts STIS/STIR from either source:
+    - inside baseline pack metadata/content (`from pack`), or
+    - separate uploaded files (`separate upload`).
+  - Analysis/import is gated by preflight: when required artifacts are missing/invalid, analysis does not proceed and returns actionable remediation.
+- `Fix`
+  - SP targeting baseline bounds lookup now queries base tables `sp_targeting_daily_fact` and `sp_advertised_product_daily_fact` (order + limit min/max date) instead of latest views to avoid statement timeout on wide ranges.
+- `Ops`
+  - Added migration `20260304112421_sp_targeting_campaign_date_idx.sql`:
+    - creates index `sp_targeting_daily_fact_account_campaign_date_idx` on `(account_id, campaign_id, date)` when missing.
+
 #### Latest (2026-03-02)
 - `Shipped`
   - Output contract update: bulkgen actions must include parent identity chain for reliable review rendering.

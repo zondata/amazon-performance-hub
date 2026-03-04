@@ -29,7 +29,7 @@ describe('product baseline data pack route filters', () => {
     expect(helperSource).toContain('.in("campaign_id", campaignIds)');
     expect(helperSource).toContain('.order("date", { ascending: params.ascending }).limit(1)');
     expect(helperSource).not.toContain("max(");
-    expect(helperSource).toContain('.from("sp_advertised_product_daily_fact_latest")');
+    expect(helperSource).toContain('.from("sp_advertised_product_daily_fact")');
   });
 
   it("does not query SP campaign baseline min/max availability", () => {

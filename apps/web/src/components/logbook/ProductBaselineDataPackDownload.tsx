@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 const REQUEST_TIMEOUT_MS = 120_000;
 const IS_DEV = process.env.NODE_ENV !== "production";
@@ -14,6 +14,7 @@ const RANGE_OPTIONS = [
 ] as const;
 
 type RangeValue = (typeof RANGE_OPTIONS)[number]["value"];
+type StisMode = "pack" | "export";
 
 const normalizeRange = (value: string | undefined): RangeValue => {
   if (value === "30d") return "30d";
@@ -22,6 +23,15 @@ const normalizeRange = (value: string | undefined): RangeValue => {
   if (value === "180d") return "180d";
   if (value === "all") return "all";
   return "60d";
+};
+
+const normalizeStisMode = (value: unknown): StisMode | null => {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "pack") return "pack";
+  if (normalized === "export") return "export";
+  return null;
 };
 
 type ProductBaselineDataPackDownloadProps = {
@@ -50,11 +60,32 @@ type FetchDiagnosticEntry = {
   }>;
 };
 
+type StisStirManifest = {
+  mode?: string;
+  stis?: {
+    exported_paths?: unknown;
+  };
+  stir?: {
+    exported_paths?: unknown;
+  };
+};
+
+type StisStirPromptPayload = {
+  stisAvailable?: unknown;
+  stirAvailable?: unknown;
+  stisRowCount?: unknown;
+  stirRowCount?: unknown;
+  start?: unknown;
+  end?: unknown;
+  recommended_mode?: unknown;
+};
+
 type BaselinePackResponse = {
   ok?: boolean;
   status?: string;
   error?: string;
   messages?: unknown;
+  stis_stir?: StisStirPromptPayload;
   fetch_diagnostics?: {
     sp_reconciliation?: FetchDiagnosticEntry;
     pack_incomplete?: FetchDiagnosticEntry;
@@ -62,12 +93,23 @@ type BaselinePackResponse = {
   metadata?: {
     warnings?: unknown;
     messages?: unknown;
+    stis_stir?: StisStirManifest;
   };
   meta?: {
     fetch_diagnostics?: {
       sp_reconciliation?: FetchDiagnosticEntry;
     };
   };
+};
+
+type StisModePromptState = {
+  stisAvailable: boolean;
+  stirAvailable: boolean;
+  stisRowCount: number;
+  stirRowCount: number;
+  start: string | null;
+  end: string | null;
+  recommendedMode: StisMode;
 };
 
 const toFailedRangesSample = (
@@ -110,6 +152,13 @@ const asWarnings = (value: unknown): string[] => {
     .filter((entry) => entry.length > 0);
 };
 
+const asStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => String(entry ?? "").trim())
+    .filter((entry) => entry.length > 0);
+};
+
 const asPackMessages = (value: unknown): PackMessage[] => {
   if (!Array.isArray(value)) return [];
   return value
@@ -146,6 +195,42 @@ const formatErrorMessage = (error: unknown): string => {
   return "Unexpected error.";
 };
 
+const toPromptState = (value: unknown): StisModePromptState | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  return {
+    stisAvailable: Boolean(record.stisAvailable),
+    stirAvailable: Boolean(record.stirAvailable),
+    stisRowCount: Number.isFinite(Number(record.stisRowCount)) ? Math.max(0, Number(record.stisRowCount)) : 0,
+    stirRowCount: Number.isFinite(Number(record.stirRowCount)) ? Math.max(0, Number(record.stirRowCount)) : 0,
+    start: String(record.start ?? "").trim() || null,
+    end: String(record.end ?? "").trim() || null,
+    recommendedMode: normalizeStisMode(record.recommended_mode) ?? "pack",
+  };
+};
+
+const triggerBrowserDownload = (href: string) => {
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = "";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+const buildPackHref = (params: {
+  asin: string;
+  range: RangeValue;
+  stisMode?: StisMode;
+  requestConfirm?: boolean;
+}) => {
+  const query = new URLSearchParams();
+  query.set("range", params.range);
+  if (params.stisMode) query.set("stis_mode", params.stisMode);
+  if (params.requestConfirm) query.set("stis_confirm", "1");
+  return `/products/${encodeURIComponent(params.asin)}/logbook/ai-data-pack-v3?${query.toString()}`;
+};
+
 export default function ProductBaselineDataPackDownload({
   asin,
   initialRange,
@@ -160,26 +245,35 @@ export default function ProductBaselineDataPackDownload({
     Array<{ chunkStart: string; chunkEnd: string; message: string }>
   >([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [stisModePrompt, setStisModePrompt] = useState<StisModePromptState | null>(null);
 
-  const href = useMemo(
-    () =>
-      `/products/${encodeURIComponent(asin)}/logbook/ai-data-pack-v3?range=${encodeURIComponent(range)}`,
-    [asin, range]
-  );
-
-  const handleDownload = async () => {
+  const handleDownloadRequest = async (params: {
+    stisMode?: StisMode;
+    requestConfirm: boolean;
+    resetState: boolean;
+  }) => {
+    if (params.resetState) {
+      setErrorMessage(null);
+      setPackMessages([]);
+      setShowInfoMessages(false);
+      setShowDebugMessages(false);
+      setFailedRangesSample([]);
+      setSuccessMessage(null);
+      setStisModePrompt(null);
+    }
     setIsLoading(true);
-    setErrorMessage(null);
-    setPackMessages([]);
-    setShowInfoMessages(false);
-    setShowDebugMessages(false);
-    setFailedRangesSample([]);
-    setSuccessMessage(null);
 
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
+      const href = buildPackHref({
+        asin,
+        range,
+        stisMode: params.stisMode,
+        requestConfirm: params.requestConfirm,
+      });
+
       const response = await fetch(href, {
         method: "GET",
         signal: controller.signal,
@@ -194,6 +288,11 @@ export default function ProductBaselineDataPackDownload({
       }
 
       if (!response.ok) {
+        if (payload?.status === "stis_mode_confirmation_required") {
+          const promptState = toPromptState(payload.stis_stir);
+          setStisModePrompt(promptState);
+          return;
+        }
         if (payload?.status === "pack_incomplete") {
           const diagnostics =
             payload.fetch_diagnostics?.pack_incomplete ?? payload.fetch_diagnostics?.sp_reconciliation;
@@ -247,7 +346,6 @@ export default function ProductBaselineDataPackDownload({
         });
       }
       setPackMessages(normalizedMessages);
-
       setFailedRangesSample(toFailedRangesSample(spReconciliationDiagnostics));
 
       const blob = await response.blob();
@@ -261,7 +359,28 @@ export default function ProductBaselineDataPackDownload({
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(objectUrl);
-      setSuccessMessage("Data pack downloaded.");
+
+      const stisStirManifest = payload?.metadata?.stis_stir;
+      const stisStirMode = normalizeStisMode(stisStirManifest?.mode);
+      if (stisStirMode === "export") {
+        const stisExportPaths = asStringArray(stisStirManifest?.stis?.exported_paths);
+        const stirExportPaths = asStringArray(stisStirManifest?.stir?.exported_paths);
+        const allPaths = [...stisExportPaths, ...stirExportPaths];
+        for (const downloadUrl of allPaths) {
+          triggerBrowserDownload(downloadUrl);
+        }
+        if (allPaths.length === 2) {
+          setSuccessMessage(
+            "Data pack downloaded. Upload the pack file + the two exported files (STIS and STIR)."
+          );
+        } else {
+          setSuccessMessage(
+            "Data pack downloaded. STIS/STIR export mode is enabled; upload the pack plus any exported STIS/STIR files shown."
+          );
+        }
+      } else {
+        setSuccessMessage("Data pack downloaded.");
+      }
     } catch (error) {
       setErrorMessage(`Failed to generate data pack: ${formatErrorMessage(error)}`);
     } finally {
@@ -270,15 +389,37 @@ export default function ProductBaselineDataPackDownload({
     }
   };
 
+  const handleDownload = async () => {
+    await handleDownloadRequest({
+      requestConfirm: true,
+      resetState: true,
+    });
+  };
+
+  const handleStisModeChoice = async (mode: StisMode) => {
+    setStisModePrompt(null);
+    await handleDownloadRequest({
+      stisMode: mode,
+      requestConfirm: false,
+      resetState: false,
+    });
+  };
+
   const errorMessages = packMessages.filter((message) => message.level === "error");
   const warnMessages = packMessages.filter((message) => message.level === "warn");
   const infoMessages = packMessages.filter((message) => message.level === "info");
   const debugMessages = packMessages.filter((message) => message.level === "debug");
   const hasWarnOrError = errorMessages.length > 0 || warnMessages.length > 0;
   const hasDetailsContent =
-    hasWarnOrError || infoMessages.length > 0 || (IS_DEV && debugMessages.length > 0) || failedRangesSample.length > 0;
+    hasWarnOrError ||
+    infoMessages.length > 0 ||
+    (IS_DEV && debugMessages.length > 0) ||
+    failedRangesSample.length > 0;
   const showDetailsPanel =
-    hasWarnOrError || infoMessages.length > 0 || (IS_DEV && debugMessages.length > 0) || failedRangesSample.length > 0;
+    hasWarnOrError ||
+    infoMessages.length > 0 ||
+    (IS_DEV && debugMessages.length > 0) ||
+    failedRangesSample.length > 0;
   const titleText =
     errorMessages.length > 0
       ? "Generated with errors."
@@ -439,6 +580,58 @@ export default function ProductBaselineDataPackDownload({
       {successMessage ? (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
           {successMessage}
+        </div>
+      ) : null}
+
+      {stisModePrompt ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="stis-mode-dialog-title"
+            className="w-full max-w-xl rounded-xl border border-border bg-surface p-4 shadow-2xl"
+          >
+            <h3 id="stis-mode-dialog-title" className="text-base font-semibold text-foreground">
+              Choose STIS/STIR Handling
+            </h3>
+            <p className="mt-2 text-sm text-muted">
+              STIS and STIR are both available
+              {stisModePrompt.start && stisModePrompt.end
+                ? ` for ${stisModePrompt.start}..${stisModePrompt.end}`
+                : ""}. Select one mode before generating this pack.
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              STIS rows: {stisModePrompt.stisRowCount} · STIR rows: {stisModePrompt.stirRowCount}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => handleStisModeChoice("pack")}
+                disabled={isLoading}
+                className="inline-flex rounded-lg border border-border bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Include STIS + STIR in pack
+                {stisModePrompt.recommendedMode === "pack" ? " (Recommended)" : ""}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleStisModeChoice("export")}
+                disabled={isLoading}
+                className="inline-flex rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground hover:bg-surface disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Export STIS + STIR as separate files
+                {stisModePrompt.recommendedMode === "export" ? " (Recommended)" : ""}
+              </button>
+              <button
+                type="button"
+                onClick={() => setStisModePrompt(null)}
+                disabled={isLoading}
+                className="inline-flex rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>
