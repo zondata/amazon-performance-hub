@@ -49,6 +49,12 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - `Ops`
   - Added migration `20260304130000_sp_placement_modifier_change_log.sql`:
     - creates table `sp_placement_modifier_change_log` plus supporting indexes and per-upload uniqueness on `(account_id, upload_id, campaign_id, placement_code)`.
+  - Added SP placement modifier change-log backfill CLI (no re-ingest required):
+    - `npm run backfill:sp:placement-modifier-change-log -- --account-id <id> --limit-snapshots 10 --dry-run`
+    - dry-run is the default; use `--apply` after validating output and expand window (`--all` or `--from/--to`) incrementally.
+    - verification after apply:
+      - `select count(*) from sp_placement_modifier_change_log where account_id='<id>';`
+      - `select * from sp_placement_modifier_change_log where account_id='<id>' order by exported_at desc limit 20;`
 
   - Product Baseline Data Pack V3 STIS/STIR handling now has explicit confirm mode when both artifacts are available:
     - include STIS+STIR in-pack (`stis_mode=pack`), or

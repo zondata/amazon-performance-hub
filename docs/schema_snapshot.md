@@ -1,5 +1,5 @@
 # Supabase Schema Snapshot
-Generated: 2026-03-03T05:38:19.935Z
+Generated: 2026-03-04T08:20:17.129Z
 
 ## accounts (BASE TABLE)
 | column | type | nullable |
@@ -1394,6 +1394,20 @@ Generated: 2026-03-03T05:38:19.935Z
 | roas | numeric | YES |
 | exported_at | timestamp with time zone | NO |
 | placement_raw_norm | text | NO |
+
+## sp_placement_modifier_change_log (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | NO |
+| upload_id | uuid | NO |
+| snapshot_date | date | NO |
+| exported_at | timestamp with time zone | NO |
+| campaign_id | text | NO |
+| placement_code | text | NO |
+| placement_raw | text | YES |
+| old_pct | numeric | YES |
+| new_pct | numeric | NO |
+| created_at | timestamp with time zone | NO |
 
 ## sp_stis_daily_fact (BASE TABLE)
 | column | type | nullable |
