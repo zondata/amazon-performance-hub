@@ -194,24 +194,24 @@ Replace the current placeholder Ads page flow with a real SP-first workspace she
 Make the operator able to stage manual edits directly while reviewing targets.
 
 ### Tasks
-- [ ] Add a reusable **Change Composer** drawer/modal.
-- [ ] Allow opening the composer from SP Targets rows.
-- [ ] Prefill identity chain and current settings.
-- [ ] Composer must support only valid editable fields for the row/context.
+- [x] Add a reusable **Change Composer** drawer/modal.
+- [x] Allow opening the composer from SP Targets rows.
+- [x] Prefill identity chain and current settings.
+- [x] Composer must support only valid editable fields for the row/context.
 - [ ] Supported SP action types:
-  - [ ] `update_target_bid`
-  - [ ] `update_target_state`
-  - [ ] `update_ad_group_default_bid`
-  - [ ] `update_ad_group_state`
-  - [ ] `update_campaign_budget`
-  - [ ] `update_campaign_state`
-  - [ ] `update_campaign_bidding_strategy`
-  - [ ] `update_placement_modifier`
-- [ ] Add objective preset picker.
-- [ ] Add create/save objective preset from the composer.
-- [ ] Save resolved objective/hypothesis/forecast/review notes onto each draft item.
-- [ ] Add “active change set” behavior so the operator can keep queuing edits without leaving the page.
-- [ ] Add queue count / draft badge in the Ads workspace shell.
+  - [x] `update_target_bid`
+  - [x] `update_target_state`
+  - [x] `update_ad_group_default_bid`
+  - [x] `update_ad_group_state`
+  - [x] `update_campaign_budget`
+  - [x] `update_campaign_state`
+  - [x] `update_campaign_bidding_strategy`
+  - [x] `update_placement_modifier`
+- [x] Add objective preset picker.
+- [x] Add create/save objective preset from the composer.
+- [x] Save resolved objective/hypothesis/forecast/review notes onto each draft item.
+- [x] Add “active change set” behavior so the operator can keep queuing edits without leaving the page.
+- [x] Add queue count / draft badge in the Ads workspace shell.
 
 ### Rules
 - Draft save must write to `ads_change_sets` / `ads_change_set_items` only.
@@ -219,12 +219,12 @@ Make the operator able to stage manual edits directly while reviewing targets.
 - Composer must not expose unsupported actions for the current entity level.
 
 ### Phase 3 acceptance
-- [ ] Operator can create a draft change set and keep adding actions.
-- [ ] Objective presets can be saved and reused.
-- [ ] Draft items are persisted with the full reasoning payload.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] Operator can create a draft change set and keep adding actions.
+- [x] Objective presets can be saved and reused.
+- [x] Draft items are persisted with the full reasoning payload.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 

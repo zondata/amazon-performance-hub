@@ -1,7 +1,10 @@
+import AdsTargetsWorkspaceClient from '@/components/ads/AdsTargetsWorkspaceClient';
 import Tabs from '@/components/Tabs';
-import KpiCards from '@/components/KpiCards';
-import SpTargetsTable from '@/components/ads/SpTargetsTable';
+import { saveSpDraftAction } from '@/app/ads/performance/actions';
 import { getSpTargetsWorkspaceData } from '@/lib/ads/getSpTargetsWorkspaceData';
+import { listChangeSetItems } from '@/lib/ads-workspace/repoChangeSetItems';
+import { getChangeSet } from '@/lib/ads-workspace/repoChangeSets';
+import { listObjectivePresets } from '@/lib/ads-workspace/repoObjectivePresets';
 import { env } from '@/lib/env';
 import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
 import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
@@ -46,6 +49,7 @@ const buildHref = (params: {
   channel: string;
   level: string;
   view: string;
+  changeSetId?: string | null;
 }) => {
   const usp = new URLSearchParams({
     start: params.start,
@@ -55,6 +59,9 @@ const buildHref = (params: {
     level: params.level,
     view: params.view,
   });
+  if (params.changeSetId) {
+    usp.set('change_set', params.changeSetId);
+  }
   return `/ads/performance?${usp.toString()}`;
 };
 
@@ -77,6 +84,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
   const requestedChannel = (paramValue('channel') ?? 'sp').toLowerCase();
   const requestedLevel = (paramValue('level') ?? 'targets').toLowerCase();
   const requestedView = (paramValue('view') ?? 'table').toLowerCase();
+  const activeChangeSetId = paramValue('change_set') ?? null;
 
   if (start > end) {
     const tmp = start;
@@ -108,8 +116,43 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
   const asinOptions =
     workspaceData?.asinOptions ??
     (await fetchAsinOptions(env.accountId, env.marketplace));
+  const [spObjectivePresets, globalObjectivePresets] = shouldLoadTargets
+    ? await Promise.all([
+        listObjectivePresets({ channel: 'sp' }),
+        listObjectivePresets({ channel: null }),
+      ])
+    : [[], []];
+  const objectivePresets = [...spObjectivePresets, ...globalObjectivePresets].filter(
+    (preset, index, all) => all.findIndex((candidate) => candidate.id === preset.id) === index
+  );
 
   const warnings = [...(workspaceData?.warnings ?? [])];
+  let activeDraft:
+    | {
+        id: string;
+        name: string;
+        queueCount: number;
+      }
+    | null = null;
+
+  if (activeChangeSetId) {
+    const changeSet = await getChangeSet(activeChangeSetId);
+    if (!changeSet) {
+      warnings.unshift('The requested active draft was not found. Start a new draft from the composer.');
+    } else if (changeSet.status !== 'draft') {
+      warnings.unshift(
+        `Active draft ${changeSet.name} is ${changeSet.status} and can no longer accept staged edits.`
+      );
+    } else {
+      const queueItems = await listChangeSetItems(changeSet.id);
+      activeDraft = {
+        id: changeSet.id,
+        name: changeSet.name,
+        queueCount: queueItems.length,
+      };
+    }
+  }
+
   if (requestedChannel !== 'sp') {
     warnings.unshift(
       'Only Sponsored Products is enabled in Ads Workspace v1. SB and SD stay visible in the shell but remain disabled.'
@@ -139,6 +182,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       channel: item.value,
       level: levelValue,
       view: viewValue,
+      changeSetId: activeDraft?.id ?? activeChangeSetId,
     }),
   }));
 
@@ -154,6 +198,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       channel: channelValue,
       level: levelValue,
       view: item.value,
+      changeSetId: activeDraft?.id ?? activeChangeSetId,
     }),
   }));
 
@@ -172,6 +217,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       channel: channelValue,
       level: item.value,
       view: viewValue,
+      changeSetId: activeDraft?.id ?? activeChangeSetId,
     }),
   }));
 
@@ -219,6 +265,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
             <input type="hidden" name="channel" value={channelValue} />
             <input type="hidden" name="level" value={levelValue} />
             <input type="hidden" name="view" value={viewValue} />
+            <input type="hidden" name="change_set" value={activeDraft?.id ?? activeChangeSetId ?? ''} />
             <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
               Start
               <input
@@ -298,25 +345,21 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
           </div>
         </section>
       ) : (
-        <section className="space-y-6">
-          <KpiCards items={kpiItems} />
-          <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <div className="text-xs uppercase tracking-[0.25em] text-muted">
-                  Targets
-                </div>
-                <div className="mt-1 text-lg font-semibold text-foreground">
-                  {workspaceData?.rows.length.toLocaleString('en-US') ?? 0} target row(s)
-                </div>
-              </div>
-              <div className="max-w-xl text-sm text-muted">
-                Draft staging and the Change Composer save flow start in Phase 3. This phase stops at the SP workspace shell plus the initial Targets operational table.
-              </div>
-            </div>
-          </div>
-          <SpTargetsTable rows={workspaceData?.rows ?? []} />
-        </section>
+        <AdsTargetsWorkspaceClient
+          rows={workspaceData?.rows ?? []}
+          kpiItems={kpiItems}
+          filtersJson={{
+            start,
+            end,
+            asin,
+            channel: channelValue,
+            level: levelValue,
+            view: viewValue,
+          }}
+          objectivePresets={objectivePresets}
+          activeDraft={activeDraft}
+          saveDraftAction={saveSpDraftAction}
+        />
       )}
     </div>
   );

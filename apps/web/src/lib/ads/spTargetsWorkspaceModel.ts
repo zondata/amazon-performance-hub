@@ -76,17 +76,23 @@ export type SpCurrentTargetContext = {
   match_type: string;
   is_negative: boolean;
   state: string | null;
+  bid: number | null;
 };
 
 export type SpCurrentAdGroupContext = {
   ad_group_id: string;
   campaign_id: string;
   ad_group_name_raw: string;
+  state: string | null;
+  default_bid: number | null;
 };
 
 export type SpCurrentCampaignContext = {
   campaign_id: string;
   campaign_name_raw: string;
+  state: string | null;
+  daily_budget: number | null;
+  bidding_strategy: string | null;
 };
 
 export type SpCurrentPlacementModifier = {
@@ -127,6 +133,38 @@ export type SpTargetsPlacementContext = {
   spend: number;
 };
 
+export type SpTargetsComposerContext = {
+  channel: 'sp';
+  surface: 'targets';
+  target: {
+    id: string;
+    text: string;
+    match_type: string | null;
+    is_negative: boolean;
+    current_state: string | null;
+    current_bid: number | null;
+  };
+  ad_group: {
+    id: string;
+    name: string | null;
+    current_state: string | null;
+    current_default_bid: number | null;
+  } | null;
+  campaign: {
+    id: string;
+    name: string | null;
+    current_state: string | null;
+    current_budget: number | null;
+    current_bidding_strategy: string | null;
+  };
+  top_of_search_placement: {
+    placement_code: string;
+    label: string;
+    current_percentage: number | null;
+  } | null;
+  coverage_note: string | null;
+};
+
 export type SpTargetsWorkspaceRow = {
   target_id: string;
   campaign_id: string;
@@ -159,6 +197,7 @@ export type SpTargetsWorkspaceRow = {
   coverage_note: string | null;
   search_terms: SpTargetsWorkspaceChildRow[];
   placement_context: SpTargetsPlacementContext | null;
+  composer_context: SpTargetsComposerContext;
 };
 
 export type SpTargetsWorkspaceModel = {
@@ -539,6 +578,9 @@ export const buildSpTargetsWorkspaceModel = (params: {
         });
 
       const sameTextSearchTerm = searchTerms.find((row) => row.same_text) ?? null;
+      const coverageNote = ambiguousCampaignIds.has(target.campaign_id)
+        ? 'This campaign served more than one advertised ASIN in the selected window. Metrics remain full entity totals.'
+        : null;
 
       return {
         target_id: target.target_id,
@@ -576,11 +618,57 @@ export const buildSpTargetsWorkspaceModel = (params: {
         break_even_bid: null,
         last_activity: target.last_activity,
         coverage_label: ambiguousCampaignIds.has(target.campaign_id) ? 'Shared campaign' : null,
-        coverage_note: ambiguousCampaignIds.has(target.campaign_id)
-          ? 'This campaign served more than one advertised ASIN in the selected window. Metrics remain full entity totals.'
-          : null,
+        coverage_note: coverageNote,
         search_terms: searchTerms,
         placement_context: placementContextByCampaign.get(target.campaign_id) ?? null,
+        composer_context: {
+          channel: 'sp',
+          surface: 'targets',
+          target: {
+            id: target.target_id,
+            text:
+              trimString(currentTarget?.expression_raw) ??
+              trimString(target.targeting_raw) ??
+              target.targeting_norm ??
+              target.target_id,
+            match_type: trimString(currentTarget?.match_type) ?? target.match_type_norm,
+            is_negative: currentTarget?.is_negative ?? false,
+            current_state: trimString(currentTarget?.state),
+            current_bid:
+              currentTarget?.bid !== undefined && currentTarget?.bid !== null
+                ? currentTarget.bid
+                : null,
+          },
+          ad_group: (currentAdGroup || target.ad_group_id)
+            ? {
+                id: currentAdGroup?.ad_group_id ?? target.ad_group_id ?? '',
+                name: trimString(currentAdGroup?.ad_group_name_raw) ?? target.ad_group_name,
+                current_state: trimString(currentAdGroup?.state),
+                current_default_bid:
+                  currentAdGroup?.default_bid !== undefined && currentAdGroup?.default_bid !== null
+                    ? currentAdGroup.default_bid
+                    : null,
+              }
+            : null,
+          campaign: {
+            id: target.campaign_id,
+            name: trimString(currentCampaign?.campaign_name_raw) ?? target.campaign_name,
+            current_state: trimString(currentCampaign?.state),
+            current_budget:
+              currentCampaign?.daily_budget !== undefined &&
+              currentCampaign?.daily_budget !== null
+                ? currentCampaign.daily_budget
+                : null,
+            current_bidding_strategy: trimString(currentCampaign?.bidding_strategy),
+          },
+          top_of_search_placement: {
+            placement_code: 'PLACEMENT_TOP',
+            label: 'Top of Search (first page)',
+            current_percentage:
+              topPlacementModifierByCampaign.get(target.campaign_id) ?? null,
+          },
+          coverage_note: coverageNote,
+        },
       } satisfies SpTargetsWorkspaceRow;
     })
     .sort((left, right) => {

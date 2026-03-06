@@ -135,6 +135,7 @@ describe('buildSpTargetsWorkspaceModel', () => {
             match_type: 'EXACT',
             is_negative: false,
             state: 'enabled',
+            bid: 1.5,
           },
         ],
       ]),
@@ -145,6 +146,8 @@ describe('buildSpTargetsWorkspaceModel', () => {
             ad_group_id: 'ag1',
             campaign_id: 'c1',
             ad_group_name_raw: 'Ad Group A',
+            state: 'enabled',
+            default_bid: 0.8,
           },
         ],
       ]),
@@ -154,6 +157,9 @@ describe('buildSpTargetsWorkspaceModel', () => {
           {
             campaign_id: 'c1',
             campaign_name_raw: 'Campaign A',
+            state: 'enabled',
+            daily_budget: 40,
+            bidding_strategy: 'Dynamic bids - down only',
           },
         ],
       ]),
@@ -182,5 +188,9 @@ describe('buildSpTargetsWorkspaceModel', () => {
     expect(row?.search_terms[0]?.same_text).toBe(true);
     expect(row?.placement_context?.top_of_search_modifier_pct).toBe(35);
     expect(row?.placement_context?.sales).toBe(120);
+    expect(row?.composer_context.target.current_bid).toBe(1.5);
+    expect(row?.composer_context.ad_group?.current_default_bid).toBe(0.8);
+    expect(row?.composer_context.campaign.current_budget).toBe(40);
+    expect(row?.composer_context.top_of_search_placement?.current_percentage).toBe(35);
   });
 });

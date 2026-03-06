@@ -36,6 +36,8 @@ const GRID_TEMPLATE =
 
 type SpTargetsTableProps = {
   rows: SpTargetsWorkspaceRow[];
+  onOpenComposer?: (row: SpTargetsWorkspaceRow) => void;
+  activeDraftName?: string | null;
 };
 
 const renderCell = (value: ReactNode, subvalue?: string | null) => (
@@ -71,7 +73,11 @@ const statusPill = (status: string | null) => {
   );
 };
 
-export default function SpTargetsTable({ rows }: SpTargetsTableProps) {
+export default function SpTargetsTable({
+  rows,
+  onOpenComposer,
+  activeDraftName,
+}: SpTargetsTableProps) {
   if (rows.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border bg-surface/80 px-5 py-10 text-sm text-muted">
@@ -167,6 +173,28 @@ export default function SpTargetsTable({ rows }: SpTargetsTableProps) {
                 </summary>
 
                 <div className="border-t border-border bg-surface-2/40 px-4 py-4">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.18em] text-muted">
+                        Draft staging
+                      </div>
+                      <div className="mt-1 text-sm text-foreground">
+                        Stage target, ad group, campaign, and top-of-search modifier edits without writing to logbook facts yet.
+                      </div>
+                      <div className="mt-1 text-xs text-muted">
+                        {activeDraftName ? `Active draft: ${activeDraftName}` : 'A draft queue is created on first save.'}
+                      </div>
+                    </div>
+                    {onOpenComposer ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenComposer(row)}
+                        className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+                      >
+                        Stage change
+                      </button>
+                    ) : null}
+                  </div>
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
                     <section className="rounded-xl border border-border bg-surface p-4">
                       <div className="flex items-center justify-between gap-3">

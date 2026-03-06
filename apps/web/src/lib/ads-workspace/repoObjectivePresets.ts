@@ -42,7 +42,7 @@ const validateListLimit = (limit: number | undefined): number => {
   return limit;
 };
 
-const getObjectivePresetById = async (presetId: string): Promise<AdsObjectivePreset | null> => {
+export const getObjectivePreset = async (presetId: string): Promise<AdsObjectivePreset | null> => {
   const { data, error } = await supabaseAdmin
     .from('ads_objective_presets')
     .select(OBJECTIVE_PRESET_SELECT)
@@ -121,7 +121,7 @@ export const updateObjectivePreset = async (
 };
 
 export const archiveObjectivePreset = async (presetId: string): Promise<AdsObjectivePreset> => {
-  const existing = await getObjectivePresetById(presetId);
+  const existing = await getObjectivePreset(presetId);
   if (!existing) {
     throw new Error('Objective preset not found.');
   }
