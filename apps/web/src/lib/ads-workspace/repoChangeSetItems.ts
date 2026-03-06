@@ -91,6 +91,22 @@ const getScopedItem = async (itemId: string): Promise<ItemScopeRow> => {
   return data as unknown as ItemScopeRow;
 };
 
+export const getChangeSetItem = async (itemId: string): Promise<AdsChangeSetItem | null> => {
+  const scopedItem = await getScopedItem(itemId);
+
+  const { data, error } = await supabaseAdmin
+    .from('ads_change_set_items')
+    .select(CHANGE_SET_ITEM_SELECT)
+    .eq('id', scopedItem.id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load change set item: ${error.message}`);
+  }
+
+  return data ? mapChangeSetItemRow(data as unknown as AdsChangeSetItemRow) : null;
+};
+
 export const createChangeSetItems = async (
   changeSetId: string,
   payloads: ChangeSetItemPayload[]

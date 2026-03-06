@@ -1,11 +1,14 @@
 import AdsTargetsWorkspaceClient from '@/components/ads/AdsTargetsWorkspaceClient';
+import AdsWorkspaceQueueReview from '@/components/ads/AdsWorkspaceQueueReview';
 import Tabs from '@/components/Tabs';
 import { saveSpDraftAction } from '@/app/ads/performance/actions';
 import { getSpTargetsWorkspaceData } from '@/lib/ads/getSpTargetsWorkspaceData';
 import { listChangeSetItems } from '@/lib/ads-workspace/repoChangeSetItems';
-import { getChangeSet } from '@/lib/ads-workspace/repoChangeSets';
+import { getChangeSet, listChangeSets } from '@/lib/ads-workspace/repoChangeSets';
 import { listObjectivePresets } from '@/lib/ads-workspace/repoObjectivePresets';
+import { getTemplateStatus } from '@/lib/bulksheets/templateStore';
 import { env } from '@/lib/env';
+import { getExperimentOptions } from '@/lib/logbook/getExperimentOptions';
 import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
 import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
 
@@ -38,6 +41,13 @@ const formatPercent = (value?: number | null) => {
   return `${(value * 100).toFixed(1)}%`;
 };
 
+const formatDateTime = (value: string | null | undefined) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString('en-US');
+};
+
 type AdsPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
@@ -49,6 +59,7 @@ const buildHref = (params: {
   channel: string;
   level: string;
   view: string;
+  panel?: string | null;
   changeSetId?: string | null;
 }) => {
   const usp = new URLSearchParams({
@@ -59,6 +70,9 @@ const buildHref = (params: {
     level: params.level,
     view: params.view,
   });
+  if (params.panel && params.panel !== 'workspace') {
+    usp.set('panel', params.panel);
+  }
   if (params.changeSetId) {
     usp.set('change_set', params.changeSetId);
   }
@@ -84,7 +98,10 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
   const requestedChannel = (paramValue('channel') ?? 'sp').toLowerCase();
   const requestedLevel = (paramValue('level') ?? 'targets').toLowerCase();
   const requestedView = (paramValue('view') ?? 'table').toLowerCase();
+  const requestedPanel = (paramValue('panel') ?? 'workspace').toLowerCase();
   const activeChangeSetId = paramValue('change_set') ?? null;
+  const queueNotice = paramValue('queue_notice') ?? null;
+  const queueError = paramValue('queue_error') ?? null;
 
   if (start > end) {
     const tmp = start;
@@ -102,7 +119,9 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       ? requestedLevel
       : 'targets';
   const viewValue = requestedView === 'trend' ? 'trend' : 'table';
-  const shouldLoadTargets = levelValue === 'targets' && viewValue === 'table';
+  const panelValue = requestedPanel === 'queue' ? 'queue' : 'workspace';
+  const shouldLoadTargets =
+    panelValue === 'workspace' && levelValue === 'targets' && viewValue === 'table';
 
   const workspaceData = shouldLoadTargets
     ? await getSpTargetsWorkspaceData({
@@ -135,7 +154,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       }
     | null = null;
 
-  if (activeChangeSetId) {
+  if (activeChangeSetId && panelValue === 'workspace') {
     const changeSet = await getChangeSet(activeChangeSetId);
     if (!changeSet) {
       warnings.unshift('The requested active draft was not found. Start a new draft from the composer.');
@@ -153,11 +172,77 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
     }
   }
 
+  let queueChangeSets = [] as Awaited<ReturnType<typeof listChangeSets>>;
+  let selectedQueueChangeSet = null as Awaited<ReturnType<typeof getChangeSet>>;
+  let selectedQueueItems = [] as Awaited<ReturnType<typeof listChangeSetItems>>;
+  let experimentOptions = [] as Awaited<ReturnType<typeof getExperimentOptions>>;
+  let templateStatusLine = 'Missing (upload in Templates tab)';
+  const missingOutRoot = !env.bulkgenOutRoot;
+  const spawnDisabled = !env.enableBulkgenSpawn;
+  let templateMissing = true;
+
+  if (panelValue === 'queue') {
+    queueChangeSets = await listChangeSets({ limit: 100 });
+    let requestedQueueChangeSetId = activeChangeSetId ?? queueChangeSets[0]?.id ?? null;
+
+    if (requestedQueueChangeSetId) {
+      selectedQueueChangeSet = await getChangeSet(requestedQueueChangeSetId);
+      if (!selectedQueueChangeSet) {
+        warnings.unshift('The requested change set was not found. Showing the newest available queue item instead.');
+        requestedQueueChangeSetId = queueChangeSets[0]?.id ?? null;
+        selectedQueueChangeSet = requestedQueueChangeSetId
+          ? await getChangeSet(requestedQueueChangeSetId)
+          : null;
+      }
+    }
+
+    if (selectedQueueChangeSet) {
+      selectedQueueItems = await listChangeSetItems(selectedQueueChangeSet.id);
+    }
+
+    experimentOptions = await getExperimentOptions();
+    const spTemplateStatus = await getTemplateStatus('sp_update');
+    const templateUpdatedAt = formatDateTime(spTemplateStatus.updatedAt);
+    templateMissing = spTemplateStatus.source === 'missing';
+    templateStatusLine =
+      spTemplateStatus.source === 'storage'
+        ? `Stored in system${templateUpdatedAt ? ` (updated ${templateUpdatedAt})` : ''}`
+        : spTemplateStatus.source === 'local_fallback'
+          ? `Using local fallback (${spTemplateStatus.localFallbackPath ?? 'configured env path'})`
+          : 'Missing (upload in Templates tab)';
+
+    if (spTemplateStatus.error) {
+      warnings.unshift(`Template storage warning: ${spTemplateStatus.error}`);
+    }
+  }
+
   if (requestedChannel !== 'sp') {
     warnings.unshift(
       'Only Sponsored Products is enabled in Ads Workspace v1. SB and SD stay visible in the shell but remain disabled.'
     );
   }
+
+  const persistedChangeSetId =
+    panelValue === 'queue'
+      ? selectedQueueChangeSet?.id ?? activeChangeSetId
+      : activeDraft?.id ?? activeChangeSetId;
+
+  const workspaceTabs = [
+    { label: 'Workspace', value: 'workspace' },
+    { label: 'Queue Review', value: 'queue' },
+  ].map((item) => ({
+    ...item,
+    href: buildHref({
+      start,
+      end,
+      asin,
+      channel: channelValue,
+      level: levelValue,
+      view: viewValue,
+      panel: item.value,
+      changeSetId: persistedChangeSetId,
+    }),
+  }));
 
   const channelTabs = [
     { label: 'SP', value: 'sp' },
@@ -182,7 +267,8 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       channel: item.value,
       level: levelValue,
       view: viewValue,
-      changeSetId: activeDraft?.id ?? activeChangeSetId,
+      panel: panelValue,
+      changeSetId: persistedChangeSetId,
     }),
   }));
 
@@ -198,7 +284,8 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       channel: channelValue,
       level: levelValue,
       view: item.value,
-      changeSetId: activeDraft?.id ?? activeChangeSetId,
+      panel: panelValue,
+      changeSetId: persistedChangeSetId,
     }),
   }));
 
@@ -217,7 +304,25 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       channel: channelValue,
       level: item.value,
       view: viewValue,
-      changeSetId: activeDraft?.id ?? activeChangeSetId,
+      panel: panelValue,
+      changeSetId: persistedChangeSetId,
+    }),
+  }));
+
+  const queueChangeSetLinks = queueChangeSets.map((changeSet) => ({
+    id: changeSet.id,
+    name: changeSet.name,
+    status: changeSet.status,
+    updatedAt: changeSet.updated_at,
+    href: buildHref({
+      start,
+      end,
+      asin,
+      channel: channelValue,
+      level: levelValue,
+      view: viewValue,
+      panel: 'queue',
+      changeSetId: changeSet.id,
     }),
   }));
 
@@ -262,10 +367,15 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
             </div>
           </div>
           <form method="get" className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="panel" value={panelValue} />
             <input type="hidden" name="channel" value={channelValue} />
             <input type="hidden" name="level" value={levelValue} />
             <input type="hidden" name="view" value={viewValue} />
-            <input type="hidden" name="change_set" value={activeDraft?.id ?? activeChangeSetId ?? ''} />
+            <input
+              type="hidden"
+              name="change_set"
+              value={persistedChangeSetId ?? ''}
+            />
             <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
               Start
               <input
@@ -310,9 +420,10 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       </section>
 
       <section className="space-y-4">
+        <Tabs items={workspaceTabs} current={panelValue} />
         <Tabs items={channelTabs} current={channelValue} />
-        <Tabs items={viewTabs} current={viewValue} />
-        <Tabs items={levelTabs} current={levelValue} />
+        {panelValue === 'workspace' ? <Tabs items={viewTabs} current={viewValue} /> : null}
+        {panelValue === 'workspace' ? <Tabs items={levelTabs} current={levelValue} /> : null}
       </section>
 
       {warnings.length > 0 ? (
@@ -328,7 +439,30 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
         </section>
       ) : null}
 
-      {levelValue !== 'targets' ? (
+      {panelValue === 'queue' ? (
+        <AdsWorkspaceQueueReview
+          changeSetLinks={queueChangeSetLinks}
+          selectedChangeSet={selectedQueueChangeSet}
+          selectedItems={selectedQueueItems}
+          experimentOptions={experimentOptions}
+          templateStatusLine={templateStatusLine}
+          missingOutRoot={missingOutRoot}
+          spawnDisabled={spawnDisabled}
+          templateMissing={templateMissing}
+          returnTo={buildHref({
+            start,
+            end,
+            asin,
+            channel: channelValue,
+            level: levelValue,
+            view: viewValue,
+            panel: 'queue',
+            changeSetId: selectedQueueChangeSet?.id ?? activeChangeSetId,
+          })}
+          notice={queueNotice}
+          error={queueError}
+        />
+      ) : levelValue !== 'targets' ? (
         <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
           <div className="text-lg font-semibold text-foreground">Coming soon</div>
           <div className="mt-2 text-sm text-muted">

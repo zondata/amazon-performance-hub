@@ -234,16 +234,16 @@ Make the operator able to stage manual edits directly while reviewing targets.
 Turn staged workspace edits into a reviewable bulksheet execution flow.
 
 ### Tasks
-- [ ] Add a **Change queue / Review** surface (tab in Ads workspace or linked Bulksheet Ops page).
-- [ ] Show grouped draft items by change set.
-- [ ] Add per-item edit/remove support.
-- [ ] Add draft-set status transitions (`draft` -> `review_ready` -> `generated` / `cancelled`).
-- [ ] Convert SP draft items into `SpUpdateAction[]` using existing action-builder conventions.
-- [ ] Generate SP bulksheet output through the existing generator stack.
-- [ ] Persist generated run metadata on the change set.
-- [ ] Freeze generated actions into `log_changes` + `log_change_entities` at generation time.
-- [ ] Optionally link generated changes to a chosen experiment when `experiment_id` is present.
-- [ ] Keep validation compatible with the existing next-bulksheet-ingest workflow.
+- [x] Add a **Change queue / Review** surface (tab in Ads workspace or linked Bulksheet Ops page).
+- [x] Show grouped draft items by change set.
+- [x] Add per-item edit/remove support.
+- [x] Add draft-set status transitions (`draft` -> `review_ready` -> `generated` / `cancelled`).
+- [x] Convert SP draft items into `SpUpdateAction[]` using existing action-builder conventions.
+- [x] Generate SP bulksheet output through the existing generator stack.
+- [x] Persist generated run metadata on the change set.
+- [x] Freeze generated actions into `log_changes` + `log_change_entities` at generation time.
+- [x] Optionally link generated changes to a chosen experiment when `experiment_id` is present.
+- [x] Keep validation compatible with the existing next-bulksheet-ingest workflow.
 
 ### Rules
 - Generation is the execution boundary.
@@ -251,12 +251,12 @@ Turn staged workspace edits into a reviewable bulksheet execution flow.
 - Review UI must show before/after values and full identity chain.
 
 ### Phase 4 acceptance
-- [ ] A staged change set can generate a valid SP bulksheet.
-- [ ] Generation writes logbook facts only once.
-- [ ] Existing validation flow still works.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] A staged change set can generate a valid SP bulksheet.
+- [x] Generation writes logbook facts only once.
+- [x] Existing validation flow still works.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 
