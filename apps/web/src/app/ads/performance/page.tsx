@@ -2,7 +2,7 @@ import AdsTargetsWorkspaceClient from '@/components/ads/AdsTargetsWorkspaceClien
 import AdsWorkspaceQueueReview from '@/components/ads/AdsWorkspaceQueueReview';
 import Tabs from '@/components/Tabs';
 import { saveSpDraftAction } from '@/app/ads/performance/actions';
-import { getSpTargetsWorkspaceData } from '@/lib/ads/getSpTargetsWorkspaceData';
+import { getSpWorkspaceData } from '@/lib/ads/getSpWorkspaceData';
 import { listChangeSetItems } from '@/lib/ads-workspace/repoChangeSetItems';
 import { getChangeSet, listChangeSets } from '@/lib/ads-workspace/repoChangeSets';
 import { listObjectivePresets } from '@/lib/ads-workspace/repoObjectivePresets';
@@ -120,22 +120,28 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       : 'targets';
   const viewValue = requestedView === 'trend' ? 'trend' : 'table';
   const panelValue = requestedPanel === 'queue' ? 'queue' : 'workspace';
-  const shouldLoadTargets =
-    panelValue === 'workspace' && levelValue === 'targets' && viewValue === 'table';
+  const shouldLoadTable =
+    panelValue === 'workspace' &&
+    viewValue === 'table' &&
+    (levelValue === 'campaigns' ||
+      levelValue === 'adgroups' ||
+      levelValue === 'targets' ||
+      levelValue === 'placements');
 
-  const workspaceData = shouldLoadTargets
-    ? await getSpTargetsWorkspaceData({
+  const workspaceData = shouldLoadTable
+    ? await getSpWorkspaceData({
         accountId: env.accountId,
         marketplace: env.marketplace,
         start,
         end,
         asinFilter: asin,
+        level: levelValue,
       })
     : null;
   const asinOptions =
     workspaceData?.asinOptions ??
     (await fetchAsinOptions(env.accountId, env.marketplace));
-  const [spObjectivePresets, globalObjectivePresets] = shouldLoadTargets
+  const [spObjectivePresets, globalObjectivePresets] = shouldLoadTable
     ? await Promise.all([
         listObjectivePresets({ channel: 'sp' }),
         listObjectivePresets({ channel: null }),
@@ -329,8 +335,8 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
   const kpiItems = workspaceData
     ? [
         {
-          label: 'Targets',
-          value: formatNumber(workspaceData.totals.targets),
+          label: workspaceData.entityCountLabel,
+          value: formatNumber(workspaceData.totals.entity_count),
           subvalue: `Clicks ${formatNumber(workspaceData.totals.clicks)}`,
         },
         {
@@ -462,11 +468,11 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
           notice={queueNotice}
           error={queueError}
         />
-      ) : levelValue !== 'targets' ? (
+      ) : levelValue === 'searchterms' ? (
         <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
           <div className="text-lg font-semibold text-foreground">Coming soon</div>
           <div className="mt-2 text-sm text-muted">
-            Targets is the first operational tab in the Ads Workspace. This level stays visible for shell continuity and is intentionally deferred to a later phase.
+            Search Terms lands in Phase 6. This level stays visible for workspace continuity and is intentionally deferred.
           </div>
         </section>
       ) : viewValue !== 'table' ? (
@@ -480,6 +486,8 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
         </section>
       ) : (
         <AdsTargetsWorkspaceClient
+          level={levelValue as 'campaigns' | 'adgroups' | 'targets' | 'placements'}
+          entityCountLabel={workspaceData?.entityCountLabel ?? 'Rows'}
           rows={workspaceData?.rows ?? []}
           kpiItems={kpiItems}
           filtersJson={{

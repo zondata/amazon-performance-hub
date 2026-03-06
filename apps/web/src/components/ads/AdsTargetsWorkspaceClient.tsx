@@ -4,8 +4,16 @@ import { useMemo, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import KpiCards from '@/components/KpiCards';
+import SpAdGroupsTable from '@/components/ads/SpAdGroupsTable';
+import SpCampaignsTable from '@/components/ads/SpCampaignsTable';
 import SpChangeComposer from '@/components/ads/SpChangeComposer';
+import SpPlacementsTable from '@/components/ads/SpPlacementsTable';
 import SpTargetsTable from '@/components/ads/SpTargetsTable';
+import type {
+  SpAdGroupsWorkspaceRow,
+  SpCampaignsWorkspaceRow,
+  SpPlacementsWorkspaceRow,
+} from '@/lib/ads/spWorkspaceTablesModel';
 import type { SpTargetsWorkspaceRow } from '@/lib/ads/spTargetsWorkspaceModel';
 import type { SaveSpDraftActionState } from '@/lib/ads-workspace/spChangeComposerState';
 import type { AdsObjectivePreset, JsonObject } from '@/lib/ads-workspace/types';
@@ -27,8 +35,18 @@ type ActiveDraftSummary = {
   queueCount: number;
 } | null;
 
+type WorkspaceLevel = 'campaigns' | 'adgroups' | 'targets' | 'placements';
+
+type SpWorkspaceRow =
+  | SpCampaignsWorkspaceRow
+  | SpAdGroupsWorkspaceRow
+  | SpTargetsWorkspaceRow
+  | SpPlacementsWorkspaceRow;
+
 type AdsTargetsWorkspaceClientProps = {
-  rows: SpTargetsWorkspaceRow[];
+  level: WorkspaceLevel;
+  entityCountLabel: string;
+  rows: SpWorkspaceRow[];
   kpiItems: KpiItem[];
   filtersJson: JsonObject;
   objectivePresets: AdsObjectivePreset[];
@@ -41,7 +59,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isRouting, startRouting] = useTransition();
-  const [composerRow, setComposerRow] = useState<SpTargetsWorkspaceRow | null>(null);
+  const [composerRow, setComposerRow] = useState<SpWorkspaceRow | null>(null);
   const [activeDraft, setActiveDraft] = useState<ActiveDraftSummary>(props.activeDraft);
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
 
@@ -51,18 +69,20 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
 
   const handleSaved = (state: SaveSpDraftActionState) => {
     if (!state.ok || !state.changeSetId || !state.changeSetName) return;
+    const nextChangeSetId = state.changeSetId;
+    const nextChangeSetName = state.changeSetName;
 
     setComposerRow(null);
     setFlashMessage(state.message);
     setActiveDraft({
-      id: state.changeSetId,
-      name: state.changeSetName,
+      id: nextChangeSetId,
+      name: nextChangeSetName,
       queueCount: state.queueCount,
     });
 
     startRouting(() => {
       const params = new URLSearchParams(searchParams?.toString() ?? '');
-      params.set('change_set', state.changeSetId!);
+      params.set('change_set', nextChangeSetId);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
       router.refresh();
     });
@@ -70,10 +90,59 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
 
   const draftSummary = useMemo(() => {
     if (!activeDraft) {
-      return 'Stage a first action from a target row to create the draft queue.';
+      return 'Stage a first action from this table to create the draft queue.';
     }
     return `Active draft ${activeDraft.name} with ${activeDraft.queueCount.toLocaleString('en-US')} staged item(s).`;
   }, [activeDraft]);
+
+  const renderTable = () => {
+    if (props.level === 'campaigns') {
+      return (
+        <SpCampaignsTable
+          rows={props.rows as SpCampaignsWorkspaceRow[]}
+          onOpenComposer={(row) => {
+            setFlashMessage(null);
+            setComposerRow(row);
+          }}
+          activeDraftName={activeDraft?.name ?? null}
+        />
+      );
+    }
+    if (props.level === 'adgroups') {
+      return (
+        <SpAdGroupsTable
+          rows={props.rows as SpAdGroupsWorkspaceRow[]}
+          onOpenComposer={(row) => {
+            setFlashMessage(null);
+            setComposerRow(row);
+          }}
+          activeDraftName={activeDraft?.name ?? null}
+        />
+      );
+    }
+    if (props.level === 'placements') {
+      return (
+        <SpPlacementsTable
+          rows={props.rows as SpPlacementsWorkspaceRow[]}
+          onOpenComposer={(row) => {
+            setFlashMessage(null);
+            setComposerRow(row);
+          }}
+          activeDraftName={activeDraft?.name ?? null}
+        />
+      );
+    }
+    return (
+      <SpTargetsTable
+        rows={props.rows as SpTargetsWorkspaceRow[]}
+        onOpenComposer={(row) => {
+          setFlashMessage(null);
+          setComposerRow(row);
+        }}
+        activeDraftName={activeDraft?.name ?? null}
+      />
+    );
+  };
 
   return (
     <section className="space-y-6">
@@ -82,9 +151,11 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
       <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="text-xs uppercase tracking-[0.25em] text-muted">Targets</div>
+            <div className="text-xs uppercase tracking-[0.25em] text-muted">
+              {props.entityCountLabel}
+            </div>
             <div className="mt-1 text-lg font-semibold text-foreground">
-              {props.rows.length.toLocaleString('en-US')} target row(s)
+              {props.rows.length.toLocaleString('en-US')} row(s)
             </div>
             <div className="mt-2 max-w-2xl text-sm text-muted">{draftSummary}</div>
           </div>
@@ -110,14 +181,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
         </div>
       ) : null}
 
-      <SpTargetsTable
-        rows={props.rows}
-        onOpenComposer={(row) => {
-          setFlashMessage(null);
-          setComposerRow(row);
-        }}
-        activeDraftName={activeDraft?.name ?? null}
-      />
+      {renderTable()}
 
       {composerRow ? (
         <SpChangeComposer

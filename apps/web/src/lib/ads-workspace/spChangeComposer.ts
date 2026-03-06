@@ -1,8 +1,7 @@
 import type { ChangeSetItemPayload, ChangeSetPayload, JsonObject } from './types';
 
 const ALLOWED_STATES = new Set(['enabled', 'paused', 'archived']);
-const TARGETS_SURFACE = 'ads_workspace_targets';
-const TOP_OF_SEARCH_PLACEMENT_CODE = 'PLACEMENT_TOP';
+const WORKSPACE_SURFACE = 'ads_workspace';
 
 export type SpComposerTargetContext = {
   id: string;
@@ -36,11 +35,11 @@ export type SpComposerPlacementContext = {
 
 export type SpChangeComposerContext = {
   channel: 'sp';
-  surface: 'targets';
-  target: SpComposerTargetContext;
+  surface: 'targets' | 'campaigns' | 'adgroups' | 'placements';
+  target: SpComposerTargetContext | null;
   ad_group: SpComposerAdGroupContext | null;
   campaign: SpComposerCampaignContext;
-  top_of_search_placement: SpComposerPlacementContext | null;
+  placement: SpComposerPlacementContext | null;
   coverage_note: string | null;
 };
 
@@ -66,7 +65,7 @@ export type BuildSpDraftMutationPlanInput = {
   campaign_budget?: string | number | null;
   campaign_state?: string | null;
   campaign_bidding_strategy?: string | null;
-  top_of_search_modifier_pct?: string | number | null;
+  placement_modifier_pct?: string | number | null;
 };
 
 export type BuildSpDraftMutationPlanResult = {
@@ -156,13 +155,14 @@ export const buildForecastJson = (params: {
 };
 
 const buildUiContextJson = (context: SpChangeComposerContext): JsonObject => ({
-  surface: TARGETS_SURFACE,
+  surface: WORKSPACE_SURFACE,
   row_surface: context.surface,
   campaign_name: context.campaign.name,
   ad_group_name: context.ad_group?.name ?? null,
-  target_text: context.target.text,
-  match_type: context.target.match_type,
-  top_of_search_modifier_pct: context.top_of_search_placement?.current_percentage ?? null,
+  target_text: context.target?.text ?? null,
+  match_type: context.target?.match_type ?? null,
+  placement_label: context.placement?.label ?? null,
+  placement_modifier_pct: context.placement?.current_percentage ?? null,
   coverage_note: context.coverage_note,
 });
 
@@ -203,6 +203,9 @@ export const buildSpDraftMutationPlan = (
 
   const nextTargetBid = parseNonNegativeNumber(input.target_bid, 'target_bid');
   if (nextTargetBid !== null) {
+    if (!input.context.target) {
+      throw new Error('This row does not support target bid edits.');
+    }
     if (input.context.target.is_negative) {
       throw new Error('Negative targets cannot stage update_target_bid actions.');
     }
@@ -226,22 +229,27 @@ export const buildSpDraftMutationPlan = (
   }
 
   const nextTargetState = normalizeState(input.target_state, 'target_state');
-  if (nextTargetState !== null && !sameString(input.context.target.current_state, nextTargetState)) {
-    itemPayloads.push({
-      channel: 'sp',
-      entity_level: 'target',
-      entity_key: input.context.target.id,
-      campaign_id: input.context.campaign.id,
-      ad_group_id: input.context.ad_group?.id ?? null,
-      target_id: input.context.target.id,
-      target_key: null,
-      placement_code: null,
-      action_type: 'update_target_state',
-      before_json: { state: input.context.target.current_state },
-      after_json: { state: nextTargetState },
-      ui_context_json,
-      ...reasoningFields,
-    });
+  if (nextTargetState !== null) {
+    if (!input.context.target) {
+      throw new Error('This row does not support target state edits.');
+    }
+    if (!sameString(input.context.target.current_state, nextTargetState)) {
+      itemPayloads.push({
+        channel: 'sp',
+        entity_level: 'target',
+        entity_key: input.context.target.id,
+        campaign_id: input.context.campaign.id,
+        ad_group_id: input.context.ad_group?.id ?? null,
+        target_id: input.context.target.id,
+        target_key: null,
+        placement_code: null,
+        action_type: 'update_target_state',
+        before_json: { state: input.context.target.current_state },
+        after_json: { state: nextTargetState },
+        ui_context_json,
+        ...reasoningFields,
+      });
+    }
   }
 
   const adGroup = input.context.ad_group;
@@ -362,37 +370,35 @@ export const buildSpDraftMutationPlan = (
     });
   }
 
-  const nextPlacementPct = parseNonNegativeNumber(
-    input.top_of_search_modifier_pct,
-    'top_of_search_modifier_pct'
-  );
+  const nextPlacementPct = parseNonNegativeNumber(input.placement_modifier_pct, 'placement_modifier_pct');
   if (nextPlacementPct !== null) {
-    if (!input.context.top_of_search_placement) {
-      throw new Error('This row does not support top-of-search placement edits.');
+    if (!input.context.placement) {
+      throw new Error('This row does not support placement modifier edits.');
     }
-    if (!sameNumber(input.context.top_of_search_placement.current_percentage, nextPlacementPct)) {
+    if (!sameNumber(input.context.placement.current_percentage, nextPlacementPct)) {
       itemPayloads.push({
         channel: 'sp',
         entity_level: 'placement',
-        entity_key: `${input.context.campaign.id}::${TOP_OF_SEARCH_PLACEMENT_CODE}`,
+        entity_key: `${input.context.campaign.id}::${input.context.placement.placement_code}`,
         campaign_id: input.context.campaign.id,
         ad_group_id: null,
         target_id: null,
         target_key: null,
-        placement_code: TOP_OF_SEARCH_PLACEMENT_CODE,
+        placement_code: input.context.placement.placement_code,
         action_type: 'update_placement_modifier',
         before_json: {
-          placement_code: TOP_OF_SEARCH_PLACEMENT_CODE,
-          percentage: input.context.top_of_search_placement.current_percentage,
+          placement_code: input.context.placement.placement_code,
+          percentage: input.context.placement.current_percentage,
         },
         after_json: {
-          placement_code: TOP_OF_SEARCH_PLACEMENT_CODE,
+          placement_code: input.context.placement.placement_code,
           percentage: nextPlacementPct,
         },
         ui_context_json: {
           ...ui_context_json,
-          placement_scope: 'campaign_context',
-          placement_label: input.context.top_of_search_placement.label,
+          placement_scope:
+            input.context.surface === 'placements' ? 'placement_row' : 'campaign_context',
+          placement_label: input.context.placement.label,
         },
         ...reasoningFields,
       });

@@ -30,7 +30,7 @@ const baseContext: SpChangeComposerContext = {
     current_budget: 25,
     current_bidding_strategy: 'Dynamic bids - down only',
   },
-  top_of_search_placement: {
+  placement: {
     placement_code: 'PLACEMENT_TOP',
     label: 'Top of Search (first page)',
     current_percentage: 35,
@@ -73,7 +73,7 @@ describe('buildSpDraftMutationPlan', () => {
       target_bid: '1.05',
       ad_group_state: 'paused',
       campaign_budget: '30',
-      top_of_search_modifier_pct: '42',
+      placement_modifier_pct: '42',
     });
 
     expect(result.changeSetPayload.name).toBe('SP draft alpha');
@@ -138,7 +138,7 @@ describe('buildSpDraftMutationPlan', () => {
         campaign_budget: '25',
         campaign_state: 'enabled',
         campaign_bidding_strategy: 'Dynamic bids - down only',
-        top_of_search_modifier_pct: '35',
+        placement_modifier_pct: '35',
       })
     ).toThrow('No draft changes were staged. Change at least one editable field before saving.');
   });

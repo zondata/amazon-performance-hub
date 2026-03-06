@@ -2,20 +2,27 @@
 
 import { useActionState, useEffect, useRef, useState } from 'react';
 
-import type { SpTargetsWorkspaceRow } from '@/lib/ads/spTargetsWorkspaceModel';
 import {
   INITIAL_SAVE_SP_DRAFT_ACTION_STATE,
   type SaveSpDraftActionState,
 } from '@/lib/ads-workspace/spChangeComposerState';
-import type { AdsObjectivePreset, JsonObject } from '@/lib/ads-workspace/types';
+import type {
+  AdsObjectivePreset,
+  JsonObject,
+} from '@/lib/ads-workspace/types';
+import type { SpChangeComposerContext } from '@/lib/ads-workspace/spChangeComposer';
 
 type SaveSpDraftAction = (
   prevState: SaveSpDraftActionState,
   formData: FormData
 ) => Promise<SaveSpDraftActionState>;
 
+type SpComposerRow = {
+  composer_context: SpChangeComposerContext;
+};
+
 type SpChangeComposerProps = {
-  row: SpTargetsWorkspaceRow;
+  row: SpComposerRow;
   filtersJson: JsonObject;
   activeChangeSetId: string | null;
   activeChangeSetName: string | null;
@@ -28,7 +35,15 @@ type SpChangeComposerProps = {
 const formatNumberInput = (value: number | null | undefined) =>
   value === null || value === undefined || !Number.isFinite(value) ? '' : String(value);
 
-const baseDraftName = () => `SP draft ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`;
+const baseDraftName = () =>
+  `SP draft ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`;
+
+const surfaceLabel = (surface: SpChangeComposerContext['surface']) => {
+  if (surface === 'campaigns') return 'Campaign row';
+  if (surface === 'adgroups') return 'Ad group row';
+  if (surface === 'placements') return 'Placement row';
+  return 'Target row';
+};
 
 export default function SpChangeComposer(props: SpChangeComposerProps) {
   const { objectivePresets, onSaved } = props;
@@ -47,27 +62,22 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
   const [notes, setNotes] = useState('');
   const [saveObjectivePreset, setSaveObjectivePreset] = useState(false);
   const [objectivePresetName, setObjectivePresetName] = useState('');
-  const [targetBid, setTargetBid] = useState(formatNumberInput(props.row.composer_context.target.current_bid));
-  const [targetState, setTargetState] = useState(
-    props.row.composer_context.target.current_state ?? ''
-  );
+  const current = props.row.composer_context;
+  const [targetBid, setTargetBid] = useState(formatNumberInput(current.target?.current_bid));
+  const [targetState, setTargetState] = useState(current.target?.current_state ?? '');
   const [adGroupDefaultBid, setAdGroupDefaultBid] = useState(
-    formatNumberInput(props.row.composer_context.ad_group?.current_default_bid)
+    formatNumberInput(current.ad_group?.current_default_bid)
   );
-  const [adGroupState, setAdGroupState] = useState(
-    props.row.composer_context.ad_group?.current_state ?? ''
-  );
+  const [adGroupState, setAdGroupState] = useState(current.ad_group?.current_state ?? '');
   const [campaignBudget, setCampaignBudget] = useState(
-    formatNumberInput(props.row.composer_context.campaign.current_budget)
+    formatNumberInput(current.campaign.current_budget)
   );
-  const [campaignState, setCampaignState] = useState(
-    props.row.composer_context.campaign.current_state ?? ''
-  );
+  const [campaignState, setCampaignState] = useState(current.campaign.current_state ?? '');
   const [campaignBiddingStrategy, setCampaignBiddingStrategy] = useState(
-    props.row.composer_context.campaign.current_bidding_strategy ?? ''
+    current.campaign.current_bidding_strategy ?? ''
   );
-  const [topOfSearchModifierPct, setTopOfSearchModifierPct] = useState(
-    formatNumberInput(props.row.composer_context.top_of_search_placement?.current_percentage)
+  const [placementModifierPct, setPlacementModifierPct] = useState(
+    formatNumberInput(current.placement?.current_percentage)
   );
 
   useEffect(() => {
@@ -88,10 +98,10 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
   const presetOptions = objectivePresets.map((preset) => ({
     id: preset.id,
     label:
-      preset.channel === null ? `${preset.name} (all channels)` : `${preset.name} (${preset.channel.toUpperCase()})`,
+      preset.channel === null
+        ? `${preset.name} (all channels)`
+        : `${preset.name} (${preset.channel.toUpperCase()})`,
   }));
-
-  const current = props.row.composer_context;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-end bg-background/70 px-4 py-6 backdrop-blur-sm">
@@ -108,7 +118,7 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
               Stage SP draft actions
             </h2>
             <div className="mt-2 text-sm text-muted">
-              Target row totals remain facts. Placement edits stay campaign-context only.
+              {surfaceLabel(current.surface)}. Placement metrics stay campaign-level facts and do not become target-owned metrics.
             </div>
           </div>
           <button
@@ -138,22 +148,41 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
 
             <section className="rounded-2xl border border-border bg-surface-2/50 p-4">
               <div className="mb-3 text-xs uppercase tracking-[0.2em] text-muted">Identity chain</div>
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-xl border border-border bg-surface px-3 py-3">
                   <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Campaign</div>
-                  <div className="mt-1 text-sm font-semibold text-foreground">{current.campaign.name ?? '—'}</div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">
+                    {current.campaign.name ?? '—'}
+                  </div>
                   <div className="mt-1 text-xs text-muted">{current.campaign.id}</div>
                 </div>
-                <div className="rounded-xl border border-border bg-surface px-3 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Ad group</div>
-                  <div className="mt-1 text-sm font-semibold text-foreground">{current.ad_group?.name ?? '—'}</div>
-                  <div className="mt-1 text-xs text-muted">{current.ad_group?.id ?? 'Not available'}</div>
-                </div>
-                <div className="rounded-xl border border-border bg-surface px-3 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Target</div>
-                  <div className="mt-1 text-sm font-semibold text-foreground">{current.target.text}</div>
-                  <div className="mt-1 text-xs text-muted">{current.target.id}</div>
-                </div>
+                {current.ad_group ? (
+                  <div className="rounded-xl border border-border bg-surface px-3 py-3">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Ad group</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">
+                      {current.ad_group.name ?? '—'}
+                    </div>
+                    <div className="mt-1 text-xs text-muted">{current.ad_group.id}</div>
+                  </div>
+                ) : null}
+                {current.target ? (
+                  <div className="rounded-xl border border-border bg-surface px-3 py-3">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Target</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">
+                      {current.target.text}
+                    </div>
+                    <div className="mt-1 text-xs text-muted">{current.target.id}</div>
+                  </div>
+                ) : null}
+                {current.placement ? (
+                  <div className="rounded-xl border border-border bg-surface px-3 py-3">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Placement</div>
+                    <div className="mt-1 text-sm font-semibold text-foreground">
+                      {current.placement.label}
+                    </div>
+                    <div className="mt-1 text-xs text-muted">{current.placement.placement_code}</div>
+                  </div>
+                ) : null}
               </div>
               {current.coverage_note ? (
                 <div className="mt-3 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800">
@@ -331,43 +360,49 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
               </div>
 
               <div className="mt-4 grid gap-4">
-                <div className="grid gap-3 rounded-xl border border-border bg-surface p-4 md:grid-cols-2">
-                  <div className="md:col-span-2 text-sm font-semibold text-foreground">Target</div>
-                  {!current.target.is_negative ? (
+                {current.target ? (
+                  <div className="grid gap-3 rounded-xl border border-border bg-surface p-4 md:grid-cols-2">
+                    <div className="md:col-span-2 text-sm font-semibold text-foreground">Target</div>
+                    {!current.target.is_negative ? (
+                      <label className="flex flex-col gap-1 text-sm text-muted">
+                        <span className="text-xs uppercase tracking-[0.16em]">Bid</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          name="target_bid"
+                          value={targetBid}
+                          onChange={(event) => setTargetBid(event.target.value)}
+                          className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
+                        />
+                        <span className="text-xs text-muted">
+                          Current {formatNumberInput(current.target.current_bid) || '—'}
+                        </span>
+                      </label>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted">
+                        Negative targets cannot stage bid updates.
+                      </div>
+                    )}
                     <label className="flex flex-col gap-1 text-sm text-muted">
-                      <span className="text-xs uppercase tracking-[0.16em]">Bid</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        name="target_bid"
-                        value={targetBid}
-                        onChange={(event) => setTargetBid(event.target.value)}
+                      <span className="text-xs uppercase tracking-[0.16em]">State</span>
+                      <select
+                        name="target_state"
+                        value={targetState}
+                        onChange={(event) => setTargetState(event.target.value)}
                         className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
-                      />
-                      <span className="text-xs text-muted">Current {formatNumberInput(current.target.current_bid) || '—'}</span>
+                      >
+                        <option value="">No change</option>
+                        <option value="enabled">enabled</option>
+                        <option value="paused">paused</option>
+                        <option value="archived">archived</option>
+                      </select>
+                      <span className="text-xs text-muted">
+                        Current {current.target.current_state ?? '—'}
+                      </span>
                     </label>
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted">
-                      Negative targets cannot stage bid updates.
-                    </div>
-                  )}
-                  <label className="flex flex-col gap-1 text-sm text-muted">
-                    <span className="text-xs uppercase tracking-[0.16em]">State</span>
-                    <select
-                      name="target_state"
-                      value={targetState}
-                      onChange={(event) => setTargetState(event.target.value)}
-                      className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
-                    >
-                      <option value="">No change</option>
-                      <option value="enabled">enabled</option>
-                      <option value="paused">paused</option>
-                      <option value="archived">archived</option>
-                    </select>
-                    <span className="text-xs text-muted">Current {current.target.current_state ?? '—'}</span>
-                  </label>
-                </div>
+                  </div>
+                ) : null}
 
                 {current.ad_group ? (
                   <div className="grid gap-3 rounded-xl border border-border bg-surface p-4 md:grid-cols-2">
@@ -383,7 +418,9 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                         onChange={(event) => setAdGroupDefaultBid(event.target.value)}
                         className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
                       />
-                      <span className="text-xs text-muted">Current {formatNumberInput(current.ad_group.current_default_bid) || '—'}</span>
+                      <span className="text-xs text-muted">
+                        Current {formatNumberInput(current.ad_group.current_default_bid) || '—'}
+                      </span>
                     </label>
                     <label className="flex flex-col gap-1 text-sm text-muted">
                       <span className="text-xs uppercase tracking-[0.16em]">State</span>
@@ -398,7 +435,9 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                         <option value="paused">paused</option>
                         <option value="archived">archived</option>
                       </select>
-                      <span className="text-xs text-muted">Current {current.ad_group.current_state ?? '—'}</span>
+                      <span className="text-xs text-muted">
+                        Current {current.ad_group.current_state ?? '—'}
+                      </span>
                     </label>
                   </div>
                 ) : null}
@@ -416,7 +455,9 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                       onChange={(event) => setCampaignBudget(event.target.value)}
                       className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
                     />
-                    <span className="text-xs text-muted">Current {formatNumberInput(current.campaign.current_budget) || '—'}</span>
+                    <span className="text-xs text-muted">
+                      Current {formatNumberInput(current.campaign.current_budget) || '—'}
+                    </span>
                   </label>
                   <label className="flex flex-col gap-1 text-sm text-muted">
                     <span className="text-xs uppercase tracking-[0.16em]">State</span>
@@ -447,28 +488,30 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                   </label>
                 </div>
 
-                {current.top_of_search_placement ? (
+                {current.placement ? (
                   <div className="grid gap-3 rounded-xl border border-border bg-surface p-4 md:grid-cols-2">
                     <div className="md:col-span-2 text-sm font-semibold text-foreground">
                       Placement (campaign context)
                     </div>
                     <label className="flex flex-col gap-1 text-sm text-muted">
-                      <span className="text-xs uppercase tracking-[0.16em]">Top-of-search modifier %</span>
+                      <span className="text-xs uppercase tracking-[0.16em]">
+                        {current.placement.label} modifier %
+                      </span>
                       <input
                         type="number"
                         min="0"
                         step="1"
-                        name="top_of_search_modifier_pct"
-                        value={topOfSearchModifierPct}
-                        onChange={(event) => setTopOfSearchModifierPct(event.target.value)}
+                        name="placement_modifier_pct"
+                        value={placementModifierPct}
+                        onChange={(event) => setPlacementModifierPct(event.target.value)}
                         className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
                       />
                       <span className="text-xs text-muted">
-                        Current {formatNumberInput(current.top_of_search_placement.current_percentage) || '—'}
+                        Current {formatNumberInput(current.placement.current_percentage) || '—'}
                       </span>
                     </label>
                     <div className="rounded-xl border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted">
-                      TOS IS stays null-safe and context-only. This field stages only the placement modifier.
+                      Placement metrics remain campaign-level facts. This field stages only the placement modifier.
                     </div>
                   </div>
                 ) : null}

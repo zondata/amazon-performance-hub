@@ -191,6 +191,6 @@ describe('buildSpTargetsWorkspaceModel', () => {
     expect(row?.composer_context.target.current_bid).toBe(1.5);
     expect(row?.composer_context.ad_group?.current_default_bid).toBe(0.8);
     expect(row?.composer_context.campaign.current_budget).toBe(40);
-    expect(row?.composer_context.top_of_search_placement?.current_percentage).toBe(35);
+    expect(row?.composer_context.placement?.current_percentage).toBe(35);
   });
 });

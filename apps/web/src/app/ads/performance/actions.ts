@@ -218,7 +218,7 @@ export const saveSpDraftAction = async (
       campaign_budget: trimToNull(formData.get('campaign_budget')),
       campaign_state: trimToNull(formData.get('campaign_state')),
       campaign_bidding_strategy: trimToNull(formData.get('campaign_bidding_strategy')),
-      top_of_search_modifier_pct: trimToNull(formData.get('top_of_search_modifier_pct')),
+      placement_modifier_pct: trimToNull(formData.get('placement_modifier_pct')),
     });
 
     let changeSetId = activeChangeSetId;

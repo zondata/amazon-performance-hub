@@ -266,75 +266,75 @@ Turn staged workspace edits into a reviewable bulksheet execution flow.
 Add the remaining SP operational tabs so changes can start from any major entity level.
 
 ### Tasks
-- [ ] Implement **Campaigns** table mode.
-- [ ] Implement **Placements** table mode.
-- [ ] Implement **Ad groups** table mode.
-- [ ] Add row-level composer entry points on all three tabs.
-- [ ] Campaign KPIs:
-  - [ ] ads type
-  - [ ] campaign status
-  - [ ] campaign name
-  - [ ] bidding strategy
-  - [ ] portfolio
-  - [ ] impressions
-  - [ ] clicks
-  - [ ] orders
-  - [ ] units
-  - [ ] sales
-  - [ ] conversion
-  - [ ] spend
-  - [ ] CPC / CPS (use existing repo naming rules; do not invent duplicates without a clear definition)
-  - [ ] CTR
-  - [ ] ACOS
-  - [ ] ROAS
-  - [ ] P&L (nullable / coverage-gated)
-- [ ] Placement KPIs:
-  - [ ] type
-  - [ ] portfolio
-  - [ ] campaign
-  - [ ] placement
-  - [ ] placement modifier
-  - [ ] impressions
-  - [ ] clicks
-  - [ ] orders
-  - [ ] units
-  - [ ] sales
-  - [ ] conversion
-  - [ ] spend
-  - [ ] CPC
-  - [ ] CTR
-  - [ ] ACOS
-  - [ ] ROAS
-  - [ ] P&L (nullable / coverage-gated)
-- [ ] Ad group KPIs:
-  - [ ] ads type
-  - [ ] campaign
-  - [ ] ad group status
-  - [ ] ad group
-  - [ ] default bid
-  - [ ] impressions
-  - [ ] clicks
-  - [ ] orders
-  - [ ] units
-  - [ ] sales
-  - [ ] conversion
-  - [ ] spend
-  - [ ] CPC
-  - [ ] CTR
-  - [ ] ACOS
-  - [ ] ROAS
-  - [ ] P&L (nullable / coverage-gated)
+- [x] Implement **Campaigns** table mode.
+- [x] Implement **Placements** table mode.
+- [x] Implement **Ad groups** table mode.
+- [x] Add row-level composer entry points on all three tabs.
+- [x] Campaign KPIs:
+  - [x] ads type
+  - [x] campaign status
+  - [x] campaign name
+  - [x] bidding strategy
+  - [x] portfolio
+  - [x] impressions
+  - [x] clicks
+  - [x] orders
+  - [x] units
+  - [x] sales
+  - [x] conversion
+  - [x] spend
+  - [x] CPC / CPS (use existing repo naming rules; do not invent duplicates without a clear definition)
+  - [x] CTR
+  - [x] ACOS
+  - [x] ROAS
+  - [x] P&L (nullable / coverage-gated)
+- [x] Placement KPIs:
+  - [x] type
+  - [x] portfolio
+  - [x] campaign
+  - [x] placement
+  - [x] placement modifier
+  - [x] impressions
+  - [x] clicks
+  - [x] orders
+  - [x] units
+  - [x] sales
+  - [x] conversion
+  - [x] spend
+  - [x] CPC
+  - [x] CTR
+  - [x] ACOS
+  - [x] ROAS
+  - [x] P&L (nullable / coverage-gated)
+- [x] Ad group KPIs:
+  - [x] ads type
+  - [x] campaign
+  - [x] ad group status
+  - [x] ad group
+  - [x] default bid
+  - [x] impressions
+  - [x] clicks
+  - [x] orders
+  - [x] units
+  - [x] sales
+  - [x] conversion
+  - [x] spend
+  - [x] CPC
+  - [x] CTR
+  - [x] ACOS
+  - [x] ROAS
+  - [x] P&L (nullable / coverage-gated)
 
 ### Rules
 - Placement rows remain campaign-level facts.
 - Targets tab may consume placement rows as context, but never as target-owned metrics.
 
 ### Phase 5 acceptance
-- [ ] All three SP tabs are usable in table mode.
-- [ ] Composer can be launched from any supported row.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] All three SP tabs are usable in table mode.
+- [x] Composer can be launched from any supported row.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 

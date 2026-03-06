@@ -157,7 +157,7 @@ export type SpTargetsComposerContext = {
     current_budget: number | null;
     current_bidding_strategy: string | null;
   };
-  top_of_search_placement: {
+  placement: {
     placement_code: string;
     label: string;
     current_percentage: number | null;
@@ -661,7 +661,7 @@ export const buildSpTargetsWorkspaceModel = (params: {
                 : null,
             current_bidding_strategy: trimString(currentCampaign?.bidding_strategy),
           },
-          top_of_search_placement: {
+          placement: {
             placement_code: 'PLACEMENT_TOP',
             label: 'Top of Search (first page)',
             current_percentage:

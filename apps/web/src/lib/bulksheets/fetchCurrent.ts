@@ -174,7 +174,10 @@ export const fetchCurrentSpData = async (actions: {
       if (action.ad_group_id) adGroupIds.add(action.ad_group_id);
     }
     if (action.type === 'update_placement_modifier') {
-      if (action.campaign_id) placementCampaignIds.add(action.campaign_id);
+      if (action.campaign_id) {
+        placementCampaignIds.add(action.campaign_id);
+        campaignIds.add(action.campaign_id);
+      }
     }
   });
 

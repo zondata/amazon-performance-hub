@@ -129,7 +129,7 @@ export const getSpDraftItemFieldSpec = (item: AdsChangeSetItem): SpDraftItemFiel
   if (item.action_type === 'update_placement_modifier') {
     return {
       key: 'percentage',
-      label: 'Top-of-search modifier %',
+      label: 'Placement modifier %',
       inputType: 'number',
       beforeValue: getValue(item.before_json, 'percentage') as number | null,
       afterValue: getValue(item.after_json, 'percentage') as number | null,
@@ -143,6 +143,7 @@ export const describeSpDraftItem = (item: AdsChangeSetItem) => {
   const campaignName = trimToNull(uiContext.campaign_name);
   const adGroupName = trimToNull(uiContext.ad_group_name);
   const targetText = trimToNull(uiContext.target_text);
+  const placementLabel = trimToNull(uiContext.placement_label);
 
   const title =
     item.entity_level === 'campaign'
@@ -150,7 +151,7 @@ export const describeSpDraftItem = (item: AdsChangeSetItem) => {
       : item.entity_level === 'ad_group'
         ? adGroupName ?? item.ad_group_id ?? item.entity_key
         : item.entity_level === 'placement'
-          ? `${campaignName ?? item.campaign_id ?? item.entity_key} · Top of Search`
+          ? `${campaignName ?? item.campaign_id ?? item.entity_key} · ${placementLabel ?? item.placement_code ?? 'Placement'}`
           : targetText ?? item.target_id ?? item.entity_key;
 
   return {
