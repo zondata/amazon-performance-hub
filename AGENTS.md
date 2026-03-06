@@ -207,9 +207,11 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 **Pages**
 - Dashboard: `/dashboard` (primary UI). Uses `si_sales_trend_daily_latest` for sales KPIs.
 - Products: `/products` list and `/products/[asin]` detail with tabs (overview, sales, logbook, costs, ads, keywords, SQP, ranking) using the same URL filters. Keywords is configuration; SQP is weekly Brand Analytics (Search Query Performance).
-- Ads: `/ads/performance` with URL params `start`, `end`, `asin` (carried but ignored),
+- Ads: `/ads/performance` with URL params `start`, `end`, `asin`,
   `channel=sp|sb|sd`, `level=campaigns|adgroups|targets|placements|searchterms`.
-  Campaigns table is implemented for SP/SB/SD; other levels are placeholders.
+  Current shipped page still has campaigns implemented first; the staged Ads Workspace rebuild is documented in:
+  - `docs/ads-workspace/AGENTS.md`
+  - `docs/ads-workspace/BUILD_PLAN.md`
 - Sales Center: `/sales`.
 - Sales Trend (URL + params): `/sales/trend` supports `granularity=daily|weekly|monthly|quarterly`, `cols=<int>`, `last=YYYY-MM-DD`. When present, start/end are derived from calendar buckets and kept in the URL for tab switching.
 - Sales Trend (chart): uses straight (linear) line segments (no curve smoothing).

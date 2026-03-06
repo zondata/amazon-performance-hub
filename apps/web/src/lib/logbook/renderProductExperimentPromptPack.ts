@@ -53,7 +53,7 @@ export const renderProductExperimentPromptPackMarkdown = ({
   lines.push('    "objective": "string (required)",');
   lines.push('    "hypothesis": "string (optional)",');
   lines.push('    "evaluation_lag_days": 2,');
-  lines.push('    "evaluation_window_days": 14,');
+  lines.push('    "evaluation_window_days": 7,');
   lines.push('    "primary_metrics": {},');
   lines.push('    "guardrails": {},');
   lines.push('    "scope": {');
@@ -66,7 +66,7 @@ export const renderProductExperimentPromptPackMarkdown = ({
   lines.push('          "baseline_ref": { "data_available_through": "YYYY-MM-DD" },');
   lines.push('          "forecast": {');
   lines.push('            "directional_kpis": [{ "kpi": "spend", "direction": "up" }],');
-  lines.push('            "window_days": 14,');
+  lines.push('            "window_days": 7,');
   lines.push('            "lag_days": 2,');
   lines.push('            "assumptions": ["optional"],');
   lines.push('            "confidence": 0.6');

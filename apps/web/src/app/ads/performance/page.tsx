@@ -1,7 +1,10 @@
-import { env } from '@/lib/env';
-import { getAdsCampaignsData } from '@/lib/ads/getAdsCampaignsData';
-import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
 import Tabs from '@/components/Tabs';
+import KpiCards from '@/components/KpiCards';
+import SpTargetsTable from '@/components/ads/SpTargetsTable';
+import { getSpTargetsWorkspaceData } from '@/lib/ads/getSpTargetsWorkspaceData';
+import { env } from '@/lib/env';
+import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
+import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -42,6 +45,7 @@ const buildHref = (params: {
   asin: string;
   channel: string;
   level: string;
+  view: string;
 }) => {
   const usp = new URLSearchParams({
     start: params.start,
@@ -49,6 +53,7 @@ const buildHref = (params: {
     asin: params.asin,
     channel: params.channel,
     level: params.level,
+    view: params.view,
   });
   return `/ads/performance?${usp.toString()}`;
 };
@@ -69,8 +74,9 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
   let start = normalizeDate(paramValue('start')) ?? defaults.start;
   let end = normalizeDate(paramValue('end')) ?? defaults.end;
   const asin = paramValue('asin') ?? 'all';
-  const channel = (paramValue('channel') ?? 'sp').toLowerCase();
-  const level = (paramValue('level') ?? 'campaigns').toLowerCase();
+  const requestedChannel = (paramValue('channel') ?? 'sp').toLowerCase();
+  const requestedLevel = (paramValue('level') ?? 'targets').toLowerCase();
+  const requestedView = (paramValue('view') ?? 'table').toLowerCase();
 
   if (start > end) {
     const tmp = start;
@@ -78,28 +84,52 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
     end = tmp;
   }
 
-  const channelValue = channel === 'sb' || channel === 'sd' ? channel : 'sp';
+  const channelValue = 'sp';
   const levelValue =
-    level === 'adgroups' ||
-    level === 'targets' ||
-    level === 'placements' ||
-    level === 'searchterms'
-      ? level
-      : 'campaigns';
+    requestedLevel === 'campaigns' ||
+    requestedLevel === 'adgroups' ||
+    requestedLevel === 'targets' ||
+    requestedLevel === 'placements' ||
+    requestedLevel === 'searchterms'
+      ? requestedLevel
+      : 'targets';
+  const viewValue = requestedView === 'trend' ? 'trend' : 'table';
+  const shouldLoadTargets = levelValue === 'targets' && viewValue === 'table';
 
-  const data = await getAdsCampaignsData({
-    accountId: env.accountId,
-    marketplace: env.marketplace,
-    channel: channelValue,
-    start,
-    end,
-    asinFilter: asin,
-  });
+  const workspaceData = shouldLoadTargets
+    ? await getSpTargetsWorkspaceData({
+        accountId: env.accountId,
+        marketplace: env.marketplace,
+        start,
+        end,
+        asinFilter: asin,
+      })
+    : null;
+  const asinOptions =
+    workspaceData?.asinOptions ??
+    (await fetchAsinOptions(env.accountId, env.marketplace));
+
+  const warnings = [...(workspaceData?.warnings ?? [])];
+  if (requestedChannel !== 'sp') {
+    warnings.unshift(
+      'Only Sponsored Products is enabled in Ads Workspace v1. SB and SD stay visible in the shell but remain disabled.'
+    );
+  }
 
   const channelTabs = [
     { label: 'SP', value: 'sp' },
-    { label: 'SB', value: 'sb' },
-    { label: 'SD', value: 'sd' },
+    {
+      label: 'SB',
+      value: 'sb',
+      disabled: true,
+      title: 'Sponsored Brands arrives in a later phase.',
+    },
+    {
+      label: 'SD',
+      value: 'sd',
+      disabled: true,
+      title: 'Sponsored Display remains KIV in v1.',
+    },
   ].map((item) => ({
     ...item,
     href: buildHref({
@@ -108,6 +138,22 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       asin,
       channel: item.value,
       level: levelValue,
+      view: viewValue,
+    }),
+  }));
+
+  const viewTabs = [
+    { label: 'Table', value: 'table' },
+    { label: 'Trend', value: 'trend' },
+  ].map((item) => ({
+    ...item,
+    href: buildHref({
+      start,
+      end,
+      asin,
+      channel: channelValue,
+      level: levelValue,
+      view: item.value,
     }),
   }));
 
@@ -125,8 +171,34 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       asin,
       channel: channelValue,
       level: item.value,
+      view: viewValue,
     }),
   }));
+
+  const kpiItems = workspaceData
+    ? [
+        {
+          label: 'Targets',
+          value: formatNumber(workspaceData.totals.targets),
+          subvalue: `Clicks ${formatNumber(workspaceData.totals.clicks)}`,
+        },
+        {
+          label: 'Spend',
+          value: formatCurrency(workspaceData.totals.spend),
+          subvalue: `CPC ${formatCurrency(workspaceData.totals.cpc)}`,
+        },
+        {
+          label: 'Sales',
+          value: formatCurrency(workspaceData.totals.sales),
+          subvalue: `ROAS ${formatNumber(workspaceData.totals.roas)}`,
+        },
+        {
+          label: 'ACOS',
+          value: formatPercent(workspaceData.totals.acos),
+          subvalue: `Conv. ${formatPercent(workspaceData.totals.conversion)}`,
+        },
+      ]
+    : [];
 
   return (
     <div className="space-y-8">
@@ -134,16 +206,19 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">
-              Ads performance
+              Ads workspace
             </div>
             <div className="mt-2 text-lg font-semibold text-foreground">
               {start} → {end}
+            </div>
+            <div className="mt-2 max-w-3xl text-sm text-muted">
+              SP-first shell. Targets is the first operational tab, while other views stay visible for workspace continuity and land in later phases.
             </div>
           </div>
           <form method="get" className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="channel" value={channelValue} />
             <input type="hidden" name="level" value={levelValue} />
-            <input type="hidden" name="asin" value={asin} />
+            <input type="hidden" name="view" value={viewValue} />
             <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
               Start
               <input
@@ -162,6 +237,21 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
                 className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
               />
             </label>
+            <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+              Product
+              <select
+                name="asin"
+                defaultValue={asin}
+                className="mt-1 min-w-[260px] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              >
+                <option value="all">All advertised ASINs</option>
+                {asinOptions.map((option) => (
+                  <option key={option.asin} value={option.asin}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               type="submit"
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
@@ -174,138 +264,58 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
 
       <section className="space-y-4">
         <Tabs items={channelTabs} current={channelValue} />
+        <Tabs items={viewTabs} current={viewValue} />
         <Tabs items={levelTabs} current={levelValue} />
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-        <div className="space-y-2 text-sm text-muted">
-          {data.notes.asinFilterIgnored ? (
-            <div>ASIN filter is not applied for Ads yet.</div>
-          ) : null}
-          <div>{data.notes.dataDelayNote}</div>
-        </div>
-      </section>
+      {warnings.length > 0 ? (
+        <section className="space-y-3">
+          {warnings.map((warning) => (
+            <div
+              key={warning}
+              className="rounded-2xl border border-border bg-surface/80 px-5 py-4 text-sm text-muted shadow-sm"
+            >
+              {warning}
+            </div>
+          ))}
+        </section>
+      ) : null}
 
-      {levelValue !== 'campaigns' ? (
+      {levelValue !== 'targets' ? (
         <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
           <div className="text-lg font-semibold text-foreground">Coming soon</div>
           <div className="mt-2 text-sm text-muted">
-            This level will be wired once the next facts layer is ready.
+            Targets is the first operational tab in the Ads Workspace. This level stays visible for shell continuity and is intentionally deferred to a later phase.
+          </div>
+        </section>
+      ) : viewValue !== 'table' ? (
+        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <div className="text-lg font-semibold text-foreground">
+            Trend mode is diagnostic-only and lands later.
+          </div>
+          <div className="mt-2 text-sm text-muted">
+            Table mode remains the default editing surface in SP v1. This phase stops at the initial Targets table.
           </div>
         </section>
       ) : (
         <section className="space-y-6">
-          <div className="grid gap-4 lg:grid-cols-4">
-            <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
-              <div className="text-xs uppercase tracking-[0.25em] text-muted">
-                Spend
-              </div>
-              <div className="mt-2 text-2xl font-semibold text-foreground">
-                {formatCurrency(data.totals.spend)}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
-              <div className="text-xs uppercase tracking-[0.25em] text-muted">
-                Sales
-              </div>
-              <div className="mt-2 text-2xl font-semibold text-foreground">
-                {formatCurrency(data.totals.sales)}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
-              <div className="text-xs uppercase tracking-[0.25em] text-muted">
-                ACOS
-              </div>
-              <div className="mt-2 text-2xl font-semibold text-foreground">
-                {formatPercent(data.totals.acos)}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
-              <div className="text-xs uppercase tracking-[0.25em] text-muted">
-                ROAS
-              </div>
-              <div className="mt-2 text-2xl font-semibold text-foreground">
-                {formatNumber(data.totals.roas)}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
+          <KpiCards items={kpiItems} />
+          <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <div className="text-xs uppercase tracking-[0.3em] text-muted">
-                  Campaigns
+                <div className="text-xs uppercase tracking-[0.25em] text-muted">
+                  Targets
                 </div>
                 <div className="mt-1 text-lg font-semibold text-foreground">
-                  {data.rows.length} campaigns
+                  {workspaceData?.rows.length.toLocaleString('en-US') ?? 0} target row(s)
                 </div>
+              </div>
+              <div className="max-w-xl text-sm text-muted">
+                Draft staging and the Change Composer save flow start in Phase 3. This phase stops at the SP workspace shell plus the initial Targets operational table.
               </div>
             </div>
-
-            {data.rows.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
-                No campaign data for this range.
-              </div>
-            ) : (
-              <div className="max-h-[520px] overflow-y-auto">
-                <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
-                  <table className="w-full table-fixed text-left text-sm">
-                    <thead className="sticky top-0 bg-surface text-xs uppercase tracking-wider text-muted shadow-sm">
-                      <tr>
-                        <th className="w-40 pb-2">Campaign</th>
-                        <th className="w-32 pb-2">Spend</th>
-                        <th className="w-32 pb-2">Sales</th>
-                        <th className="w-24 pb-2">Orders</th>
-                        <th className="w-24 pb-2">Units</th>
-                        <th className="w-24 pb-2">CTR</th>
-                        <th className="w-24 pb-2">CPC</th>
-                        <th className="w-24 pb-2">ACOS</th>
-                        <th className="w-24 pb-2">ROAS</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {data.rows.map((row) => (
-                        <tr key={row.campaign_id} className="hover:bg-surface-2/70">
-                          <td className="py-3 text-foreground">
-                            <div
-                              className="truncate font-medium"
-                              title={row.campaign_name ?? row.campaign_id}
-                            >
-                              {row.campaign_name ?? row.campaign_id}
-                            </div>
-                          </td>
-                          <td className="py-3 text-muted">
-                            {formatCurrency(row.spend)}
-                          </td>
-                          <td className="py-3 text-muted">
-                            {formatCurrency(row.sales)}
-                          </td>
-                          <td className="py-3 text-muted">
-                            {formatNumber(row.orders)}
-                          </td>
-                          <td className="py-3 text-muted">
-                            {formatNumber(row.units)}
-                          </td>
-                          <td className="py-3 text-muted">
-                            {formatPercent(row.ctr)}
-                          </td>
-                          <td className="py-3 text-muted">
-                            {formatCurrency(row.cpc)}
-                          </td>
-                          <td className="py-3 text-muted">
-                            {formatPercent(row.acos)}
-                          </td>
-                          <td className="py-3 text-muted">
-                            {formatNumber(row.roas)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
           </div>
+          <SpTargetsTable rows={workspaceData?.rows ?? []} />
         </section>
       )}
     </div>
