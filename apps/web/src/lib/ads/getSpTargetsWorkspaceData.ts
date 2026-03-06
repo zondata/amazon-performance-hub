@@ -4,6 +4,7 @@ import { fetchCurrentSpData } from '@/lib/bulksheets/fetchCurrent';
 import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { fetchAllRows } from '@/lib/supabaseFetchAll';
+import { normalizeSpAdvertisedAsin } from './spAdvertisedAsinScope';
 import {
   buildSpTargetsWorkspaceModel,
   resolveSpProductScopeSummary,
@@ -30,8 +31,6 @@ const trimString = (value: string | null | undefined): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-const normalizeAsin = (value: string) => value.trim().toLowerCase();
-
 const emptyTotals = {
   targets: 0,
   impressions: 0,
@@ -54,6 +53,14 @@ const chunkIds = (ids: string[], size = ID_CHUNK_SIZE) => {
     chunks.push(unique.slice(index, index + size));
   }
   return chunks;
+};
+
+const uniqueBy = <TRow,>(rows: TRow[], getKey: (row: TRow) => string) => {
+  const deduped = new Map<string, TRow>();
+  for (const row of rows) {
+    deduped.set(getKey(row), row);
+  }
+  return Array.from(deduped.values());
 };
 
 const fetchRowsByIdChunks = async <TRow,>(params: {
@@ -162,10 +169,20 @@ export const getSpTargetsWorkspaceData = async ({
 
   let scopeCampaignIds: string[] = [];
   let scopeAdGroupIds: string[] = [];
+  let scopeCampaignIdsWithoutAdGroupScope: string[] = [];
   let ambiguousCampaignIds = new Set<string>();
 
   if (asinFilter !== 'all') {
-    const asinNorm = normalizeAsin(asinFilter);
+    const asinNorm = normalizeSpAdvertisedAsin(asinFilter);
+    if (!asinNorm) {
+      warnings.push(`ASIN filter ${asinFilter} is invalid after normalization.`);
+      return {
+        asinOptions,
+        warnings,
+        rows: [],
+        totals: emptyTotals,
+      };
+    }
     const selectedRows = await fetchProductScopeRows({
       accountId,
       start,
@@ -200,10 +217,24 @@ export const getSpTargetsWorkspaceData = async ({
     scopeCampaignIds = scopeSummary.campaignIds;
     scopeAdGroupIds = scopeSummary.adGroupIds;
     ambiguousCampaignIds = scopeSummary.ambiguousCampaignIds;
+    const campaignsWithAdGroupScope = new Set(
+      selectedRows
+        .filter((row) => trimString(row.ad_group_id) !== null)
+        .map((row) => trimString(row.campaign_id))
+        .filter((value): value is string => Boolean(value))
+    );
+    scopeCampaignIdsWithoutAdGroupScope = scopeCampaignIds.filter(
+      (campaignId) => !campaignsWithAdGroupScope.has(campaignId)
+    );
 
     if (ambiguousCampaignIds.size > 0) {
       warnings.push(
         `${asinFilter} is included via advertised-ASIN scope, but ${ambiguousCampaignIds.size} campaign(s) also served other ASINs in this window. Target metrics remain full entity totals, not ASIN-only slices.`
+      );
+    }
+    if (scopeCampaignIdsWithoutAdGroupScope.length > 0) {
+      warnings.push(
+        `${scopeCampaignIdsWithoutAdGroupScope.length} campaign(s) lack ad-group advertised-ASIN coverage in the selected window. Targets falls back to campaign-level inclusion for those campaigns.`
       );
     }
   }
@@ -239,26 +270,41 @@ export const getSpTargetsWorkspaceData = async ({
       .lte('date', end)
       .order('date', { ascending: true });
     targetRows = await fetchAllRows<SpTargetFactRow>((from, to) => query.range(from, to));
-  } else if (scopeAdGroupIds.length > 0) {
-    targetRows = await fetchRowsByIdChunks<SpTargetFactRow>({
-      table: 'sp_targeting_daily_fact_latest',
-      select: targetingSelect,
-      idColumn: 'ad_group_id',
-      ids: scopeAdGroupIds,
-      accountId,
-      start,
-      end,
-    });
-  } else if (scopeCampaignIds.length > 0) {
-    targetRows = await fetchRowsByIdChunks<SpTargetFactRow>({
-      table: 'sp_targeting_daily_fact_latest',
-      select: targetingSelect,
-      idColumn: 'campaign_id',
-      ids: scopeCampaignIds,
-      accountId,
-      start,
-      end,
-    });
+  } else {
+    const [rowsByAdGroup, rowsByCampaignFallback] = await Promise.all([
+      scopeAdGroupIds.length > 0
+        ? fetchRowsByIdChunks<SpTargetFactRow>({
+            table: 'sp_targeting_daily_fact_latest',
+            select: targetingSelect,
+            idColumn: 'ad_group_id',
+            ids: scopeAdGroupIds,
+            accountId,
+            start,
+            end,
+          })
+        : Promise.resolve([] as SpTargetFactRow[]),
+      scopeCampaignIdsWithoutAdGroupScope.length > 0
+        ? fetchRowsByIdChunks<SpTargetFactRow>({
+            table: 'sp_targeting_daily_fact_latest',
+            select: targetingSelect,
+            idColumn: 'campaign_id',
+            ids: scopeCampaignIdsWithoutAdGroupScope,
+            accountId,
+            start,
+            end,
+          })
+        : Promise.resolve([] as SpTargetFactRow[]),
+    ]);
+
+    targetRows = uniqueBy([...rowsByAdGroup, ...rowsByCampaignFallback], (row) =>
+      [
+        trimString(row.date),
+        trimString(row.exported_at),
+        trimString(row.target_id),
+        trimString(row.campaign_id),
+        trimString(row.ad_group_id),
+      ].join('::')
+    );
   }
 
   if (targetRows.length === 0) {

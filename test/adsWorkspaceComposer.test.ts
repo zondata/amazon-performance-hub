@@ -142,4 +142,31 @@ describe('buildSpDraftMutationPlan', () => {
       })
     ).toThrow('No draft changes were staged. Change at least one editable field before saving.');
   });
+
+  it('accepts search-term detail context without changing action semantics', () => {
+    const result = buildSpDraftMutationPlan({
+      change_set_name: 'Search term draft',
+      filters_json: { level: 'searchterms' },
+      context: {
+        ...baseContext,
+        surface: 'searchterms',
+      },
+      reasoning: {
+        objective: 'Trim inefficient search terms',
+        hypothesis: null,
+        forecast_json: null,
+        forecast_window_days: null,
+        review_after_days: null,
+        notes: null,
+        objective_preset_id: null,
+      },
+      target_state: 'paused',
+      campaign_budget: '28',
+    });
+
+    expect(result.itemPayloads.map((item) => item.action_type)).toEqual([
+      'update_target_state',
+      'update_campaign_budget',
+    ]);
+  });
 });

@@ -68,7 +68,16 @@ function fileIfExists(folderPath: string, filename: string): string | null {
   return fs.existsSync(filePath) ? filePath : null;
 }
 
-async function mapReportByFile(accountId: string, reportType: "sp_campaign" | "sp_placement" | "sp_targeting" | "sp_stis", filePath: string) {
+async function mapReportByFile(
+  accountId: string,
+  reportType:
+    | "sp_campaign"
+    | "sp_placement"
+    | "sp_targeting"
+    | "sp_stis"
+    | "sp_advertised_product",
+  filePath: string
+) {
   const fileHash = hashFileSha256(filePath);
   const uploadId = await findUploadIdByFileHash(accountId, fileHash);
   if (!uploadId) {
@@ -149,6 +158,7 @@ async function processFolder(folder: DateFolder, opts: BackfillOptions): Promise
 
     summary.mappings.sp_campaign = { status: campaignPath ? "would-run" : "missing" };
     summary.mappings.sp_placement = { status: placementPath ? "would-run" : "missing" };
+    summary.mappings.sp_advertised_product = { status: advertisedPath ? "would-run" : "missing" };
     summary.mappings.sp_targeting = { status: targetingPath ? "would-run" : "missing" };
     summary.mappings.sp_stis = { status: stisPath ? "would-run" : "missing" };
     return summary;
@@ -241,6 +251,16 @@ async function processFolder(folder: DateFolder, opts: BackfillOptions): Promise
     summary.mappings.sp_targeting = await mapReportByFile(opts.accountId, "sp_targeting", targetingPath);
   } else {
     summary.mappings.sp_targeting = { status: "missing" };
+  }
+
+  if (advertisedPath) {
+    summary.mappings.sp_advertised_product = await mapReportByFile(
+      opts.accountId,
+      "sp_advertised_product",
+      advertisedPath
+    );
+  } else {
+    summary.mappings.sp_advertised_product = { status: "missing" };
   }
 
   if (stisPath) {

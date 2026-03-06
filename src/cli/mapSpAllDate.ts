@@ -1,4 +1,11 @@
-import { resolveDateFolder, getSpCampaignCsv, getSpPlacementXlsx, getSpTargetingXlsx, getSpStisCsv } from "../fs/reportLocator";
+import {
+  resolveDateFolder,
+  getSpAdvertisedProductXlsx,
+  getSpCampaignCsv,
+  getSpPlacementXlsx,
+  getSpTargetingXlsx,
+  getSpStisCsv,
+} from "../fs/reportLocator";
 import { hashFileSha256 } from "../ingest/utils";
 import { findUploadIdByFileHash, mapUpload } from "../mapping/db";
 import { rejectDeprecatedAccountId } from "./_accountGuard";
@@ -29,7 +36,16 @@ function getPositionalArgs(): string[] {
   return positionals;
 }
 
-async function mapByFile(accountId: string, filePath: string, reportType: "sp_campaign" | "sp_placement" | "sp_targeting" | "sp_stis") {
+async function mapByFile(
+  accountId: string,
+  filePath: string,
+  reportType:
+    | "sp_campaign"
+    | "sp_placement"
+    | "sp_targeting"
+    | "sp_stis"
+    | "sp_advertised_product"
+) {
   const fileHash = hashFileSha256(filePath);
   const uploadId = await findUploadIdByFileHash(accountId, fileHash);
   if (!uploadId) {
@@ -55,11 +71,13 @@ async function main() {
 
   const campaignCsv = getSpCampaignCsv(dateFolder);
   const placementXlsx = getSpPlacementXlsx(dateFolder);
+  const advertisedXlsx = getSpAdvertisedProductXlsx(dateFolder);
   const targetingXlsx = getSpTargetingXlsx(dateFolder);
   const stisCsv = getSpStisCsv(dateFolder);
 
   await mapByFile(accountId, campaignCsv, "sp_campaign");
   await mapByFile(accountId, placementXlsx, "sp_placement");
+  await mapByFile(accountId, advertisedXlsx, "sp_advertised_product");
   await mapByFile(accountId, targetingXlsx, "sp_targeting");
   await mapByFile(accountId, stisCsv, "sp_stis");
 }

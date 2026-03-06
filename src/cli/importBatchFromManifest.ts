@@ -68,6 +68,7 @@ type BatchSummary = {
 const SP_MAPPABLE: ReadonlySet<DetectedSourceType> = new Set([
   "sp_campaign",
   "sp_placement",
+  "sp_advertised_product",
   "sp_targeting",
   "sp_stis",
 ]);
@@ -87,7 +88,12 @@ const SD_MAPPABLE: ReadonlySet<DetectedSourceType> = new Set([
   "sd_purchased_product",
 ]);
 
-type SpMapReportType = "sp_campaign" | "sp_placement" | "sp_targeting" | "sp_stis";
+type SpMapReportType =
+  | "sp_campaign"
+  | "sp_placement"
+  | "sp_advertised_product"
+  | "sp_targeting"
+  | "sp_stis";
 type SbMapReportType = "sb_campaign" | "sb_campaign_placement" | "sb_keyword" | "sb_stis";
 type SdMapReportType =
   | "sd_campaign"

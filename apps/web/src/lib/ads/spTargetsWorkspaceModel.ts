@@ -1,4 +1,5 @@
 import { mapPlacementModifierKey } from '../logbook/aiPack/aiPackV3Helpers';
+import { normalizeSpAdvertisedAsin } from './spAdvertisedAsinScope';
 
 type NumericLike = number | string | null | undefined;
 
@@ -42,7 +43,11 @@ export type SpSearchTermFactRow = {
   ad_group_id: string | null;
   target_id: string | null;
   target_key: string | null;
+  campaign_name_raw?: string | null;
+  ad_group_name_raw?: string | null;
+  targeting_raw?: string | null;
   targeting_norm: string | null;
+  match_type_norm?: string | null;
   customer_search_term_raw: string | null;
   customer_search_term_norm: string | null;
   search_term_impression_share: NumericLike;
@@ -338,7 +343,7 @@ export const resolveSpProductScopeSummary = (params: {
   const asinByCampaign = new Map<string, Set<string>>();
   for (const row of params.scopedRows) {
     const campaignId = trimString(row.campaign_id);
-    const asinNorm = normalizeText(row.advertised_asin_norm);
+    const asinNorm = normalizeSpAdvertisedAsin(row.advertised_asin_norm);
     if (!campaignId || !asinNorm) continue;
     const seen = asinByCampaign.get(campaignId) ?? new Set<string>();
     seen.add(asinNorm);

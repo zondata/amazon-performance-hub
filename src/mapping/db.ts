@@ -10,8 +10,10 @@ import {
 import {
   mapSpCampaignRows,
   mapSpPlacementRows,
+  mapSpAdvertisedProductRows,
   mapSpTargetingRows,
   mapSpStisRows,
+  SpAdvertisedProductRawRow,
   SpCampaignRawRow,
   SpPlacementRawRow,
   SpTargetingRawRow,
@@ -25,6 +27,8 @@ type UploadRow = {
   account_id: string;
   source_type: string;
   exported_at: string | null;
+  coverage_start: string | null;
+  coverage_end: string | null;
 };
 
 function extractDate(iso: string | null): string | null {
@@ -85,22 +89,44 @@ export async function pickBulkSnapshotForExport(accountId: string, exportedAtDat
   return pickBulkSnapshotFromList(exportedAtDate, snapshotDates);
 }
 
-function getRawTableForReportType(reportType: "sp_campaign" | "sp_placement" | "sp_targeting" | "sp_stis") {
+function getRawTableForReportType(
+  reportType:
+    | "sp_campaign"
+    | "sp_placement"
+    | "sp_targeting"
+    | "sp_stis"
+    | "sp_advertised_product"
+) {
   if (reportType === "sp_campaign") return "sp_campaign_daily_raw";
   if (reportType === "sp_placement") return "sp_placement_daily_raw";
   if (reportType === "sp_targeting") return "sp_targeting_daily_raw";
+  if (reportType === "sp_advertised_product") return "sp_advertised_product_daily_fact";
   return "sp_stis_daily_raw";
 }
 
 async function fetchDistinctCampaignNameNorms(
-  reportType: "sp_campaign" | "sp_placement" | "sp_targeting" | "sp_stis",
-  uploadId: string
+  params: {
+    reportType:
+      | "sp_campaign"
+      | "sp_placement"
+      | "sp_targeting"
+      | "sp_stis"
+      | "sp_advertised_product";
+    uploadId: string;
+    accountId: string;
+    exportedAt: string;
+  }
 ): Promise<string[]> {
-  const table = getRawTableForReportType(reportType);
+  const table = getRawTableForReportType(params.reportType);
   const rows = await fetchAllRows<{ campaign_name_norm: string }>(
     table,
     "campaign_name_norm",
-    { upload_id: uploadId }
+    params.reportType === "sp_advertised_product"
+      ? {
+          account_id: params.accountId,
+          exported_at: params.exportedAt,
+        }
+      : { upload_id: params.uploadId }
   );
   const set = new Set<string>();
   for (const row of rows) {
@@ -159,11 +185,22 @@ async function countBulkCampaignNameMatches(
 async function pickBestBulkSnapshotForUpload(params: {
   accountId: string;
   uploadId: string;
-  reportType: "sp_campaign" | "sp_placement" | "sp_targeting" | "sp_stis";
+  reportType:
+    | "sp_campaign"
+    | "sp_placement"
+    | "sp_targeting"
+    | "sp_stis"
+    | "sp_advertised_product";
   exportedAtDate: string;
+  exportedAt: string;
 }): Promise<string | null> {
-  const { accountId, uploadId, reportType, exportedAtDate } = params;
-  const campaignNames = await fetchDistinctCampaignNameNorms(reportType, uploadId);
+  const { accountId, uploadId, reportType, exportedAtDate, exportedAt } = params;
+  const campaignNames = await fetchDistinctCampaignNameNorms({
+    reportType,
+    uploadId,
+    accountId,
+    exportedAt,
+  });
   if (!campaignNames.length) {
     return pickBulkSnapshotForExport(accountId, exportedAtDate);
   }
@@ -385,14 +422,160 @@ async function fetchUpload(uploadId: string): Promise<UploadRow> {
   const client = getSupabaseClient();
   const { data, error } = await client
     .from("uploads")
-    .select("upload_id,account_id,source_type,exported_at")
+    .select("upload_id,account_id,source_type,exported_at,coverage_start,coverage_end")
     .eq("upload_id", uploadId)
     .single();
   if (error) throw new Error(`Failed fetching upload: ${error.message}`);
   return data as UploadRow;
 }
 
-async function clearExisting(uploadId: string, reportType: string, factTable: string) {
+type AdvertisedProductBatchRow = SpAdvertisedProductRawRow & {
+  exported_at: string;
+};
+
+type AdvertisedProductBatchCandidate = {
+  exportedAt: string;
+  minDate: string;
+  maxDate: string;
+  rowCount: number;
+};
+
+function dayDiffAbs(left: string, right: string): number {
+  return Math.abs(dateToUtcMs(left) - dateToUtcMs(right));
+}
+
+function timestampDiffAbs(left: string, right: string): number {
+  return Math.abs(Date.parse(left) - Date.parse(right));
+}
+
+export function pickAdvertisedProductBatchCandidate(params: {
+  uploadExportedAt: string;
+  coverageStart: string | null;
+  coverageEnd: string | null;
+  candidates: AdvertisedProductBatchCandidate[];
+}): AdvertisedProductBatchCandidate | null {
+  const { uploadExportedAt, coverageStart, coverageEnd, candidates } = params;
+  if (!candidates.length) return null;
+
+  const uploadExportedDate = extractDate(uploadExportedAt);
+  if (!uploadExportedDate) return candidates[0] ?? null;
+
+  const sorted = [...candidates].sort((left, right) => {
+    const leftExactCoverage =
+      coverageStart !== null &&
+      coverageEnd !== null &&
+      left.minDate === coverageStart &&
+      left.maxDate === coverageEnd;
+    const rightExactCoverage =
+      coverageStart !== null &&
+      coverageEnd !== null &&
+      right.minDate === coverageStart &&
+      right.maxDate === coverageEnd;
+    if (leftExactCoverage !== rightExactCoverage) {
+      return leftExactCoverage ? -1 : 1;
+    }
+
+    const leftSameExportedDate = extractDate(left.exportedAt) === uploadExportedDate;
+    const rightSameExportedDate = extractDate(right.exportedAt) === uploadExportedDate;
+    if (leftSameExportedDate !== rightSameExportedDate) {
+      return leftSameExportedDate ? -1 : 1;
+    }
+
+    const leftCoverageDistance =
+      coverageStart !== null && coverageEnd !== null
+        ? dayDiffAbs(left.minDate, coverageStart) + dayDiffAbs(left.maxDate, coverageEnd)
+        : 0;
+    const rightCoverageDistance =
+      coverageStart !== null && coverageEnd !== null
+        ? dayDiffAbs(right.minDate, coverageStart) + dayDiffAbs(right.maxDate, coverageEnd)
+        : 0;
+    if (leftCoverageDistance !== rightCoverageDistance) {
+      return leftCoverageDistance - rightCoverageDistance;
+    }
+
+    if (left.rowCount !== right.rowCount) {
+      return right.rowCount - left.rowCount;
+    }
+
+    return timestampDiffAbs(left.exportedAt, uploadExportedAt) - timestampDiffAbs(right.exportedAt, uploadExportedAt);
+  });
+
+  return sorted[0] ?? null;
+}
+
+async function discoverAdvertisedProductBatch(params: {
+  accountId: string;
+  uploadId: string;
+  uploadExportedAt: string;
+  coverageStart: string | null;
+  coverageEnd: string | null;
+}): Promise<{ batchExportedAt: string; rows: AdvertisedProductBatchRow[] }> {
+  const { accountId, uploadId, uploadExportedAt, coverageStart, coverageEnd } = params;
+  if (!coverageStart || !coverageEnd) {
+    throw new Error(
+      `Advertised-product remap requires coverage_start and coverage_end on upload ${uploadId}.`
+    );
+  }
+
+  const factRows = await fetchAllRows<AdvertisedProductBatchRow>(
+    "sp_advertised_product_daily_fact",
+    "date,campaign_id,ad_group_id,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,advertised_asin_raw,advertised_asin_norm,sku_raw,impressions,clicks,spend,sales,orders,units,exported_at",
+    {
+      account_id: accountId,
+    }
+  );
+
+  const rowsInCoverage = factRows.filter((row) => row.date >= coverageStart && row.date <= coverageEnd);
+  if (rowsInCoverage.length === 0) {
+    throw new Error(
+      `No sp_advertised_product_daily_fact rows found for upload ${uploadId} in coverage window ${coverageStart}..${coverageEnd}.`
+    );
+  }
+
+  const rowsByBatch = new Map<string, AdvertisedProductBatchRow[]>();
+  for (const row of rowsInCoverage) {
+    const batch = row.exported_at;
+    const list = rowsByBatch.get(batch) ?? [];
+    list.push(row);
+    rowsByBatch.set(batch, list);
+  }
+
+  const candidates = [...rowsByBatch.entries()].map(([exportedAt, rows]) => {
+    const dates = rows.map((row) => row.date).sort();
+    return {
+      exportedAt,
+      minDate: dates[0] ?? coverageStart,
+      maxDate: dates[dates.length - 1] ?? coverageEnd,
+      rowCount: rows.length,
+    };
+  });
+
+  const selected = pickAdvertisedProductBatchCandidate({
+    uploadExportedAt,
+    coverageStart,
+    coverageEnd,
+    candidates,
+  });
+  if (!selected) {
+    throw new Error(
+      `No sp_advertised_product_daily_fact batch candidates could be selected for upload ${uploadId}.`
+    );
+  }
+
+  const rows = rowsByBatch.get(selected.exportedAt) ?? [];
+  if (rows.length === 0) {
+    throw new Error(
+      `Selected advertised-product batch ${selected.exportedAt} for upload ${uploadId}, but it contains zero rows.`
+    );
+  }
+
+  return {
+    batchExportedAt: selected.exportedAt,
+    rows,
+  };
+}
+
+async function clearExistingIssues(uploadId: string, reportType: string) {
   const client = getSupabaseClient();
   const { error: issueError } = await client
     .from("sp_mapping_issues")
@@ -400,12 +583,28 @@ async function clearExisting(uploadId: string, reportType: string, factTable: st
     .eq("upload_id", uploadId)
     .eq("report_type", reportType);
   if (issueError) throw new Error(`Failed clearing mapping issues: ${issueError.message}`);
+}
 
+async function clearExisting(uploadId: string, reportType: string, factTable: string) {
+  const client = getSupabaseClient();
+  await clearExistingIssues(uploadId, reportType);
   const { error: factError } = await client
     .from(factTable)
     .delete()
     .eq("upload_id", uploadId);
   if (factError) throw new Error(`Failed clearing facts from ${factTable}: ${factError.message}`);
+}
+
+async function clearExistingAdvertisedProductFacts(accountId: string, batchExportedAt: string) {
+  const client = getSupabaseClient();
+  const { error } = await client
+    .from("sp_advertised_product_daily_fact")
+    .delete()
+    .eq("account_id", accountId)
+    .eq("exported_at", batchExportedAt);
+  if (error) {
+    throw new Error(`Failed clearing facts from sp_advertised_product_daily_fact: ${error.message}`);
+  }
 }
 
 async function insertChunked(table: string, rows: Record<string, unknown>[]) {
@@ -446,7 +645,15 @@ async function refreshSpCampaignHourlyFactGold(uploadId: string) {
   }
 }
 
-export async function mapUpload(uploadId: string, reportType: "sp_campaign" | "sp_placement" | "sp_targeting" | "sp_stis") {
+export async function mapUpload(
+  uploadId: string,
+  reportType:
+    | "sp_campaign"
+    | "sp_placement"
+    | "sp_targeting"
+    | "sp_stis"
+    | "sp_advertised_product"
+) {
   const upload = await fetchUpload(uploadId);
   if (upload.source_type !== reportType) {
     throw new Error(`Upload ${uploadId} is ${upload.source_type}, expected ${reportType}`);
@@ -455,10 +662,34 @@ export async function mapUpload(uploadId: string, reportType: "sp_campaign" | "s
   const exportedAtDate = extractDate(upload.exported_at);
   if (!exportedAtDate) throw new Error(`Upload ${uploadId} has no exported_at`);
 
-  await clearExisting(uploadId, reportType, reportType === "sp_campaign" ? "sp_campaign_hourly_fact"
-    : reportType === "sp_placement" ? "sp_placement_daily_fact"
-    : reportType === "sp_targeting" ? "sp_targeting_daily_fact"
-    : "sp_stis_daily_fact");
+  const exportedAt = upload.exported_at ?? new Date().toISOString();
+  let advertisedRows: SpAdvertisedProductRawRow[] = [];
+  let advertisedBatchExportedAt: string | null = null;
+
+  if (reportType === "sp_advertised_product") {
+    const discoveredBatch = await discoverAdvertisedProductBatch({
+      accountId: upload.account_id,
+      uploadId,
+      uploadExportedAt: exportedAt,
+      coverageStart: upload.coverage_start,
+      coverageEnd: upload.coverage_end,
+    });
+    advertisedRows = discoveredBatch.rows.map(({ exported_at: _exportedAt, ...row }) => row);
+    advertisedBatchExportedAt = discoveredBatch.batchExportedAt;
+    await clearExistingIssues(uploadId, reportType);
+  } else {
+    await clearExisting(
+      uploadId,
+      reportType,
+      reportType === "sp_campaign"
+        ? "sp_campaign_hourly_fact"
+        : reportType === "sp_placement"
+          ? "sp_placement_daily_fact"
+          : reportType === "sp_targeting"
+            ? "sp_targeting_daily_fact"
+            : "sp_stis_daily_fact"
+    );
+  }
 
   const snapshotDate =
     (await pickBestBulkSnapshotForUpload({
@@ -466,6 +697,7 @@ export async function mapUpload(uploadId: string, reportType: "sp_campaign" | "s
       uploadId,
       reportType,
       exportedAtDate,
+      exportedAt,
     })) ?? (await pickBulkSnapshotForExport(upload.account_id, exportedAtDate));
   if (!snapshotDate) {
     await insertIssues(upload.account_id, uploadId, reportType, [
@@ -481,7 +713,23 @@ export async function mapUpload(uploadId: string, reportType: "sp_campaign" | "s
 
   const lookup = await loadBulkLookup(upload.account_id, snapshotDate);
   const referenceDate = exportedAtDate;
-  const exportedAt = upload.exported_at ?? new Date().toISOString();
+
+  if (reportType === "sp_advertised_product") {
+    if (!advertisedBatchExportedAt) {
+      throw new Error(`No advertised-product batch was discovered for upload ${uploadId}.`);
+    }
+    const { facts, issues } = mapSpAdvertisedProductRows({
+      rows: advertisedRows,
+      lookup,
+      accountId: upload.account_id,
+      exportedAt: advertisedBatchExportedAt,
+      referenceDate,
+    });
+    await clearExistingAdvertisedProductFacts(upload.account_id, advertisedBatchExportedAt);
+    await insertChunked("sp_advertised_product_daily_fact", facts);
+    await insertIssues(upload.account_id, uploadId, reportType, issues);
+    return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
+  }
 
   if (reportType === "sp_campaign") {
     const rows = await fetchAllRows<SpCampaignRawRow>(

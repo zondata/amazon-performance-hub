@@ -137,6 +137,30 @@ export type SpStisDailyFactRow = SpStisRawRow & {
 };
 export type SpStisFactRow = SpStisDailyFactRow;
 
+export type SpAdvertisedProductRawRow = {
+  date: string;
+  campaign_id: string;
+  ad_group_id: string | null;
+  campaign_name_raw: string;
+  campaign_name_norm: string;
+  ad_group_name_raw: string | null;
+  ad_group_name_norm: string | null;
+  advertised_asin_raw: string;
+  advertised_asin_norm: string;
+  sku_raw: string | null;
+  impressions: number | null;
+  clicks: number | null;
+  spend: number | null;
+  sales: number | null;
+  orders: number | null;
+  units: number | null;
+};
+
+export type SpAdvertisedProductFactRow = SpAdvertisedProductRawRow & {
+  account_id: string;
+  exported_at: string;
+};
+
 function issueKeyBase(row: { campaign_name_norm: string; portfolio_name_norm?: string | null }) {
   return {
     campaign_name_norm: row.campaign_name_norm,
@@ -614,6 +638,109 @@ export function mapSpStisRows(params: {
   }
   for (const pending of pendingTargetIssues) {
     if (resolvedTargetKeys.has(pending.key)) continue;
+    collector.addIssue(pending.issue);
+  }
+
+  return { facts, issues: collector.list() };
+}
+
+export function mapSpAdvertisedProductRows(params: {
+  rows: SpAdvertisedProductRawRow[];
+  lookup: BulkLookup;
+  accountId: string;
+  exportedAt: string;
+  referenceDate: string;
+}): { facts: SpAdvertisedProductFactRow[]; issues: MappingIssue[] } {
+  const { rows, lookup, accountId, exportedAt, referenceDate } = params;
+  const facts: SpAdvertisedProductFactRow[] = [];
+  const collector = createIssueCollector();
+  const resolvedCampaignKeys = new Set<string>();
+  const resolvedAdGroupKeys = new Set<string>();
+  const pendingCampaignIssues: { key: string; issue: PendingIssue }[] = [];
+  const pendingAdGroupIssues: { key: string; issue: PendingIssue }[] = [];
+
+  for (const row of rows) {
+    const campaignKey = JSON.stringify(issueKeyBase(row));
+    const campaignResult = resolveCampaignId({
+      campaignNameNorm: row.campaign_name_norm,
+      portfolioNameNorm: null,
+      referenceDate,
+      lookup,
+    });
+
+    if (campaignResult.status !== "ok") {
+      pendingCampaignIssues.push({
+        key: campaignKey,
+        issue: {
+          entity_level: "campaign",
+          issue_type: campaignResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+          key_json: issueKeyBase(row),
+          candidates_json: campaignResult.status === "ambiguous" ? campaignResult.candidates : null,
+        },
+      });
+      continue;
+    }
+
+    resolvedCampaignKeys.add(campaignKey);
+
+    let canonicalAdGroupId: string | null = null;
+    if (row.ad_group_name_norm) {
+      const adGroupKeyObj = {
+        ...issueKeyBase(row),
+        ad_group_name_norm: row.ad_group_name_norm,
+      };
+      const adGroupKey = JSON.stringify(adGroupKeyObj);
+      const adGroupResult = resolveAdGroupId({
+        campaignId: campaignResult.id,
+        adGroupNameNorm: row.ad_group_name_norm,
+        referenceDate,
+        lookup,
+      });
+
+      if (adGroupResult.status === "ok") {
+        canonicalAdGroupId = adGroupResult.id;
+        resolvedAdGroupKeys.add(adGroupKey);
+      } else {
+        pendingAdGroupIssues.push({
+          key: adGroupKey,
+          issue: {
+            entity_level: "ad_group",
+            issue_type: adGroupResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+            key_json: adGroupKeyObj,
+            candidates_json: adGroupResult.status === "ambiguous" ? adGroupResult.candidates : null,
+          },
+        });
+      }
+    }
+
+    facts.push({
+      account_id: accountId,
+      date: row.date,
+      campaign_id: campaignResult.id,
+      ad_group_id: canonicalAdGroupId,
+      campaign_name_raw: row.campaign_name_raw,
+      campaign_name_norm: row.campaign_name_norm,
+      ad_group_name_raw: row.ad_group_name_raw,
+      ad_group_name_norm: row.ad_group_name_norm,
+      advertised_asin_raw: row.advertised_asin_raw,
+      advertised_asin_norm: row.advertised_asin_norm,
+      sku_raw: row.sku_raw,
+      impressions: row.impressions,
+      clicks: row.clicks,
+      spend: row.spend,
+      sales: row.sales,
+      orders: row.orders,
+      units: row.units,
+      exported_at: exportedAt,
+    });
+  }
+
+  for (const pending of pendingCampaignIssues) {
+    if (resolvedCampaignKeys.has(pending.key)) continue;
+    collector.addIssue(pending.issue);
+  }
+  for (const pending of pendingAdGroupIssues) {
+    if (resolvedAdGroupKeys.has(pending.key)) continue;
     collector.addIssue(pending.issue);
   }
 

@@ -42,6 +42,7 @@ const surfaceLabel = (surface: SpChangeComposerContext['surface']) => {
   if (surface === 'campaigns') return 'Campaign row';
   if (surface === 'adgroups') return 'Ad group row';
   if (surface === 'placements') return 'Placement row';
+  if (surface === 'searchterms') return 'Search term detail row';
   return 'Target row';
 };
 

@@ -58,6 +58,7 @@
     "log:validate:bulkgen": "ts-node src/cli/logValidateBulkgenChanges.ts",
     "map:sp:campaign": "ts-node src/cli/mapSpCampaign.ts",
     "map:sp:placement": "ts-node src/cli/mapSpPlacement.ts",
+    "map:sp:advertised": "ts-node src/cli/mapSpAdvertisedProduct.ts",
     "map:sp:targeting": "ts-node src/cli/mapSpTargeting.ts",
     "map:sp:stis": "ts-node src/cli/mapSpStis.ts",
     "map:sp:all:date": "ts-node src/cli/mapSpAllDate.ts",

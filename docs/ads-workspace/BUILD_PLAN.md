@@ -344,53 +344,53 @@ Add the remaining SP operational tabs so changes can start from any major entity
 Provide a search-term-first operational view for SP.
 
 ### Tasks
-- [ ] Build SP Search terms parent grouping by `(asin, ads_type, normalized_search_term)`.
-- [ ] Show each search term once per ad type.
-- [ ] Add expandable child rows with KPI header:
-  - [ ] campaign
-  - [ ] ad group
-  - [ ] keyword / target
-  - [ ] status
-  - [ ] match type
-  - [ ] impressions
-  - [ ] clicks
-  - [ ] orders
-  - [ ] units
-  - [ ] sales
-  - [ ] conversion
-  - [ ] cost
-  - [ ] current bid
-  - [ ] CPC
-  - [ ] ACOS
-  - [ ] ROAS
-- [ ] Search-term parent KPIs:
-  - [ ] sponsored
-  - [ ] search term
-  - [ ] impressions
-  - [ ] clicks
-  - [ ] orders
-  - [ ] units
-  - [ ] spend
-  - [ ] sales
-  - [ ] CTR
-  - [ ] CPC
-  - [ ] cost / order
-  - [ ] conversion
-  - [ ] ACOS
-  - [ ] ROAS
-  - [ ] P&L (nullable / coverage-gated)
-- [ ] Add coverage/fallback behavior for missing STIS rows.
+- [x] Build SP Search terms parent grouping by `(asin, ads_type, normalized_search_term)`.
+- [x] Show each search term once per ad type.
+- [x] Add expandable child rows with KPI header:
+  - [x] campaign
+  - [x] ad group
+  - [x] keyword / target
+  - [x] status
+  - [x] match type
+  - [x] impressions
+  - [x] clicks
+  - [x] orders
+  - [x] units
+  - [x] sales
+  - [x] conversion
+  - [x] cost
+  - [x] current bid
+  - [x] CPC
+  - [x] ACOS
+  - [x] ROAS
+- [x] Search-term parent KPIs:
+  - [x] sponsored
+  - [x] search term
+  - [x] impressions
+  - [x] clicks
+  - [x] orders
+  - [x] units
+  - [x] spend
+  - [x] sales
+  - [x] CTR
+  - [x] CPC
+  - [x] cost / order
+  - [x] conversion
+  - [x] ACOS
+  - [x] ROAS
+  - [x] P&L (nullable / coverage-gated)
+- [x] Add coverage/fallback behavior for missing STIS rows.
 
 ### Rules
 - Search terms live under the selected ad type; do not mix SP with SB/SD here in v1.
 - This phase is SP-only.
 
 ### Phase 6 acceptance
-- [ ] Search terms tab is operational for SP.
-- [ ] Parent/child grouping is stable and deduplicated.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] Search terms tab is operational for SP.
+- [x] Parent/child grouping is stable and deduplicated.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 

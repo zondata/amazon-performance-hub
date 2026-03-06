@@ -126,7 +126,8 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
     (levelValue === 'campaigns' ||
       levelValue === 'adgroups' ||
       levelValue === 'targets' ||
-      levelValue === 'placements');
+      levelValue === 'placements' ||
+      levelValue === 'searchterms');
 
   const workspaceData = shouldLoadTable
     ? await getSpWorkspaceData({
@@ -369,7 +370,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
               {start} → {end}
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
-              SP-first shell. Targets is the first operational tab, while other views stay visible for workspace continuity and land in later phases.
+              SP-first workspace shell. Table mode is operational for campaigns, ad groups, targets, placements, and search terms. Trend mode still lands later.
             </div>
           </div>
           <form method="get" className="flex flex-wrap items-end gap-3">
@@ -468,13 +469,6 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
           notice={queueNotice}
           error={queueError}
         />
-      ) : levelValue === 'searchterms' ? (
-        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-          <div className="text-lg font-semibold text-foreground">Coming soon</div>
-          <div className="mt-2 text-sm text-muted">
-            Search Terms lands in Phase 6. This level stays visible for workspace continuity and is intentionally deferred.
-          </div>
-        </section>
       ) : viewValue !== 'table' ? (
         <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
           <div className="text-lg font-semibold text-foreground">
@@ -486,7 +480,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
         </section>
       ) : (
         <AdsTargetsWorkspaceClient
-          level={levelValue as 'campaigns' | 'adgroups' | 'targets' | 'placements'}
+          level={levelValue as 'campaigns' | 'adgroups' | 'targets' | 'placements' | 'searchterms'}
           entityCountLabel={workspaceData?.entityCountLabel ?? 'Rows'}
           rows={workspaceData?.rows ?? []}
           kpiItems={kpiItems}

@@ -35,7 +35,7 @@ export type SpComposerPlacementContext = {
 
 export type SpChangeComposerContext = {
   channel: 'sp';
-  surface: 'targets' | 'campaigns' | 'adgroups' | 'placements';
+  surface: 'targets' | 'campaigns' | 'adgroups' | 'placements' | 'searchterms';
   target: SpComposerTargetContext | null;
   ad_group: SpComposerAdGroupContext | null;
   campaign: SpComposerCampaignContext;

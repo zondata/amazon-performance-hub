@@ -1,10 +1,16 @@
 import 'server-only';
 
 import { fetchCurrentSpData } from '@/lib/bulksheets/fetchCurrent';
+import { fetchByDateChunks } from '@/lib/logbook/aiPack/fetchByDateChunks';
 import { isStatementTimeoutMessage } from '@/lib/logbook/aiPack/fetchByDateChunks';
 import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { fetchAllRows } from '@/lib/supabaseFetchAll';
+import { normalizeSpAdvertisedAsin } from './spAdvertisedAsinScope';
+import {
+  buildSpSearchTermsWorkspaceModel,
+  type SpSearchTermsWorkspaceRow,
+} from './spSearchTermsWorkspaceModel';
 import {
   buildSpAdGroupsWorkspaceModel,
   buildSpCampaignsWorkspaceModel,
@@ -21,7 +27,7 @@ import {
   type SpTargetFactRow,
 } from './spTargetsWorkspaceModel';
 
-export type SpWorkspaceLevel = 'campaigns' | 'adgroups' | 'targets' | 'placements';
+export type SpWorkspaceLevel = 'campaigns' | 'adgroups' | 'targets' | 'placements' | 'searchterms';
 
 export type SpWorkspaceData = {
   asinOptions: Awaited<ReturnType<typeof fetchAsinOptions>>;
@@ -31,7 +37,8 @@ export type SpWorkspaceData = {
     | ReturnType<typeof buildSpCampaignsWorkspaceModel>['rows']
     | ReturnType<typeof buildSpAdGroupsWorkspaceModel>['rows']
     | ReturnType<typeof buildSpTargetsWorkspaceModel>['rows']
-    | ReturnType<typeof buildSpPlacementsWorkspaceModel>['rows'];
+    | ReturnType<typeof buildSpPlacementsWorkspaceModel>['rows']
+    | SpSearchTermsWorkspaceRow[];
   totals: SpWorkspaceSummaryTotals;
 };
 
@@ -55,13 +62,13 @@ type SpPlacementWorkspaceFactRow = SpPlacementFactRow & {
 const ID_CHUNK_SIZE = 250;
 const CAMPAIGN_PAGE_SIZE = 1000;
 const CAMPAIGN_CHUNK_DAYS = 14;
+const SEARCH_TERM_PAGE_SIZE = 1000;
+const SEARCH_TERM_CHUNK_DAYS = 14;
 
 const trimString = (value: string | null | undefined): string | null => {
   const trimmed = String(value ?? '').trim();
   return trimmed.length > 0 ? trimmed : null;
 };
-
-const normalizeAsin = (value: string) => value.trim().toLowerCase();
 
 const addDays = (value: string, days: number) => {
   const date = new Date(`${value}T00:00:00Z`);
@@ -93,6 +100,14 @@ const chunkIds = (ids: string[], size = ID_CHUNK_SIZE) => {
     chunks.push(unique.slice(index, index + size));
   }
   return chunks;
+};
+
+const uniqueBy = <TRow,>(rows: TRow[], getKey: (row: TRow) => string) => {
+  const deduped = new Map<string, TRow>();
+  for (const row of rows) {
+    deduped.set(getKey(row), row);
+  }
+  return Array.from(deduped.values());
 };
 
 const fetchRowsByIdChunks = async <TRow,>(params: {
@@ -211,6 +226,120 @@ const fetchCampaignRowsChunked = async (params: {
   return Array.from(aggregated.values());
 };
 
+const fetchSearchTermRowsChunked = async (params: {
+  accountId: string;
+  start: string;
+  end: string;
+  adGroupIds?: string[];
+  campaignIds?: string[];
+}): Promise<{
+  rows: SpSearchTermFactRow[];
+  chunkErrors: Array<{ chunkStart: string; chunkEnd: string; message: string }>;
+}> => {
+  if (Array.isArray(params.adGroupIds) && params.adGroupIds.length === 0) {
+    return { rows: [], chunkErrors: [] };
+  }
+  if (
+    !params.adGroupIds &&
+    Array.isArray(params.campaignIds) &&
+    params.campaignIds.length === 0
+  ) {
+    return { rows: [], chunkErrors: [] };
+  }
+
+  const idColumn = params.adGroupIds?.length
+    ? 'ad_group_id'
+    : params.campaignIds?.length
+      ? 'campaign_id'
+      : null;
+  const ids = params.adGroupIds?.length
+    ? params.adGroupIds
+    : params.campaignIds?.length
+      ? params.campaignIds
+      : null;
+  const select = [
+    'date',
+    'exported_at',
+    'campaign_id',
+    'ad_group_id',
+    'target_id',
+    'target_key',
+    'campaign_name_raw',
+    'ad_group_name_raw',
+    'targeting_raw',
+    'targeting_norm',
+    'match_type_norm',
+    'customer_search_term_raw',
+    'customer_search_term_norm',
+    'search_term_impression_share',
+    'search_term_impression_rank',
+    'impressions',
+    'clicks',
+    'spend',
+    'sales',
+    'orders',
+    'units',
+  ].join(',');
+
+  const result = await fetchByDateChunks<SpSearchTermFactRow>({
+    startDate: params.start,
+    endDate: params.end,
+    chunkDays: SEARCH_TERM_CHUNK_DAYS,
+    runChunk: async (chunkStart, chunkEnd) => {
+      const rows: SpSearchTermFactRow[] = [];
+      const idChunks = ids ? chunkIds(ids) : [null];
+
+      for (const idChunk of idChunks) {
+        let from = 0;
+        while (true) {
+          let query = supabaseAdmin
+            .from('sp_stis_daily_fact_latest')
+            .select(select)
+            .eq('account_id', params.accountId)
+            .gte('date', chunkStart)
+            .lte('date', chunkEnd)
+            .order('date', { ascending: true })
+            .range(from, from + SEARCH_TERM_PAGE_SIZE - 1);
+
+          if (idColumn && idChunk) {
+            query = query.in(idColumn, idChunk);
+          }
+
+          const { data, error } = await query;
+          if (error) {
+            const prefix = isStatementTimeoutMessage(error.message)
+              ? `Timed out loading SP search-term chunk ${chunkStart}..${chunkEnd}`
+              : `Failed loading SP search-term chunk ${chunkStart}..${chunkEnd}`;
+            throw new Error(`${prefix}: ${error.message}`);
+          }
+
+          if (!data || data.length === 0) {
+            break;
+          }
+
+          rows.push(...((data ?? []) as unknown as SpSearchTermFactRow[]));
+
+          if (data.length < SEARCH_TERM_PAGE_SIZE) {
+            break;
+          }
+          from += SEARCH_TERM_PAGE_SIZE;
+        }
+      }
+
+      return rows;
+    },
+  });
+
+  return {
+    rows: result.rows,
+    chunkErrors: result.chunkErrors.map((entry) => ({
+      chunkStart: entry.chunkStart,
+      chunkEnd: entry.chunkEnd,
+      message: entry.message,
+    })),
+  };
+};
+
 const fetchProductScopeRows = async (params: {
   accountId: string;
   start: string;
@@ -294,6 +423,7 @@ const levelEmptyMessage: Record<SpWorkspaceLevel, string> = {
   adgroups: 'No SP ad group rows were found for the selected workspace filters.',
   targets: 'No SP target rows were found for the selected workspace filters.',
   placements: 'No SP placement rows were found for the selected workspace filters.',
+  searchterms: 'No SP search-term rows were found for the selected workspace filters.',
 };
 
 const levelEntityLabel: Record<SpWorkspaceLevel, string> = {
@@ -301,6 +431,7 @@ const levelEntityLabel: Record<SpWorkspaceLevel, string> = {
   adgroups: 'Ad groups',
   targets: 'Targets',
   placements: 'Placements',
+  searchterms: 'Search terms',
 };
 
 export const getSpWorkspaceData = async ({
@@ -328,13 +459,30 @@ export const getSpWorkspaceData = async ({
       'Ad group totals are aggregated from SP targeting facts because the current facts layer does not expose a dedicated SP ad-group daily view.'
     );
   }
+  if (level === 'searchterms') {
+    warnings.push(
+      'Search Terms uses SP STIS rows. When STIS is missing for the selected window, this tab stays explicit about the gap instead of inventing search-term facts.'
+    );
+  }
 
   let scopeCampaignIds: string[] = [];
   let scopeAdGroupIds: string[] = [];
+  let scopeCampaignIdsWithoutAdGroupScope: string[] = [];
   let ambiguousCampaignIds = new Set<string>();
+  let scopedAdvertisedProductRows: SpScopeAdvertisedProductRow[] = [];
 
   if (asinFilter !== 'all') {
-    const asinNorm = normalizeAsin(asinFilter);
+    const asinNorm = normalizeSpAdvertisedAsin(asinFilter);
+    if (!asinNorm) {
+      warnings.push(`ASIN filter ${asinFilter} is invalid after normalization.`);
+      return {
+        asinOptions,
+        warnings,
+        entityCountLabel: levelEntityLabel[level],
+        rows: [],
+        totals: emptyTotals,
+      };
+    }
     const selectedRows = await fetchProductScopeRows({
       accountId,
       start,
@@ -355,7 +503,7 @@ export const getSpWorkspaceData = async ({
       };
     }
 
-    const scopedRows = await fetchScopedAdvertisedProductRows({
+    scopedAdvertisedProductRows = await fetchScopedAdvertisedProductRows({
       accountId,
       start,
       end,
@@ -365,15 +513,29 @@ export const getSpWorkspaceData = async ({
     });
     const scopeSummary = resolveSpProductScopeSummary({
       selectedRows,
-      scopedRows,
+      scopedRows: scopedAdvertisedProductRows,
     });
     scopeCampaignIds = scopeSummary.campaignIds;
     scopeAdGroupIds = scopeSummary.adGroupIds;
     ambiguousCampaignIds = scopeSummary.ambiguousCampaignIds;
+    const campaignsWithAdGroupScope = new Set(
+      selectedRows
+        .filter((row) => trimString(row.ad_group_id) !== null)
+        .map((row) => trimString(row.campaign_id))
+        .filter((value): value is string => Boolean(value))
+    );
+    scopeCampaignIdsWithoutAdGroupScope = scopeCampaignIds.filter(
+      (campaignId) => !campaignsWithAdGroupScope.has(campaignId)
+    );
 
     if (ambiguousCampaignIds.size > 0) {
       warnings.push(
         `${asinFilter} is included via advertised-ASIN scope, but ${ambiguousCampaignIds.size} campaign(s) also served other ASINs in this window. Metrics remain full entity totals, not ASIN-only slices.`
+      );
+    }
+    if (scopeCampaignIdsWithoutAdGroupScope.length > 0) {
+      warnings.push(
+        `${scopeCampaignIdsWithoutAdGroupScope.length} campaign(s) lack ad-group advertised-ASIN coverage in the selected window. Lower-level SP tabs fall back to campaign-level inclusion for those campaigns.`
       );
     }
   }
@@ -417,6 +579,8 @@ export const getSpWorkspaceData = async ({
   let campaignRows: SpCampaignFactRow[] = [];
   let targetRows: SpTargetFactRow[] = [];
   let placementRows: SpPlacementWorkspaceFactRow[] = [];
+  let searchTermRows: SpSearchTermFactRow[] = [];
+  let searchTermChunkErrors: Array<{ chunkStart: string; chunkEnd: string; message: string }> = [];
 
   if (level === 'campaigns') {
     campaignRows = await fetchCampaignRowsChunked({
@@ -437,26 +601,41 @@ export const getSpWorkspaceData = async ({
         .lte('date', end)
         .order('date', { ascending: true });
       targetRows = await fetchAllRows<SpTargetFactRow>((from, to) => query.range(from, to));
-    } else if (scopeAdGroupIds.length > 0) {
-      targetRows = await fetchRowsByIdChunks<SpTargetFactRow>({
-        table: 'sp_targeting_daily_fact_latest',
-        select: targetingSelect,
-        idColumn: 'ad_group_id',
-        ids: scopeAdGroupIds,
-        accountId,
-        start,
-        end,
-      });
-    } else if (scopeCampaignIds.length > 0) {
-      targetRows = await fetchRowsByIdChunks<SpTargetFactRow>({
-        table: 'sp_targeting_daily_fact_latest',
-        select: targetingSelect,
-        idColumn: 'campaign_id',
-        ids: scopeCampaignIds,
-        accountId,
-        start,
-        end,
-      });
+    } else {
+      const [rowsByAdGroup, rowsByCampaignFallback] = await Promise.all([
+        scopeAdGroupIds.length > 0
+          ? fetchRowsByIdChunks<SpTargetFactRow>({
+              table: 'sp_targeting_daily_fact_latest',
+              select: targetingSelect,
+              idColumn: 'ad_group_id',
+              ids: scopeAdGroupIds,
+              accountId,
+              start,
+              end,
+            })
+          : Promise.resolve([] as SpTargetFactRow[]),
+        scopeCampaignIdsWithoutAdGroupScope.length > 0
+          ? fetchRowsByIdChunks<SpTargetFactRow>({
+              table: 'sp_targeting_daily_fact_latest',
+              select: targetingSelect,
+              idColumn: 'campaign_id',
+              ids: scopeCampaignIdsWithoutAdGroupScope,
+              accountId,
+              start,
+              end,
+            })
+          : Promise.resolve([] as SpTargetFactRow[]),
+      ]);
+
+      targetRows = uniqueBy([...rowsByAdGroup, ...rowsByCampaignFallback], (row) =>
+        [
+          trimString(row.date),
+          trimString(row.exported_at),
+          trimString(row.target_id),
+          trimString(row.campaign_id),
+          trimString(row.ad_group_id),
+        ].join('::')
+      );
     }
   }
 
@@ -485,14 +664,73 @@ export const getSpWorkspaceData = async ({
     }
   }
 
+  if (level === 'searchterms') {
+    const searchTermResults =
+      asinFilter === 'all'
+        ? [
+            await fetchSearchTermRowsChunked({
+              accountId,
+              start,
+              end,
+            }),
+          ]
+        : await Promise.all([
+            scopeAdGroupIds.length > 0
+              ? fetchSearchTermRowsChunked({
+                  accountId,
+                  start,
+                  end,
+                  adGroupIds: scopeAdGroupIds,
+                })
+              : Promise.resolve({ rows: [] as SpSearchTermFactRow[], chunkErrors: [] }),
+            scopeCampaignIdsWithoutAdGroupScope.length > 0
+              ? fetchSearchTermRowsChunked({
+                  accountId,
+                  start,
+                  end,
+                  campaignIds: scopeCampaignIdsWithoutAdGroupScope,
+                })
+              : Promise.resolve({ rows: [] as SpSearchTermFactRow[], chunkErrors: [] }),
+          ]);
+
+    searchTermRows = uniqueBy(
+      searchTermResults.flatMap((result) => result.rows),
+      (row) =>
+        [
+          trimString(row.date),
+          trimString(row.exported_at),
+          trimString(row.campaign_id),
+          trimString(row.ad_group_id),
+          trimString(row.target_id),
+          trimString(row.target_key),
+          trimString(row.customer_search_term_norm),
+          trimString(row.customer_search_term_raw),
+        ].join('::')
+    );
+    searchTermChunkErrors = searchTermResults.flatMap((result) => result.chunkErrors);
+
+    if (searchTermChunkErrors.length > 0) {
+      warnings.push(
+        `Search-term coverage is partial. ${searchTermChunkErrors.length} STIS range(s) failed to load; showing successful chunks only.`
+      );
+    }
+  }
+
   const primaryRows =
     level === 'campaigns'
       ? campaignRows
       : level === 'placements'
         ? placementRows
-        : targetRows;
+        : level === 'searchterms'
+          ? searchTermRows
+          : targetRows;
 
   if (primaryRows.length === 0) {
+    if (level === 'searchterms') {
+      warnings.push(
+        'Search Terms depends on SP STIS exports. No matching STIS rows were available for this range.'
+      );
+    }
     warnings.push(levelEmptyMessage[level]);
     return {
       asinOptions,
@@ -519,6 +757,14 @@ export const getSpWorkspaceData = async ({
               .filter((value): value is string => Boolean(value))
           ),
         ]
+      : level === 'searchterms'
+        ? [
+            ...new Set(
+              searchTermRows
+                .map((row) => trimString(row.ad_group_id))
+                .filter((value): value is string => Boolean(value))
+            ),
+          ]
       : [];
   const targetIds =
     level === 'targets'
@@ -529,9 +775,18 @@ export const getSpWorkspaceData = async ({
               .filter((value): value is string => Boolean(value))
           ),
         ]
+      : level === 'searchterms'
+        ? [
+            ...new Set(
+              searchTermRows
+                .map((row) => trimString(row.target_id))
+                .filter((value): value is string => Boolean(value))
+            ),
+          ]
       : [];
 
-  const [searchTermRows, targetPlacementRows, currentSnapshotResult] = await Promise.all([
+  const [targetSearchTermRows, targetPlacementRows, currentSnapshotResult, searchTermScopeRows] =
+    await Promise.all([
     level === 'targets' && targetIds.length > 0
       ? fetchRowsByIdChunks<SpSearchTermFactRow>({
           table: 'sp_stis_daily_fact_latest',
@@ -542,7 +797,11 @@ export const getSpWorkspaceData = async ({
             'ad_group_id',
             'target_id',
             'target_key',
+            'campaign_name_raw',
+            'ad_group_name_raw',
+            'targeting_raw',
             'targeting_norm',
+            'match_type_norm',
             'customer_search_term_raw',
             'customer_search_term_norm',
             'search_term_impression_share',
@@ -578,7 +837,15 @@ export const getSpWorkspaceData = async ({
       targetIds,
       placementCampaignIds: campaignIds,
     }),
-  ]);
+    level === 'searchterms' && asinFilter === 'all' && campaignIds.length > 0
+      ? fetchScopedAdvertisedProductRows({
+          accountId,
+          start,
+          end,
+          campaignIds,
+        })
+      : Promise.resolve(scopedAdvertisedProductRows),
+    ]);
 
   if (currentSnapshotResult.warning) {
     warnings.push(currentSnapshotResult.warning);
@@ -640,9 +907,54 @@ export const getSpWorkspaceData = async ({
     };
   }
 
+  if (level === 'searchterms') {
+    const model = buildSpSearchTermsWorkspaceModel({
+      searchTermRows,
+      asinFilter,
+      scopedAdvertisedProductRows: searchTermScopeRows,
+      currentTargetsById,
+      currentAdGroupsById,
+      currentCampaignsById,
+      currentPlacementModifiers,
+      ambiguousCampaignIds,
+    });
+
+    if (model.coverage.shared_scope_count > 0) {
+      warnings.push(
+        `${model.coverage.shared_scope_count} search-term parent row(s) span more than one advertised ASIN in the selected window and are grouped under a shared bucket to avoid metric double counting.`
+      );
+    }
+    if (model.coverage.unattributed_count > 0) {
+      warnings.push(
+        `${model.coverage.unattributed_count} search-term parent row(s) could not be matched to an advertised ASIN and are grouped under an explicit fallback bucket.`
+      );
+    }
+
+    return {
+      asinOptions,
+      warnings,
+      entityCountLabel: levelEntityLabel[level],
+      rows: model.rows,
+      totals: {
+        entity_count: model.totals.search_terms,
+        impressions: model.totals.impressions,
+        clicks: model.totals.clicks,
+        orders: model.totals.orders,
+        units: model.totals.units,
+        sales: model.totals.sales,
+        spend: model.totals.spend,
+        conversion: model.totals.conversion,
+        cpc: model.totals.cpc,
+        ctr: model.totals.ctr,
+        acos: model.totals.acos,
+        roas: model.totals.roas,
+      },
+    };
+  }
+
   const targetsModel = buildSpTargetsWorkspaceModel({
     targetRows,
-    searchTermRows,
+    searchTermRows: targetSearchTermRows,
     placementRows: targetPlacementRows,
     currentTargetsById,
     currentAdGroupsById,

@@ -8,7 +8,12 @@ import SpAdGroupsTable from '@/components/ads/SpAdGroupsTable';
 import SpCampaignsTable from '@/components/ads/SpCampaignsTable';
 import SpChangeComposer from '@/components/ads/SpChangeComposer';
 import SpPlacementsTable from '@/components/ads/SpPlacementsTable';
+import SpSearchTermsTable from '@/components/ads/SpSearchTermsTable';
 import SpTargetsTable from '@/components/ads/SpTargetsTable';
+import type {
+  SpSearchTermsWorkspaceChildRow,
+  SpSearchTermsWorkspaceRow,
+} from '@/lib/ads/spSearchTermsWorkspaceModel';
 import type {
   SpAdGroupsWorkspaceRow,
   SpCampaignsWorkspaceRow,
@@ -35,18 +40,26 @@ type ActiveDraftSummary = {
   queueCount: number;
 } | null;
 
-type WorkspaceLevel = 'campaigns' | 'adgroups' | 'targets' | 'placements';
+type WorkspaceLevel = 'campaigns' | 'adgroups' | 'targets' | 'placements' | 'searchterms';
 
-type SpWorkspaceRow =
+type SpWorkspaceDisplayRow =
   | SpCampaignsWorkspaceRow
   | SpAdGroupsWorkspaceRow
   | SpTargetsWorkspaceRow
-  | SpPlacementsWorkspaceRow;
+  | SpPlacementsWorkspaceRow
+  | SpSearchTermsWorkspaceRow;
+
+type SpWorkspaceComposerRow =
+  | SpCampaignsWorkspaceRow
+  | SpAdGroupsWorkspaceRow
+  | SpTargetsWorkspaceRow
+  | SpPlacementsWorkspaceRow
+  | SpSearchTermsWorkspaceChildRow;
 
 type AdsTargetsWorkspaceClientProps = {
   level: WorkspaceLevel;
   entityCountLabel: string;
-  rows: SpWorkspaceRow[];
+  rows: SpWorkspaceDisplayRow[];
   kpiItems: KpiItem[];
   filtersJson: JsonObject;
   objectivePresets: AdsObjectivePreset[];
@@ -59,7 +72,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isRouting, startRouting] = useTransition();
-  const [composerRow, setComposerRow] = useState<SpWorkspaceRow | null>(null);
+  const [composerRow, setComposerRow] = useState<SpWorkspaceComposerRow | null>(null);
   const [activeDraft, setActiveDraft] = useState<ActiveDraftSummary>(props.activeDraft);
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
 
@@ -124,6 +137,18 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
       return (
         <SpPlacementsTable
           rows={props.rows as SpPlacementsWorkspaceRow[]}
+          onOpenComposer={(row) => {
+            setFlashMessage(null);
+            setComposerRow(row);
+          }}
+          activeDraftName={activeDraft?.name ?? null}
+        />
+      );
+    }
+    if (props.level === 'searchterms') {
+      return (
+        <SpSearchTermsTable
+          rows={props.rows as SpSearchTermsWorkspaceRow[]}
           onOpenComposer={(row) => {
             setFlashMessage(null);
             setComposerRow(row);
