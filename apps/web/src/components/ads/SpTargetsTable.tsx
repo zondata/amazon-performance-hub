@@ -154,7 +154,7 @@ export default function SpTargetsTable({
                   {renderCell(row.ad_group_name ?? '—', row.ad_group_id)}
                   {renderCell(row.match_type ?? '—')}
                   {renderCell(formatPercent(row.stis), 'latest target diagnostic')}
-                  {renderCell(formatRank(row.stir), 'same-text child when available')}
+                  {renderCell(formatRank(row.stir), 'same-text, else best covered child')}
                   {renderCell('—', 'campaign placement context below')}
                   {renderCell(formatNumber(row.impressions))}
                   {renderCell(formatNumber(row.clicks))}

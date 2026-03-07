@@ -117,7 +117,7 @@ export type SpTargetsWorkspaceChildRow = {
   impressions: number;
   clicks: number;
   orders: number;
-  units: number;
+  units: number | null;
   sales: number;
   spend: number;
   conversion: number | null;
@@ -133,7 +133,7 @@ export type SpTargetsPlacementContext = {
   impressions: number;
   clicks: number;
   orders: number;
-  units: number;
+  units: number | null;
   sales: number;
   spend: number;
 };
@@ -187,7 +187,7 @@ export type SpTargetsWorkspaceRow = {
   impressions: number;
   clicks: number;
   orders: number;
-  units: number;
+  units: number | null;
   sales: number;
   conversion: number | null;
   spend: number;
@@ -212,7 +212,7 @@ export type SpTargetsWorkspaceModel = {
     impressions: number;
     clicks: number;
     orders: number;
-    units: number;
+    units: number | null;
     sales: number;
     spend: number;
     conversion: number | null;
@@ -237,6 +237,7 @@ type TargetAccumulator = {
   clicks: number;
   orders: number;
   units: number;
+  has_units: boolean;
   sales: number;
   spend: number;
   last_activity: string | null;
@@ -252,11 +253,23 @@ type SearchTermAccumulator = {
   clicks: number;
   orders: number;
   units: number;
+  has_units: boolean;
   sales: number;
   spend: number;
   last_activity: string | null;
   stis: { value: number | null; date: string | null; exported_at: string | null } | null;
   stir: { value: number | null; date: string | null; exported_at: string | null } | null;
+};
+
+type PlacementContextAccumulator = {
+  top_of_search_modifier_pct: number | null;
+  impressions: number;
+  clicks: number;
+  orders: number;
+  units: number;
+  has_units: boolean;
+  sales: number;
+  spend: number;
 };
 
 const numberValue = (value: NumericLike): number => {
@@ -277,6 +290,9 @@ const safeDivide = (numerator: number, denominator: number): number | null => {
   }
   return numerator / denominator;
 };
+
+const compareNullableDesc = (left: string | null, right: string | null) =>
+  (right ?? '').localeCompare(left ?? '');
 
 const trimString = (value: string | null | undefined): string | null => {
   const trimmed = String(value ?? '').trim();
@@ -368,7 +384,7 @@ const buildPlacementContextByCampaign = (
   placementRows: SpPlacementFactRow[],
   modifiers: Map<string, number | null>
 ) => {
-  const byCampaign = new Map<string, SpTargetsPlacementContext>();
+  const byCampaign = new Map<string, PlacementContextAccumulator>();
 
   for (const row of placementRows) {
     const campaignId = trimString(row.campaign_id);
@@ -386,19 +402,37 @@ const buildPlacementContextByCampaign = (
       clicks: 0,
       orders: 0,
       units: 0,
+      has_units: false,
       sales: 0,
       spend: 0,
     };
     existing.impressions += numberValue(row.impressions);
     existing.clicks += numberValue(row.clicks);
     existing.orders += numberValue(row.orders);
-    existing.units += numberValue(row.units);
+    const nextUnits = toFiniteNumberOrNull(row.units);
+    if (nextUnits !== null) {
+      existing.units += nextUnits;
+      existing.has_units = true;
+    }
     existing.sales += numberValue(row.sales);
     existing.spend += numberValue(row.spend);
     byCampaign.set(campaignId, existing);
   }
 
-  return byCampaign;
+  return new Map<string, SpTargetsPlacementContext>(
+    [...byCampaign.entries()].map(([campaignId, value]) => [
+      campaignId,
+      {
+        top_of_search_modifier_pct: value.top_of_search_modifier_pct,
+        impressions: value.impressions,
+        clicks: value.clicks,
+        orders: value.orders,
+        units: value.has_units ? value.units : null,
+        sales: value.sales,
+        spend: value.spend,
+      },
+    ])
+  );
 };
 
 const buildSearchTermsByTarget = (rows: SpSearchTermFactRow[]) => {
@@ -420,6 +454,7 @@ const buildSearchTermsByTarget = (rows: SpSearchTermFactRow[]) => {
       clicks: 0,
       orders: 0,
       units: 0,
+      has_units: false,
       sales: 0,
       spend: 0,
       last_activity: null,
@@ -430,7 +465,11 @@ const buildSearchTermsByTarget = (rows: SpSearchTermFactRow[]) => {
     existing.impressions += numberValue(row.impressions);
     existing.clicks += numberValue(row.clicks);
     existing.orders += numberValue(row.orders);
-    existing.units += numberValue(row.units);
+    const nextUnits = toFiniteNumberOrNull(row.units);
+    if (nextUnits !== null) {
+      existing.units += nextUnits;
+      existing.has_units = true;
+    }
     existing.sales += numberValue(row.sales);
     existing.spend += numberValue(row.spend);
     existing.last_activity = updateLastActivity(existing.last_activity, trimString(row.date));
@@ -514,6 +553,7 @@ export const buildSpTargetsWorkspaceModel = (params: {
       clicks: 0,
       orders: 0,
       units: 0,
+      has_units: false,
       sales: 0,
       spend: 0,
       last_activity: null,
@@ -523,7 +563,11 @@ export const buildSpTargetsWorkspaceModel = (params: {
     existing.impressions += numberValue(row.impressions);
     existing.clicks += numberValue(row.clicks);
     existing.orders += numberValue(row.orders);
-    existing.units += numberValue(row.units);
+    const nextUnits = toFiniteNumberOrNull(row.units);
+    if (nextUnits !== null) {
+      existing.units += nextUnits;
+      existing.has_units = true;
+    }
     existing.sales += numberValue(row.sales);
     existing.spend += numberValue(row.spend);
     existing.last_activity = updateLastActivity(existing.last_activity, trimString(row.date));
@@ -565,7 +609,7 @@ export const buildSpTargetsWorkspaceModel = (params: {
             impressions: searchTerm.impressions,
             clicks: searchTerm.clicks,
             orders: searchTerm.orders,
-            units: searchTerm.units,
+            units: searchTerm.has_units ? searchTerm.units : null,
             sales: searchTerm.sales,
             spend: searchTerm.spend,
             conversion: safeDivide(searchTerm.orders, searchTerm.clicks),
@@ -582,7 +626,18 @@ export const buildSpTargetsWorkspaceModel = (params: {
           return left.search_term.localeCompare(right.search_term);
         });
 
-      const sameTextSearchTerm = searchTerms.find((row) => row.same_text) ?? null;
+      const parentDiagnosticChild =
+        [...searchTerms]
+          .filter((row) => row.stir !== null)
+          .sort((left, right) => {
+            if (left.same_text !== right.same_text) return left.same_text ? -1 : 1;
+            if (left.impressions !== right.impressions) return right.impressions - left.impressions;
+            if (left.clicks !== right.clicks) return right.clicks - left.clicks;
+            if (left.spend !== right.spend) return right.spend - left.spend;
+            const lastActivity = compareNullableDesc(left.last_activity, right.last_activity);
+            if (lastActivity !== 0) return lastActivity;
+            return left.search_term.localeCompare(right.search_term);
+          })[0] ?? null;
       const coverageNote = ambiguousCampaignIds.has(target.campaign_id)
         ? 'This campaign served more than one advertised ASIN in the selected window. Metrics remain full entity totals.'
         : null;
@@ -606,12 +661,12 @@ export const buildSpTargetsWorkspaceModel = (params: {
         match_type:
           trimString(currentTarget?.match_type) ?? target.match_type_norm,
         stis: target.stis?.value ?? null,
-        stir: sameTextSearchTerm?.stir ?? null,
+        stir: parentDiagnosticChild?.stir ?? null,
         tos_is: null,
         impressions: target.impressions,
         clicks: target.clicks,
         orders: target.orders,
-        units: target.units,
+        units: target.has_units ? target.units : null,
         sales: target.sales,
         conversion: safeDivide(target.orders, target.clicks),
         spend: target.spend,
@@ -687,7 +742,9 @@ export const buildSpTargetsWorkspaceModel = (params: {
       acc.impressions += row.impressions;
       acc.clicks += row.clicks;
       acc.orders += row.orders;
-      acc.units += row.units;
+      if (row.units !== null) {
+        acc.units = (acc.units ?? 0) + row.units;
+      }
       acc.sales += row.sales;
       acc.spend += row.spend;
       return acc;
@@ -697,7 +754,7 @@ export const buildSpTargetsWorkspaceModel = (params: {
       impressions: 0,
       clicks: 0,
       orders: 0,
-      units: 0,
+      units: null as number | null,
       sales: 0,
       spend: 0,
       conversion: null as number | null,

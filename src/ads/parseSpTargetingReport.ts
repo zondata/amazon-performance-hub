@@ -57,7 +57,7 @@ const HEADER_ALIASES: Record<string, string[]> = {
   spend: ["spend", "cost"],
   sales: ["sales", "attributed sales", "total sales", "14 day total sales", "7 day total sales"],
   orders: ["orders", "total orders", "14 day total orders", "7 day total orders"],
-  units: ["units", "units sold", "total units", "14 day total units"],
+  units: ["units", "units sold", "total units", "14 day total units", "7 day total units"],
   cpc: ["cpc", "cost per click"],
   ctr: ["ctr", "click through rate"],
   acos: ["acos"],

@@ -217,6 +217,50 @@ describe('buildSpSearchTermsWorkspaceModel', () => {
     });
   });
 
+  it('keeps units nullable when source search-term rows do not provide units coverage', () => {
+    const model = buildSpSearchTermsWorkspaceModel({
+      asinFilter: 'all',
+      searchTermRows: [
+        {
+          date: '2026-03-02',
+          exported_at: '2026-03-03T00:00:00.000Z',
+          campaign_id: 'c1',
+          ad_group_id: 'ag1',
+          target_id: 't1',
+          target_key: 'tk1',
+          campaign_name_raw: 'Campaign A',
+          ad_group_name_raw: 'Ad Group A',
+          targeting_raw: 'Blue Shoes',
+          targeting_norm: 'blue shoes',
+          match_type_norm: 'EXACT',
+          customer_search_term_raw: 'blue shoes',
+          customer_search_term_norm: 'blue shoes',
+          search_term_impression_share: 0.3,
+          search_term_impression_rank: 3,
+          impressions: 10,
+          clicks: 1,
+          spend: 2,
+          sales: 8,
+          orders: 1,
+          units: null,
+        },
+      ],
+      scopedAdvertisedProductRows: [
+        { campaign_id: 'c1', ad_group_id: 'ag1', advertised_asin_norm: 'asin-a' },
+      ],
+      currentTargetsById: new Map(),
+      currentAdGroupsById: new Map(),
+      currentCampaignsById: new Map(),
+      currentPlacementModifiers: [],
+      ambiguousCampaignIds: new Set(),
+    });
+
+    expect(model.rows).toHaveLength(1);
+    expect(model.rows[0]?.units).toBeNull();
+    expect(model.rows[0]?.child_rows[0]?.units).toBeNull();
+    expect(model.totals.units).toBeNull();
+  });
+
   it('uses the selected asin bucket while keeping shared-campaign coverage explicit', () => {
     const model = buildSpSearchTermsWorkspaceModel({
       asinFilter: 'B0TEST1234',

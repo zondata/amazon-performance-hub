@@ -193,4 +193,79 @@ describe('buildSpTargetsWorkspaceModel', () => {
     expect(row?.composer_context.campaign.current_budget).toBe(40);
     expect(row?.composer_context.placement?.current_percentage).toBe(35);
   });
+
+  it('surfaces parent STIR from the best covered child when same-text is unavailable and preserves null units', () => {
+    const model = buildSpTargetsWorkspaceModel({
+      targetRows: [
+        {
+          date: '2026-03-03',
+          exported_at: '2026-03-04T00:00:00.000Z',
+          target_id: 't2',
+          campaign_id: 'c2',
+          ad_group_id: 'ag2',
+          portfolio_name_raw: 'Portfolio B',
+          campaign_name_raw: 'Campaign B',
+          ad_group_name_raw: 'Ad Group B',
+          targeting_raw: 'Brown Boots',
+          targeting_norm: 'brown boots',
+          match_type_norm: 'PHRASE',
+          impressions: 80,
+          clicks: 8,
+          spend: 24,
+          sales: 96,
+          orders: 3,
+          units: null,
+          top_of_search_impression_share: 0.14,
+        },
+      ],
+      searchTermRows: [
+        {
+          date: '2026-03-03',
+          exported_at: '2026-03-04T00:00:00.000Z',
+          campaign_id: 'c2',
+          ad_group_id: 'ag2',
+          target_id: 't2',
+          target_key: 'tk2',
+          targeting_norm: 'brown boots',
+          customer_search_term_raw: 'brown winter boots',
+          customer_search_term_norm: 'brown winter boots',
+          search_term_impression_share: 0.22,
+          search_term_impression_rank: 5,
+          impressions: 120,
+          clicks: 10,
+          spend: 20,
+          sales: 40,
+          orders: 2,
+          units: null,
+        },
+        {
+          date: '2026-03-03',
+          exported_at: '2026-03-04T00:00:00.000Z',
+          campaign_id: 'c2',
+          ad_group_id: 'ag2',
+          target_id: 't2',
+          target_key: 'tk2',
+          targeting_norm: 'brown boots',
+          customer_search_term_raw: 'boots for winter',
+          customer_search_term_norm: 'boots for winter',
+          search_term_impression_share: 0.18,
+          search_term_impression_rank: 11,
+          impressions: 20,
+          clicks: 2,
+          spend: 4,
+          sales: 8,
+          orders: 1,
+          units: 0,
+        },
+      ],
+      placementRows: [],
+    });
+
+    expect(model.rows).toHaveLength(1);
+    expect(model.rows[0]?.stir).toBe(5);
+    expect(model.rows[0]?.units).toBeNull();
+    expect(model.rows[0]?.search_terms[0]?.units).toBeNull();
+    expect(model.rows[0]?.search_terms[1]?.units).toBe(0);
+    expect(model.totals.units).toBeNull();
+  });
 });

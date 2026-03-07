@@ -32,6 +32,7 @@ type SearchTermChildAccumulator = {
   clicks: number;
   orders: number;
   units: number;
+  has_units: boolean;
   sales: number;
   spend: number;
   last_activity: string | null;
@@ -48,6 +49,7 @@ type SearchTermParentAccumulator = {
   clicks: number;
   orders: number;
   units: number;
+  has_units: boolean;
   sales: number;
   spend: number;
   child_rows: Map<string, SearchTermChildAccumulator>;
@@ -77,7 +79,7 @@ export type SpSearchTermsWorkspaceChildRow = {
   impressions: number;
   clicks: number;
   orders: number;
-  units: number;
+  units: number | null;
   sales: number;
   conversion: number | null;
   cost: number;
@@ -100,7 +102,7 @@ export type SpSearchTermsWorkspaceRow = {
   impressions: number;
   clicks: number;
   orders: number;
-  units: number;
+  units: number | null;
   spend: number;
   sales: number;
   ctr: number | null;
@@ -122,7 +124,7 @@ export type SpSearchTermsWorkspaceModel = {
     impressions: number;
     clicks: number;
     orders: number;
-    units: number;
+    units: number | null;
     sales: number;
     spend: number;
     ctr: number | null;
@@ -142,6 +144,12 @@ const numberValue = (value: NumericLike): number => {
   if (value === null || value === undefined) return 0;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const toFiniteNumberOrNull = (value: NumericLike): number | null => {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
 const safeDivide = (numerator: number, denominator: number): number | null => {
@@ -336,6 +344,7 @@ export const buildSpSearchTermsWorkspaceModel = (params: {
       clicks: 0,
       orders: 0,
       units: 0,
+      has_units: false,
       sales: 0,
       spend: 0,
       child_rows: new Map<string, SearchTermChildAccumulator>(),
@@ -346,7 +355,11 @@ export const buildSpSearchTermsWorkspaceModel = (params: {
     parent.impressions += numberValue(row.impressions);
     parent.clicks += numberValue(row.clicks);
     parent.orders += numberValue(row.orders);
-    parent.units += numberValue(row.units);
+    const nextParentUnits = toFiniteNumberOrNull(row.units);
+    if (nextParentUnits !== null) {
+      parent.units += nextParentUnits;
+      parent.has_units = true;
+    }
     parent.sales += numberValue(row.sales);
     parent.spend += numberValue(row.spend);
 
@@ -376,6 +389,7 @@ export const buildSpSearchTermsWorkspaceModel = (params: {
       clicks: 0,
       orders: 0,
       units: 0,
+      has_units: false,
       sales: 0,
       spend: 0,
       last_activity: null,
@@ -384,7 +398,11 @@ export const buildSpSearchTermsWorkspaceModel = (params: {
     child.impressions += numberValue(row.impressions);
     child.clicks += numberValue(row.clicks);
     child.orders += numberValue(row.orders);
-    child.units += numberValue(row.units);
+    const nextChildUnits = toFiniteNumberOrNull(row.units);
+    if (nextChildUnits !== null) {
+      child.units += nextChildUnits;
+      child.has_units = true;
+    }
     child.sales += numberValue(row.sales);
     child.spend += numberValue(row.spend);
     child.last_activity = updateLastActivity(child.last_activity, trimString(row.date));
@@ -435,7 +453,7 @@ export const buildSpSearchTermsWorkspaceModel = (params: {
             impressions: child.impressions,
             clicks: child.clicks,
             orders: child.orders,
-            units: child.units,
+            units: child.has_units ? child.units : null,
             sales: child.sales,
             conversion: safeDivide(child.orders, child.clicks),
             cost: child.spend,
@@ -521,7 +539,7 @@ export const buildSpSearchTermsWorkspaceModel = (params: {
         impressions: parent.impressions,
         clicks: parent.clicks,
         orders: parent.orders,
-        units: parent.units,
+        units: parent.has_units ? parent.units : null,
         spend: parent.spend,
         sales: parent.sales,
         ctr: safeDivide(parent.clicks, parent.impressions),
@@ -552,7 +570,9 @@ export const buildSpSearchTermsWorkspaceModel = (params: {
       acc.impressions += row.impressions;
       acc.clicks += row.clicks;
       acc.orders += row.orders;
-      acc.units += row.units;
+      if (row.units !== null) {
+        acc.units = (acc.units ?? 0) + row.units;
+      }
       acc.sales += row.sales;
       acc.spend += row.spend;
       return acc;
@@ -562,7 +582,7 @@ export const buildSpSearchTermsWorkspaceModel = (params: {
       impressions: 0,
       clicks: 0,
       orders: 0,
-      units: 0,
+      units: null as number | null,
       sales: 0,
       spend: 0,
       ctr: null as number | null,

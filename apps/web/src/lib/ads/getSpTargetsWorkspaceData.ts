@@ -36,7 +36,7 @@ const emptyTotals = {
   impressions: 0,
   clicks: 0,
   orders: 0,
-  units: 0,
+  units: null as number | null,
   sales: 0,
   spend: 0,
   conversion: null,

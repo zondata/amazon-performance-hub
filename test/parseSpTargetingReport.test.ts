@@ -18,7 +18,7 @@ function writeTargetingXlsx(filePath: string) {
       "Spend",
       "Sales",
       "Orders",
-      "Units",
+      "7 Day Total Units (#)",
       "CTR",
       "ACOS",
       "Conversion Rate",
@@ -100,6 +100,7 @@ describe("parseSpTargetingReport", () => {
 
     const first = result.rows[0];
     expect(first.match_type_norm).toBe("EXACT");
+    expect(first.units).toBe(4);
     expect(first.ctr).toBeCloseTo(0.0098, 6);
     expect(first.acos).toBeCloseTo(0.286, 6);
     expect(first.conversion_rate).toBeCloseTo(0.125, 6);

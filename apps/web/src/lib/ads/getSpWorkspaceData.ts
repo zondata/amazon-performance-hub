@@ -59,6 +59,12 @@ type SpPlacementWorkspaceFactRow = SpPlacementFactRow & {
   campaign_name_raw: string | null;
 };
 
+type SpCampaignPlacementUnitsRow = {
+  campaign_id: string | null;
+  date: string | null;
+  units: unknown;
+};
+
 const ID_CHUNK_SIZE = 250;
 const CAMPAIGN_PAGE_SIZE = 1000;
 const CAMPAIGN_CHUNK_DAYS = 14;
@@ -83,7 +89,7 @@ const emptyTotals: SpWorkspaceSummaryTotals = {
   impressions: 0,
   clicks: 0,
   orders: 0,
-  units: 0,
+  units: null,
   sales: 0,
   spend: 0,
   conversion: null,
@@ -100,6 +106,12 @@ const chunkIds = (ids: string[], size = ID_CHUNK_SIZE) => {
     chunks.push(unique.slice(index, index + size));
   }
   return chunks;
+};
+
+const toFiniteNumberOrNull = (value: unknown): number | null => {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
 const uniqueBy = <TRow,>(rows: TRow[], getKey: (row: TRow) => string) => {
@@ -146,6 +158,7 @@ const fetchCampaignRowsChunked = async (params: {
     return [];
   }
   const aggregated = new Map<string, SpCampaignFactRow>();
+  const placementUnitsByCampaignDate = new Map<string, number | null>();
   const campaignIdChunks =
     params.campaignIds && params.campaignIds.length > 0 ? chunkIds(params.campaignIds) : [null];
 
@@ -156,9 +169,63 @@ const fetchCampaignRowsChunked = async (params: {
       let from = 0;
       while (true) {
         let query = supabaseAdmin
+          .from('sp_placement_daily_fact_latest')
+          .select('campaign_id,date,units')
+          .eq('account_id', params.accountId)
+          .gte('date', chunkStart)
+          .lte('date', chunkEnd)
+          .order('date', { ascending: true })
+          .range(from, from + CAMPAIGN_PAGE_SIZE - 1);
+
+        if (campaignIdChunk) {
+          query = query.in('campaign_id', campaignIdChunk);
+        }
+
+        const { data, error } = await query;
+        if (error) {
+          const prefix = isStatementTimeoutMessage(error.message)
+            ? `Timed out loading SP campaign placement-units chunk ${chunkStart}..${chunkEnd}`
+            : `Failed loading SP campaign placement-units chunk ${chunkStart}..${chunkEnd}`;
+          throw new Error(`${prefix}: ${error.message}`);
+        }
+
+        if (!data || data.length === 0) {
+          break;
+        }
+
+        for (const row of data as SpCampaignPlacementUnitsRow[]) {
+          const campaignId = trimString(row.campaign_id);
+          const date = trimString(row.date);
+          const nextUnits = toFiniteNumberOrNull(row.units);
+          if (!campaignId || !date || nextUnits === null) continue;
+
+          const key = `${campaignId}::${date}`;
+          placementUnitsByCampaignDate.set(key, (placementUnitsByCampaignDate.get(key) ?? 0) + nextUnits);
+        }
+
+        if (data.length < CAMPAIGN_PAGE_SIZE) {
+          break;
+        }
+        from += CAMPAIGN_PAGE_SIZE;
+      }
+    }
+
+    if (chunkEnd >= params.end) {
+      break;
+    }
+    chunkStart = addDays(chunkEnd, 1);
+  }
+
+  for (let chunkStart = params.start; chunkStart <= params.end; ) {
+    const chunkEnd = minDate(addDays(chunkStart, CAMPAIGN_CHUNK_DAYS - 1), params.end);
+
+    for (const campaignIdChunk of campaignIdChunks) {
+      let from = 0;
+      while (true) {
+        let query = supabaseAdmin
           .from('sp_campaign_daily_fact_latest_gold')
           .select(
-            'campaign_id,portfolio_name_raw,campaign_name_raw,impressions,clicks,spend,sales,orders,units'
+            'date,campaign_id,portfolio_name_raw,campaign_name_raw,impressions,clicks,spend,sales,orders,units'
           )
           .eq('account_id', params.accountId)
           .gte('date', chunkStart)
@@ -184,6 +251,7 @@ const fetchCampaignRowsChunked = async (params: {
 
         for (const row of data as SpCampaignFactRow[]) {
           const campaignId = trimString(row.campaign_id);
+          const date = trimString(row.date);
           if (!campaignId) continue;
 
           const existing = aggregated.get(campaignId) ?? {
@@ -197,7 +265,7 @@ const fetchCampaignRowsChunked = async (params: {
             spend: 0,
             sales: 0,
             orders: 0,
-            units: 0,
+            units: null,
           };
 
           existing.impressions = Number(existing.impressions ?? 0) + Number(row.impressions ?? 0);
@@ -205,7 +273,16 @@ const fetchCampaignRowsChunked = async (params: {
           existing.spend = Number(existing.spend ?? 0) + Number(row.spend ?? 0);
           existing.sales = Number(existing.sales ?? 0) + Number(row.sales ?? 0);
           existing.orders = Number(existing.orders ?? 0) + Number(row.orders ?? 0);
-          existing.units = Number(existing.units ?? 0) + Number(row.units ?? 0);
+          const nextUnits = toFiniteNumberOrNull(row.units);
+          const fallbackUnits =
+            nextUnits !== null
+              ? nextUnits
+              : campaignId && date
+                ? placementUnitsByCampaignDate.get(`${campaignId}::${date}`) ?? null
+                : null;
+          if (fallbackUnits !== null) {
+            existing.units = Number(existing.units ?? 0) + fallbackUnits;
+          }
 
           aggregated.set(campaignId, existing);
         }

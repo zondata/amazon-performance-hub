@@ -58,6 +58,32 @@ describe('buildSpCampaignsWorkspaceModel', () => {
     expect(model.rows[0]?.composer_context.surface).toBe('campaigns');
     expect(model.rows[0]?.composer_context.placement?.current_percentage).toBe(35);
   });
+
+  it('preserves nullable campaign units when source rows have no units coverage', () => {
+    const model = buildSpCampaignsWorkspaceModel({
+      campaignRows: [
+        {
+          date: '2026-03-01',
+          exported_at: '2026-03-02T00:00:00.000Z',
+          campaign_id: 'c2',
+          portfolio_name_raw: 'Portfolio B',
+          campaign_name_raw: 'Campaign B',
+          impressions: 80,
+          clicks: 8,
+          spend: 16,
+          sales: 48,
+          orders: 2,
+          units: null,
+        },
+      ],
+      currentCampaignsById: new Map(),
+      currentPlacementModifiers: [],
+    });
+
+    expect(model.rows).toHaveLength(1);
+    expect(model.rows[0]?.units).toBeNull();
+    expect(model.totals.units).toBeNull();
+  });
 });
 
 describe('buildSpAdGroupsWorkspaceModel', () => {

@@ -130,7 +130,8 @@ export type SpStisDailyFactRow = SpStisRawRow & {
   account_id: string;
   campaign_id: string;
   ad_group_id: string;
-  // target_id may be null when customer_search_term_norm is present (search-term rows).
+  // target_id remains null only when the STIS row cannot be deterministically linked
+  // to a canonical target, such as roll-up "*" rows.
   target_id: string | null;
   target_key: string;
   exported_at: string;
@@ -546,10 +547,7 @@ export function mapSpStisRows(params: {
       is_negative: inferIsNegative(row.match_type_raw),
     });
     let targetId: string | null = null;
-    if (isSearchTermRow) {
-      // Search-term rows don't have a target_id; avoid logging target issues.
-      targetId = null;
-    } else if (targetingNorm !== "*") {
+    if (targetingNorm !== "*") {
       const targetResult = resolveTargetId({
         adGroupId: adGroupResult.id,
         expressionNorm: row.targeting_norm,
@@ -561,34 +559,37 @@ export function mapSpStisRows(params: {
       });
 
       if (targetResult.status !== "ok") {
-        const targetKeyObj = {
+        if (!isSearchTermRow) {
+          const targetKeyObj = {
+            ...issueKeyBase(row),
+            ad_group_name_norm: row.ad_group_name_norm,
+            targeting_norm: row.targeting_norm,
+            match_type_norm: row.match_type_norm,
+            is_negative: inferIsNegative(row.match_type_raw),
+          };
+          const targetKey = JSON.stringify(targetKeyObj);
+          pendingTargetIssues.push({
+            key: targetKey,
+            issue: {
+              entity_level: "target",
+              issue_type: targetResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+              key_json: targetKeyObj,
+              candidates_json: targetResult.status === "ambiguous" ? targetResult.candidates : null,
+            },
+          });
+          continue;
+        }
+      } else {
+        targetId = targetResult.id;
+        const targetKey = JSON.stringify({
           ...issueKeyBase(row),
           ad_group_name_norm: row.ad_group_name_norm,
           targeting_norm: row.targeting_norm,
           match_type_norm: row.match_type_norm,
           is_negative: inferIsNegative(row.match_type_raw),
-        };
-        const targetKey = JSON.stringify(targetKeyObj);
-        pendingTargetIssues.push({
-          key: targetKey,
-          issue: {
-            entity_level: "target",
-            issue_type: targetResult.status === "ambiguous" ? "ambiguous" : "unmapped",
-            key_json: targetKeyObj,
-            candidates_json: targetResult.status === "ambiguous" ? targetResult.candidates : null,
-          },
         });
-        continue;
+        resolvedTargetKeys.add(targetKey);
       }
-      targetId = targetResult.id;
-      const targetKey = JSON.stringify({
-        ...issueKeyBase(row),
-        ad_group_name_norm: row.ad_group_name_norm,
-        targeting_norm: row.targeting_norm,
-        match_type_norm: row.match_type_norm,
-        is_negative: inferIsNegative(row.match_type_raw),
-      });
-      resolvedTargetKeys.add(targetKey);
     }
 
     facts.push({

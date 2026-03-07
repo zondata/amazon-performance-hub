@@ -298,4 +298,58 @@ describe("mapSpStisRows", () => {
     });
     expect(facts[0]?.target_key).toBe(expectedKey);
   });
+
+  it("resolves canonical target_id for deterministic search-term rows", () => {
+    const lookup = emptyLookup();
+    lookup.campaignByName.set("camp", [{ campaign_id: "c1", portfolio_id: null }]);
+    lookup.campaignById.set("c1", { campaign_id: "c1", portfolio_id: null });
+    lookup.adGroupByCampaignName.set("c1::ag", [{ ad_group_id: "ag1", campaign_id: "c1" }]);
+    lookup.adGroupById.set("ag1", { ad_group_id: "ag1", campaign_id: "c1" });
+    lookup.targetByAdGroupKey.set(buildTargetKey("ag1", "blue shoes", "EXACT", false), [
+      { target_id: "t1", ad_group_id: "ag1", match_type_norm: "EXACT", is_negative: false },
+    ]);
+
+    const { facts, issues } = mapSpStisRows({
+      rows: [
+        {
+          date: "2025-01-01",
+          portfolio_name_raw: null,
+          portfolio_name_norm: null,
+          campaign_name_raw: "Camp",
+          campaign_name_norm: "camp",
+          ad_group_name_raw: "Ag",
+          ad_group_name_norm: "ag",
+          targeting_raw: "Blue Shoes",
+          targeting_norm: "blue shoes",
+          match_type_raw: "Exact",
+          match_type_norm: "EXACT",
+          customer_search_term_raw: "blue shoes",
+          customer_search_term_norm: "blue shoes",
+          search_term_impression_rank: 2,
+          search_term_impression_share: 0.31,
+          impressions: 10,
+          clicks: 2,
+          spend: 4,
+          sales: 20,
+          orders: 1,
+          units: 1,
+          cpc: 2,
+          ctr: 0.2,
+          acos: 0.2,
+          roas: 5,
+          conversion_rate: 0.5,
+        },
+      ],
+      lookup,
+      uploadId: "u1",
+      accountId: "a1",
+      exportedAt: "2025-01-02T00:00:00Z",
+      referenceDate: "2025-01-02",
+    });
+
+    expect(issues.length).toBe(0);
+    expect(facts.length).toBe(1);
+    expect(facts[0]?.target_id).toBe("t1");
+    expect(facts[0]?.target_key).toBe("t1");
+  });
 });

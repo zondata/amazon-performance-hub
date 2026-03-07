@@ -33,7 +33,7 @@ export type SpCampaignsWorkspaceRow = {
   impressions: number;
   clicks: number;
   orders: number;
-  units: number;
+  units: number | null;
   sales: number;
   conversion: number | null;
   spend: number;
@@ -58,7 +58,7 @@ export type SpAdGroupsWorkspaceRow = {
   impressions: number;
   clicks: number;
   orders: number;
-  units: number;
+  units: number | null;
   sales: number;
   conversion: number | null;
   spend: number;
@@ -84,7 +84,7 @@ export type SpPlacementsWorkspaceRow = {
   impressions: number;
   clicks: number;
   orders: number;
-  units: number;
+  units: number | null;
   sales: number;
   conversion: number | null;
   spend: number;
@@ -103,7 +103,7 @@ export type SpWorkspaceSummaryTotals = {
   impressions: number;
   clicks: number;
   orders: number;
-  units: number;
+  units: number | null;
   sales: number;
   spend: number;
   conversion: number | null;
@@ -121,6 +121,7 @@ type CampaignAccumulator = {
   clicks: number;
   orders: number;
   units: number;
+  has_units: boolean;
   sales: number;
   spend: number;
 };
@@ -135,6 +136,7 @@ type AdGroupAccumulator = {
   clicks: number;
   orders: number;
   units: number;
+  has_units: boolean;
   sales: number;
   spend: number;
 };
@@ -150,6 +152,7 @@ type PlacementAccumulator = {
   clicks: number;
   orders: number;
   units: number;
+  has_units: boolean;
   sales: number;
   spend: number;
 };
@@ -158,6 +161,12 @@ const numberValue = (value: NumericLike): number => {
   if (value === null || value === undefined) return 0;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const toFiniteNumberOrNull = (value: NumericLike): number | null => {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
 const safeDivide = (numerator: number, denominator: number): number | null => {
@@ -214,7 +223,7 @@ const buildTotals = <TRow extends {
   impressions: number;
   clicks: number;
   orders: number;
-  units: number;
+  units: number | null;
   sales: number;
   spend: number;
 }>(rows: TRow[]): SpWorkspaceSummaryTotals => {
@@ -224,7 +233,9 @@ const buildTotals = <TRow extends {
       acc.impressions += row.impressions;
       acc.clicks += row.clicks;
       acc.orders += row.orders;
-      acc.units += row.units;
+      if (row.units !== null) {
+        acc.units = (acc.units ?? 0) + row.units;
+      }
       acc.sales += row.sales;
       acc.spend += row.spend;
       return acc;
@@ -234,7 +245,7 @@ const buildTotals = <TRow extends {
       impressions: 0,
       clicks: 0,
       orders: 0,
-      units: 0,
+      units: null as number | null,
       sales: 0,
       spend: 0,
       conversion: null as number | null,
@@ -280,6 +291,7 @@ export const buildSpCampaignsWorkspaceModel = (params: {
       clicks: 0,
       orders: 0,
       units: 0,
+      has_units: false,
       sales: 0,
       spend: 0,
     };
@@ -287,7 +299,11 @@ export const buildSpCampaignsWorkspaceModel = (params: {
     existing.impressions += numberValue(row.impressions);
     existing.clicks += numberValue(row.clicks);
     existing.orders += numberValue(row.orders);
-    existing.units += numberValue(row.units);
+    const nextUnits = toFiniteNumberOrNull(row.units);
+    if (nextUnits !== null) {
+      existing.units += nextUnits;
+      existing.has_units = true;
+    }
     existing.sales += numberValue(row.sales);
     existing.spend += numberValue(row.spend);
     byCampaign.set(campaignId, existing);
@@ -310,7 +326,7 @@ export const buildSpCampaignsWorkspaceModel = (params: {
         impressions: campaign.impressions,
         clicks: campaign.clicks,
         orders: campaign.orders,
-        units: campaign.units,
+        units: campaign.has_units ? campaign.units : null,
         sales: campaign.sales,
         conversion: safeDivide(campaign.orders, campaign.clicks),
         spend: campaign.spend,
@@ -386,6 +402,7 @@ export const buildSpAdGroupsWorkspaceModel = (params: {
       clicks: 0,
       orders: 0,
       units: 0,
+      has_units: false,
       sales: 0,
       spend: 0,
     };
@@ -393,7 +410,11 @@ export const buildSpAdGroupsWorkspaceModel = (params: {
     existing.impressions += numberValue(row.impressions);
     existing.clicks += numberValue(row.clicks);
     existing.orders += numberValue(row.orders);
-    existing.units += numberValue(row.units);
+    const nextUnits = toFiniteNumberOrNull(row.units);
+    if (nextUnits !== null) {
+      existing.units += nextUnits;
+      existing.has_units = true;
+    }
     existing.sales += numberValue(row.sales);
     existing.spend += numberValue(row.spend);
     byAdGroup.set(adGroupId, existing);
@@ -422,7 +443,7 @@ export const buildSpAdGroupsWorkspaceModel = (params: {
         impressions: adGroup.impressions,
         clicks: adGroup.clicks,
         orders: adGroup.orders,
-        units: adGroup.units,
+        units: adGroup.has_units ? adGroup.units : null,
         sales: adGroup.sales,
         conversion: safeDivide(adGroup.orders, adGroup.clicks),
         spend: adGroup.spend,
@@ -517,6 +538,7 @@ export const buildSpPlacementsWorkspaceModel = (params: {
       clicks: 0,
       orders: 0,
       units: 0,
+      has_units: false,
       sales: 0,
       spend: 0,
     };
@@ -524,7 +546,11 @@ export const buildSpPlacementsWorkspaceModel = (params: {
     existing.impressions += numberValue(row.impressions);
     existing.clicks += numberValue(row.clicks);
     existing.orders += numberValue(row.orders);
-    existing.units += numberValue(row.units);
+    const nextUnits = toFiniteNumberOrNull(row.units);
+    if (nextUnits !== null) {
+      existing.units += nextUnits;
+      existing.has_units = true;
+    }
     existing.sales += numberValue(row.sales);
     existing.spend += numberValue(row.spend);
     byPlacement.set(key, existing);
@@ -547,7 +573,7 @@ export const buildSpPlacementsWorkspaceModel = (params: {
         impressions: placement.impressions,
         clicks: placement.clicks,
         orders: placement.orders,
-        units: placement.units,
+        units: placement.has_units ? placement.units : null,
         sales: placement.sales,
         conversion: safeDivide(placement.orders, placement.clicks),
         spend: placement.spend,

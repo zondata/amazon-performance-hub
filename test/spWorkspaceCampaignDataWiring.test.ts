@@ -13,6 +13,9 @@ describe('sp workspace campaign data wiring', () => {
     const source = fs.readFileSync(sourcePath, 'utf-8');
 
     expect(source).toContain("from('sp_campaign_daily_fact_latest_gold')");
+    expect(source).toContain(
+      "'date,campaign_id,portfolio_name_raw,campaign_name_raw,impressions,clicks,spend,sales,orders,units'"
+    );
     expect(source).toContain('fetchCampaignRowsChunked');
     expect(source).toContain('CAMPAIGN_CHUNK_DAYS');
     expect(source).not.toContain("from('sp_campaign_daily_fact_latest')");

@@ -321,4 +321,73 @@ describe('getSpWorkspaceData advertised-ASIN scope', () => {
 
     results.forEach((result) => expect(result.rows.length).toBeGreaterThan(0));
   });
+
+  it('fills campaign units from placement facts when campaign-source units are null', async () => {
+    tableData.sp_campaign_daily_fact_latest_gold = [
+      {
+        account_id: 'acct',
+        date: '2026-03-01',
+        campaign_id: 'c1',
+        portfolio_name_raw: 'Portfolio A',
+        campaign_name_raw: 'Campaign A',
+        impressions: 100,
+        clicks: 10,
+        spend: 20,
+        sales: 60,
+        orders: 2,
+        units: null,
+      },
+    ];
+    tableData.sp_placement_daily_fact_latest = [
+      {
+        account_id: 'acct',
+        date: '2026-03-01',
+        campaign_id: 'c1',
+        portfolio_name_raw: 'Portfolio A',
+        campaign_name_raw: 'Campaign A',
+        placement_code: 'PLACEMENT_TOP',
+        placement_raw: 'Top of Search (first page)',
+        placement_raw_norm: 'top of search (first page)',
+        impressions: 60,
+        clicks: 6,
+        spend: 12,
+        sales: 30,
+        orders: 1,
+        units: 1,
+      },
+      {
+        account_id: 'acct',
+        date: '2026-03-01',
+        campaign_id: 'c1',
+        portfolio_name_raw: 'Portfolio A',
+        campaign_name_raw: 'Campaign A',
+        placement_code: 'PLACEMENT_REST_OF_SEARCH',
+        placement_raw: 'Rest of search',
+        placement_raw_norm: 'rest of search',
+        impressions: 40,
+        clicks: 4,
+        spend: 8,
+        sales: 30,
+        orders: 1,
+        units: 1,
+      },
+    ];
+
+    const result = await getSpWorkspaceData({
+      accountId: 'acct',
+      marketplace: 'US',
+      start: '2026-03-01',
+      end: '2026-03-31',
+      asinFilter: 'all',
+      level: 'campaigns',
+    });
+
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({
+      campaign_id: 'c1',
+      orders: 2,
+      units: 2,
+    });
+    expect(result.totals.units).toBe(2);
+  });
 });

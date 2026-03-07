@@ -1,5 +1,5 @@
 # Supabase Schema Snapshot
-Generated: 2026-03-04T08:20:17.129Z
+Generated: 2026-03-07T01:20:45.236Z
 
 ## accounts (BASE TABLE)
 | column | type | nullable |
@@ -18,6 +18,69 @@ Generated: 2026-03-04T08:20:17.129Z
 | name_norm | text | NO |
 | valid_from | date | NO |
 | valid_to | date | YES |
+
+## ads_change_set_items (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| change_set_id | uuid | NO |
+| channel | text | NO |
+| entity_level | text | NO |
+| entity_key | text | NO |
+| campaign_id | text | YES |
+| ad_group_id | text | YES |
+| target_id | text | YES |
+| target_key | text | YES |
+| placement_code | text | YES |
+| action_type | text | NO |
+| before_json | jsonb | NO |
+| after_json | jsonb | NO |
+| objective | text | YES |
+| hypothesis | text | YES |
+| forecast_json | jsonb | YES |
+| review_after_days | integer | YES |
+| notes | text | YES |
+| objective_preset_id | uuid | YES |
+| ui_context_json | jsonb | YES |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+
+## ads_change_sets (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| experiment_id | uuid | YES |
+| name | text | NO |
+| status | text | NO |
+| objective | text | YES |
+| hypothesis | text | YES |
+| forecast_window_days | integer | YES |
+| review_after_days | integer | YES |
+| notes | text | YES |
+| filters_json | jsonb | NO |
+| generated_run_id | text | YES |
+| generated_artifact_json | jsonb | YES |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+
+## ads_objective_presets (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| channel | text | YES |
+| name | text | NO |
+| objective | text | NO |
+| hypothesis | text | YES |
+| forecast_json | jsonb | YES |
+| review_after_days | integer | YES |
+| notes | text | YES |
+| is_archived | boolean | NO |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
 
 ## bulk_ad_groups (BASE TABLE)
 | column | type | nullable |
