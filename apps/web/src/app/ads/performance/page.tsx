@@ -64,6 +64,11 @@ const buildHref = (params: {
   panel?: string | null;
   changeSetId?: string | null;
   trendEntity?: string | null;
+  showIds?: boolean;
+  campaignScopeId?: string | null;
+  campaignScopeLabel?: string | null;
+  adGroupScopeId?: string | null;
+  adGroupScopeLabel?: string | null;
 }) => {
   const usp = new URLSearchParams({
     start: params.start,
@@ -81,6 +86,21 @@ const buildHref = (params: {
   }
   if (params.trendEntity) {
     usp.set('trend_entity', params.trendEntity);
+  }
+  if (params.showIds) {
+    usp.set('show_ids', '1');
+  }
+  if (params.campaignScopeId) {
+    usp.set('campaign_scope', params.campaignScopeId);
+  }
+  if (params.campaignScopeLabel) {
+    usp.set('campaign_scope_name', params.campaignScopeLabel);
+  }
+  if (params.adGroupScopeId) {
+    usp.set('ad_group_scope', params.adGroupScopeId);
+  }
+  if (params.adGroupScopeLabel) {
+    usp.set('ad_group_scope_name', params.adGroupScopeLabel);
   }
   return `/ads/performance?${usp.toString()}`;
 };
@@ -107,6 +127,11 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
   const requestedPanel = (paramValue('panel') ?? 'workspace').toLowerCase();
   const activeChangeSetId = paramValue('change_set') ?? null;
   const trendEntity = paramValue('trend_entity') ?? null;
+  const showIds = paramValue('show_ids') === '1';
+  const campaignScopeId = paramValue('campaign_scope') ?? null;
+  const campaignScopeLabel = paramValue('campaign_scope_name') ?? null;
+  const adGroupScopeId = paramValue('ad_group_scope') ?? null;
+  const adGroupScopeLabel = paramValue('ad_group_scope_name') ?? null;
   const queueNotice = paramValue('queue_notice') ?? null;
   const queueError = paramValue('queue_error') ?? null;
 
@@ -147,6 +172,8 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
         asinFilter: asin,
         level: levelValue,
         selectedEntityId: trendEntity,
+        campaignScopeId,
+        adGroupScopeId,
       })
     : null;
   const workspaceData =
@@ -159,6 +186,8 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
           end,
           asinFilter: asin,
           level: levelValue,
+          campaignScopeId,
+          adGroupScopeId,
         })
       : null);
   const trendData = trendBundle?.trendData ?? null;
@@ -272,6 +301,11 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       panel: item.value,
       changeSetId: persistedChangeSetId,
       trendEntity,
+      showIds,
+      campaignScopeId,
+      campaignScopeLabel,
+      adGroupScopeId,
+      adGroupScopeLabel,
     }),
   }));
 
@@ -301,6 +335,11 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       panel: panelValue,
       changeSetId: persistedChangeSetId,
       trendEntity,
+      showIds,
+      campaignScopeId,
+      campaignScopeLabel,
+      adGroupScopeId,
+      adGroupScopeLabel,
     }),
   }));
 
@@ -319,6 +358,11 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       panel: panelValue,
       changeSetId: persistedChangeSetId,
       trendEntity,
+      showIds,
+      campaignScopeId,
+      campaignScopeLabel,
+      adGroupScopeId,
+      adGroupScopeLabel,
     }),
   }));
 
@@ -340,6 +384,11 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       panel: panelValue,
       changeSetId: persistedChangeSetId,
       trendEntity,
+      showIds,
+      campaignScopeId,
+      campaignScopeLabel,
+      adGroupScopeId,
+      adGroupScopeLabel,
     }),
   }));
 
@@ -358,6 +407,11 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       panel: 'queue',
       changeSetId: changeSet.id,
       trendEntity,
+      showIds,
+      campaignScopeId,
+      campaignScopeLabel,
+      adGroupScopeId,
+      adGroupScopeLabel,
     }),
   }));
 
@@ -412,6 +466,11 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
               value={persistedChangeSetId ?? ''}
             />
             <input type="hidden" name="trend_entity" value={trendData?.selectedEntityId ?? trendEntity ?? ''} />
+            <input type="hidden" name="show_ids" value={showIds ? '1' : ''} />
+            <input type="hidden" name="campaign_scope" value={campaignScopeId ?? ''} />
+            <input type="hidden" name="campaign_scope_name" value={campaignScopeLabel ?? ''} />
+            <input type="hidden" name="ad_group_scope" value={adGroupScopeId ?? ''} />
+            <input type="hidden" name="ad_group_scope_name" value={adGroupScopeLabel ?? ''} />
             <label className="flex min-w-0 flex-col text-xs uppercase tracking-wide text-muted">
               Start
               <input
@@ -495,6 +554,11 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
             panel: 'queue',
             changeSetId: selectedQueueChangeSet?.id ?? activeChangeSetId,
             trendEntity,
+            showIds,
+            campaignScopeId,
+            campaignScopeLabel,
+            adGroupScopeId,
+            adGroupScopeLabel,
           })}
           notice={queueNotice}
           error={queueError}
@@ -505,6 +569,11 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
             level={levelValue as 'campaigns' | 'targets'}
             kpiItems={kpiItems}
             trendData={trendData}
+            showIds={showIds}
+            campaignScopeId={campaignScopeId}
+            campaignScopeLabel={campaignScopeLabel}
+            adGroupScopeId={adGroupScopeId}
+            adGroupScopeLabel={adGroupScopeLabel}
           />
         ) : (
           <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
@@ -533,6 +602,11 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
           objectivePresets={objectivePresets}
           activeDraft={activeDraft}
           saveDraftAction={saveSpDraftAction}
+          showIds={showIds}
+          campaignScopeId={campaignScopeId}
+          campaignScopeLabel={campaignScopeLabel}
+          adGroupScopeId={adGroupScopeId}
+          adGroupScopeLabel={adGroupScopeLabel}
         />
       )}
     </div>

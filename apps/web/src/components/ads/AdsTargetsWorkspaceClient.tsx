@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import KpiCards from '@/components/KpiCards';
+import AdsWorkspaceStateBar from '@/components/ads/AdsWorkspaceStateBar';
 import SpAdGroupsTable from '@/components/ads/SpAdGroupsTable';
 import SpCampaignsTable from '@/components/ads/SpCampaignsTable';
 import SpChangeComposer from '@/components/ads/SpChangeComposer';
@@ -65,6 +66,11 @@ type AdsTargetsWorkspaceClientProps = {
   objectivePresets: AdsObjectivePreset[];
   activeDraft: ActiveDraftSummary;
   saveDraftAction: SaveSpDraftAction;
+  showIds: boolean;
+  campaignScopeId?: string | null;
+  adGroupScopeId?: string | null;
+  campaignScopeLabel?: string | null;
+  adGroupScopeLabel?: string | null;
 };
 
 export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClientProps) {
@@ -108,6 +114,45 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
     return `Active draft ${activeDraft.name} with ${activeDraft.queueCount.toLocaleString('en-US')} staged item(s).`;
   }, [activeDraft]);
 
+  const drilldownToLevel = (
+    nextLevel: WorkspaceLevel,
+    scope: {
+      campaignScopeId?: string | null;
+      adGroupScopeId?: string | null;
+      campaignScopeLabel?: string | null;
+      adGroupScopeLabel?: string | null;
+    }
+  ) => {
+    startRouting(() => {
+      const params = new URLSearchParams(searchParams?.toString() ?? '');
+      params.set('panel', 'workspace');
+      params.set('view', 'table');
+      params.set('level', nextLevel);
+      params.delete('trend_entity');
+      if (scope.campaignScopeId) {
+        params.set('campaign_scope', scope.campaignScopeId);
+      } else {
+        params.delete('campaign_scope');
+      }
+      if (scope.campaignScopeLabel) {
+        params.set('campaign_scope_name', scope.campaignScopeLabel);
+      } else {
+        params.delete('campaign_scope_name');
+      }
+      if (scope.adGroupScopeId) {
+        params.set('ad_group_scope', scope.adGroupScopeId);
+      } else {
+        params.delete('ad_group_scope');
+      }
+      if (scope.adGroupScopeLabel) {
+        params.set('ad_group_scope_name', scope.adGroupScopeLabel);
+      } else {
+        params.delete('ad_group_scope_name');
+      }
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    });
+  };
+
   const renderTable = () => {
     if (props.level === 'campaigns') {
       return (
@@ -118,6 +163,15 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
             setComposerRow(row);
           }}
           activeDraftName={activeDraft?.name ?? null}
+          showIds={props.showIds}
+          onDrilldownToAdGroups={(row) =>
+            drilldownToLevel('adgroups', {
+              campaignScopeId: row.campaign_id,
+              campaignScopeLabel: row.campaign_name,
+              adGroupScopeId: null,
+              adGroupScopeLabel: null,
+            })
+          }
         />
       );
     }
@@ -130,6 +184,15 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
             setComposerRow(row);
           }}
           activeDraftName={activeDraft?.name ?? null}
+          showIds={props.showIds}
+          onDrilldownToTargets={(row) =>
+            drilldownToLevel('targets', {
+              campaignScopeId: row.campaign_id,
+              campaignScopeLabel: row.campaign_name,
+              adGroupScopeId: row.ad_group_id,
+              adGroupScopeLabel: row.ad_group_name,
+            })
+          }
         />
       );
     }
@@ -142,6 +205,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
             setComposerRow(row);
           }}
           activeDraftName={activeDraft?.name ?? null}
+          showIds={props.showIds}
         />
       );
     }
@@ -154,6 +218,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
             setComposerRow(row);
           }}
           activeDraftName={activeDraft?.name ?? null}
+          showIds={props.showIds}
         />
       );
     }
@@ -165,6 +230,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
           setComposerRow(row);
         }}
         activeDraftName={activeDraft?.name ?? null}
+        showIds={props.showIds}
       />
     );
   };
@@ -172,6 +238,13 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
   return (
     <section className="space-y-6">
       <KpiCards items={props.kpiItems} />
+      <AdsWorkspaceStateBar
+        showIds={props.showIds}
+        campaignScopeId={props.campaignScopeId}
+        adGroupScopeId={props.adGroupScopeId}
+        campaignScopeLabel={props.campaignScopeLabel}
+        adGroupScopeLabel={props.adGroupScopeLabel}
+      />
 
       <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

@@ -497,18 +497,18 @@ Resolve remaining SP correctness issues and harden layout behavior before broade
 Add high-value reusable UX improvements that make the SP workspace easier to inspect without changing metric definitions.
 
 #### Tasks
-- [ ] Add sticky/frozen headers across supported Ads Workspace tabs.
-- [ ] Add rightmost mini trend bar chart column in Trend view, reusing the Sales-page pattern where practical.
-- [ ] Add visual differentiation for expanded child sections:
-  - [ ] color/style expanded search-term rows in Targets
-  - [ ] color/style expanded child rows in Search Terms
-- [ ] Add a global workspace **Show IDs** toggle, default off.
-  - [ ] default display remains human-readable name only
-  - [ ] when enabled, show IDs alongside names in muted secondary text
-- [ ] Add scoped drilldown navigation:
-  - [ ] Campaign row can drill into Ad Groups
-  - [ ] Ad Group row can drill into Targets
-  - [ ] preserve date/product/view state when drilling down
+- [x] Add sticky/frozen headers across supported Ads Workspace tabs.
+- [x] Add rightmost mini trend bar chart column in Trend view, reusing the Sales-page pattern where practical.
+- [x] Add visual differentiation for expanded child sections:
+  - [x] color/style expanded search-term rows in Targets
+  - [x] color/style expanded child rows in Search Terms
+- [x] Add a global workspace **Show IDs** toggle, default off.
+  - [x] default display remains human-readable name only
+  - [x] when enabled, show IDs alongside names in muted secondary text
+- [x] Add scoped drilldown navigation:
+  - [x] Campaign row can drill into Ad Groups
+  - [x] Ad Group row can drill into Targets
+  - [x] preserve date/product/view state when drilling down
 
 #### Rules
 - Sticky headers must not break existing scroll behavior.
@@ -516,14 +516,14 @@ Add high-value reusable UX improvements that make the SP workspace easier to ins
 - Drilldown should stay within Ads Workspace semantics, not jump to unrelated pages.
 
 #### Acceptance
-- [ ] Sticky headers work consistently on supported tabs.
-- [ ] Trend view has usable rightmost mini chart diagnostics.
-- [ ] Expanded child sections are visually distinguishable from parent rows.
-- [ ] ID toggle works without cluttering the default view.
-- [ ] Drilldown preserves workspace context.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] Sticky headers work consistently on supported tabs.
+- [x] Trend view has usable rightmost mini chart diagnostics.
+- [x] Expanded child sections are visually distinguishable from parent rows.
+- [x] ID toggle works without cluttering the default view.
+- [x] Drilldown preserves workspace context.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ### Phase 7B-C — configurability and operator ergonomics
 

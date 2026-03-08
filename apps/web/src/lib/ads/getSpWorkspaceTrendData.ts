@@ -27,6 +27,8 @@ type GetSpWorkspaceTrendDataArgs = {
   asinFilter: string;
   level: SpWorkspaceLevel;
   selectedEntityId?: string | null;
+  campaignScopeId?: string | null;
+  adGroupScopeId?: string | null;
 };
 
 type LogChangeEntityRow = {
@@ -243,6 +245,8 @@ const buildUnsupportedTrendData = async (params: {
   end: string;
   asinFilter: string;
   level: SpWorkspaceLevel;
+  campaignScopeId?: string | null;
+  adGroupScopeId?: string | null;
 }) => {
   const workspaceData = await getSpWorkspaceData({
     accountId: params.accountId,
@@ -251,6 +255,8 @@ const buildUnsupportedTrendData = async (params: {
     end: params.end,
     asinFilter: params.asinFilter,
     level: params.level,
+    campaignScopeId: params.campaignScopeId,
+    adGroupScopeId: params.adGroupScopeId,
   });
 
   return {
@@ -268,6 +274,8 @@ export const getSpWorkspaceTrendData = async ({
   asinFilter,
   level,
   selectedEntityId,
+  campaignScopeId,
+  adGroupScopeId,
 }: GetSpWorkspaceTrendDataArgs): Promise<{
   warnings: string[];
   workspaceData: Awaited<ReturnType<typeof getSpWorkspaceData>>;
@@ -281,6 +289,8 @@ export const getSpWorkspaceTrendData = async ({
       end,
       asinFilter,
       level,
+      campaignScopeId,
+      adGroupScopeId,
     });
   }
 
@@ -291,6 +301,8 @@ export const getSpWorkspaceTrendData = async ({
     end,
     asinFilter,
     level,
+    campaignScopeId,
+    adGroupScopeId,
   });
 
   const workspaceWarnings = [...workspaceData.warnings];

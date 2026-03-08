@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import KpiCards from '@/components/KpiCards';
+import AdsWorkspaceStateBar from '@/components/ads/AdsWorkspaceStateBar';
 import type { SpTrendMarker, SpTrendMetricCell, SpWorkspaceTrendData } from '@/lib/ads/spWorkspaceTrendModel';
 
 type KpiItem = {
@@ -16,6 +17,11 @@ type AdsWorkspaceTrendClientProps = {
   level: 'campaigns' | 'targets';
   kpiItems: KpiItem[];
   trendData: SpWorkspaceTrendData;
+  showIds: boolean;
+  campaignScopeId?: string | null;
+  adGroupScopeId?: string | null;
+  campaignScopeLabel?: string | null;
+  adGroupScopeLabel?: string | null;
 };
 
 const formatDateHeader = (value: string) => {
@@ -65,10 +71,88 @@ const validationTone = (status: string | null) => {
 const markerTitle = (marker: SpTrendMarker) =>
   marker.entity_type ? `${marker.entity_type} · ${marker.change_type}` : marker.change_type;
 
+const MINI_BAR_HEIGHT = 32;
+const MINI_BAR_MIN_VISIBLE_HEIGHT = 6;
+
+const buildMiniBarMetrics = (cells: SpTrendMetricCell[], kind: string) => {
+  const values = cells.map((cell) => cell.value);
+  const finiteValues = values.filter((value): value is number => value !== null && Number.isFinite(value));
+  if (finiteValues.length === 0) {
+    return {
+      hasData: false,
+      bars: [] as Array<number | null>,
+      baseline: MINI_BAR_HEIGHT,
+      hasNegative: false,
+    };
+  }
+
+  const max = Math.max(...finiteValues);
+  const min = Math.min(...finiteValues);
+  const hasNegative = min < 0;
+  const positiveMax = Math.max(max, 0);
+  const negativeMax = Math.max(Math.abs(min), 0);
+  const baseline = hasNegative
+    ? (positiveMax / Math.max(positiveMax + negativeMax, 1)) * MINI_BAR_HEIGHT
+    : MINI_BAR_HEIGHT;
+  const positiveHeight = Math.max(baseline, 1);
+  const negativeHeight = Math.max(MINI_BAR_HEIGHT - baseline, 1);
+  const useLocalContrastScaling = kind === 'percent';
+
+  const withVisibleFloor = (scaledHeight: number, availableHeight: number, value: number) => {
+    if (value === 0) return 0;
+    return Math.min(
+      availableHeight,
+      Math.max(MINI_BAR_MIN_VISIBLE_HEIGHT, scaledHeight)
+    );
+  };
+  const positiveNonZeroValues = finiteValues.filter((value) => value > 0);
+  const negativeAbsValues = finiteValues.filter((value) => value < 0).map((value) => Math.abs(value));
+  const positiveMin = positiveNonZeroValues.length > 0 ? Math.min(...positiveNonZeroValues) : null;
+  const negativeMin = negativeAbsValues.length > 0 ? Math.min(...negativeAbsValues) : null;
+  const scaleWithLocalContrast = (
+    magnitude: number,
+    minMagnitude: number | null,
+    maxMagnitude: number,
+    availableHeight: number
+  ) => {
+    if (magnitude === 0) return 0;
+    if (!useLocalContrastScaling || minMagnitude === null || maxMagnitude <= 0) {
+      return withVisibleFloor((magnitude / Math.max(maxMagnitude, 1)) * availableHeight, availableHeight, magnitude);
+    }
+    if (maxMagnitude === minMagnitude) {
+      return withVisibleFloor(availableHeight * 0.72, availableHeight, magnitude);
+    }
+    const normalized = (magnitude - minMagnitude) / (maxMagnitude - minMagnitude);
+    return withVisibleFloor(
+      MINI_BAR_MIN_VISIBLE_HEIGHT + normalized * (availableHeight - MINI_BAR_MIN_VISIBLE_HEIGHT),
+      availableHeight,
+      magnitude
+    );
+  };
+
+  return {
+    hasData: true,
+    bars: values.map((value) => {
+      if (value === null || !Number.isFinite(value)) return null;
+      if (value < 0) {
+        return scaleWithLocalContrast(Math.abs(value), negativeMin, negativeMax, negativeHeight);
+      }
+      return scaleWithLocalContrast(value, positiveMin, positiveMax, positiveHeight);
+    }),
+    baseline,
+    hasNegative,
+  };
+};
+
 export default function AdsWorkspaceTrendClient({
   level,
   kpiItems,
   trendData,
+  showIds,
+  campaignScopeId,
+  adGroupScopeId,
+  campaignScopeLabel,
+  adGroupScopeLabel,
 }: AdsWorkspaceTrendClientProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -108,6 +192,13 @@ export default function AdsWorkspaceTrendClient({
     return (
       <section className="space-y-6">
         <KpiCards items={kpiItems} />
+        <AdsWorkspaceStateBar
+          showIds={showIds}
+          campaignScopeId={campaignScopeId}
+          adGroupScopeId={adGroupScopeId}
+          campaignScopeLabel={campaignScopeLabel}
+          adGroupScopeLabel={adGroupScopeLabel}
+        />
         <div className="rounded-2xl border border-dashed border-border bg-surface/80 px-5 py-10 text-sm text-muted">
           No {level === 'campaigns' ? 'campaign' : 'target'} trend rows matched the current workspace filters.
         </div>
@@ -118,6 +209,13 @@ export default function AdsWorkspaceTrendClient({
   return (
     <section className="space-y-6">
       <KpiCards items={kpiItems} />
+      <AdsWorkspaceStateBar
+        showIds={showIds}
+        campaignScopeId={campaignScopeId}
+        adGroupScopeId={adGroupScopeId}
+        campaignScopeLabel={campaignScopeLabel}
+        adGroupScopeLabel={adGroupScopeLabel}
+      />
 
       <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -128,6 +226,11 @@ export default function AdsWorkspaceTrendClient({
             <div className="mt-1 text-lg font-semibold text-foreground">
               {trendData.selectedEntityLabel}
             </div>
+            {showIds && trendData.selectedEntityId ? (
+              <div className="mt-1 text-xs text-muted">
+                ID {trendData.selectedEntityId}
+              </div>
+            ) : null}
             <div className="mt-2 max-w-2xl text-sm text-muted">
               Trend mode stays diagnostic-first. Table mode remains the editing surface.
             </div>
@@ -141,7 +244,7 @@ export default function AdsWorkspaceTrendClient({
             >
               {trendData.entities.map((entity) => (
                 <option key={entity.id} value={entity.id}>
-                  {entity.label}
+                  {showIds ? `${entity.label} · ${entity.id}` : entity.label}
                 </option>
               ))}
             </select>
@@ -163,12 +266,15 @@ export default function AdsWorkspaceTrendClient({
               Dates stay horizontal, KPIs stay vertical, and change markers open frozen logbook details.
             </div>
           </div>
-          <div className="max-h-[720px] overflow-y-auto">
-            <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
-              <table
-                className="min-w-[calc(180px+96px*7)] w-full text-left text-sm"
-                style={{ ['--metric-col-w' as string]: '180px', ['--day-col-w' as string]: '96px' }}
-              >
+          <div data-aph-hscroll data-aph-hscroll-axis="x" className="max-h-[720px] overflow-auto">
+            <table
+              className="min-w-[calc(180px+96px*7+160px)] w-full text-left text-sm"
+              style={{
+                ['--metric-col-w' as string]: '180px',
+                ['--day-col-w' as string]: '96px',
+                ['--analysis-col-w' as string]: '160px',
+              }}
+            >
                 <thead className="sticky top-0 z-10 bg-surface text-[11px] uppercase tracking-[0.18em] text-muted">
                   <tr className="border-b border-border">
                     <th className="sticky left-0 z-20 w-[var(--metric-col-w)] border-r border-border bg-surface px-3 py-3 font-semibold">
@@ -199,12 +305,17 @@ export default function AdsWorkspaceTrendClient({
                         </th>
                       );
                     })}
+                    <th className="w-[var(--analysis-col-w)] px-3 py-3 text-center font-semibold">
+                      Trend
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {trendData.metricRows.map((metric) => (
+                  {trendData.metricRows.map((metric) => {
+                    const miniBars = buildMiniBarMetrics(metric.cells, metric.kind);
+                    return (
                     <tr key={metric.key} className="bg-surface/70">
-                      <th className="sticky left-0 z-10 w-[var(--metric-col-w)] border-r border-border bg-surface px-3 py-3 text-left">
+                      <th className="sticky left-0 z-10 w-[var(--metric-col-w)] border-r border-border bg-surface px-3 py-3 text-left shadow-[2px_0_0_rgba(0,0,0,0.04)]">
                         <div className="font-semibold text-foreground">{metric.label}</div>
                         {metric.support_note ? (
                           <div className="mt-1 text-xs font-normal normal-case tracking-normal text-muted">
@@ -247,11 +358,71 @@ export default function AdsWorkspaceTrendClient({
                           </td>
                         );
                       })}
+                      <td className="w-[var(--analysis-col-w)] px-3 py-2">
+                        {miniBars.hasData ? (
+                          <div className="relative h-9 w-[var(--analysis-col-w)]">
+                            {miniBars.hasNegative ? (
+                              <div
+                                className="absolute left-0 right-0 h-px bg-border"
+                                style={{ top: `${miniBars.baseline}px` }}
+                              />
+                            ) : null}
+                            <div className="flex h-full items-stretch gap-[2px]">
+                              {metric.cells.map((cell, index) => {
+                                const height = miniBars.bars[index];
+                                const isNegative = (cell.value ?? 0) < 0;
+                                return (
+                                  <button
+                                    key={`${metric.key}-mini-${cell.date}`}
+                                    type="button"
+                                    onMouseEnter={() =>
+                                      setHovered({
+                                        metricLabel: metric.label,
+                                        kind: metric.kind,
+                                        cell,
+                                        note: metric.support_note,
+                                      })
+                                    }
+                                    onFocus={() =>
+                                      setHovered({
+                                        metricLabel: metric.label,
+                                        kind: metric.kind,
+                                        cell,
+                                        note: metric.support_note,
+                                      })
+                                    }
+                                    className="relative flex-1 rounded-sm outline-none focus:ring-2 focus:ring-ring"
+                                  >
+                                    {height !== null ? (
+                                      <div
+                                        className={`absolute left-0 right-0 rounded-sm ${
+                                          isNegative ? 'bg-rose-400/70' : 'bg-foreground/70'
+                                        }`}
+                                        style={
+                                          miniBars.hasNegative
+                                            ? isNegative
+                                              ? { height: `${height}px`, top: `${miniBars.baseline}px` }
+                                              : {
+                                                  height: `${height}px`,
+                                                  bottom: `${32 - miniBars.baseline}px`,
+                                                }
+                                            : { height: `${height}px`, bottom: '0' }
+                                        }
+                                      />
+                                    ) : null}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted">—</span>
+                        )}
+                      </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
-              </table>
-            </div>
+            </table>
           </div>
         </div>
 

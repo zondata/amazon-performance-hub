@@ -38,6 +38,7 @@ type SpTargetsTableProps = {
   rows: SpTargetsWorkspaceRow[];
   onOpenComposer?: (row: SpTargetsWorkspaceRow) => void;
   activeDraftName?: string | null;
+  showIds?: boolean;
 };
 
 const renderCell = (value: ReactNode, subvalue?: string | null) => (
@@ -77,6 +78,7 @@ export default function SpTargetsTable({
   rows,
   onOpenComposer,
   activeDraftName,
+  showIds = false,
 }: SpTargetsTableProps) {
   if (rows.length === 0) {
     return (
@@ -88,11 +90,10 @@ export default function SpTargetsTable({
 
   return (
     <div className="rounded-2xl border border-border bg-surface/80 shadow-sm">
-      <div className="max-h-[760px] overflow-y-auto">
-          <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
-          <div className="min-w-[2780px]">
+      <div data-aph-hscroll data-aph-hscroll-axis="x" className="max-h-[760px] overflow-auto">
+        <div className="min-w-[2780px]">
             <div
-              className={`sticky top-0 z-10 grid ${GRID_TEMPLATE} border-b border-border bg-surface text-[11px] font-semibold uppercase tracking-[0.18em] text-muted`}
+              className={`sticky top-0 z-20 grid ${GRID_TEMPLATE} border-b border-border bg-surface text-[11px] font-semibold uppercase tracking-[0.18em] text-muted`}
             >
               {[
                 'Target',
@@ -129,7 +130,7 @@ export default function SpTargetsTable({
             {rows.map((row) => (
               <details key={row.target_id} className="group border-b border-border last:border-b-0">
                 <summary
-                  className={`grid ${GRID_TEMPLATE} cursor-pointer list-none bg-surface/70 hover:bg-surface-2/70 [&::-webkit-details-marker]:hidden`}
+                  className={`grid ${GRID_TEMPLATE} cursor-pointer list-none bg-surface/70 transition hover:bg-surface-2/80 group-open:bg-surface-2 [&::-webkit-details-marker]:hidden`}
                 >
                   <div className="min-w-0 px-3 py-3">
                     <div className="flex items-start gap-3">
@@ -141,7 +142,9 @@ export default function SpTargetsTable({
                           {row.target_text}
                         </div>
                         <div className="mt-1 flex flex-wrap gap-2">
-                          <span className="text-[11px] text-muted">ID {row.target_id}</span>
+                          {showIds ? (
+                            <span className="text-[11px] text-muted">ID {row.target_id}</span>
+                          ) : null}
                           {coverageBadge(row)}
                         </div>
                       </div>
@@ -150,8 +153,8 @@ export default function SpTargetsTable({
                   {renderCell(statusPill(row.status))}
                   {renderCell(row.type_label)}
                   {renderCell(row.portfolio_name ?? '—')}
-                  {renderCell(row.campaign_name ?? '—', row.campaign_id)}
-                  {renderCell(row.ad_group_name ?? '—', row.ad_group_id)}
+                  {renderCell(row.campaign_name ?? '—', showIds ? row.campaign_id : null)}
+                  {renderCell(row.ad_group_name ?? '—', showIds ? row.ad_group_id : null)}
                   {renderCell(row.match_type ?? '—')}
                   {renderCell(formatPercent(row.stis), 'latest target diagnostic')}
                   {renderCell(formatRank(row.stir), 'same-text, else best covered child')}
@@ -172,8 +175,8 @@ export default function SpTargetsTable({
                   {renderCell(row.last_activity ?? '—')}
                 </summary>
 
-                <div className="border-t border-border bg-surface-2/40 px-4 py-4">
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3">
+                <div className="border-t border-border border-l-[6px] border-l-border bg-surface-2 px-4 py-4 shadow-[inset_0_1px_0_rgba(0,0,0,0.08)]">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background/90 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                     <div>
                       <div className="text-xs uppercase tracking-[0.18em] text-muted">
                         Draft staging
@@ -216,48 +219,53 @@ export default function SpTargetsTable({
                           No search-term diagnostics for this target in the selected range.
                         </div>
                       ) : (
-                        <div className="mt-4 overflow-x-auto">
-                          <table className="min-w-[980px] w-full text-left text-sm">
-                            <thead className="text-[11px] uppercase tracking-[0.16em] text-muted">
-                              <tr className="border-b border-border">
-                                <th className="px-3 py-2">Search term</th>
-                                <th className="px-3 py-2">STIS</th>
-                                <th className="px-3 py-2">STIR</th>
-                                <th className="px-3 py-2">Impr.</th>
-                                <th className="px-3 py-2">Clicks</th>
-                                <th className="px-3 py-2">Orders</th>
-                                <th className="px-3 py-2">Sales</th>
-                                <th className="px-3 py-2">Spend</th>
-                                <th className="px-3 py-2">ACOS</th>
-                                <th className="px-3 py-2">ROAS</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
-                              {row.search_terms.map((child) => (
-                                <tr key={child.id} className="align-top">
-                                  <td className="px-3 py-3">
-                                    <div className="font-medium text-foreground">
-                                      {child.search_term}
-                                    </div>
-                                    {child.same_text ? (
-                                      <div className="mt-1 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
-                                        Same text
-                                      </div>
-                                    ) : null}
-                                  </td>
-                                  <td className="px-3 py-3 text-foreground">{formatPercent(child.stis)}</td>
-                                  <td className="px-3 py-3 text-foreground">{formatRank(child.stir)}</td>
-                                  <td className="px-3 py-3 text-foreground">{formatNumber(child.impressions)}</td>
-                                  <td className="px-3 py-3 text-foreground">{formatNumber(child.clicks)}</td>
-                                  <td className="px-3 py-3 text-foreground">{formatNumber(child.orders)}</td>
-                                  <td className="px-3 py-3 text-foreground">{formatCurrency(child.sales)}</td>
-                                  <td className="px-3 py-3 text-foreground">{formatCurrency(child.spend)}</td>
-                                  <td className="px-3 py-3 text-foreground">{formatPercent(child.acos)}</td>
-                                  <td className="px-3 py-3 text-foreground">{formatDecimal(child.roas)}</td>
+                        <div className="mt-4 max-h-[320px] overflow-y-auto">
+                          <div className="overflow-x-auto rounded-xl border border-border bg-background">
+                            <table className="min-w-[980px] w-full text-left text-sm">
+                              <thead className="sticky top-0 z-10 bg-surface text-[11px] uppercase tracking-[0.16em] text-muted">
+                                <tr className="border-b border-border">
+                                  <th className="px-3 py-2">Search term</th>
+                                  <th className="px-3 py-2">STIS</th>
+                                  <th className="px-3 py-2">STIR</th>
+                                  <th className="px-3 py-2">Impr.</th>
+                                  <th className="px-3 py-2">Clicks</th>
+                                  <th className="px-3 py-2">Orders</th>
+                                  <th className="px-3 py-2">Sales</th>
+                                  <th className="px-3 py-2">Spend</th>
+                                  <th className="px-3 py-2">ACOS</th>
+                                  <th className="px-3 py-2">ROAS</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody className="divide-y divide-border">
+                                {row.search_terms.map((child) => (
+                                  <tr
+                                    key={child.id}
+                                    className="align-top bg-background transition odd:bg-surface-2/90 hover:bg-surface"
+                                  >
+                                    <td className="px-3 py-3">
+                                      <div className="font-medium text-foreground">
+                                        {child.search_term}
+                                      </div>
+                                      {child.same_text ? (
+                                        <div className="mt-1 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                                          Same text
+                                        </div>
+                                      ) : null}
+                                    </td>
+                                    <td className="px-3 py-3 text-foreground">{formatPercent(child.stis)}</td>
+                                    <td className="px-3 py-3 text-foreground">{formatRank(child.stir)}</td>
+                                    <td className="px-3 py-3 text-foreground">{formatNumber(child.impressions)}</td>
+                                    <td className="px-3 py-3 text-foreground">{formatNumber(child.clicks)}</td>
+                                    <td className="px-3 py-3 text-foreground">{formatNumber(child.orders)}</td>
+                                    <td className="px-3 py-3 text-foreground">{formatCurrency(child.sales)}</td>
+                                    <td className="px-3 py-3 text-foreground">{formatCurrency(child.spend)}</td>
+                                    <td className="px-3 py-3 text-foreground">{formatPercent(child.acos)}</td>
+                                    <td className="px-3 py-3 text-foreground">{formatDecimal(child.roas)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       )}
                     </section>
@@ -334,7 +342,6 @@ export default function SpTargetsTable({
                 </div>
               </details>
             ))}
-          </div>
         </div>
       </div>
     </div>

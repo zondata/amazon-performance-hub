@@ -45,13 +45,19 @@ type SpAdGroupsTableProps = {
   rows: SpAdGroupsWorkspaceRow[];
   onOpenComposer?: (row: SpAdGroupsWorkspaceRow) => void;
   activeDraftName?: string | null;
+  showIds?: boolean;
+  onDrilldownToTargets?: (row: SpAdGroupsWorkspaceRow) => void;
 };
 
 export default function SpAdGroupsTable({
   rows,
   onOpenComposer,
   activeDraftName,
+  showIds = false,
+  onDrilldownToTargets,
 }: SpAdGroupsTableProps) {
+  const isDrilldownEnabled = Boolean(onDrilldownToTargets);
+
   if (rows.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border bg-surface/80 px-5 py-10 text-sm text-muted">
@@ -75,85 +81,120 @@ export default function SpAdGroupsTable({
           </div>
         </div>
       </div>
-      <div className="max-h-[760px] overflow-y-auto">
-        <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
-          <table className="min-w-[1880px] w-full text-left text-sm">
-            <thead className="sticky top-0 z-10 bg-surface text-[11px] uppercase tracking-[0.18em] text-muted">
-              <tr className="border-b border-border">
-                {[
-                  'Ads type',
-                  'Campaign',
-                  'Status',
-                  'Ad group',
-                  'Default bid',
-                  'Impr.',
-                  'Clicks',
-                  'Orders',
-                  'Units',
-                  'Sales',
-                  'Conv.',
-                  'Spend',
-                  'CPC',
-                  'CTR',
-                  'ACOS',
-                  'ROAS',
-                  'P&L',
-                  'Action',
-                ].map((label) => (
-                  <th key={label} className="px-3 py-3 font-semibold">
-                    {label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.map((row) => (
-                <tr key={row.ad_group_id} className="align-top bg-surface/70 hover:bg-surface-2/60">
-                  <td className="px-3 py-3 text-foreground">{row.ads_type}</td>
-                  <td className="px-3 py-3">
-                    <div className="font-medium text-foreground">{row.campaign_name ?? '—'}</div>
-                    <div className="mt-1 text-xs text-muted">{row.campaign_id}</div>
-                  </td>
-                  <td className="px-3 py-3">{statusPill(row.status)}</td>
-                  <td className="px-3 py-3">
-                    <div className="font-semibold text-foreground">{row.ad_group_name}</div>
-                    <div className="mt-1 text-xs text-muted">{row.ad_group_id}</div>
-                    {row.coverage_label ? (
-                      <div className="mt-2 inline-flex rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-700">
-                        {row.coverage_label}
-                      </div>
+      <div data-aph-hscroll data-aph-hscroll-axis="x" className="max-h-[760px] overflow-auto">
+        <table className="min-w-[1880px] w-full text-left text-sm">
+          <thead className="sticky top-0 z-10 bg-surface text-[11px] uppercase tracking-[0.18em] text-muted">
+            <tr className="border-b border-border">
+              {[
+                'Ads type',
+                'Campaign',
+                'Status',
+                'Ad group',
+                'Default bid',
+                'Impr.',
+                'Clicks',
+                'Orders',
+                'Units',
+                'Sales',
+                'Conv.',
+                'Spend',
+                'CPC',
+                'CTR',
+                'ACOS',
+                'ROAS',
+                'P&L',
+                'Action',
+              ].map((label) => (
+                <th key={label} className="bg-surface px-3 py-3 font-semibold">
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((row) => (
+              <tr
+                key={row.ad_group_id}
+                role={isDrilldownEnabled ? 'link' : undefined}
+                tabIndex={isDrilldownEnabled ? 0 : undefined}
+                onClick={isDrilldownEnabled ? () => onDrilldownToTargets?.(row) : undefined}
+                onKeyDown={
+                  isDrilldownEnabled
+                    ? (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          onDrilldownToTargets?.(row);
+                        }
+                      }
+                    : undefined
+                }
+                className={`align-top bg-surface/70 ${
+                  isDrilldownEnabled
+                    ? 'cursor-pointer transition hover:bg-surface-2/70 focus-visible:bg-surface-2/70'
+                    : 'hover:bg-surface-2/60'
+                }`}
+              >
+                <td className="px-3 py-3 text-foreground">{row.ads_type}</td>
+                <td className="px-3 py-3">
+                  <div className="font-medium text-foreground">{row.campaign_name ?? '—'}</div>
+                  {showIds ? <div className="mt-1 text-xs text-muted">{row.campaign_id}</div> : null}
+                </td>
+                <td className="px-3 py-3">{statusPill(row.status)}</td>
+                <td className="px-3 py-3">
+                  <div className="font-semibold text-foreground">{row.ad_group_name}</div>
+                  {showIds ? <div className="mt-1 text-xs text-muted">{row.ad_group_id}</div> : null}
+                  {row.coverage_label ? (
+                    <div className="mt-2 inline-flex rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-700">
+                      {row.coverage_label}
+                    </div>
+                  ) : null}
+                </td>
+                <td className="px-3 py-3 text-foreground">{formatCurrency(row.default_bid)}</td>
+                <td className="px-3 py-3 text-foreground">{formatNumber(row.impressions)}</td>
+                <td className="px-3 py-3 text-foreground">{formatNumber(row.clicks)}</td>
+                <td className="px-3 py-3 text-foreground">{formatNumber(row.orders)}</td>
+                <td className="px-3 py-3 text-foreground">{formatNumber(row.units)}</td>
+                <td className="px-3 py-3 text-foreground">{formatCurrency(row.sales)}</td>
+                <td className="px-3 py-3 text-foreground">{formatPercent(row.conversion)}</td>
+                <td className="px-3 py-3 text-foreground">{formatCurrency(row.spend)}</td>
+                <td className="px-3 py-3 text-foreground">{formatCurrency(row.cpc)}</td>
+                <td className="px-3 py-3 text-foreground">{formatPercent(row.ctr)}</td>
+                <td className="px-3 py-3 text-foreground">{formatPercent(row.acos)}</td>
+                <td className="px-3 py-3 text-foreground">{formatDecimal(row.roas)}</td>
+                <td className="px-3 py-3 text-muted">—</td>
+                <td className="px-3 py-3">
+                  <div className="flex min-w-[140px] flex-col gap-2">
+                    {onDrilldownToTargets ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onDrilldownToTargets(row);
+                        }}
+                        className="rounded-xl border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground"
+                      >
+                        View targets
+                      </button>
                     ) : null}
-                  </td>
-                  <td className="px-3 py-3 text-foreground">{formatCurrency(row.default_bid)}</td>
-                  <td className="px-3 py-3 text-foreground">{formatNumber(row.impressions)}</td>
-                  <td className="px-3 py-3 text-foreground">{formatNumber(row.clicks)}</td>
-                  <td className="px-3 py-3 text-foreground">{formatNumber(row.orders)}</td>
-                  <td className="px-3 py-3 text-foreground">{formatNumber(row.units)}</td>
-                  <td className="px-3 py-3 text-foreground">{formatCurrency(row.sales)}</td>
-                  <td className="px-3 py-3 text-foreground">{formatPercent(row.conversion)}</td>
-                  <td className="px-3 py-3 text-foreground">{formatCurrency(row.spend)}</td>
-                  <td className="px-3 py-3 text-foreground">{formatCurrency(row.cpc)}</td>
-                  <td className="px-3 py-3 text-foreground">{formatPercent(row.ctr)}</td>
-                  <td className="px-3 py-3 text-foreground">{formatPercent(row.acos)}</td>
-                  <td className="px-3 py-3 text-foreground">{formatDecimal(row.roas)}</td>
-                  <td className="px-3 py-3 text-muted">—</td>
-                  <td className="px-3 py-3">
                     <button
                       type="button"
-                      onClick={() => onOpenComposer?.(row)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenComposer?.(row);
+                      }}
                       className="rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
                     >
                       Stage change
                     </button>
-                    {row.coverage_note ? (
-                      <div className="mt-2 max-w-[220px] text-xs text-muted">{row.coverage_note}</div>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                  {row.coverage_note ? (
+                    <div className="mt-2 max-w-[220px] text-xs text-muted">{row.coverage_note}</div>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

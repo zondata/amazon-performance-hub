@@ -12,6 +12,11 @@ import {
   resolveCampaignUnitsWithPlacementFallback,
 } from './spCampaignUnitsFallback';
 import {
+  filterCampaignIdsByWorkspaceScope,
+  filterRowsByWorkspaceScope,
+  normalizeWorkspaceScopeId,
+} from './spWorkspaceScope';
+import {
   buildSpSearchTermsWorkspaceModel,
   type SpSearchTermsWorkspaceRow,
 } from './spSearchTermsWorkspaceModel';
@@ -53,6 +58,8 @@ type GetSpWorkspaceDataArgs = {
   end: string;
   asinFilter: string;
   level: SpWorkspaceLevel;
+  campaignScopeId?: string | null;
+  adGroupScopeId?: string | null;
 };
 
 type CurrentSnapshotData = Awaited<ReturnType<typeof fetchCurrentSpData>>;
@@ -509,6 +516,8 @@ export const getSpWorkspaceData = async ({
   end,
   asinFilter,
   level,
+  campaignScopeId: campaignScopeIdArg,
+  adGroupScopeId: adGroupScopeIdArg,
 }: GetSpWorkspaceDataArgs): Promise<SpWorkspaceData> => {
   const asinOptions = await fetchAsinOptions(accountId, marketplace);
   const warnings: string[] = [
@@ -608,6 +617,13 @@ export const getSpWorkspaceData = async ({
     }
   }
 
+  const campaignScopeId = normalizeWorkspaceScopeId(campaignScopeIdArg);
+  const adGroupScopeId = normalizeWorkspaceScopeId(adGroupScopeIdArg);
+  ambiguousCampaignIds = filterCampaignIdsByWorkspaceScope(ambiguousCampaignIds, {
+    campaignScopeId,
+    adGroupScopeId,
+  });
+
   const targetingSelect = [
     'date',
     'exported_at',
@@ -657,6 +673,7 @@ export const getSpWorkspaceData = async ({
       end,
       campaignIds: asinFilter === 'all' ? undefined : scopeCampaignIds,
     });
+    campaignRows = filterRowsByWorkspaceScope(campaignRows, { campaignScopeId });
   }
 
   if (level === 'adgroups' || level === 'targets') {
@@ -705,6 +722,10 @@ export const getSpWorkspaceData = async ({
         ].join('::')
       );
     }
+    targetRows = filterRowsByWorkspaceScope(targetRows, {
+      campaignScopeId,
+      adGroupScopeId,
+    });
   }
 
   if (level === 'placements') {
@@ -730,6 +751,7 @@ export const getSpWorkspaceData = async ({
         end,
       });
     }
+    placementRows = filterRowsByWorkspaceScope(placementRows, { campaignScopeId });
   }
 
   if (level === 'searchterms') {
@@ -776,6 +798,10 @@ export const getSpWorkspaceData = async ({
         ].join('::')
     );
     searchTermChunkErrors = searchTermResults.flatMap((result) => result.chunkErrors);
+    searchTermRows = filterRowsByWorkspaceScope(searchTermRows, {
+      campaignScopeId,
+      adGroupScopeId,
+    });
 
     if (searchTermChunkErrors.length > 0) {
       warnings.push(
@@ -915,6 +941,18 @@ export const getSpWorkspaceData = async ({
       : Promise.resolve(scopedAdvertisedProductRows),
     ]);
 
+  const scopedTargetSearchTermRows = filterRowsByWorkspaceScope(targetSearchTermRows, {
+    campaignScopeId,
+    adGroupScopeId,
+  });
+  const scopedTargetPlacementRows = filterRowsByWorkspaceScope(targetPlacementRows, {
+    campaignScopeId,
+  });
+  const scopedSearchTermScopeRows = filterRowsByWorkspaceScope(searchTermScopeRows, {
+    campaignScopeId,
+    adGroupScopeId,
+  });
+
   if (currentSnapshotResult.warning) {
     warnings.push(currentSnapshotResult.warning);
   }
@@ -979,7 +1017,7 @@ export const getSpWorkspaceData = async ({
     const model = buildSpSearchTermsWorkspaceModel({
       searchTermRows,
       asinFilter,
-      scopedAdvertisedProductRows: searchTermScopeRows,
+      scopedAdvertisedProductRows: scopedSearchTermScopeRows,
       currentTargetsById,
       currentAdGroupsById,
       currentCampaignsById,
@@ -1022,8 +1060,8 @@ export const getSpWorkspaceData = async ({
 
   const targetsModel = buildSpTargetsWorkspaceModel({
     targetRows,
-    searchTermRows: targetSearchTermRows,
-    placementRows: targetPlacementRows,
+    searchTermRows: scopedTargetSearchTermRows,
+    placementRows: scopedTargetPlacementRows,
     currentTargetsById,
     currentAdGroupsById,
     currentCampaignsById,
