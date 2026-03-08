@@ -36,6 +36,9 @@ import {
 import type { AdsChangeSet, AdsChangeSetStatus } from '@/lib/ads-workspace/types';
 import { env } from '@/lib/env';
 import type { JsonObject } from '@/lib/ads-workspace/types';
+import { savePageSettings } from '@/lib/uiSettings/savePageSettings';
+import type { AdsWorkspaceUiSettings } from '@/lib/ads-workspace/adsWorkspaceUiSettings';
+import { ADS_WORKSPACE_UI_PAGE_KEY } from '@/lib/ads-workspace/adsWorkspaceUiSettings';
 
 const trimToNull = (value: FormDataEntryValue | null) => {
   const trimmed = String(value ?? '').trim();
@@ -201,6 +204,17 @@ const resolveReasoning = async (formData: FormData) => {
     },
     createdPreset: { id: createdPreset.id, name: createdPreset.name },
   };
+};
+
+export const saveAdsWorkspaceUiSettings = async (settings: AdsWorkspaceUiSettings) => {
+  await savePageSettings({
+    accountId: env.accountId,
+    marketplace: env.marketplace,
+    pageKey: ADS_WORKSPACE_UI_PAGE_KEY,
+    settings,
+  });
+
+  return { ok: true };
 };
 
 export const saveSpDraftAction = async (

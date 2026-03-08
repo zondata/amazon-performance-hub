@@ -5,6 +5,7 @@ import Tabs from '@/components/Tabs';
 import { saveSpDraftAction } from '@/app/ads/performance/actions';
 import { getSpWorkspaceData } from '@/lib/ads/getSpWorkspaceData';
 import { getSpWorkspaceTrendData } from '@/lib/ads/getSpWorkspaceTrendData';
+import { ADS_WORKSPACE_UI_PAGE_KEY } from '@/lib/ads-workspace/adsWorkspaceUiSettings';
 import { listChangeSetItems } from '@/lib/ads-workspace/repoChangeSetItems';
 import { getChangeSet, listChangeSets } from '@/lib/ads-workspace/repoChangeSets';
 import { listObjectivePresets } from '@/lib/ads-workspace/repoObjectivePresets';
@@ -13,6 +14,14 @@ import { env } from '@/lib/env';
 import { getExperimentOptions } from '@/lib/logbook/getExperimentOptions';
 import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
 import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
+import { getPageSettings } from '@/lib/uiSettings/getPageSettings';
+import type { SpSearchTermsWorkspaceChildRow } from '@/lib/ads/spSearchTermsWorkspaceModel';
+import type {
+  SpAdGroupsWorkspaceRow,
+  SpCampaignsWorkspaceRow,
+  SpPlacementsWorkspaceRow,
+} from '@/lib/ads/spWorkspaceTablesModel';
+import type { SpTargetsWorkspaceRow } from '@/lib/ads/spTargetsWorkspaceModel';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -54,6 +63,14 @@ type AdsPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
+type WorkspaceLevel = 'campaigns' | 'adgroups' | 'targets' | 'placements' | 'searchterms';
+type InitialComposerRow =
+  | SpCampaignsWorkspaceRow
+  | SpAdGroupsWorkspaceRow
+  | SpTargetsWorkspaceRow
+  | SpPlacementsWorkspaceRow
+  | SpSearchTermsWorkspaceChildRow;
+
 const buildHref = (params: {
   start: string;
   end: string;
@@ -69,6 +86,9 @@ const buildHref = (params: {
   campaignScopeLabel?: string | null;
   adGroupScopeId?: string | null;
   adGroupScopeLabel?: string | null;
+  composeLevel?: string | null;
+  composeRowId?: string | null;
+  composeChildId?: string | null;
 }) => {
   const usp = new URLSearchParams({
     start: params.start,
@@ -102,7 +122,69 @@ const buildHref = (params: {
   if (params.adGroupScopeLabel) {
     usp.set('ad_group_scope_name', params.adGroupScopeLabel);
   }
+  if (params.composeLevel) {
+    usp.set('compose_level', params.composeLevel);
+  }
+  if (params.composeRowId) {
+    usp.set('compose_row', params.composeRowId);
+  }
+  if (params.composeChildId) {
+    usp.set('compose_child', params.composeChildId);
+  }
   return `/ads/performance?${usp.toString()}`;
+};
+
+const resolveInitialComposerRow = (params: {
+  level: WorkspaceLevel;
+  rows: unknown[];
+  composeLevel: string | null;
+  composeRowId: string | null;
+  composeChildId: string | null;
+}): InitialComposerRow | null => {
+  if (params.composeLevel !== params.level) return null;
+
+  if (params.level === 'campaigns' && params.composeRowId) {
+    return (
+      ((params.rows as SpCampaignsWorkspaceRow[]).find(
+        (row) => row.campaign_id === params.composeRowId
+      ) ?? null)
+    );
+  }
+
+  if (params.level === 'adgroups' && params.composeRowId) {
+    return (
+      ((params.rows as SpAdGroupsWorkspaceRow[]).find(
+        (row) => row.ad_group_id === params.composeRowId
+      ) ?? null)
+    );
+  }
+
+  if (params.level === 'targets' && params.composeRowId) {
+    return (
+      ((params.rows as SpTargetsWorkspaceRow[]).find(
+        (row) => row.target_id === params.composeRowId
+      ) ?? null)
+    );
+  }
+
+  if (params.level === 'placements' && params.composeRowId) {
+    return (
+      ((params.rows as SpPlacementsWorkspaceRow[]).find(
+        (row) => row.id === params.composeRowId
+      ) ?? null)
+    );
+  }
+
+  if (params.level !== 'searchterms' || !params.composeChildId) {
+    return null;
+  }
+
+  for (const row of params.rows as Array<{ child_rows: SpSearchTermsWorkspaceChildRow[] }>) {
+    const child = row.child_rows.find((entry) => entry.id === params.composeChildId) ?? null;
+    if (child) return child;
+  }
+
+  return null;
 };
 
 export default async function AdsPerformancePage({ searchParams }: AdsPageProps) {
@@ -132,6 +214,9 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
   const campaignScopeLabel = paramValue('campaign_scope_name') ?? null;
   const adGroupScopeId = paramValue('ad_group_scope') ?? null;
   const adGroupScopeLabel = paramValue('ad_group_scope_name') ?? null;
+  const composeLevel = paramValue('compose_level') ?? null;
+  const composeRowId = paramValue('compose_row') ?? null;
+  const composeChildId = paramValue('compose_child') ?? null;
   const queueNotice = paramValue('queue_notice') ?? null;
   const queueError = paramValue('queue_error') ?? null;
 
@@ -194,15 +279,32 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
   const asinOptions =
     workspaceData?.asinOptions ??
     (await fetchAsinOptions(env.accountId, env.marketplace));
-  const [spObjectivePresets, globalObjectivePresets] = shouldLoadTable
+  const [spObjectivePresets, globalObjectivePresets] = shouldLoadWorkspaceData
     ? await Promise.all([
         listObjectivePresets({ channel: 'sp' }),
         listObjectivePresets({ channel: null }),
       ])
     : [[], []];
+  const defaultUiSettings = panelValue === 'workspace'
+    ? await getPageSettings({
+        accountId: env.accountId,
+        marketplace: env.marketplace,
+        pageKey: ADS_WORKSPACE_UI_PAGE_KEY,
+      })
+    : null;
   const objectivePresets = [...spObjectivePresets, ...globalObjectivePresets].filter(
     (preset, index, all) => all.findIndex((candidate) => candidate.id === preset.id) === index
   );
+  const initialComposerRow =
+    workspaceData && panelValue === 'workspace'
+      ? resolveInitialComposerRow({
+          level: levelValue as WorkspaceLevel,
+          rows: workspaceData.rows,
+          composeLevel,
+          composeRowId,
+          composeChildId,
+        })
+      : null;
 
   const warnings = [...(trendBundle?.warnings ?? workspaceData?.warnings ?? [])];
   let activeDraft:
@@ -301,13 +403,16 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       panel: item.value,
       changeSetId: persistedChangeSetId,
       trendEntity,
-      showIds,
-      campaignScopeId,
-      campaignScopeLabel,
-      adGroupScopeId,
-      adGroupScopeLabel,
-    }),
-  }));
+       showIds,
+       campaignScopeId,
+       campaignScopeLabel,
+       adGroupScopeId,
+       adGroupScopeLabel,
+       composeLevel,
+       composeRowId,
+       composeChildId,
+     }),
+   }));
 
   const channelTabs = [
     { label: 'SP', value: 'sp' },
@@ -335,13 +440,16 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       panel: panelValue,
       changeSetId: persistedChangeSetId,
       trendEntity,
-      showIds,
-      campaignScopeId,
-      campaignScopeLabel,
-      adGroupScopeId,
-      adGroupScopeLabel,
-    }),
-  }));
+       showIds,
+       campaignScopeId,
+       campaignScopeLabel,
+       adGroupScopeId,
+       adGroupScopeLabel,
+       composeLevel,
+       composeRowId,
+       composeChildId,
+     }),
+   }));
 
   const viewTabs = [
     { label: 'Table', value: 'table' },
@@ -358,13 +466,16 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       panel: panelValue,
       changeSetId: persistedChangeSetId,
       trendEntity,
-      showIds,
-      campaignScopeId,
-      campaignScopeLabel,
-      adGroupScopeId,
-      adGroupScopeLabel,
-    }),
-  }));
+       showIds,
+       campaignScopeId,
+       campaignScopeLabel,
+       adGroupScopeId,
+       adGroupScopeLabel,
+       composeLevel,
+       composeRowId,
+       composeChildId,
+     }),
+   }));
 
   const levelTabs = [
     { label: 'Campaigns', value: 'campaigns' },
@@ -384,13 +495,16 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       panel: panelValue,
       changeSetId: persistedChangeSetId,
       trendEntity,
-      showIds,
-      campaignScopeId,
-      campaignScopeLabel,
-      adGroupScopeId,
-      adGroupScopeLabel,
-    }),
-  }));
+       showIds,
+       campaignScopeId,
+       campaignScopeLabel,
+       adGroupScopeId,
+       adGroupScopeLabel,
+       composeLevel,
+       composeRowId,
+       composeChildId,
+     }),
+   }));
 
   const queueChangeSetLinks = queueChangeSets.map((changeSet) => ({
     id: changeSet.id,
@@ -407,13 +521,16 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       panel: 'queue',
       changeSetId: changeSet.id,
       trendEntity,
-      showIds,
-      campaignScopeId,
-      campaignScopeLabel,
-      adGroupScopeId,
-      adGroupScopeLabel,
-    }),
-  }));
+       showIds,
+       campaignScopeId,
+       campaignScopeLabel,
+       adGroupScopeId,
+       adGroupScopeLabel,
+       composeLevel,
+       composeRowId,
+       composeChildId,
+     }),
+   }));
 
   const kpiItems = workspaceData
     ? [
@@ -554,26 +671,43 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
             panel: 'queue',
             changeSetId: selectedQueueChangeSet?.id ?? activeChangeSetId,
             trendEntity,
-            showIds,
-            campaignScopeId,
-            campaignScopeLabel,
-            adGroupScopeId,
-            adGroupScopeLabel,
-          })}
-          notice={queueNotice}
-          error={queueError}
-        />
-      ) : viewValue !== 'table' ? (
-        trendData ? (
-          <AdsWorkspaceTrendClient
-            level={levelValue as 'campaigns' | 'targets'}
-            kpiItems={kpiItems}
-            trendData={trendData}
-            showIds={showIds}
-            campaignScopeId={campaignScopeId}
-            campaignScopeLabel={campaignScopeLabel}
-            adGroupScopeId={adGroupScopeId}
-            adGroupScopeLabel={adGroupScopeLabel}
+             showIds,
+             campaignScopeId,
+             campaignScopeLabel,
+             adGroupScopeId,
+             adGroupScopeLabel,
+             composeLevel,
+             composeRowId,
+             composeChildId,
+           })}
+           notice={queueNotice}
+           error={queueError}
+         />
+       ) : viewValue !== 'table' ? (
+         trendData ? (
+           <AdsWorkspaceTrendClient
+             level={levelValue as 'campaigns' | 'targets'}
+             kpiItems={kpiItems}
+             trendData={trendData}
+             filtersJson={{
+               start,
+               end,
+               asin,
+               channel: channelValue,
+               level: levelValue,
+               view: viewValue,
+             }}
+             objectivePresets={objectivePresets}
+             activeDraft={activeDraft}
+             saveDraftAction={saveSpDraftAction}
+             initialComposerRow={
+               initialComposerRow as SpCampaignsWorkspaceRow | SpTargetsWorkspaceRow | null
+             }
+             showIds={showIds}
+             campaignScopeId={campaignScopeId}
+             campaignScopeLabel={campaignScopeLabel}
+             adGroupScopeId={adGroupScopeId}
+             adGroupScopeLabel={adGroupScopeLabel}
           />
         ) : (
           <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
@@ -591,18 +725,20 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
           entityCountLabel={workspaceData?.entityCountLabel ?? 'Rows'}
           rows={workspaceData?.rows ?? []}
           kpiItems={kpiItems}
-          filtersJson={{
-            start,
-            end,
-            asin,
+           filtersJson={{
+             start,
+             end,
+             asin,
             channel: channelValue,
             level: levelValue,
             view: viewValue,
-          }}
-          objectivePresets={objectivePresets}
-          activeDraft={activeDraft}
-          saveDraftAction={saveSpDraftAction}
-          showIds={showIds}
+           }}
+           objectivePresets={objectivePresets}
+           defaultUiSettings={defaultUiSettings as Record<string, unknown> | null}
+           initialComposerRow={initialComposerRow}
+           activeDraft={activeDraft}
+           saveDraftAction={saveSpDraftAction}
+           showIds={showIds}
           campaignScopeId={campaignScopeId}
           campaignScopeLabel={campaignScopeLabel}
           adGroupScopeId={adGroupScopeId}

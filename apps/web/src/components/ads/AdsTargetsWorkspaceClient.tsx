@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import KpiCards from '@/components/KpiCards';
@@ -23,6 +23,13 @@ import type {
 import type { SpTargetsWorkspaceRow } from '@/lib/ads/spTargetsWorkspaceModel';
 import type { SaveSpDraftActionState } from '@/lib/ads-workspace/spChangeComposerState';
 import type { AdsObjectivePreset, JsonObject } from '@/lib/ads-workspace/types';
+import {
+  type AdsWorkspaceSurfaceSettings,
+  type AdsWorkspaceTableSurfaceKey,
+  type AdsWorkspaceUiSettings,
+  normalizeAdsWorkspaceUiSettings,
+} from '@/lib/ads-workspace/adsWorkspaceUiSettings';
+import { saveAdsWorkspaceUiSettings } from '@/app/ads/performance/actions';
 
 type SaveSpDraftAction = (
   prevState: SaveSpDraftActionState,
@@ -64,6 +71,8 @@ type AdsTargetsWorkspaceClientProps = {
   kpiItems: KpiItem[];
   filtersJson: JsonObject;
   objectivePresets: AdsObjectivePreset[];
+  defaultUiSettings: Record<string, unknown> | null;
+  initialComposerRow: SpWorkspaceComposerRow | null;
   activeDraft: ActiveDraftSummary;
   saveDraftAction: SaveSpDraftAction;
   showIds: boolean;
@@ -78,20 +87,71 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isRouting, startRouting] = useTransition();
-  const [composerRow, setComposerRow] = useState<SpWorkspaceComposerRow | null>(null);
   const [activeDraft, setActiveDraft] = useState<ActiveDraftSummary>(props.activeDraft);
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
+  const normalizedDefaultUiSettings = useMemo(
+    () => normalizeAdsWorkspaceUiSettings(props.defaultUiSettings),
+    [props.defaultUiSettings]
+  );
+  const [uiSettingsDraft, setUiSettingsDraft] = useState<AdsWorkspaceUiSettings | null>(null);
+  const [isSavingUiSettings, startSavingUiSettings] = useTransition();
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const uiSettings = uiSettingsDraft ?? normalizedDefaultUiSettings;
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const draftBadgeText = activeDraft
     ? `${activeDraft.queueCount.toLocaleString('en-US')} staged item(s)`
     : 'No active draft';
+  const composerRow = props.initialComposerRow;
+
+  const syncComposerRouteState = (row: SpWorkspaceComposerRow | null) => {
+    startRouting(() => {
+      const params = new URLSearchParams(searchParams?.toString() ?? '');
+
+      if (!row) {
+        params.delete('compose_level');
+        params.delete('compose_row');
+        params.delete('compose_child');
+        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+        return;
+      }
+
+      params.set('compose_level', props.level);
+      if (props.level === 'campaigns') {
+        params.set('compose_row', (row as SpCampaignsWorkspaceRow).campaign_id);
+        params.delete('compose_child');
+        params.set('trend_entity', (row as SpCampaignsWorkspaceRow).campaign_id);
+      } else if (props.level === 'adgroups') {
+        params.set('compose_row', (row as SpAdGroupsWorkspaceRow).ad_group_id);
+        params.delete('compose_child');
+      } else if (props.level === 'targets') {
+        params.set('compose_row', (row as SpTargetsWorkspaceRow).target_id);
+        params.delete('compose_child');
+        params.set('trend_entity', (row as SpTargetsWorkspaceRow).target_id);
+      } else if (props.level === 'placements') {
+        params.set('compose_row', (row as SpPlacementsWorkspaceRow).id);
+        params.delete('compose_child');
+      } else {
+        params.delete('compose_row');
+        params.set('compose_child', (row as SpSearchTermsWorkspaceChildRow).id);
+      }
+
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    });
+  };
 
   const handleSaved = (state: SaveSpDraftActionState) => {
     if (!state.ok || !state.changeSetId || !state.changeSetName) return;
     const nextChangeSetId = state.changeSetId;
     const nextChangeSetName = state.changeSetName;
 
-    setComposerRow(null);
     setFlashMessage(state.message);
     setActiveDraft({
       id: nextChangeSetId,
@@ -102,6 +162,9 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
     startRouting(() => {
       const params = new URLSearchParams(searchParams?.toString() ?? '');
       params.set('change_set', nextChangeSetId);
+      params.delete('compose_level');
+      params.delete('compose_row');
+      params.delete('compose_child');
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
       router.refresh();
     });
@@ -129,6 +192,9 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
       params.set('view', 'table');
       params.set('level', nextLevel);
       params.delete('trend_entity');
+      params.delete('compose_level');
+      params.delete('compose_row');
+      params.delete('compose_child');
       if (scope.campaignScopeId) {
         params.set('campaign_scope', scope.campaignScopeId);
       } else {
@@ -153,6 +219,36 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
     });
   };
 
+  const updateSurfaceSettings = (
+    surfaceKey: AdsWorkspaceTableSurfaceKey,
+    settings: AdsWorkspaceSurfaceSettings
+  ) => {
+    setUiSettingsDraft((current) => {
+      const base = current ?? normalizedDefaultUiSettings;
+      const next: AdsWorkspaceUiSettings = {
+        surfaces: {
+          ...base.surfaces,
+          [surfaceKey]: settings,
+        },
+      };
+
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      saveTimeoutRef.current = setTimeout(() => {
+        startSavingUiSettings(async () => {
+          await saveAdsWorkspaceUiSettings(next);
+        });
+      }, 400);
+
+      return next;
+    });
+  };
+
+  const currentSurfaceKey = `table:${props.level}` as AdsWorkspaceTableSurfaceKey;
+  const currentSurfaceSettings = uiSettings.surfaces[currentSurfaceKey] ?? null;
+  const settingsSaveStateLabel = isSavingUiSettings ? 'Saving defaults…' : 'Defaults saved per tab';
+
   const renderTable = () => {
     if (props.level === 'campaigns') {
       return (
@@ -160,10 +256,13 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
           rows={props.rows as SpCampaignsWorkspaceRow[]}
           onOpenComposer={(row) => {
             setFlashMessage(null);
-            setComposerRow(row);
+            syncComposerRouteState(row);
           }}
           activeDraftName={activeDraft?.name ?? null}
           showIds={props.showIds}
+          surfaceSettings={currentSurfaceSettings}
+          settingsSaveStateLabel={settingsSaveStateLabel}
+          onSurfaceSettingsChange={(settings) => updateSurfaceSettings(currentSurfaceKey, settings)}
           onDrilldownToAdGroups={(row) =>
             drilldownToLevel('adgroups', {
               campaignScopeId: row.campaign_id,
@@ -181,10 +280,13 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
           rows={props.rows as SpAdGroupsWorkspaceRow[]}
           onOpenComposer={(row) => {
             setFlashMessage(null);
-            setComposerRow(row);
+            syncComposerRouteState(row);
           }}
           activeDraftName={activeDraft?.name ?? null}
           showIds={props.showIds}
+          surfaceSettings={currentSurfaceSettings}
+          settingsSaveStateLabel={settingsSaveStateLabel}
+          onSurfaceSettingsChange={(settings) => updateSurfaceSettings(currentSurfaceKey, settings)}
           onDrilldownToTargets={(row) =>
             drilldownToLevel('targets', {
               campaignScopeId: row.campaign_id,
@@ -202,10 +304,13 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
           rows={props.rows as SpPlacementsWorkspaceRow[]}
           onOpenComposer={(row) => {
             setFlashMessage(null);
-            setComposerRow(row);
+            syncComposerRouteState(row);
           }}
           activeDraftName={activeDraft?.name ?? null}
           showIds={props.showIds}
+          surfaceSettings={currentSurfaceSettings}
+          settingsSaveStateLabel={settingsSaveStateLabel}
+          onSurfaceSettingsChange={(settings) => updateSurfaceSettings(currentSurfaceKey, settings)}
         />
       );
     }
@@ -215,10 +320,13 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
           rows={props.rows as SpSearchTermsWorkspaceRow[]}
           onOpenComposer={(row) => {
             setFlashMessage(null);
-            setComposerRow(row);
+            syncComposerRouteState(row);
           }}
           activeDraftName={activeDraft?.name ?? null}
           showIds={props.showIds}
+          surfaceSettings={currentSurfaceSettings}
+          settingsSaveStateLabel={settingsSaveStateLabel}
+          onSurfaceSettingsChange={(settings) => updateSurfaceSettings(currentSurfaceKey, settings)}
         />
       );
     }
@@ -227,10 +335,13 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
         rows={props.rows as SpTargetsWorkspaceRow[]}
         onOpenComposer={(row) => {
           setFlashMessage(null);
-          setComposerRow(row);
+          syncComposerRouteState(row);
         }}
         activeDraftName={activeDraft?.name ?? null}
         showIds={props.showIds}
+        surfaceSettings={currentSurfaceSettings}
+        settingsSaveStateLabel={settingsSaveStateLabel}
+        onSurfaceSettingsChange={(settings) => updateSurfaceSettings(currentSurfaceKey, settings)}
       />
     );
   };
@@ -279,20 +390,25 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
         </div>
       ) : null}
 
-      {renderTable()}
+      <div className={composerRow ? 'grid gap-6 xl:grid-cols-[minmax(0,1fr)_430px]' : ''}>
+        <div className="min-w-0">{renderTable()}</div>
 
-      {composerRow ? (
-        <SpChangeComposer
-          row={composerRow}
-          filtersJson={props.filtersJson}
-          activeChangeSetId={activeDraft?.id ?? null}
-          activeChangeSetName={activeDraft?.name ?? null}
-          objectivePresets={props.objectivePresets}
-          action={props.saveDraftAction}
-          onClose={() => setComposerRow(null)}
-          onSaved={handleSaved}
-        />
-      ) : null}
+        {composerRow ? (
+          <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">
+            <SpChangeComposer
+              row={composerRow}
+              filtersJson={props.filtersJson}
+              activeChangeSetId={activeDraft?.id ?? null}
+              activeChangeSetName={activeDraft?.name ?? null}
+              objectivePresets={props.objectivePresets}
+              action={props.saveDraftAction}
+              onClose={() => syncComposerRouteState(null)}
+              onSaved={handleSaved}
+              mode="docked"
+            />
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }

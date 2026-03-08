@@ -5,6 +5,11 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import KpiCards from '@/components/KpiCards';
 import AdsWorkspaceStateBar from '@/components/ads/AdsWorkspaceStateBar';
+import SpChangeComposer from '@/components/ads/SpChangeComposer';
+import type { SpCampaignsWorkspaceRow } from '@/lib/ads/spWorkspaceTablesModel';
+import type { SpTargetsWorkspaceRow } from '@/lib/ads/spTargetsWorkspaceModel';
+import type { SaveSpDraftActionState } from '@/lib/ads-workspace/spChangeComposerState';
+import type { AdsObjectivePreset, JsonObject } from '@/lib/ads-workspace/types';
 import type { SpTrendMarker, SpTrendMetricCell, SpWorkspaceTrendData } from '@/lib/ads/spWorkspaceTrendModel';
 
 type KpiItem = {
@@ -17,6 +22,18 @@ type AdsWorkspaceTrendClientProps = {
   level: 'campaigns' | 'targets';
   kpiItems: KpiItem[];
   trendData: SpWorkspaceTrendData;
+  filtersJson: JsonObject;
+  objectivePresets: AdsObjectivePreset[];
+  activeDraft: {
+    id: string;
+    name: string;
+    queueCount: number;
+  } | null;
+  saveDraftAction: (
+    prevState: SaveSpDraftActionState,
+    formData: FormData
+  ) => Promise<SaveSpDraftActionState>;
+  initialComposerRow: SpCampaignsWorkspaceRow | SpTargetsWorkspaceRow | null;
   showIds: boolean;
   campaignScopeId?: string | null;
   adGroupScopeId?: string | null;
@@ -148,6 +165,11 @@ export default function AdsWorkspaceTrendClient({
   level,
   kpiItems,
   trendData,
+  filtersJson,
+  objectivePresets,
+  activeDraft: initialActiveDraft,
+  saveDraftAction,
+  initialComposerRow,
   showIds,
   campaignScopeId,
   adGroupScopeId,
@@ -158,6 +180,8 @@ export default function AdsWorkspaceTrendClient({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isRouting, startRouting] = useTransition();
+  const [activeDraft, setActiveDraft] = useState(initialActiveDraft);
+  const [flashMessage, setFlashMessage] = useState<string | null>(null);
   const [activeMarkerDate, setActiveMarkerDate] = useState<string | null>(null);
   const [hovered, setHovered] = useState<{ metricLabel: string; kind: string; cell: SpTrendMetricCell; note: string | null } | null>(null);
 
@@ -185,6 +209,39 @@ export default function AdsWorkspaceTrendClient({
       const params = new URLSearchParams(searchParams?.toString() ?? '');
       params.set('trend_entity', nextEntityId);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    });
+  };
+
+  const closeComposer = () => {
+    startRouting(() => {
+      const params = new URLSearchParams(searchParams?.toString() ?? '');
+      params.delete('compose_level');
+      params.delete('compose_row');
+      params.delete('compose_child');
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    });
+  };
+
+  const handleSaved = (state: SaveSpDraftActionState) => {
+    if (!state.ok || !state.changeSetId || !state.changeSetName) return;
+    const nextChangeSetId = state.changeSetId;
+    const nextChangeSetName = state.changeSetName;
+
+    setFlashMessage(state.message);
+    setActiveDraft({
+      id: nextChangeSetId,
+      name: nextChangeSetName,
+      queueCount: state.queueCount,
+    });
+
+    startRouting(() => {
+      const params = new URLSearchParams(searchParams?.toString() ?? '');
+      params.set('change_set', nextChangeSetId);
+      params.delete('compose_level');
+      params.delete('compose_row');
+      params.delete('compose_child');
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      router.refresh();
     });
   };
 
@@ -258,7 +315,19 @@ export default function AdsWorkspaceTrendClient({
         </div>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      {flashMessage ? (
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-4 text-sm text-emerald-800">
+          {flashMessage}
+        </div>
+      ) : null}
+
+      <div
+        className={
+          initialComposerRow
+            ? 'grid gap-6 xl:grid-cols-[minmax(0,1fr)_430px]'
+            : 'grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]'
+        }
+      >
         <div className="min-w-0 rounded-2xl border border-border bg-surface/80 shadow-sm">
           <div className="border-b border-border px-5 py-4">
             <div className="text-xs uppercase tracking-[0.2em] text-muted">Daily trend</div>
@@ -512,6 +581,22 @@ export default function AdsWorkspaceTrendClient({
               </div>
             )}
           </div>
+
+          {initialComposerRow ? (
+            <div className="xl:sticky xl:top-4">
+              <SpChangeComposer
+                row={initialComposerRow}
+                filtersJson={filtersJson}
+                activeChangeSetId={activeDraft?.id ?? null}
+                activeChangeSetName={activeDraft?.name ?? null}
+                objectivePresets={objectivePresets}
+                action={saveDraftAction}
+                onClose={closeComposer}
+                onSaved={handleSaved}
+                mode="docked"
+              />
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

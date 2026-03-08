@@ -531,28 +531,28 @@ Add high-value reusable UX improvements that make the SP workspace easier to ins
 Add operator controls for column management, filtering, wrapping, and non-modal editing in a staged way.
 
 #### Tasks
-- [ ] Header interactions:
-  - [ ] add per-column sort
-  - [ ] add basic numeric filter popover with:
-    - [ ] `>=`
-    - [ ] `<=`
-    - [ ] `>`
-    - [ ] `<`
-    - [ ] `has value`
+- [x] Header interactions:
+  - [x] add per-column sort
+  - [x] add basic numeric filter popover with:
+    - [x] `>=`
+    - [x] `<=`
+    - [x] `>`
+    - [x] `<`
+    - [x] `has value`
   - [ ] add advanced AND/OR filter builder only after basic filters are stable
-- [ ] Add **Wrap long labels** toggle:
-  - [ ] default to clamped/multi-line-safe display
-  - [ ] allow fuller wrap when enabled
-- [ ] Add per-tab column settings in stages:
-  - [ ] show / hide columns
-  - [ ] reorder columns
-  - [ ] freeze / unfreeze columns
-  - [ ] save defaults per tab/view
-  - [ ] font size controls
-- [ ] Convert Change Composer from modal/expand-only flow to a docked non-modal side panel first.
-  - [ ] keep page/table/trend context visible while composing
-  - [ ] only consider draggable pop-out later if still needed
-- [ ] Further responsive refinements after the above controls land.
+- [x] Add **Wrap long labels** toggle:
+  - [x] default to clamped/multi-line-safe display
+  - [x] allow fuller wrap when enabled
+- [x] Add per-tab column settings in stages:
+  - [x] show / hide columns
+  - [x] reorder columns
+  - [x] freeze / unfreeze columns
+  - [x] save defaults per tab/view
+  - [x] font size controls
+- [x] Convert Change Composer from modal/expand-only flow to a docked non-modal side panel first.
+  - [x] keep page/table/trend context visible while composing
+  - [x] only consider draggable pop-out later if still needed
+- [x] Further responsive refinements after the above controls land.
 
 #### Rules
 - Do not start with a full complex filter DSL if basic sort/filter controls are not stable.
@@ -560,14 +560,14 @@ Add operator controls for column management, filtering, wrapping, and non-modal 
 - Docked composer is preferred over draggable floating-window complexity in this phase.
 
 #### Acceptance
-- [ ] Operators can sort and apply basic numeric filters in-header.
-- [ ] Long labels are readable without forcing every row into excessive height.
-- [ ] Column settings are configurable per tab/view.
-- [ ] Composer can stay open while inspecting the workspace.
-- [ ] Responsive behavior remains usable after these controls are added.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] Operators can sort and apply basic numeric filters in-header.
+- [x] Long labels are readable without forcing every row into excessive height.
+- [x] Column settings are configurable per tab/view.
+- [x] Composer can stay open while inspecting the workspace.
+- [x] Responsive behavior remains usable after these controls are added.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ### Phase 7B-D — conditional rank context in Targets
 

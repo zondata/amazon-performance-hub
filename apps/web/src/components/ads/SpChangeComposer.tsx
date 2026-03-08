@@ -31,6 +31,7 @@ type SpChangeComposerProps = {
   action: SaveSpDraftAction;
   onClose: () => void;
   onSaved: (state: SaveSpDraftActionState) => void;
+  mode?: 'overlay' | 'docked';
 };
 
 const formatNumberInput = (value: number | null | undefined) =>
@@ -132,14 +133,35 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
         ? `${preset.name} (all channels)`
         : `${preset.name} (${preset.channel.toUpperCase()})`,
   }));
+  const mode = props.mode ?? 'overlay';
+  const isDocked = mode === 'docked';
+  const identityGridClass =
+    isDocked ? 'grid gap-3 sm:grid-cols-2' : 'grid gap-3 md:grid-cols-2 xl:grid-cols-4';
+  const reasoningGridClass = isDocked ? 'grid gap-4' : 'grid gap-4 md:grid-cols-2';
+  const editableSectionGridClass = isDocked ? 'grid gap-3' : 'grid gap-3 md:grid-cols-2';
+  const fullSpanClass = isDocked ? '' : 'md:col-span-2';
+  const fieldLabelClass = `flex min-w-0 flex-col gap-1 text-sm text-muted ${fullSpanClass}`;
+  const controlClass =
+    'w-full min-w-0 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground';
+  const textareaClass = `${controlClass} resize-y`;
+  const dockedShellClass =
+    isDocked
+      ? 'flex max-h-[calc(100vh-2rem)] min-h-[560px] w-full flex-col overflow-hidden rounded-3xl border border-border bg-surface shadow-xl'
+      : 'ml-auto flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border bg-surface shadow-2xl sm:max-h-[calc(100vh-3rem)]';
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-background/70 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-6">
+    <div
+      className={
+        mode === 'overlay'
+          ? 'fixed inset-0 z-50 overflow-y-auto bg-background/70 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-6'
+          : 'w-full'
+      }
+    >
       <div
         role="dialog"
-        aria-modal="true"
+        aria-modal={mode === 'overlay' ? 'true' : undefined}
         aria-labelledby="sp-change-composer-title"
-        className="ml-auto flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border bg-surface shadow-2xl sm:max-h-[calc(100vh-3rem)]"
+        className={dockedShellClass}
       >
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-4 py-5 sm:px-6">
           <div className="min-w-0">
@@ -178,7 +200,7 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
 
             <section className="rounded-2xl border border-border bg-surface-2/50 p-4">
               <div className="mb-3 text-xs uppercase tracking-[0.2em] text-muted">Identity chain</div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className={identityGridClass}>
                 <div className="rounded-xl border border-border bg-surface px-3 py-3">
                   <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Campaign</div>
                   <div className="mt-1 text-sm font-semibold text-foreground">
@@ -231,18 +253,18 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="flex flex-col gap-1 text-sm text-muted md:col-span-2">
+              <div className={reasoningGridClass}>
+                <label className={fieldLabelClass}>
                   <span className="text-xs uppercase tracking-[0.16em]">Active draft name</span>
                   <input
                     name="change_set_name"
                     value={changeSetName}
                     onChange={(event) => setChangeSetName(event.target.value)}
-                    className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                    className={controlClass}
                   />
                 </label>
 
-                <label className="flex flex-col gap-1 text-sm text-muted md:col-span-2">
+                <label className={fieldLabelClass}>
                   <span className="text-xs uppercase tracking-[0.16em]">Objective preset</span>
                   <select
                     name="objective_preset_id"
@@ -273,7 +295,7 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                       );
                       setNotes(nextPreset.notes ?? '');
                     }}
-                    className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                    className={controlClass}
                   >
                     <option value="">No preset</option>
                     {presetOptions.map((option) => (
@@ -284,39 +306,39 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                   </select>
                 </label>
 
-                <label className="flex flex-col gap-1 text-sm text-muted md:col-span-2">
+                <label className={fieldLabelClass}>
                   <span className="text-xs uppercase tracking-[0.16em]">Objective</span>
                   <textarea
                     name="objective"
                     value={objective}
                     onChange={(event) => setObjective(event.target.value)}
-                    className="min-h-[84px] rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                    className={`${textareaClass} min-h-[84px]`}
                     required
                   />
                 </label>
 
-                <label className="flex flex-col gap-1 text-sm text-muted md:col-span-2">
+                <label className={fieldLabelClass}>
                   <span className="text-xs uppercase tracking-[0.16em]">Hypothesis</span>
                   <textarea
                     name="hypothesis"
                     value={hypothesis}
                     onChange={(event) => setHypothesis(event.target.value)}
-                    className="min-h-[72px] rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                    className={`${textareaClass} min-h-[72px]`}
                   />
                 </label>
 
-                <label className="flex flex-col gap-1 text-sm text-muted md:col-span-2">
+                <label className={fieldLabelClass}>
                   <span className="text-xs uppercase tracking-[0.16em]">Forecast</span>
                   <textarea
                     name="forecast_summary"
                     value={forecastSummary}
                     onChange={(event) => setForecastSummary(event.target.value)}
-                    className="min-h-[72px] rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                    className={`${textareaClass} min-h-[72px]`}
                     placeholder="Expected directional outcome or guardrail impact"
                   />
                 </label>
 
-                <label className="flex flex-col gap-1 text-sm text-muted">
+                <label className="flex min-w-0 flex-col gap-1 text-sm text-muted">
                   <span className="text-xs uppercase tracking-[0.16em]">Forecast window days</span>
                   <input
                     type="number"
@@ -324,11 +346,11 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                     name="forecast_window_days"
                     value={forecastWindowDays}
                     onChange={(event) => setForecastWindowDays(event.target.value)}
-                    className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                    className={controlClass}
                   />
                 </label>
 
-                <label className="flex flex-col gap-1 text-sm text-muted">
+                <label className="flex min-w-0 flex-col gap-1 text-sm text-muted">
                   <span className="text-xs uppercase tracking-[0.16em]">Review after days</span>
                   <input
                     type="number"
@@ -336,21 +358,21 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                     name="review_after_days"
                     value={reviewAfterDays}
                     onChange={(event) => setReviewAfterDays(event.target.value)}
-                    className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                    className={controlClass}
                   />
                 </label>
 
-                <label className="flex flex-col gap-1 text-sm text-muted md:col-span-2">
+                <label className={fieldLabelClass}>
                   <span className="text-xs uppercase tracking-[0.16em]">Review notes</span>
                   <textarea
                     name="notes"
                     value={notes}
                     onChange={(event) => setNotes(event.target.value)}
-                    className="min-h-[72px] rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                    className={`${textareaClass} min-h-[72px]`}
                   />
                 </label>
 
-                <div className="rounded-xl border border-border bg-surface px-4 py-4 md:col-span-2">
+                <div className={`rounded-xl border border-border bg-surface px-4 py-4 ${fullSpanClass}`}>
                   <label className="flex items-center gap-2 text-sm font-medium text-foreground">
                     <input
                       type="checkbox"
@@ -366,13 +388,13 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                     value={saveObjectivePreset ? '1' : '0'}
                   />
                   {saveObjectivePreset ? (
-                    <label className="mt-3 flex flex-col gap-1 text-sm text-muted">
+                    <label className="mt-3 flex min-w-0 flex-col gap-1 text-sm text-muted">
                       <span className="text-xs uppercase tracking-[0.16em]">Preset name</span>
                       <input
                         name="objective_preset_name"
                         value={objectivePresetName}
                         onChange={(event) => setObjectivePresetName(event.target.value)}
-                        className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
+                        className="w-full min-w-0 rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
                         required={saveObjectivePreset}
                       />
                     </label>
@@ -391,20 +413,20 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
 
               <div className="mt-4 grid gap-4">
                 {current.target ? (
-                  <div className="grid gap-3 rounded-xl border border-border bg-surface p-4 md:grid-cols-2">
-                    <div className="md:col-span-2 text-sm font-semibold text-foreground">Target</div>
+                  <div className={`rounded-xl border border-border bg-surface p-4 ${editableSectionGridClass}`}>
+                    <div className={`${mode === 'docked' ? '' : 'md:col-span-2'} text-sm font-semibold text-foreground`}>Target</div>
                     {!current.target.is_negative ? (
                       <label className="flex flex-col gap-1 text-sm text-muted">
                         <span className="text-xs uppercase tracking-[0.16em]">Bid</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          name="target_bid"
-                          value={targetBid}
-                          onChange={(event) => setTargetBid(event.target.value)}
-                          className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
-                        />
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        name="target_bid"
+                        value={targetBid}
+                        onChange={(event) => setTargetBid(event.target.value)}
+                        className="w-full min-w-0 rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
+                      />
                         <span className="text-xs text-muted">
                           Current {formatNumberInput(current.target.current_bid) || '—'}
                         </span>
@@ -420,7 +442,7 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                         name="target_state"
                         value={targetState}
                         onChange={(event) => setTargetState(event.target.value)}
-                        className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
+                        className="w-full min-w-0 rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
                       >
                         <option value="">No change</option>
                         <option value="enabled">enabled</option>
@@ -435,8 +457,8 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                 ) : null}
 
                 {current.ad_group ? (
-                  <div className="grid gap-3 rounded-xl border border-border bg-surface p-4 md:grid-cols-2">
-                    <div className="md:col-span-2 text-sm font-semibold text-foreground">Ad group</div>
+                  <div className={`rounded-xl border border-border bg-surface p-4 ${editableSectionGridClass}`}>
+                    <div className={`${mode === 'docked' ? '' : 'md:col-span-2'} text-sm font-semibold text-foreground`}>Ad group</div>
                     <label className="flex flex-col gap-1 text-sm text-muted">
                       <span className="text-xs uppercase tracking-[0.16em]">Default bid</span>
                       <input
@@ -446,7 +468,7 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                         name="ad_group_default_bid"
                         value={adGroupDefaultBid}
                         onChange={(event) => setAdGroupDefaultBid(event.target.value)}
-                        className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
+                        className="w-full min-w-0 rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
                       />
                       <span className="text-xs text-muted">
                         Current {formatNumberInput(current.ad_group.current_default_bid) || '—'}
@@ -458,7 +480,7 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                         name="ad_group_state"
                         value={adGroupState}
                         onChange={(event) => setAdGroupState(event.target.value)}
-                        className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
+                        className="w-full min-w-0 rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
                       >
                         <option value="">No change</option>
                         <option value="enabled">enabled</option>
@@ -472,8 +494,8 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                   </div>
                 ) : null}
 
-                <div className="grid gap-3 rounded-xl border border-border bg-surface p-4 md:grid-cols-2">
-                  <div className="md:col-span-2 text-sm font-semibold text-foreground">Campaign</div>
+                <div className={`rounded-xl border border-border bg-surface p-4 ${editableSectionGridClass}`}>
+                  <div className={`${mode === 'docked' ? '' : 'md:col-span-2'} text-sm font-semibold text-foreground`}>Campaign</div>
                   <label className="flex flex-col gap-1 text-sm text-muted">
                     <span className="text-xs uppercase tracking-[0.16em]">Daily budget</span>
                     <input
@@ -483,7 +505,7 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                       name="campaign_budget"
                       value={campaignBudget}
                       onChange={(event) => setCampaignBudget(event.target.value)}
-                      className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
+                      className="w-full min-w-0 rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
                     />
                     <span className="text-xs text-muted">
                       Current {formatNumberInput(current.campaign.current_budget) || '—'}
@@ -495,7 +517,7 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                       name="campaign_state"
                       value={campaignState}
                       onChange={(event) => setCampaignState(event.target.value)}
-                      className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
+                      className="w-full min-w-0 rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
                     >
                       <option value="">No change</option>
                       <option value="enabled">enabled</option>
@@ -504,13 +526,13 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                     </select>
                     <span className="text-xs text-muted">Current {current.campaign.current_state ?? '—'}</span>
                   </label>
-                  <label className="flex flex-col gap-1 text-sm text-muted md:col-span-2">
+                  <label className={`flex flex-col gap-1 text-sm text-muted ${mode === 'docked' ? '' : 'md:col-span-2'}`}>
                     <span className="text-xs uppercase tracking-[0.16em]">Bidding strategy</span>
                     <select
                       name="campaign_bidding_strategy"
                       value={campaignBiddingStrategy}
                       onChange={(event) => setCampaignBiddingStrategy(event.target.value)}
-                      className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
+                      className="w-full min-w-0 rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
                     >
                       <option value="">No change</option>
                       {biddingStrategyOptions.map((option) => (
@@ -526,8 +548,8 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                 </div>
 
                 {editablePlacements.length > 0 ? (
-                  <div className="grid gap-3 rounded-xl border border-border bg-surface p-4 md:grid-cols-2">
-                    <div className="md:col-span-2 text-sm font-semibold text-foreground">
+                  <div className={`rounded-xl border border-border bg-surface p-4 ${editableSectionGridClass}`}>
+                    <div className={`${mode === 'docked' ? '' : 'md:col-span-2'} text-sm font-semibold text-foreground`}>
                       Placement (campaign context)
                     </div>
                     {editablePlacements.map((placement) => (
@@ -550,14 +572,14 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                               [placement.placement_code]: event.target.value,
                             }))
                           }
-                          className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
+                          className="w-full min-w-0 rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
                         />
                         <span className="text-xs text-muted">
                           Current {formatNumberInput(placement.current_percentage) || '—'}
                         </span>
                       </label>
                     ))}
-                    <div className="rounded-xl border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted md:col-span-2">
+                    <div className={`rounded-xl border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted ${mode === 'docked' ? '' : 'md:col-span-2'}`}>
                       Placement metrics remain campaign-level facts. This field stages only the placement modifier.
                     </div>
                   </div>
