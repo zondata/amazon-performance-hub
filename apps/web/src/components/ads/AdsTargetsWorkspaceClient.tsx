@@ -22,13 +22,14 @@ import type {
 } from '@/lib/ads/spWorkspaceTablesModel';
 import type { SpTargetsWorkspaceRow } from '@/lib/ads/spTargetsWorkspaceModel';
 import type { SaveSpDraftActionState } from '@/lib/ads-workspace/spChangeComposerState';
-import type { AdsObjectivePreset, JsonObject } from '@/lib/ads-workspace/types';
+import type { AdsObjectivePreset, AdsChangeSetItem, JsonObject } from '@/lib/ads-workspace/types';
 import {
   type AdsWorkspaceSurfaceSettings,
   type AdsWorkspaceTableSurfaceKey,
   type AdsWorkspaceUiSettings,
   normalizeAdsWorkspaceUiSettings,
 } from '@/lib/ads-workspace/adsWorkspaceUiSettings';
+import { deriveSpActiveDraftHighlights } from '@/lib/ads-workspace/spActiveDraftHighlights';
 import { saveAdsWorkspaceUiSettings } from '@/app/ads/performance/actions';
 
 type SaveSpDraftAction = (
@@ -74,6 +75,7 @@ type AdsTargetsWorkspaceClientProps = {
   defaultUiSettings: Record<string, unknown> | null;
   initialComposerRow: SpWorkspaceComposerRow | null;
   activeDraft: ActiveDraftSummary;
+  activeDraftItems: AdsChangeSetItem[];
   saveDraftAction: SaveSpDraftAction;
   showIds: boolean;
   campaignScopeId?: string | null;
@@ -97,6 +99,10 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
   const [isSavingUiSettings, startSavingUiSettings] = useTransition();
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uiSettings = uiSettingsDraft ?? normalizedDefaultUiSettings;
+  const activeDraftHighlights = useMemo(
+    () => deriveSpActiveDraftHighlights(props.activeDraftItems),
+    [props.activeDraftItems]
+  );
 
   useEffect(() => {
     return () => {
@@ -263,6 +269,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
           surfaceSettings={currentSurfaceSettings}
           settingsSaveStateLabel={settingsSaveStateLabel}
           onSurfaceSettingsChange={(settings) => updateSurfaceSettings(currentSurfaceKey, settings)}
+          rowHighlightTones={activeDraftHighlights.campaigns}
           onDrilldownToAdGroups={(row) =>
             drilldownToLevel('adgroups', {
               campaignScopeId: row.campaign_id,
@@ -287,6 +294,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
           surfaceSettings={currentSurfaceSettings}
           settingsSaveStateLabel={settingsSaveStateLabel}
           onSurfaceSettingsChange={(settings) => updateSurfaceSettings(currentSurfaceKey, settings)}
+          rowHighlightTones={activeDraftHighlights.adGroups}
           onDrilldownToTargets={(row) =>
             drilldownToLevel('targets', {
               campaignScopeId: row.campaign_id,
@@ -311,6 +319,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
           surfaceSettings={currentSurfaceSettings}
           settingsSaveStateLabel={settingsSaveStateLabel}
           onSurfaceSettingsChange={(settings) => updateSurfaceSettings(currentSurfaceKey, settings)}
+          rowHighlightTones={activeDraftHighlights.placements}
         />
       );
     }
@@ -342,6 +351,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
         surfaceSettings={currentSurfaceSettings}
         settingsSaveStateLabel={settingsSaveStateLabel}
         onSurfaceSettingsChange={(settings) => updateSurfaceSettings(currentSurfaceKey, settings)}
+        rowHighlightTones={activeDraftHighlights.targets}
       />
     );
   };

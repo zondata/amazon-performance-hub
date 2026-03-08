@@ -295,6 +295,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
   const objectivePresets = [...spObjectivePresets, ...globalObjectivePresets].filter(
     (preset, index, all) => all.findIndex((candidate) => candidate.id === preset.id) === index
   );
+  let activeDraftItems = [] as Awaited<ReturnType<typeof listChangeSetItems>>;
   const initialComposerRow =
     workspaceData && panelValue === 'workspace'
       ? resolveInitialComposerRow({
@@ -319,12 +320,13 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
     const changeSet = await getChangeSet(activeChangeSetId);
     if (!changeSet) {
       warnings.unshift('The requested active draft was not found. Start a new draft from the composer.');
-    } else if (changeSet.status !== 'draft') {
+    } else if (changeSet.status !== 'draft' && changeSet.status !== 'review_ready') {
       warnings.unshift(
         `Active draft ${changeSet.name} is ${changeSet.status} and can no longer accept staged edits.`
       );
     } else {
       const queueItems = await listChangeSetItems(changeSet.id);
+      activeDraftItems = queueItems;
       activeDraft = {
         id: changeSet.id,
         name: changeSet.name,
@@ -737,6 +739,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
            defaultUiSettings={defaultUiSettings as Record<string, unknown> | null}
            initialComposerRow={initialComposerRow}
            activeDraft={activeDraft}
+           activeDraftItems={activeDraftItems}
            saveDraftAction={saveSpDraftAction}
            showIds={showIds}
           campaignScopeId={campaignScopeId}

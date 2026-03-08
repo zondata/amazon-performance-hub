@@ -82,10 +82,30 @@ const fileLink = (relativePath: string | null) => {
   return `/api/files?path=${encodeURIComponent(relativePath)}`;
 };
 
+type QueueItemGroup = {
+  key: string;
+  title: string;
+  items: AdsChangeSetItem[];
+};
+
 export default function AdsWorkspaceQueueReview(props: AdsWorkspaceQueueReviewProps) {
   const selected = props.selectedChangeSet;
   const editable = selected?.status === 'draft' || selected?.status === 'review_ready';
   const artifact = selected ? readArtifact(selected.generated_artifact_json) : null;
+  const groupedItems = props.selectedItems.reduce<QueueItemGroup[]>((groups, item) => {
+    const descriptor = describeSpDraftItem(item);
+    const existing = groups.find((group) => group.key === descriptor.groupKey);
+    if (existing) {
+      existing.items.push(item);
+      return groups;
+    }
+    groups.push({
+      key: descriptor.groupKey,
+      title: descriptor.groupTitle,
+      items: [item],
+    });
+    return groups;
+  }, []);
 
   return (
     <section className="space-y-6">
@@ -282,163 +302,231 @@ export default function AdsWorkspaceQueueReview(props: AdsWorkspaceQueueReviewPr
                   </div>
                 ) : (
                   <div className="mt-4 space-y-4">
-                    {props.selectedItems.map((item) => {
-                      const fieldSpec = getSpDraftItemFieldSpec(item);
-                      const descriptor = describeSpDraftItem(item);
-                      const itemEditable = selected.status === 'draft' || selected.status === 'review_ready';
-                      return (
-                        <details key={item.id} className="rounded-xl border border-border bg-surface-2/60">
-                          <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 px-4 py-4 [&::-webkit-details-marker]:hidden">
-                            <div>
-                              <div className="text-sm font-semibold text-foreground">{descriptor.title}</div>
-                              <div className="mt-1 text-xs text-muted">
-                                {item.action_type} · {descriptor.subtitle || item.entity_level}
-                              </div>
-                            </div>
-                            <div className="text-right text-sm text-foreground">
-                              <div>
-                                {fieldSpec.label}: {formatValue(fieldSpec.beforeValue)} → {formatValue(fieldSpec.afterValue)}
-                              </div>
-                              <div className="mt-1 text-xs text-muted">Created {formatDateTime(item.created_at)}</div>
-                            </div>
-                          </summary>
-
-                          <div className="border-t border-border px-4 py-4">
-                            <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                              <div className="rounded-xl border border-border bg-surface px-3 py-3">
-                                <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Campaign</div>
-                                <div className="mt-1 text-sm font-medium text-foreground">{item.campaign_id ?? '—'}</div>
-                              </div>
-                              <div className="rounded-xl border border-border bg-surface px-3 py-3">
-                                <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Ad group</div>
-                                <div className="mt-1 text-sm font-medium text-foreground">{item.ad_group_id ?? '—'}</div>
-                              </div>
-                              <div className="rounded-xl border border-border bg-surface px-3 py-3">
-                                <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Target</div>
-                                <div className="mt-1 text-sm font-medium text-foreground">{item.target_id ?? '—'}</div>
-                              </div>
-                              <div className="rounded-xl border border-border bg-surface px-3 py-3">
-                                <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Placement</div>
-                                <div className="mt-1 text-sm font-medium text-foreground">{item.placement_code ?? '—'}</div>
-                              </div>
-                            </div>
-
-                            <form action={saveQueueItemAction} className="grid gap-4 md:grid-cols-2">
-                              <input type="hidden" name="return_to" value={props.returnTo} />
-                              <input type="hidden" name="item_id" value={item.id} />
-                              <label className="flex flex-col gap-1 text-sm text-muted">
-                                <span className="text-xs uppercase tracking-[0.16em]">{fieldSpec.label}</span>
-                                {fieldSpec.inputType === 'state' ? (
-                                  <select
-                                    name="next_value"
-                                    defaultValue={String(fieldSpec.afterValue ?? '')}
-                                    className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                                    disabled={!itemEditable}
-                                  >
-                                    <option value="enabled">enabled</option>
-                                    <option value="paused">paused</option>
-                                    <option value="archived">archived</option>
-                                  </select>
-                                ) : (
-                                  <input
-                                    type={fieldSpec.inputType === 'number' ? 'number' : 'text'}
-                                    step={fieldSpec.inputType === 'number' ? '0.01' : undefined}
-                                    min={fieldSpec.inputType === 'number' ? '0' : undefined}
-                                    name="next_value"
-                                    defaultValue={String(fieldSpec.afterValue ?? '')}
-                                    className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                                    disabled={!itemEditable}
-                                  />
-                                )}
-                                <span className="text-xs text-muted">Before value {formatValue(fieldSpec.beforeValue)}</span>
-                              </label>
-                              <label className="flex flex-col gap-1 text-sm text-muted">
-                                <span className="text-xs uppercase tracking-[0.16em]">Objective</span>
-                                <textarea
-                                  name="objective"
-                                  defaultValue={item.objective ?? ''}
-                                  className="min-h-[88px] rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                                  disabled={!itemEditable}
-                                />
-                              </label>
-                              <label className="flex flex-col gap-1 text-sm text-muted">
-                                <span className="text-xs uppercase tracking-[0.16em]">Hypothesis</span>
-                                <textarea
-                                  name="hypothesis"
-                                  defaultValue={item.hypothesis ?? ''}
-                                  className="min-h-[88px] rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                                  disabled={!itemEditable}
-                                />
-                              </label>
-                              <label className="flex flex-col gap-1 text-sm text-muted">
-                                <span className="text-xs uppercase tracking-[0.16em]">Forecast summary</span>
-                                <textarea
-                                  name="forecast_summary"
-                                  defaultValue={typeof item.forecast_json?.summary === 'string' ? item.forecast_json.summary : ''}
-                                  className="min-h-[88px] rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                                  disabled={!itemEditable}
-                                />
-                              </label>
-                              <label className="flex flex-col gap-1 text-sm text-muted">
-                                <span className="text-xs uppercase tracking-[0.16em]">Forecast window days</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  name="forecast_window_days"
-                                  defaultValue={typeof item.forecast_json?.window_days === 'number' ? String(item.forecast_json.window_days) : ''}
-                                  className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                                  disabled={!itemEditable}
-                                />
-                              </label>
-                              <label className="flex flex-col gap-1 text-sm text-muted">
-                                <span className="text-xs uppercase tracking-[0.16em]">Review after days</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  name="review_after_days"
-                                  defaultValue={item.review_after_days === null ? '' : String(item.review_after_days)}
-                                  className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                                  disabled={!itemEditable}
-                                />
-                              </label>
-                              <label className="flex flex-col gap-1 text-sm text-muted md:col-span-2">
-                                <span className="text-xs uppercase tracking-[0.16em]">Notes</span>
-                                <textarea
-                                  name="notes"
-                                  defaultValue={item.notes ?? ''}
-                                  className="min-h-[88px] rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                                  disabled={!itemEditable}
-                                />
-                              </label>
-
-                              {itemEditable ? (
-                                <div className="md:col-span-2 flex flex-wrap gap-3">
-                                  <button
-                                    type="submit"
-                                    className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground"
-                                  >
-                                    Save Item
-                                  </button>
-                                </div>
-                              ) : null}
-                            </form>
-
-                            {itemEditable ? (
-                              <form action={deleteQueueItemAction} className="mt-3">
-                                <input type="hidden" name="return_to" value={props.returnTo} />
-                                <input type="hidden" name="item_id" value={item.id} />
-                                <button
-                                  type="submit"
-                                  className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-800"
-                                >
-                                  Remove Item
-                                </button>
-                              </form>
-                            ) : null}
+                    {groupedItems.map((group) => (
+                      <section key={group.key} className="rounded-2xl border border-border bg-surface-2/40">
+                        <div className="border-b border-border px-4 py-4">
+                          <div className="text-xs uppercase tracking-[0.16em] text-muted">Campaign context</div>
+                          <div className="mt-1 text-sm font-semibold text-foreground">{group.title}</div>
+                          <div className="mt-1 text-xs text-muted">
+                            {group.items.length.toLocaleString('en-US')} atomic queued item(s)
                           </div>
-                        </details>
-                      );
-                    })}
+                        </div>
+                        <div className="space-y-4 p-4">
+                          {group.items.map((item) => {
+                            const fieldSpec = getSpDraftItemFieldSpec(item);
+                            const descriptor = describeSpDraftItem(item);
+                            const itemEditable =
+                              selected.status === 'draft' || selected.status === 'review_ready';
+                            const uiContext = item.ui_context_json ?? {};
+                            return (
+                              <details key={item.id} className="rounded-xl border border-border bg-surface/80">
+                                <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 px-4 py-4 [&::-webkit-details-marker]:hidden">
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-semibold text-foreground">{descriptor.title}</div>
+                                    <div className="mt-1 text-xs text-muted">
+                                      {item.action_type} · {descriptor.subtitle || item.entity_level}
+                                    </div>
+                                    {descriptor.secondaryIds ? (
+                                      <div className="mt-1 text-[11px] text-muted">{descriptor.secondaryIds}</div>
+                                    ) : null}
+                                  </div>
+                                  <div className="text-right text-sm text-foreground">
+                                    <div>
+                                      {fieldSpec.label}: {formatValue(fieldSpec.beforeValue)} →{' '}
+                                      {formatValue(fieldSpec.afterValue)}
+                                    </div>
+                                    <div className="mt-1 text-xs text-muted">
+                                      Created {formatDateTime(item.created_at)}
+                                    </div>
+                                  </div>
+                                </summary>
+
+                                <div className="border-t border-border px-4 py-4">
+                                  <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div className="rounded-xl border border-border bg-surface px-3 py-3">
+                                      <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Campaign</div>
+                                      <div className="mt-1 text-sm font-medium text-foreground">
+                                        {typeof uiContext.campaign_name === 'string' && uiContext.campaign_name
+                                          ? uiContext.campaign_name
+                                          : item.campaign_id ?? '—'}
+                                      </div>
+                                      {item.campaign_id ? (
+                                        <div className="mt-1 text-[11px] text-muted">{item.campaign_id}</div>
+                                      ) : null}
+                                    </div>
+                                    <div className="rounded-xl border border-border bg-surface px-3 py-3">
+                                      <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Ad group</div>
+                                      <div className="mt-1 text-sm font-medium text-foreground">
+                                        {typeof uiContext.ad_group_name === 'string' && uiContext.ad_group_name
+                                          ? uiContext.ad_group_name
+                                          : item.ad_group_id ?? '—'}
+                                      </div>
+                                      {item.ad_group_id ? (
+                                        <div className="mt-1 text-[11px] text-muted">{item.ad_group_id}</div>
+                                      ) : null}
+                                    </div>
+                                    <div className="rounded-xl border border-border bg-surface px-3 py-3">
+                                      <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Target</div>
+                                      <div className="mt-1 text-sm font-medium text-foreground">
+                                        {typeof uiContext.target_text === 'string' && uiContext.target_text
+                                          ? uiContext.target_text
+                                          : item.target_id ?? '—'}
+                                      </div>
+                                      <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted">
+                                        {typeof uiContext.match_type === 'string' && uiContext.match_type ? (
+                                          <span>{uiContext.match_type}</span>
+                                        ) : null}
+                                        {item.target_id ? <span>{item.target_id}</span> : null}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-xl border border-border bg-surface px-3 py-3">
+                                      <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Placement</div>
+                                      <div className="mt-1 text-sm font-medium text-foreground">
+                                        {typeof uiContext.placement_label === 'string' && uiContext.placement_label
+                                          ? uiContext.placement_label
+                                          : item.placement_code ?? '—'}
+                                      </div>
+                                      {item.placement_code ? (
+                                        <div className="mt-1 text-[11px] text-muted">{item.placement_code}</div>
+                                      ) : null}
+                                    </div>
+                                  </div>
+
+                                  <form action={saveQueueItemAction} className="grid gap-4 md:grid-cols-2">
+                                    <input type="hidden" name="return_to" value={props.returnTo} />
+                                    <input type="hidden" name="item_id" value={item.id} />
+                                    <label className="flex flex-col gap-1 text-sm text-muted">
+                                      <span className="text-xs uppercase tracking-[0.16em]">{fieldSpec.label}</span>
+                                      {fieldSpec.inputType === 'state' ? (
+                                        <select
+                                          name="next_value"
+                                          defaultValue={String(fieldSpec.afterValue ?? '')}
+                                          className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                                          disabled={!itemEditable}
+                                        >
+                                          <option value="enabled">enabled</option>
+                                          <option value="paused">paused</option>
+                                          <option value="archived">archived</option>
+                                        </select>
+                                      ) : (
+                                        <input
+                                          type={fieldSpec.inputType === 'number' ? 'number' : 'text'}
+                                          step={fieldSpec.inputType === 'number' ? '0.01' : undefined}
+                                          min={fieldSpec.inputType === 'number' ? '0' : undefined}
+                                          name="next_value"
+                                          defaultValue={String(fieldSpec.afterValue ?? '')}
+                                          className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                                          disabled={!itemEditable}
+                                        />
+                                      )}
+                                      <span className="text-xs text-muted">
+                                        Before value {formatValue(fieldSpec.beforeValue)}
+                                      </span>
+                                    </label>
+                                    <label className="flex flex-col gap-1 text-sm text-muted">
+                                      <span className="text-xs uppercase tracking-[0.16em]">Objective</span>
+                                      <textarea
+                                        name="objective"
+                                        defaultValue={item.objective ?? ''}
+                                        className="min-h-[88px] rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                                        disabled={!itemEditable}
+                                      />
+                                    </label>
+                                    <label className="flex flex-col gap-1 text-sm text-muted">
+                                      <span className="text-xs uppercase tracking-[0.16em]">Hypothesis</span>
+                                      <textarea
+                                        name="hypothesis"
+                                        defaultValue={item.hypothesis ?? ''}
+                                        className="min-h-[88px] rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                                        disabled={!itemEditable}
+                                      />
+                                    </label>
+                                    <label className="flex flex-col gap-1 text-sm text-muted">
+                                      <span className="text-xs uppercase tracking-[0.16em]">Forecast summary</span>
+                                      <textarea
+                                        name="forecast_summary"
+                                        defaultValue={
+                                          typeof item.forecast_json?.summary === 'string'
+                                            ? item.forecast_json.summary
+                                            : ''
+                                        }
+                                        className="min-h-[88px] rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                                        disabled={!itemEditable}
+                                      />
+                                    </label>
+                                    <label className="flex flex-col gap-1 text-sm text-muted">
+                                      <span className="text-xs uppercase tracking-[0.16em]">
+                                        Forecast window days
+                                      </span>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        name="forecast_window_days"
+                                        defaultValue={
+                                          typeof item.forecast_json?.window_days === 'number'
+                                            ? String(item.forecast_json.window_days)
+                                            : ''
+                                        }
+                                        className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                                        disabled={!itemEditable}
+                                      />
+                                    </label>
+                                    <label className="flex flex-col gap-1 text-sm text-muted">
+                                      <span className="text-xs uppercase tracking-[0.16em]">Review after days</span>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        name="review_after_days"
+                                        defaultValue={
+                                          item.review_after_days === null
+                                            ? ''
+                                            : String(item.review_after_days)
+                                        }
+                                        className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                                        disabled={!itemEditable}
+                                      />
+                                    </label>
+                                    <label className="flex flex-col gap-1 text-sm text-muted md:col-span-2">
+                                      <span className="text-xs uppercase tracking-[0.16em]">Notes</span>
+                                      <textarea
+                                        name="notes"
+                                        defaultValue={item.notes ?? ''}
+                                        className="min-h-[88px] rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                                        disabled={!itemEditable}
+                                      />
+                                    </label>
+
+                                    {itemEditable ? (
+                                      <div className="md:col-span-2 flex flex-wrap gap-3">
+                                        <button
+                                          type="submit"
+                                          className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground"
+                                        >
+                                          Save Item
+                                        </button>
+                                      </div>
+                                    ) : null}
+                                  </form>
+
+                                  {itemEditable ? (
+                                    <form action={deleteQueueItemAction} className="mt-3">
+                                      <input type="hidden" name="return_to" value={props.returnTo} />
+                                      <input type="hidden" name="item_id" value={item.id} />
+                                      <button
+                                        type="submit"
+                                        className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-800"
+                                      >
+                                        Remove Item
+                                      </button>
+                                    </form>
+                                  ) : null}
+                                </div>
+                              </details>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    ))}
                   </div>
                 )}
               </section>

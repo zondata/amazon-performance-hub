@@ -49,7 +49,7 @@ type AdsWorkspaceGridTableProps<TRow> = {
   onRowClick?: (row: TRow) => void;
   onRowKeyDown?: (row: TRow, event: KeyboardEvent<HTMLDivElement>) => void;
   renderExpanded?: (row: TRow, context: { fontSize: AdsWorkspaceTableFontSize; wrapLongLabels: boolean }) => ReactNode;
-  rowClassName?: string;
+  rowClassName?: string | ((row: TRow) => string | null | undefined);
   expandedRowClassName?: string;
 };
 
@@ -547,13 +547,21 @@ export default function AdsWorkspaceGridTable<TRow>({
           </div>
 
           {sortedRows.map((row) => {
+            const resolvedRowClassName =
+              typeof rowClassName === 'function' ? rowClassName(row) ?? '' : rowClassName ?? '';
+            const hasCustomRowSurfaceTone =
+              resolvedRowClassName.includes('bg-') ||
+              resolvedRowClassName.includes('ring-') ||
+              resolvedRowClassName.includes('border-l-');
             const summary = (
               <div
                 role={rowLinkRole}
                 tabIndex={onRowClick ? 0 : undefined}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 onKeyDown={onRowKeyDown ? (event) => onRowKeyDown(row, event) : undefined}
-                className={`grid bg-surface/70 transition hover:bg-surface-2/70 ${rowClassName ?? ''}`}
+                className={`grid transition ${
+                  hasCustomRowSurfaceTone ? '' : 'bg-surface/70 hover:bg-surface-2/70'
+                } ${resolvedRowClassName}`}
                 style={{ gridTemplateColumns: visibleColumns.map((column) => `${column.width}px`).join(' ') }}
               >
                 {visibleColumns.map((column) => {

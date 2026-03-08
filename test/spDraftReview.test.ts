@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildSpDraftItemPatch,
+  describeSpDraftItem,
   mapChangeSetItemsToSpUpdateActions,
 } from '../apps/web/src/lib/ads-workspace/spDraftReview';
 import type { AdsChangeSetItem } from '../apps/web/src/lib/ads-workspace/types';
@@ -176,5 +177,43 @@ describe('buildSpDraftItemPatch', () => {
         notes: null,
       })
     ).toThrow('Target bid must be non-negative.');
+  });
+});
+
+describe('describeSpDraftItem', () => {
+  it('keeps target text primary while adding readable campaign and ad group context', () => {
+    const descriptor = describeSpDraftItem(makeItem());
+
+    expect(descriptor.title).toBe('blue shoes');
+    expect(descriptor.subtitle).toBe('Campaign A · Ad Group A');
+    expect(descriptor.contextLabel).toBe('Campaign A · Ad Group A · blue shoes');
+    expect(descriptor.groupKey).toBe('campaign-1');
+    expect(descriptor.groupTitle).toBe('Campaign A');
+    expect(descriptor.secondaryIds).toBe('campaign-1 · ad-group-1 · target-1');
+  });
+
+  it('simplifies placement items while keeping campaign context readable', () => {
+    const descriptor = describeSpDraftItem(
+      makeItem({
+        entity_level: 'placement',
+        entity_key: 'campaign-1::PLACEMENT_TOP',
+        ad_group_id: null,
+        target_id: null,
+        placement_code: 'PLACEMENT_TOP',
+        action_type: 'update_placement_modifier',
+        before_json: { placement_code: 'PLACEMENT_TOP', percentage: 20 },
+        after_json: { placement_code: 'PLACEMENT_TOP', percentage: 35 },
+        ui_context_json: {
+          campaign_name: 'Campaign A',
+          placement_label: 'Top of Search (first page)',
+        },
+      })
+    );
+
+    expect(descriptor.title).toBe('Top of Search (first page)');
+    expect(descriptor.subtitle).toBe('Campaign A');
+    expect(descriptor.contextLabel).toBe('Campaign A · Top of Search (first page)');
+    expect(descriptor.groupKey).toBe('campaign-1');
+    expect(descriptor.secondaryIds).toBe('campaign-1 · PLACEMENT_TOP');
   });
 });

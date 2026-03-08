@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { isRedirectError } from 'next/dist/client/components/redirect-error';
 
 import { runSpUpdateGenerator } from '@/lib/bulksheets/runGenerators';
 import { downloadTemplateToLocalPath } from '@/lib/bulksheets/templateStore';
@@ -94,6 +95,12 @@ const redirectWithFlash = (returnTo: string, params: { notice?: string; error?: 
     url.searchParams.set('queue_error', params.error);
   }
   redirect(`${url.pathname}?${url.searchParams.toString()}`);
+};
+
+const rethrowRedirectError = (error: unknown) => {
+  if (isRedirectError(error)) {
+    throw error;
+  }
 };
 
 const readChangeSetId = (formData: FormData) => {
@@ -312,6 +319,7 @@ export const saveQueueChangeSetMetaAction = async (formData: FormData) => {
     revalidatePath('/ads/performance');
     redirectWithFlash(returnTo, { notice: 'Change set details updated.' });
   } catch (error) {
+    rethrowRedirectError(error);
     redirectWithFlash(returnTo, {
       error: error instanceof Error ? error.message : 'Failed to update change set.',
     });
@@ -360,6 +368,7 @@ export const updateQueueChangeSetStatusAction = async (formData: FormData) => {
             : 'Change set cancelled.',
     });
   } catch (error) {
+    rethrowRedirectError(error);
     redirectWithFlash(returnTo, {
       error: error instanceof Error ? error.message : 'Failed to update change set status.',
     });
@@ -395,6 +404,7 @@ export const saveQueueItemAction = async (formData: FormData) => {
     revalidatePath('/ads/performance');
     redirectWithFlash(returnTo, { notice: 'Queue item updated.' });
   } catch (error) {
+    rethrowRedirectError(error);
     redirectWithFlash(returnTo, {
       error: error instanceof Error ? error.message : 'Failed to update queue item.',
     });
@@ -419,6 +429,7 @@ export const deleteQueueItemAction = async (formData: FormData) => {
     revalidatePath('/ads/performance');
     redirectWithFlash(returnTo, { notice: 'Queue item removed.' });
   } catch (error) {
+    rethrowRedirectError(error);
     redirectWithFlash(returnTo, {
       error: error instanceof Error ? error.message : 'Failed to remove queue item.',
     });
@@ -484,6 +495,7 @@ export const generateQueueChangeSetAction = async (formData: FormData) => {
       notice: `Bulksheet generated and ${result.log_created ?? 0} logbook change(s) frozen.`,
     });
   } catch (error) {
+    rethrowRedirectError(error);
     redirectWithFlash(returnTo, {
       error: error instanceof Error ? error.message : 'Failed to generate bulksheet.',
     });

@@ -11,6 +11,15 @@ export type SpDraftItemFieldSpec = {
   afterValue: string | number | null;
 };
 
+export type SpDraftItemDescriptor = {
+  title: string;
+  subtitle: string;
+  secondaryIds: string;
+  groupKey: string;
+  groupTitle: string;
+  contextLabel: string;
+};
+
 const STATE_OPTIONS = ['enabled', 'paused', 'archived'] as const;
 
 const trimToNull = (value: unknown): string | null => {
@@ -61,6 +70,15 @@ const readReviewAfterDays = (value: string | null): number | null => {
 };
 
 const getValue = (object: JsonObject, key: string) => object[key] ?? null;
+
+const formatPlacementCode = (value: string | null | undefined) => {
+  const normalized = trimToNull(value);
+  if (!normalized) return 'Placement';
+  if (normalized === 'PLACEMENT_TOP') return 'Top of Search';
+  if (normalized === 'PLACEMENT_REST_OF_SEARCH') return 'Rest of Search';
+  if (normalized === 'PLACEMENT_PRODUCT_PAGE') return 'Product Pages';
+  return normalized;
+};
 
 export const getSpDraftItemFieldSpec = (item: AdsChangeSetItem): SpDraftItemFieldSpec => {
   if (item.action_type === 'update_target_bid') {
@@ -138,27 +156,53 @@ export const getSpDraftItemFieldSpec = (item: AdsChangeSetItem): SpDraftItemFiel
   throw new Error(`Unsupported action type: ${item.action_type}`);
 };
 
-export const describeSpDraftItem = (item: AdsChangeSetItem) => {
+export const describeSpDraftItem = (item: AdsChangeSetItem): SpDraftItemDescriptor => {
   const uiContext = item.ui_context_json ?? {};
   const campaignName = trimToNull(uiContext.campaign_name);
   const adGroupName = trimToNull(uiContext.ad_group_name);
   const targetText = trimToNull(uiContext.target_text);
+  const matchType = trimToNull(uiContext.match_type);
   const placementLabel = trimToNull(uiContext.placement_label);
+  const campaignLabel = campaignName ?? item.campaign_id ?? item.entity_key;
+  const adGroupLabel = adGroupName ?? item.ad_group_id ?? 'Ad group';
+  const placementShortLabel = placementLabel ?? formatPlacementCode(item.placement_code);
 
   const title =
     item.entity_level === 'campaign'
-      ? campaignName ?? item.campaign_id ?? item.entity_key
+      ? campaignLabel
       : item.entity_level === 'ad_group'
-        ? adGroupName ?? item.ad_group_id ?? item.entity_key
+        ? adGroupLabel
         : item.entity_level === 'placement'
-          ? `${campaignName ?? item.campaign_id ?? item.entity_key} · ${placementLabel ?? item.placement_code ?? 'Placement'}`
+          ? placementShortLabel
           : targetText ?? item.target_id ?? item.entity_key;
+
+  const subtitle =
+    item.entity_level === 'campaign'
+      ? 'Campaign'
+      : item.entity_level === 'ad_group'
+        ? [campaignLabel].filter(Boolean).join(' · ')
+        : item.entity_level === 'placement'
+          ? [campaignLabel].filter(Boolean).join(' · ')
+          : [campaignLabel, adGroupName, matchType].filter((value): value is string => Boolean(value)).join(' · ');
+
+  const contextLabel =
+    item.entity_level === 'campaign'
+      ? campaignLabel
+      : item.entity_level === 'ad_group'
+        ? [campaignLabel, adGroupLabel].filter(Boolean).join(' · ')
+        : item.entity_level === 'placement'
+          ? [campaignLabel, placementShortLabel].filter(Boolean).join(' · ')
+          : [campaignLabel, adGroupLabel, title].filter(Boolean).join(' · ');
 
   return {
     title,
-    subtitle: [item.campaign_id, item.ad_group_id, item.target_id, item.placement_code]
+    subtitle,
+    secondaryIds: [item.campaign_id, item.ad_group_id, item.target_id, item.placement_code]
       .filter((value): value is string => Boolean(value))
       .join(' · '),
+    groupKey: item.campaign_id ?? item.entity_key,
+    groupTitle: campaignLabel,
+    contextLabel,
   };
 };
 

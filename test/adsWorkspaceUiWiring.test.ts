@@ -36,6 +36,10 @@ const gridTablePath = path.join(
   process.cwd(),
   'apps/web/src/components/ads/AdsWorkspaceGridTable.tsx'
 );
+const queueReviewPath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads/AdsWorkspaceQueueReview.tsx'
+);
 
 describe('ads workspace 7B-B UI wiring', () => {
   it('preserves global show-ids and drilldown scope params in the workspace route state', () => {
@@ -91,8 +95,12 @@ describe('ads workspace 7B-C UI wiring', () => {
     expect(pageSource).toContain("const composeLevel = paramValue('compose_level') ?? null");
     expect(pageSource).toContain("const composeRowId = paramValue('compose_row') ?? null");
     expect(pageSource).toContain("const composeChildId = paramValue('compose_child') ?? null");
+    expect(pageSource).toContain('let activeDraftItems = [] as Awaited<ReturnType<typeof listChangeSetItems>>;');
+    expect(pageSource).toContain('activeDraftItems = queueItems;');
+    expect(pageSource).toContain("changeSet.status !== 'draft' && changeSet.status !== 'review_ready'");
     expect(clientSource).toContain('const currentSurfaceKey = `table:${props.level}` as AdsWorkspaceTableSurfaceKey');
     expect(clientSource).toContain('await saveAdsWorkspaceUiSettings(next);');
+    expect(clientSource).toContain('deriveSpActiveDraftHighlights(props.activeDraftItems)');
     expect(clientSource).toContain("params.set('compose_level', props.level)");
     expect(trendSource).toContain("params.delete('compose_level')");
     expect(trendSource).toContain('<SpChangeComposer');
@@ -100,10 +108,22 @@ describe('ads workspace 7B-C UI wiring', () => {
     expect(actionsSource).toContain('pageKey: ADS_WORKSPACE_UI_PAGE_KEY');
   });
 
+  it('lets queue review redirect exceptions escape instead of flashing NEXT_REDIRECT as an error', () => {
+    const actionsSource = fs.readFileSync(actionsPath, 'utf-8');
+
+    expect(actionsSource).toContain("import { isRedirectError } from 'next/dist/client/components/redirect-error';");
+    expect(actionsSource).toContain('const rethrowRedirectError = (error: unknown) => {');
+    expect(actionsSource).toContain('if (isRedirectError(error)) {');
+    expect(actionsSource).toContain('throw error;');
+    expect(actionsSource).toContain('rethrowRedirectError(error);');
+  });
+
   it('wires shared header controls, Search Terms settings, and the docked composer layout', () => {
     const clientSource = fs.readFileSync(clientPath, 'utf-8');
     const gridTableSource = fs.readFileSync(gridTablePath, 'utf-8');
     const searchTermsSource = fs.readFileSync(searchTermsTablePath, 'utf-8');
+    const campaignsTableSource = fs.readFileSync(campaignsTablePath, 'utf-8');
+    const adGroupsTableSource = fs.readFileSync(adGroupsTablePath, 'utf-8');
 
     expect(gridTableSource).toContain('Wrap long labels');
     expect(gridTableSource).toContain('Columns');
@@ -119,10 +139,26 @@ describe('ads workspace 7B-C UI wiring', () => {
     expect(gridTableSource).toContain('toggleFrozen');
     expect(gridTableSource).toContain('group-open:rotate-90');
     expect(gridTableSource).toContain('No rows matched the current filters.');
+    expect(gridTableSource).toContain("typeof rowClassName === 'function' ? rowClassName(row) ?? '' : rowClassName ?? ''");
+    expect(gridTableSource).toContain('const hasCustomRowSurfaceTone =');
+    expect(gridTableSource).toContain("hasCustomRowSurfaceTone ? '' : 'bg-surface/70 hover:bg-surface-2/70'");
     expect(searchTermsSource).toContain('surfaceSettings={surfaceSettings}');
     expect(searchTermsSource).toContain('settingsSaveStateLabel={settingsSaveStateLabel}');
     expect(searchTermsSource).toContain('onSurfaceSettingsChange={onSurfaceSettingsChange}');
+    expect(campaignsTableSource).toContain('rowHighlightTones?: Map<string, SpActiveDraftRowTone>;');
+    expect(adGroupsTableSource).toContain('rowHighlightTones?: Map<string, SpActiveDraftRowTone>;');
     expect(clientSource).toContain("xl:grid-cols-[minmax(0,1fr)_430px]");
     expect(clientSource).toContain('mode="docked"');
+  });
+
+  it('groups queue review items by campaign context while keeping atomic item controls', () => {
+    const queueReviewSource = fs.readFileSync(queueReviewPath, 'utf-8');
+
+    expect(queueReviewSource).toContain('const groupedItems = props.selectedItems.reduce<QueueItemGroup[]>');
+    expect(queueReviewSource).toContain('Campaign context');
+    expect(queueReviewSource).toContain("atomic queued item(s)");
+    expect(queueReviewSource).toContain('descriptor.secondaryIds');
+    expect(queueReviewSource).toContain('Save Item');
+    expect(queueReviewSource).toContain('Remove Item');
   });
 });

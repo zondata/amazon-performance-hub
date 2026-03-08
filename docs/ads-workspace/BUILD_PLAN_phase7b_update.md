@@ -569,6 +569,32 @@ Add operator controls for column management, filtering, wrapping, and non-modal 
 - [x] `npm run web:lint` passes.
 - [x] `npm run web:build` passes.
 
+### Post-7B-C — active draft highlight safety
+
+#### Objectives
+Make currently staged SP draft edits visually obvious in the workspace so operators do not accidentally restage the same entity.
+
+#### Tasks
+- [x] Derive active staged entity identity from the current active draft change set items only.
+- [x] Add strongest direct row highlight for staged SP table rows:
+  - [x] Campaign rows
+  - [x] Ad Group rows
+  - [x] Target rows
+  - [x] Placement rows
+- [x] Add lighter contextual ancestor highlight where identity is deterministic:
+  - [x] Campaign rows for staged ad-group / target / placement edits
+  - [x] Ad Group rows for staged target edits
+- [x] Keep highlight tied to active draft state only so it clears when the draft item is removed or the change set leaves `draft` status.
+- [x] Add tests for staged-highlight derivation and row wiring.
+
+#### Acceptance
+- [x] Active staged SP table rows are visibly distinguishable from untouched rows.
+- [x] Directly edited rows are stronger than contextual ancestor rows.
+- [x] Highlight does not persist for generated or non-draft change sets.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
+
 ### Phase 7B-D — conditional rank context in Targets
 
 #### Objectives

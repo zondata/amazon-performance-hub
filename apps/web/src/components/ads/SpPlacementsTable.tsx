@@ -3,6 +3,7 @@ import AdsWorkspaceGridTable, {
 } from '@/components/ads/AdsWorkspaceGridTable';
 import type { SpPlacementsWorkspaceRow } from '@/lib/ads/spWorkspaceTablesModel';
 import type { AdsWorkspaceSurfaceSettings } from '@/lib/ads-workspace/adsWorkspaceUiSettings';
+import type { SpActiveDraftRowTone } from '@/lib/ads-workspace/spActiveDraftHighlights';
 
 const formatCurrency = (value?: number | null) => {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
@@ -36,7 +37,15 @@ type SpPlacementsTableProps = {
   surfaceSettings?: AdsWorkspaceSurfaceSettings | null;
   settingsSaveStateLabel?: string | null;
   onSurfaceSettingsChange: (settings: AdsWorkspaceSurfaceSettings) => void;
+  rowHighlightTones?: Map<string, SpActiveDraftRowTone>;
 };
+
+const stagedRowClassName = (tone: SpActiveDraftRowTone | undefined) =>
+  tone === 'direct'
+    ? 'border-l-4 border-l-stone-500/45 bg-stone-500/10 ring-1 ring-inset ring-stone-500/20'
+    : tone === 'context'
+      ? 'border-l-4 border-l-stone-400/25 bg-stone-500/5 ring-1 ring-inset ring-stone-400/12'
+      : '';
 
 export default function SpPlacementsTable({
   rows,
@@ -46,6 +55,7 @@ export default function SpPlacementsTable({
   surfaceSettings,
   settingsSaveStateLabel,
   onSurfaceSettingsChange,
+  rowHighlightTones,
 }: SpPlacementsTableProps) {
   const columns: AdsWorkspaceGridColumn<SpPlacementsWorkspaceRow>[] = [
     {
@@ -253,7 +263,11 @@ export default function SpPlacementsTable({
       surfaceSettings={surfaceSettings}
       settingsSaveStateLabel={settingsSaveStateLabel}
       onSurfaceSettingsChange={onSurfaceSettingsChange}
-      rowClassName="border-b border-border last:border-b-0"
+      rowClassName={(row) =>
+        `border-b border-border last:border-b-0 ${stagedRowClassName(
+          rowHighlightTones?.get(row.id)
+        )}`.trim()
+      }
     />
   );
 }
