@@ -1,8 +1,10 @@
 import AdsTargetsWorkspaceClient from '@/components/ads/AdsTargetsWorkspaceClient';
+import AdsWorkspaceTrendClient from '@/components/ads/AdsWorkspaceTrendClient';
 import AdsWorkspaceQueueReview from '@/components/ads/AdsWorkspaceQueueReview';
 import Tabs from '@/components/Tabs';
 import { saveSpDraftAction } from '@/app/ads/performance/actions';
 import { getSpWorkspaceData } from '@/lib/ads/getSpWorkspaceData';
+import { getSpWorkspaceTrendData } from '@/lib/ads/getSpWorkspaceTrendData';
 import { listChangeSetItems } from '@/lib/ads-workspace/repoChangeSetItems';
 import { getChangeSet, listChangeSets } from '@/lib/ads-workspace/repoChangeSets';
 import { listObjectivePresets } from '@/lib/ads-workspace/repoObjectivePresets';
@@ -61,6 +63,7 @@ const buildHref = (params: {
   view: string;
   panel?: string | null;
   changeSetId?: string | null;
+  trendEntity?: string | null;
 }) => {
   const usp = new URLSearchParams({
     start: params.start,
@@ -75,6 +78,9 @@ const buildHref = (params: {
   }
   if (params.changeSetId) {
     usp.set('change_set', params.changeSetId);
+  }
+  if (params.trendEntity) {
+    usp.set('trend_entity', params.trendEntity);
   }
   return `/ads/performance?${usp.toString()}`;
 };
@@ -100,6 +106,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
   const requestedView = (paramValue('view') ?? 'table').toLowerCase();
   const requestedPanel = (paramValue('panel') ?? 'workspace').toLowerCase();
   const activeChangeSetId = paramValue('change_set') ?? null;
+  const trendEntity = paramValue('trend_entity') ?? null;
   const queueNotice = paramValue('queue_notice') ?? null;
   const queueError = paramValue('queue_error') ?? null;
 
@@ -120,25 +127,41 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       : 'targets';
   const viewValue = requestedView === 'trend' ? 'trend' : 'table';
   const panelValue = requestedPanel === 'queue' ? 'queue' : 'workspace';
-  const shouldLoadTable =
+  const shouldLoadWorkspaceData =
     panelValue === 'workspace' &&
-    viewValue === 'table' &&
     (levelValue === 'campaigns' ||
       levelValue === 'adgroups' ||
       levelValue === 'targets' ||
       levelValue === 'placements' ||
       levelValue === 'searchterms');
+  const shouldLoadTable = shouldLoadWorkspaceData && viewValue === 'table';
+  const shouldLoadTrend =
+    shouldLoadWorkspaceData && viewValue === 'trend' && (levelValue === 'campaigns' || levelValue === 'targets');
 
-  const workspaceData = shouldLoadTable
-    ? await getSpWorkspaceData({
+  const trendBundle = shouldLoadTrend
+    ? await getSpWorkspaceTrendData({
         accountId: env.accountId,
         marketplace: env.marketplace,
         start,
         end,
         asinFilter: asin,
         level: levelValue,
+        selectedEntityId: trendEntity,
       })
     : null;
+  const workspaceData =
+    trendBundle?.workspaceData ??
+    (shouldLoadTable
+      ? await getSpWorkspaceData({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+          start,
+          end,
+          asinFilter: asin,
+          level: levelValue,
+        })
+      : null);
+  const trendData = trendBundle?.trendData ?? null;
   const asinOptions =
     workspaceData?.asinOptions ??
     (await fetchAsinOptions(env.accountId, env.marketplace));
@@ -152,7 +175,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
     (preset, index, all) => all.findIndex((candidate) => candidate.id === preset.id) === index
   );
 
-  const warnings = [...(workspaceData?.warnings ?? [])];
+  const warnings = [...(trendBundle?.warnings ?? workspaceData?.warnings ?? [])];
   let activeDraft:
     | {
         id: string;
@@ -248,6 +271,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       view: viewValue,
       panel: item.value,
       changeSetId: persistedChangeSetId,
+      trendEntity,
     }),
   }));
 
@@ -276,6 +300,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       view: viewValue,
       panel: panelValue,
       changeSetId: persistedChangeSetId,
+      trendEntity,
     }),
   }));
 
@@ -293,6 +318,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       view: item.value,
       panel: panelValue,
       changeSetId: persistedChangeSetId,
+      trendEntity,
     }),
   }));
 
@@ -313,6 +339,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       view: viewValue,
       panel: panelValue,
       changeSetId: persistedChangeSetId,
+      trendEntity,
     }),
   }));
 
@@ -330,6 +357,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
       view: viewValue,
       panel: 'queue',
       changeSetId: changeSet.id,
+      trendEntity,
     }),
   }));
 
@@ -361,8 +389,8 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
   return (
     <div className="space-y-8">
       <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
             <div className="text-xs uppercase tracking-[0.3em] text-muted">
               Ads workspace
             </div>
@@ -370,10 +398,10 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
               {start} → {end}
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
-              SP-first workspace shell. Table mode is operational for campaigns, ad groups, targets, placements, and search terms. Trend mode still lands later.
+              SP-first workspace shell. Table mode is operational for campaigns, ad groups, targets, placements, and search terms. Phase 7 currently ships a diagnostic-first trend slice for Campaigns and Targets.
             </div>
           </div>
-          <form method="get" className="flex flex-wrap items-end gap-3">
+          <form method="get" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_auto] xl:items-end">
             <input type="hidden" name="panel" value={panelValue} />
             <input type="hidden" name="channel" value={channelValue} />
             <input type="hidden" name="level" value={levelValue} />
@@ -383,7 +411,8 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
               name="change_set"
               value={persistedChangeSetId ?? ''}
             />
-            <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+            <input type="hidden" name="trend_entity" value={trendData?.selectedEntityId ?? trendEntity ?? ''} />
+            <label className="flex min-w-0 flex-col text-xs uppercase tracking-wide text-muted">
               Start
               <input
                 type="date"
@@ -392,7 +421,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
                 className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
               />
             </label>
-            <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+            <label className="flex min-w-0 flex-col text-xs uppercase tracking-wide text-muted">
               End
               <input
                 type="date"
@@ -401,12 +430,12 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
                 className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
               />
             </label>
-            <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+            <label className="flex min-w-0 flex-col text-xs uppercase tracking-wide text-muted sm:col-span-2 xl:col-span-1">
               Product
               <select
                 name="asin"
                 defaultValue={asin}
-                className="mt-1 min-w-[260px] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                className="mt-1 w-full min-w-0 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
               >
                 <option value="all">All advertised ASINs</option>
                 {asinOptions.map((option) => (
@@ -418,7 +447,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
             </label>
             <button
               type="submit"
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground xl:self-end"
             >
               Apply
             </button>
@@ -465,19 +494,28 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
             view: viewValue,
             panel: 'queue',
             changeSetId: selectedQueueChangeSet?.id ?? activeChangeSetId,
+            trendEntity,
           })}
           notice={queueNotice}
           error={queueError}
         />
       ) : viewValue !== 'table' ? (
-        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-          <div className="text-lg font-semibold text-foreground">
-            Trend mode is diagnostic-only and lands later.
-          </div>
-          <div className="mt-2 text-sm text-muted">
-            Table mode remains the default editing surface in SP v1. This phase stops at the initial Targets table.
-          </div>
-        </section>
+        trendData ? (
+          <AdsWorkspaceTrendClient
+            level={levelValue as 'campaigns' | 'targets'}
+            kpiItems={kpiItems}
+            trendData={trendData}
+          />
+        ) : (
+          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+            <div className="text-lg font-semibold text-foreground">
+              Trend mode is currently supported on Campaigns and Targets.
+            </div>
+            <div className="mt-2 text-sm text-muted">
+              Table mode remains the default editing surface. Ad Groups, Placements, and Search Terms trend slices stay explicit Phase 7 follow-up work.
+            </div>
+          </section>
+        )
       ) : (
         <AdsTargetsWorkspaceClient
           level={levelValue as 'campaigns' | 'adgroups' | 'targets' | 'placements' | 'searchterms'}

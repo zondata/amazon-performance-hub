@@ -1,4 +1,5 @@
 import type { SpChangeComposerContext } from '../ads-workspace/spChangeComposer';
+import { buildSpPlacementModifierContexts } from '../ads-workspace/spPlacementModifiers';
 import { mapPlacementModifierKey } from '../logbook/aiPack/aiPackV3Helpers';
 import {
   normalizeSpAdvertisedAsin,
@@ -191,6 +192,21 @@ const buildTopPlacementModifierMap = (rows: SpCurrentPlacementModifier[]) => {
   return byCampaign;
 };
 
+const buildPlacementModifierContextsByCampaign = (rows: SpCurrentPlacementModifier[]) => {
+  const byCampaign = new Map<string, ReturnType<typeof buildSpPlacementModifierContexts>>();
+  const campaignIds = new Set(rows.map((row) => row.campaign_id));
+  for (const campaignId of campaignIds) {
+    byCampaign.set(
+      campaignId,
+      buildSpPlacementModifierContexts({
+        campaignId,
+        rows,
+      })
+    );
+  }
+  return byCampaign;
+};
+
 const buildAsinMaps = (rows: SpScopeAdvertisedProductRow[]) => {
   const byAdGroup = new Map<string, Set<string>>();
   const byCampaign = new Map<string, Set<string>>();
@@ -316,6 +332,9 @@ export const buildSpSearchTermsWorkspaceModel = (params: {
   const currentPlacementModifiers = params.currentPlacementModifiers ?? [];
   const ambiguousCampaignIds = params.ambiguousCampaignIds ?? new Set<string>();
   const topPlacementModifierByCampaign = buildTopPlacementModifierMap(currentPlacementModifiers);
+  const placementModifierContextsByCampaign = buildPlacementModifierContextsByCampaign(
+    currentPlacementModifiers
+  );
   const { byAdGroup, byCampaign } = buildAsinMaps(params.scopedAdvertisedProductRows);
 
   const byParent = new Map<string, SearchTermParentAccumulator>();
@@ -513,6 +532,7 @@ export const buildSpSearchTermsWorkspaceModel = (params: {
                 current_percentage:
                   topPlacementModifierByCampaign.get(child.campaign_id) ?? null,
               },
+              placements: placementModifierContextsByCampaign.get(child.campaign_id) ?? [],
               coverage_note: coverage.coverage_note,
             },
           } satisfies SpSearchTermsWorkspaceChildRow;

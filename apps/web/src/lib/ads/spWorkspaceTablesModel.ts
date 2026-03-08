@@ -1,4 +1,5 @@
 import { mapPlacementModifierKey } from '../logbook/aiPack/aiPackV3Helpers';
+import { buildSpPlacementModifierContexts } from '../ads-workspace/spPlacementModifiers';
 import type {
   SpCurrentAdGroupContext,
   SpCurrentCampaignContext,
@@ -197,6 +198,21 @@ const buildTopPlacementModifierMap = (rows: SpCurrentPlacementModifier[]) => {
   return byCampaign;
 };
 
+const buildPlacementContextsByCampaign = (rows: SpCurrentPlacementModifier[]) => {
+  const byCampaign = new Map<string, ReturnType<typeof buildSpPlacementModifierContexts>>();
+  const campaignIds = new Set(rows.map((row) => row.campaign_id));
+  for (const campaignId of campaignIds) {
+    byCampaign.set(
+      campaignId,
+      buildSpPlacementModifierContexts({
+        campaignId,
+        rows,
+      })
+    );
+  }
+  return byCampaign;
+};
+
 const buildPlacementModifierMap = (rows: SpCurrentPlacementModifier[]) => {
   const byPlacement = new Map<string, number | null>();
   for (const row of rows) {
@@ -277,6 +293,9 @@ export const buildSpCampaignsWorkspaceModel = (params: {
   const topPlacementModifierByCampaign = buildTopPlacementModifierMap(
     params.currentPlacementModifiers ?? []
   );
+  const placementContextsByCampaign = buildPlacementContextsByCampaign(
+    params.currentPlacementModifiers ?? []
+  );
   const byCampaign = new Map<string, CampaignAccumulator>();
 
   for (const row of params.campaignRows) {
@@ -352,11 +371,15 @@ export const buildSpCampaignsWorkspaceModel = (params: {
                 : null,
             current_bidding_strategy: trimString(currentCampaign?.bidding_strategy),
           },
-          placement: {
-            placement_code: 'PLACEMENT_TOP',
-            label: 'Top of Search (first page)',
-            current_percentage: topPlacementModifierByCampaign.get(campaign.campaign_id) ?? null,
-          },
+          placement:
+            placementContextsByCampaign.get(campaign.campaign_id)?.find(
+              (placement) => placement.placement_code === 'PLACEMENT_TOP'
+            ) ?? {
+              placement_code: 'PLACEMENT_TOP',
+              label: 'Top of Search (first page)',
+              current_percentage: topPlacementModifierByCampaign.get(campaign.campaign_id) ?? null,
+            },
+          placements: placementContextsByCampaign.get(campaign.campaign_id) ?? [],
           coverage_note: coverage.coverage_note,
         },
       } satisfies SpCampaignsWorkspaceRow;
@@ -383,6 +406,9 @@ export const buildSpAdGroupsWorkspaceModel = (params: {
   const currentCampaignsById = params.currentCampaignsById ?? new Map<string, SpCurrentCampaignContext>();
   const ambiguousCampaignIds = params.ambiguousCampaignIds ?? new Set<string>();
   const topPlacementModifierByCampaign = buildTopPlacementModifierMap(
+    params.currentPlacementModifiers ?? []
+  );
+  const placementContextsByCampaign = buildPlacementContextsByCampaign(
     params.currentPlacementModifiers ?? []
   );
   const byAdGroup = new Map<string, AdGroupAccumulator>();
@@ -478,11 +504,15 @@ export const buildSpAdGroupsWorkspaceModel = (params: {
                 : null,
             current_bidding_strategy: trimString(currentCampaign?.bidding_strategy),
           },
-          placement: {
-            placement_code: 'PLACEMENT_TOP',
-            label: 'Top of Search (first page)',
-            current_percentage: topPlacementModifierByCampaign.get(adGroup.campaign_id) ?? null,
-          },
+          placement:
+            placementContextsByCampaign.get(adGroup.campaign_id)?.find(
+              (placement) => placement.placement_code === 'PLACEMENT_TOP'
+            ) ?? {
+              placement_code: 'PLACEMENT_TOP',
+              label: 'Top of Search (first page)',
+              current_percentage: topPlacementModifierByCampaign.get(adGroup.campaign_id) ?? null,
+            },
+          placements: placementContextsByCampaign.get(adGroup.campaign_id) ?? [],
           coverage_note: coverage.coverage_note,
         },
       } satisfies SpAdGroupsWorkspaceRow;
@@ -519,6 +549,9 @@ export const buildSpPlacementsWorkspaceModel = (params: {
   const currentCampaignsById = params.currentCampaignsById ?? new Map<string, SpCurrentCampaignContext>();
   const ambiguousCampaignIds = params.ambiguousCampaignIds ?? new Set<string>();
   const placementModifierByKey = buildPlacementModifierMap(params.currentPlacementModifiers ?? []);
+  const placementContextsByCampaign = buildPlacementContextsByCampaign(
+    params.currentPlacementModifiers ?? []
+  );
   const byPlacement = new Map<string, PlacementAccumulator>();
 
   for (const row of params.placementRows) {
@@ -604,6 +637,7 @@ export const buildSpPlacementsWorkspaceModel = (params: {
             label: placement.placement_label,
             current_percentage: placementModifierByKey.get(placement.id) ?? null,
           },
+          placements: placementContextsByCampaign.get(placement.campaign_id) ?? [],
           coverage_note: coverage.coverage_note,
         },
       } satisfies SpPlacementsWorkspaceRow;

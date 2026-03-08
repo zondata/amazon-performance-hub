@@ -5,6 +5,7 @@ import {
   buildSpDraftMutationPlan,
   type SpChangeComposerContext,
 } from '../apps/web/src/lib/ads-workspace/spChangeComposer';
+import { buildSpPlacementModifierContexts } from '../apps/web/src/lib/ads-workspace/spPlacementModifiers';
 
 const baseContext: SpChangeComposerContext = {
   channel: 'sp',
@@ -35,6 +36,29 @@ const baseContext: SpChangeComposerContext = {
     label: 'Top of Search (first page)',
     current_percentage: 35,
   },
+  placements: buildSpPlacementModifierContexts({
+    campaignId: 'c1',
+    rows: [
+      {
+        campaign_id: 'c1',
+        placement_code: 'PLACEMENT_TOP',
+        placement_raw: 'Top of Search (first page)',
+        percentage: 35,
+      },
+      {
+        campaign_id: 'c1',
+        placement_code: 'PLACEMENT_REST_OF_SEARCH',
+        placement_raw: 'Rest of Search',
+        percentage: 12,
+      },
+      {
+        campaign_id: 'c1',
+        placement_code: 'PLACEMENT_PRODUCT_PAGE',
+        placement_raw: 'Product Pages',
+        percentage: 18,
+      },
+    ],
+  }),
   coverage_note: null,
 };
 
@@ -167,6 +191,44 @@ describe('buildSpDraftMutationPlan', () => {
     expect(result.itemPayloads.map((item) => item.action_type)).toEqual([
       'update_target_state',
       'update_campaign_budget',
+    ]);
+  });
+
+  it('stages multiple SP placement modifier edits in one save using campaign context', () => {
+    const result = buildSpDraftMutationPlan({
+      change_set_name: 'Placement draft',
+      filters_json: { level: 'campaigns' },
+      context: {
+        ...baseContext,
+        surface: 'campaigns',
+        target: null,
+        ad_group: null,
+      },
+      reasoning: {
+        objective: 'Tune placement mix',
+        hypothesis: null,
+        forecast_json: null,
+        forecast_window_days: null,
+        review_after_days: null,
+        notes: null,
+        objective_preset_id: null,
+      },
+      placement_modifier_updates: [
+        { placement_code: 'PLACEMENT_TOP', percentage: '42' },
+        { placement_code: 'PLACEMENT_REST_OF_SEARCH', percentage: '15' },
+        { placement_code: 'PLACEMENT_PRODUCT_PAGE', percentage: '20' },
+      ],
+    });
+
+    expect(result.itemPayloads.map((item) => item.action_type)).toEqual([
+      'update_placement_modifier',
+      'update_placement_modifier',
+      'update_placement_modifier',
+    ]);
+    expect(result.itemPayloads.map((item) => item.placement_code)).toEqual([
+      'PLACEMENT_TOP',
+      'PLACEMENT_REST_OF_SEARCH',
+      'PLACEMENT_PRODUCT_PAGE',
     ]);
   });
 });

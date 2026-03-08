@@ -179,7 +179,7 @@ export default function SpTargetsTable({
                         Draft staging
                       </div>
                       <div className="mt-1 text-sm text-foreground">
-                        Stage target, ad group, campaign, and top-of-search modifier edits without writing to logbook facts yet.
+                        Stage target, ad group, campaign, and campaign placement modifier edits without writing to logbook facts yet.
                       </div>
                       <div className="mt-1 text-xs text-muted">
                         {activeDraftName ? `Active draft: ${activeDraftName}` : 'A draft queue is created on first save.'}

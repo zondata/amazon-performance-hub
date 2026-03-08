@@ -5,6 +5,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 type SyncSource = 'bar' | 'target' | null;
 
+type BarFrame = {
+  left: number;
+  width: number;
+};
+
 const pickTarget = () => {
   const els = Array.from(document.querySelectorAll<HTMLElement>('[data-aph-hscroll]'));
   for (const el of els) {
@@ -22,8 +27,25 @@ export default function StickyHScrollBar() {
   const fillerRef = useRef<HTMLDivElement>(null);
   const syncRef = useRef<SyncSource>(null);
   const [target, setTarget] = useState<HTMLElement | null>(null);
+  const [barFrame, setBarFrame] = useState<BarFrame | null>(null);
 
-  const syncLayoutFor = useCallback((active: HTMLElement | null) => {
+  const measureTargetFrame = useCallback((active: HTMLElement | null) => {
+    if (!active) {
+      setBarFrame(null);
+      return;
+    }
+
+    const rect = active.getBoundingClientRect();
+    const left = Math.max(rect.left, 0);
+    const width = Math.max(Math.min(rect.width, window.innerWidth - left), 0);
+    if (width <= 0) {
+      setBarFrame(null);
+      return;
+    }
+    setBarFrame({ left, width });
+  }, []);
+
+  const syncDomFor = useCallback((active: HTMLElement | null) => {
     const bar = barRef.current;
     const filler = fillerRef.current;
     if (!active || !bar || !filler) return;
@@ -39,20 +61,12 @@ export default function StickyHScrollBar() {
     }
   }, []);
 
-  const updateLayout = useCallback(() => {
-    syncLayoutFor(target);
-  }, [syncLayoutFor, target]);
-
   const refreshTarget = useCallback(() => {
     const next = pickTarget();
-    setTarget(next);
-    syncLayoutFor(next);
-  }, [syncLayoutFor]);
-
-  const refreshTargetAndLayout = useCallback(() => {
-    refreshTarget();
-    updateLayout();
-  }, [refreshTarget, updateLayout]);
+    setTarget((current) => (current === next ? current : next));
+    measureTargetFrame(next);
+    syncDomFor(next);
+  }, [measureTargetFrame, syncDomFor]);
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
@@ -62,13 +76,9 @@ export default function StickyHScrollBar() {
   }, [refreshTarget, pathname]);
 
   useEffect(() => {
-    updateLayout();
-  }, [target, updateLayout]);
-
-  useEffect(() => {
-    const onWindowScroll = () => refreshTargetAndLayout();
-    const onWindowResize = () => refreshTargetAndLayout();
-    const onSidebarToggle = () => refreshTargetAndLayout();
+    const onWindowScroll = () => refreshTarget();
+    const onWindowResize = () => refreshTarget();
+    const onSidebarToggle = () => refreshTarget();
 
     window.addEventListener('scroll', onWindowScroll, { passive: true });
     window.addEventListener('resize', onWindowResize);
@@ -79,11 +89,27 @@ export default function StickyHScrollBar() {
       window.removeEventListener('resize', onWindowResize);
       window.removeEventListener('aph:sidebar-toggle', onSidebarToggle as EventListener);
     };
-  }, [refreshTargetAndLayout]);
+  }, [refreshTarget]);
+
+  useEffect(() => {
+    if (!target) return;
+    const raf = requestAnimationFrame(() => {
+      syncDomFor(target);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [syncDomFor, target]);
 
   useEffect(() => {
     const active = target;
     if (!active) return;
+
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => {
+          measureTargetFrame(active);
+          syncDomFor(active);
+        });
+    resizeObserver?.observe(active);
 
     const onTargetScroll = () => {
       const bar = barRef.current;
@@ -96,8 +122,11 @@ export default function StickyHScrollBar() {
     };
 
     active.addEventListener('scroll', onTargetScroll, { passive: true });
-    return () => active.removeEventListener('scroll', onTargetScroll);
-  }, [target]);
+    return () => {
+      resizeObserver?.disconnect();
+      active.removeEventListener('scroll', onTargetScroll);
+    };
+  }, [measureTargetFrame, syncDomFor, target]);
 
   useEffect(() => {
     const bar = barRef.current;
@@ -117,7 +146,7 @@ export default function StickyHScrollBar() {
     return () => bar.removeEventListener('scroll', onBarScroll);
   }, [target]);
 
-  if (!target || target.scrollWidth <= target.clientWidth + 1) return null;
+  if (!target || !barFrame || target.scrollWidth <= target.clientWidth + 1) return null;
 
   return (
     <div
@@ -128,8 +157,8 @@ export default function StickyHScrollBar() {
         position: 'fixed',
         bottom: 0,
         zIndex: 60,
-        left: 'var(--aph-sidebar-width)',
-        width: 'calc(100vw - var(--aph-sidebar-width))',
+        left: `${barFrame.left}px`,
+        width: `${barFrame.width}px`,
       }}
     >
       <div ref={fillerRef} className="h-px" />

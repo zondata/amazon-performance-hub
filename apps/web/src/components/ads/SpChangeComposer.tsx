@@ -6,6 +6,7 @@ import {
   INITIAL_SAVE_SP_DRAFT_ACTION_STATE,
   type SaveSpDraftActionState,
 } from '@/lib/ads-workspace/spChangeComposerState';
+import { SP_BIDDING_STRATEGY_OPTIONS } from '@/lib/ads-workspace/spPlacementModifiers';
 import type {
   AdsObjectivePreset,
   JsonObject,
@@ -46,6 +47,25 @@ const surfaceLabel = (surface: SpChangeComposerContext['surface']) => {
   return 'Target row';
 };
 
+const getEditablePlacements = (context: SpChangeComposerContext) => {
+  const byCode = new Map<string, NonNullable<SpChangeComposerContext['placement']>>();
+  for (const placement of context.placements ?? []) {
+    byCode.set(placement.placement_code, placement);
+  }
+  if (context.placement && !byCode.has(context.placement.placement_code)) {
+    byCode.set(context.placement.placement_code, context.placement);
+  }
+  return [...byCode.values()];
+};
+
+const buildPlacementModifierState = (context: SpChangeComposerContext) =>
+  Object.fromEntries(
+    getEditablePlacements(context).map((placement) => [
+      placement.placement_code,
+      formatNumberInput(placement.current_percentage),
+    ])
+  );
+
 export default function SpChangeComposer(props: SpChangeComposerProps) {
   const { objectivePresets, onSaved } = props;
   const lastHandledSuccessKey = useRef<string>('');
@@ -77,8 +97,17 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
   const [campaignBiddingStrategy, setCampaignBiddingStrategy] = useState(
     current.campaign.current_bidding_strategy ?? ''
   );
-  const [placementModifierPct, setPlacementModifierPct] = useState(
-    formatNumberInput(current.placement?.current_percentage)
+  const [placementModifiers, setPlacementModifiers] = useState<Record<string, string>>(
+    buildPlacementModifierState(current)
+  );
+  const editablePlacements = getEditablePlacements(current);
+  const biddingStrategyOptions = Array.from(
+    new Set(
+      [
+        current.campaign.current_bidding_strategy?.trim() ?? '',
+        ...SP_BIDDING_STRATEGY_OPTIONS,
+      ].filter((value) => value.length > 0)
+    )
   );
 
   useEffect(() => {
@@ -105,15 +134,15 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
   }));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-end bg-background/70 px-4 py-6 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-background/70 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-6">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="sp-change-composer-title"
-        className="flex h-[calc(100vh-3rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border bg-surface shadow-2xl"
+        className="ml-auto flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border bg-surface shadow-2xl sm:max-h-[calc(100vh-3rem)]"
       >
-        <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-4 py-5 sm:px-6">
+          <div className="min-w-0">
             <div className="text-xs uppercase tracking-[0.24em] text-muted">Change composer</div>
             <h2 id="sp-change-composer-title" className="mt-1 text-xl font-semibold text-foreground">
               Stage SP draft actions
@@ -131,7 +160,7 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           {state.error ? (
             <div className="mb-4 rounded-xl border border-rose-300/50 bg-rose-500/10 px-4 py-3 text-sm text-rose-700">
               {state.error}
@@ -175,7 +204,7 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                     <div className="mt-1 text-xs text-muted">{current.target.id}</div>
                   </div>
                 ) : null}
-                {current.placement ? (
+                {current.surface === 'placements' && current.placement ? (
                   <div className="rounded-xl border border-border bg-surface px-3 py-3">
                     <div className="text-[11px] uppercase tracking-[0.16em] text-muted">Placement</div>
                     <div className="mt-1 text-sm font-semibold text-foreground">
@@ -477,41 +506,58 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
                   </label>
                   <label className="flex flex-col gap-1 text-sm text-muted md:col-span-2">
                     <span className="text-xs uppercase tracking-[0.16em]">Bidding strategy</span>
-                    <input
+                    <select
                       name="campaign_bidding_strategy"
                       value={campaignBiddingStrategy}
                       onChange={(event) => setCampaignBiddingStrategy(event.target.value)}
                       className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
-                    />
+                    >
+                      <option value="">No change</option>
+                      {biddingStrategyOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
                     <span className="text-xs text-muted">
                       Current {current.campaign.current_bidding_strategy ?? '—'}
                     </span>
                   </label>
                 </div>
 
-                {current.placement ? (
+                {editablePlacements.length > 0 ? (
                   <div className="grid gap-3 rounded-xl border border-border bg-surface p-4 md:grid-cols-2">
                     <div className="md:col-span-2 text-sm font-semibold text-foreground">
                       Placement (campaign context)
                     </div>
-                    <label className="flex flex-col gap-1 text-sm text-muted">
-                      <span className="text-xs uppercase tracking-[0.16em]">
-                        {current.placement.label} modifier %
-                      </span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        name="placement_modifier_pct"
-                        value={placementModifierPct}
-                        onChange={(event) => setPlacementModifierPct(event.target.value)}
-                        className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
-                      />
-                      <span className="text-xs text-muted">
-                        Current {formatNumberInput(current.placement.current_percentage) || '—'}
-                      </span>
-                    </label>
-                    <div className="rounded-xl border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted">
+                    {editablePlacements.map((placement) => (
+                      <label
+                        key={placement.placement_code}
+                        className="flex flex-col gap-1 text-sm text-muted"
+                      >
+                        <span className="text-xs uppercase tracking-[0.16em]">
+                          {placement.label} modifier %
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          name={`placement_modifier_pct__${placement.placement_code}`}
+                          value={placementModifiers[placement.placement_code] ?? ''}
+                          onChange={(event) =>
+                            setPlacementModifiers((currentValue) => ({
+                              ...currentValue,
+                              [placement.placement_code]: event.target.value,
+                            }))
+                          }
+                          className="rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm text-foreground"
+                        />
+                        <span className="text-xs text-muted">
+                          Current {formatNumberInput(placement.current_percentage) || '—'}
+                        </span>
+                      </label>
+                    ))}
+                    <div className="rounded-xl border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted md:col-span-2">
                       Placement metrics remain campaign-level facts. This field stages only the placement modifier.
                     </div>
                   </div>
@@ -519,7 +565,7 @@ export default function SpChangeComposer(props: SpChangeComposerProps) {
               </div>
             </section>
 
-            <div className="flex items-center justify-end gap-3 border-t border-border pt-2">
+            <div className="flex flex-col-reverse gap-3 border-t border-border pt-2 sm:flex-row sm:items-center sm:justify-end">
               <button
                 type="button"
                 onClick={props.onClose}

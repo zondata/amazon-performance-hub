@@ -40,6 +40,7 @@ export type SpChangeComposerContext = {
   ad_group: SpComposerAdGroupContext | null;
   campaign: SpComposerCampaignContext;
   placement: SpComposerPlacementContext | null;
+  placements?: SpComposerPlacementContext[] | null;
   coverage_note: string | null;
 };
 
@@ -66,6 +67,10 @@ export type BuildSpDraftMutationPlanInput = {
   campaign_state?: string | null;
   campaign_bidding_strategy?: string | null;
   placement_modifier_pct?: string | number | null;
+  placement_modifier_updates?: Array<{
+    placement_code: string | null | undefined;
+    percentage: string | number | null | undefined;
+  }>;
 };
 
 export type BuildSpDraftMutationPlanResult = {
@@ -108,6 +113,8 @@ const normalizeState = (value: string | null | undefined, fieldName: string) => 
 };
 
 const normalizeStrategy = (value: string | null | undefined) => trimToNull(value);
+
+const normalizePlacementCode = (value: string | null | undefined) => trimToNull(value)?.toUpperCase() ?? null;
 
 const sameNumber = (left: number | null, right: number | null) => {
   if (left === null || right === null) return left === right;
@@ -163,6 +170,9 @@ const buildUiContextJson = (context: SpChangeComposerContext): JsonObject => ({
   match_type: context.target?.match_type ?? null,
   placement_label: context.placement?.label ?? null,
   placement_modifier_pct: context.placement?.current_percentage ?? null,
+  editable_placement_codes:
+    context.placements?.map((placement) => placement.placement_code) ??
+    (context.placement ? [context.placement.placement_code] : []),
   coverage_note: context.coverage_note,
 });
 
@@ -174,6 +184,28 @@ const buildReasoningFields = (reasoning: ResolvedSpComposerReasoning) => ({
   notes: reasoning.notes,
   objective_preset_id: reasoning.objective_preset_id,
 });
+
+const resolvePlacementContexts = (context: SpChangeComposerContext) => {
+  const byCode = new Map<string, SpComposerPlacementContext>();
+  for (const placement of context.placements ?? []) {
+    const code = normalizePlacementCode(placement.placement_code);
+    if (!code || byCode.has(code)) continue;
+    byCode.set(code, {
+      ...placement,
+      placement_code: code,
+    });
+  }
+  if (context.placement) {
+    const code = normalizePlacementCode(context.placement.placement_code);
+    if (code && !byCode.has(code)) {
+      byCode.set(code, {
+        ...context.placement,
+        placement_code: code,
+      });
+    }
+  }
+  return byCode;
+};
 
 export const buildSpDraftMutationPlan = (
   input: BuildSpDraftMutationPlanInput
@@ -370,35 +402,63 @@ export const buildSpDraftMutationPlan = (
     });
   }
 
-  const nextPlacementPct = parseNonNegativeNumber(input.placement_modifier_pct, 'placement_modifier_pct');
-  if (nextPlacementPct !== null) {
-    if (!input.context.placement) {
+  const placementUpdates =
+    input.placement_modifier_updates && input.placement_modifier_updates.length > 0
+      ? input.placement_modifier_updates
+      : input.context.placement
+        ? [
+            {
+              placement_code: input.context.placement.placement_code,
+              percentage: input.placement_modifier_pct,
+            },
+          ]
+        : [];
+  if (placementUpdates.length > 0) {
+    const placementContexts = resolvePlacementContexts(input.context);
+    if (placementContexts.size === 0) {
       throw new Error('This row does not support placement modifier edits.');
     }
-    if (!sameNumber(input.context.placement.current_percentage, nextPlacementPct)) {
+
+    for (const update of placementUpdates) {
+      const placementCode = normalizePlacementCode(update.placement_code);
+      if (!placementCode) continue;
+      const nextPlacementPct = parseNonNegativeNumber(
+        update.percentage,
+        `placement_modifier_pct:${placementCode}`
+      );
+      if (nextPlacementPct === null) continue;
+
+      const placementContext = placementContexts.get(placementCode);
+      if (!placementContext) {
+        throw new Error(`This row does not support placement modifier edits for ${placementCode}.`);
+      }
+      if (sameNumber(placementContext.current_percentage, nextPlacementPct)) {
+        continue;
+      }
+
       itemPayloads.push({
         channel: 'sp',
         entity_level: 'placement',
-        entity_key: `${input.context.campaign.id}::${input.context.placement.placement_code}`,
+        entity_key: `${input.context.campaign.id}::${placementContext.placement_code}`,
         campaign_id: input.context.campaign.id,
         ad_group_id: null,
         target_id: null,
         target_key: null,
-        placement_code: input.context.placement.placement_code,
+        placement_code: placementContext.placement_code,
         action_type: 'update_placement_modifier',
         before_json: {
-          placement_code: input.context.placement.placement_code,
-          percentage: input.context.placement.current_percentage,
+          placement_code: placementContext.placement_code,
+          percentage: placementContext.current_percentage,
         },
         after_json: {
-          placement_code: input.context.placement.placement_code,
+          placement_code: placementContext.placement_code,
           percentage: nextPlacementPct,
         },
         ui_context_json: {
           ...ui_context_json,
           placement_scope:
             input.context.surface === 'placements' ? 'placement_row' : 'campaign_context',
-          placement_label: input.context.placement.label,
+          placement_label: placementContext.label,
         },
         ...reasoningFields,
       });

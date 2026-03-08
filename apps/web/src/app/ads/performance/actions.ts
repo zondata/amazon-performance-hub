@@ -64,6 +64,14 @@ const parseComposerContext = (formData: FormData): SpChangeComposerContext => {
   return parsed as unknown as SpChangeComposerContext;
 };
 
+const parsePlacementModifierUpdates = (formData: FormData) =>
+  Array.from(formData.entries())
+    .filter(([key]) => key.startsWith('placement_modifier_pct__'))
+    .map(([key, value]) => ({
+      placement_code: key.slice('placement_modifier_pct__'.length),
+      percentage: trimToNull(value),
+    }));
+
 const parseReturnTo = (formData: FormData) => {
   const value = trimToNull(formData.get('return_to'));
   if (!value || !value.startsWith('/ads/performance')) {
@@ -219,6 +227,7 @@ export const saveSpDraftAction = async (
       campaign_state: trimToNull(formData.get('campaign_state')),
       campaign_bidding_strategy: trimToNull(formData.get('campaign_bidding_strategy')),
       placement_modifier_pct: trimToNull(formData.get('placement_modifier_pct')),
+      placement_modifier_updates: parsePlacementModifierUpdates(formData),
     });
 
     let changeSetId = activeChangeSetId;

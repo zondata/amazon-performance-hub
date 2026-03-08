@@ -8,6 +8,10 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { fetchAllRows } from '@/lib/supabaseFetchAll';
 import { normalizeSpAdvertisedAsin } from './spAdvertisedAsinScope';
 import {
+  buildPlacementUnitsByCampaignDate,
+  resolveCampaignUnitsWithPlacementFallback,
+} from './spCampaignUnitsFallback';
+import {
   buildSpSearchTermsWorkspaceModel,
   type SpSearchTermsWorkspaceRow,
 } from './spSearchTermsWorkspaceModel';
@@ -108,12 +112,6 @@ const chunkIds = (ids: string[], size = ID_CHUNK_SIZE) => {
   return chunks;
 };
 
-const toFiniteNumberOrNull = (value: unknown): number | null => {
-  if (value === null || value === undefined) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
 const uniqueBy = <TRow,>(rows: TRow[], getKey: (row: TRow) => string) => {
   const deduped = new Map<string, TRow>();
   for (const row of rows) {
@@ -158,7 +156,7 @@ const fetchCampaignRowsChunked = async (params: {
     return [];
   }
   const aggregated = new Map<string, SpCampaignFactRow>();
-  const placementUnitsByCampaignDate = new Map<string, number | null>();
+  const placementUnitRows: SpCampaignPlacementUnitsRow[] = [];
   const campaignIdChunks =
     params.campaignIds && params.campaignIds.length > 0 ? chunkIds(params.campaignIds) : [null];
 
@@ -193,15 +191,7 @@ const fetchCampaignRowsChunked = async (params: {
           break;
         }
 
-        for (const row of data as SpCampaignPlacementUnitsRow[]) {
-          const campaignId = trimString(row.campaign_id);
-          const date = trimString(row.date);
-          const nextUnits = toFiniteNumberOrNull(row.units);
-          if (!campaignId || !date || nextUnits === null) continue;
-
-          const key = `${campaignId}::${date}`;
-          placementUnitsByCampaignDate.set(key, (placementUnitsByCampaignDate.get(key) ?? 0) + nextUnits);
-        }
+        placementUnitRows.push(...(data as SpCampaignPlacementUnitsRow[]));
 
         if (data.length < CAMPAIGN_PAGE_SIZE) {
           break;
@@ -215,6 +205,8 @@ const fetchCampaignRowsChunked = async (params: {
     }
     chunkStart = addDays(chunkEnd, 1);
   }
+
+  const placementUnitsByCampaignDate = buildPlacementUnitsByCampaignDate(placementUnitRows);
 
   for (let chunkStart = params.start; chunkStart <= params.end; ) {
     const chunkEnd = minDate(addDays(chunkStart, CAMPAIGN_CHUNK_DAYS - 1), params.end);
@@ -273,13 +265,12 @@ const fetchCampaignRowsChunked = async (params: {
           existing.spend = Number(existing.spend ?? 0) + Number(row.spend ?? 0);
           existing.sales = Number(existing.sales ?? 0) + Number(row.sales ?? 0);
           existing.orders = Number(existing.orders ?? 0) + Number(row.orders ?? 0);
-          const nextUnits = toFiniteNumberOrNull(row.units);
-          const fallbackUnits =
-            nextUnits !== null
-              ? nextUnits
-              : campaignId && date
-                ? placementUnitsByCampaignDate.get(`${campaignId}::${date}`) ?? null
-                : null;
+          const fallbackUnits = resolveCampaignUnitsWithPlacementFallback({
+            campaignId,
+            date,
+            primaryUnits: row.units,
+            placementUnitsByCampaignDate,
+          });
           if (fallbackUnits !== null) {
             existing.units = Number(existing.units ?? 0) + fallbackUnits;
           }

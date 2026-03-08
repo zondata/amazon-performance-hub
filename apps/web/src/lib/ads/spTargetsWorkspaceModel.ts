@@ -1,4 +1,5 @@
 import { mapPlacementModifierKey } from '../logbook/aiPack/aiPackV3Helpers';
+import { buildSpPlacementModifierContexts } from '../ads-workspace/spPlacementModifiers';
 import { normalizeSpAdvertisedAsin } from './spAdvertisedAsinScope';
 
 type NumericLike = number | string | null | undefined;
@@ -167,6 +168,11 @@ export type SpTargetsComposerContext = {
     label: string;
     current_percentage: number | null;
   } | null;
+  placements?: Array<{
+    placement_code: string;
+    label: string;
+    current_percentage: number | null;
+  }> | null;
   coverage_note: string | null;
 };
 
@@ -435,6 +441,21 @@ const buildPlacementContextByCampaign = (
   );
 };
 
+const buildPlacementModifierContextsByCampaign = (rows: SpCurrentPlacementModifier[]) => {
+  const byCampaign = new Map<string, ReturnType<typeof buildSpPlacementModifierContexts>>();
+  const campaignIds = new Set(rows.map((row) => row.campaign_id));
+  for (const campaignId of campaignIds) {
+    byCampaign.set(
+      campaignId,
+      buildSpPlacementModifierContexts({
+        campaignId,
+        rows,
+      })
+    );
+  }
+  return byCampaign;
+};
+
 const buildSearchTermsByTarget = (rows: SpSearchTermFactRow[]) => {
   const byTarget = new Map<string, Map<string, SearchTermAccumulator>>();
 
@@ -526,6 +547,9 @@ export const buildSpTargetsWorkspaceModel = (params: {
     if (key !== 'PLACEMENT_TOP') continue;
     topPlacementModifierByCampaign.set(row.campaign_id, row.percentage);
   }
+  const placementModifierContextsByCampaign = buildPlacementModifierContextsByCampaign(
+    params.currentPlacementModifiers ?? []
+  );
 
   const placementContextByCampaign = buildPlacementContextByCampaign(
     params.placementRows,
@@ -727,6 +751,7 @@ export const buildSpTargetsWorkspaceModel = (params: {
             current_percentage:
               topPlacementModifierByCampaign.get(target.campaign_id) ?? null,
           },
+          placements: placementModifierContextsByCampaign.get(target.campaign_id) ?? [],
           coverage_note: coverageNote,
         },
       } satisfies SpTargetsWorkspaceRow;

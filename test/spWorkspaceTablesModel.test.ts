@@ -57,6 +57,11 @@ describe('buildSpCampaignsWorkspaceModel', () => {
     });
     expect(model.rows[0]?.composer_context.surface).toBe('campaigns');
     expect(model.rows[0]?.composer_context.placement?.current_percentage).toBe(35);
+    expect(model.rows[0]?.composer_context.placements?.map((placement) => placement.placement_code)).toEqual([
+      'PLACEMENT_TOP',
+      'PLACEMENT_REST_OF_SEARCH',
+      'PLACEMENT_PRODUCT_PAGE',
+    ]);
   });
 
   it('preserves nullable campaign units when source rows have no units coverage', () => {
@@ -209,6 +214,12 @@ describe('buildSpPlacementsWorkspaceModel', () => {
           placement_raw: 'Product Pages',
           percentage: 15,
         },
+        {
+          campaign_id: 'c1',
+          placement_code: 'PLACEMENT_TOP',
+          placement_raw: 'Top of Search (first page)',
+          percentage: 35,
+        },
       ],
     });
 
@@ -224,6 +235,11 @@ describe('buildSpPlacementsWorkspaceModel', () => {
     expect(model.rows[0]?.composer_context.placement?.placement_code).toBe(
       'PLACEMENT_PRODUCT_PAGE'
     );
+    expect(model.rows[0]?.composer_context.placements?.map((placement) => placement.placement_code)).toEqual([
+      'PLACEMENT_TOP',
+      'PLACEMENT_REST_OF_SEARCH',
+      'PLACEMENT_PRODUCT_PAGE',
+    ]);
   });
 });
 

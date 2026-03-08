@@ -1,7 +1,9 @@
-# Ads Workspace — Build Plan
+# Ads Workspace — Build Plan (Phase 7B update)
 
 This is the execution checklist for building the Ads Workspace.
 Codex should work **phase-by-phase**, mark completed items in this file, and stop after the requested phase/subphase instead of partially starting later phases.
+
+> This file is a **new build-plan revision** that preserves the previous build plan and adds a Phase 7B SP stabilization / UX polish sequence before SB expansion.
 
 ## Working thesis
 Use AI for diagnosis, not exhaustive action generation. Move execution back to a human-in-the-loop Ads Workspace that stages manual changes, routes them through Bulksheet Ops, and logs/validates outcomes later.
@@ -22,6 +24,9 @@ Use AI for diagnosis, not exhaustive action generation. Move execution back to a
 - [x] Entity-level P&L and break-even bid must remain nullable / coverage-gated until deterministic economics allocation exists.
 - [x] `All` channel mode is not a v1 requirement; do not block SP delivery waiting for SP/SB/SD unification.
 - [x] SD remains KIV.
+- [x] Search Terms units may remain null-safe when the current STIS export does not provide a units field.
+- [x] Trend mode may reuse campaign-level placement facts for campaign-level fallback only; do not flatten placement facts into target-owned metrics.
+- [x] Rank context in Targets must remain **context**, not target-owned ad-performance fact.
 
 ## Phase 0 — Spec + agent scaffolding
 - [x] Create `docs/ads-workspace/AGENTS.md`.
@@ -419,9 +424,10 @@ Add the sales-style diagnostic view for Ads without sacrificing the normal editi
 - [x] Markers must open change details / reasoning / before-after summary.
 - [x] Pull change markers from generated/validated changes, not raw drafts by default.
 
-Current slice note:
+### Current slice note
 - Campaigns and Targets are the first supported trend tabs in this phase.
-- Ad Groups, Placements, and Search Terms trend slices remain explicit Phase 7 follow-up work.
+- Ad Groups, Placements, and Search Terms trend slices remain explicit follow-up work.
+- Phase 7B below is the ordered SP stabilization / polish pass before SB.
 
 ### Rules
 - Trend mode is diagnostic-first.
@@ -432,6 +438,159 @@ Current slice note:
 - [ ] Operator can switch between table and trend.
 - [ ] Trend mode surfaces before/after intervention patterns clearly.
 - [ ] Change markers are visible and explainable.
+- [ ] `npm test` passes.
+- [ ] `npm run web:lint` passes.
+- [ ] `npm run web:build` passes.
+
+---
+
+## Phase 7B — SP stabilization and UX polish before SB
+
+### Objectives
+Finish the SP workspace hardening and usability pass before Sponsored Brands expansion.
+
+### Global rules
+- Treat 7B as **SP-first stabilization**, not scope creep.
+- Work subphase-by-subphase; stop after the requested subphase instead of partially starting later subphases.
+- Do not weaken any null-safety rules just to fill UI cells.
+- Keep Search Terms units null-safe unless a deterministic source exists.
+- Rank additions in Targets must be clearly labeled **context**, not target-owned performance facts.
+- Prefer reusable table/trend infrastructure over one-off per-tab hacks.
+- Preserve existing table mode and queue/composer behavior unless the subphase explicitly changes them.
+
+### Phase 7B-A — correctness and hardening
+
+#### Objectives
+Resolve remaining SP correctness issues and harden layout behavior before broader UX additions.
+
+#### Tasks
+- [x] Fix Campaign Trend units so trend mode uses the same trustworthy campaign-units fallback logic as Campaign table mode.
+- [x] Fix Change Composer bidding strategy options so the value is actually editable, not read-only/current-value only.
+- [x] Extend placement modifier editing support to all SP placement types used in the workspace:
+  - [x] Top of Search (TOS)
+  - [x] Rest of Search (ROS)
+  - [x] Product Pages (PP)
+- [x] Fix horizontal scrollbar architecture so the visible scrollbar truly reaches the last column in Ads Workspace tables/trend grids.
+- [x] Minimum responsive hardening for SP workspace:
+  - [x] stack controls cleanly on smaller screens
+  - [x] eliminate broken horizontal/vertical overflow
+  - [x] preserve usable scroll behavior
+  - [x] keep sticky behavior working once introduced
+
+#### Rules
+- Campaign Trend units may reuse campaign-level placement fallback only at campaign scope.
+- Do not invent Search Terms units.
+- Responsive hardening does not mean “fit every wide table without scrolling”; horizontal scroll remains acceptable for analytical tables.
+
+#### Acceptance
+- [x] Campaign trend units no longer disagree with trustworthy campaign-level fallback logic.
+- [x] Composer supports editable bidding strategy and all required SP placement modifiers.
+- [x] Horizontal scrolling reaches the actual last visible column.
+- [x] Small-screen layout remains usable.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
+
+### Phase 7B-B — reusable table/trend UX polish
+
+#### Objectives
+Add high-value reusable UX improvements that make the SP workspace easier to inspect without changing metric definitions.
+
+#### Tasks
+- [ ] Add sticky/frozen headers across supported Ads Workspace tabs.
+- [ ] Add rightmost mini trend bar chart column in Trend view, reusing the Sales-page pattern where practical.
+- [ ] Add visual differentiation for expanded child sections:
+  - [ ] color/style expanded search-term rows in Targets
+  - [ ] color/style expanded child rows in Search Terms
+- [ ] Add a global workspace **Show IDs** toggle, default off.
+  - [ ] default display remains human-readable name only
+  - [ ] when enabled, show IDs alongside names in muted secondary text
+- [ ] Add scoped drilldown navigation:
+  - [ ] Campaign row can drill into Ad Groups
+  - [ ] Ad Group row can drill into Targets
+  - [ ] preserve date/product/view state when drilling down
+
+#### Rules
+- Sticky headers must not break existing scroll behavior.
+- Trend mini charts are supplemental diagnostics, not replacements for numeric cells.
+- Drilldown should stay within Ads Workspace semantics, not jump to unrelated pages.
+
+#### Acceptance
+- [ ] Sticky headers work consistently on supported tabs.
+- [ ] Trend view has usable rightmost mini chart diagnostics.
+- [ ] Expanded child sections are visually distinguishable from parent rows.
+- [ ] ID toggle works without cluttering the default view.
+- [ ] Drilldown preserves workspace context.
+- [ ] `npm test` passes.
+- [ ] `npm run web:lint` passes.
+- [ ] `npm run web:build` passes.
+
+### Phase 7B-C — configurability and operator ergonomics
+
+#### Objectives
+Add operator controls for column management, filtering, wrapping, and non-modal editing in a staged way.
+
+#### Tasks
+- [ ] Header interactions:
+  - [ ] add per-column sort
+  - [ ] add basic numeric filter popover with:
+    - [ ] `>=`
+    - [ ] `<=`
+    - [ ] `>`
+    - [ ] `<`
+    - [ ] `has value`
+  - [ ] add advanced AND/OR filter builder only after basic filters are stable
+- [ ] Add **Wrap long labels** toggle:
+  - [ ] default to clamped/multi-line-safe display
+  - [ ] allow fuller wrap when enabled
+- [ ] Add per-tab column settings in stages:
+  - [ ] show / hide columns
+  - [ ] reorder columns
+  - [ ] freeze / unfreeze columns
+  - [ ] save defaults per tab/view
+  - [ ] font size controls
+- [ ] Convert Change Composer from modal/expand-only flow to a docked non-modal side panel first.
+  - [ ] keep page/table/trend context visible while composing
+  - [ ] only consider draggable pop-out later if still needed
+- [ ] Further responsive refinements after the above controls land.
+
+#### Rules
+- Do not start with a full complex filter DSL if basic sort/filter controls are not stable.
+- Save defaults per tab/view, not one global layout that breaks all surfaces.
+- Docked composer is preferred over draggable floating-window complexity in this phase.
+
+#### Acceptance
+- [ ] Operators can sort and apply basic numeric filters in-header.
+- [ ] Long labels are readable without forcing every row into excessive height.
+- [ ] Column settings are configurable per tab/view.
+- [ ] Composer can stay open while inspecting the workspace.
+- [ ] Responsive behavior remains usable after these controls are added.
+- [ ] `npm test` passes.
+- [ ] `npm run web:lint` passes.
+- [ ] `npm run web:build` passes.
+
+### Phase 7B-D — conditional rank context in Targets
+
+#### Objectives
+Add rank context to Targets in a way that is explicit about scope and coverage.
+
+#### Tasks
+- [ ] Add **Rank context** cell/column to Targets.
+- [ ] Show Organic rank on top (bold) and Sponsored rank below in the same cell.
+- [ ] Gate rank context to trustworthy coverage only, such as:
+  - [ ] single-ASIN context
+  - [ ] or another deterministic rank-context mapping with explicit rules
+- [ ] Keep null-safe display when rank context is not trustworthy.
+- [ ] If useful, expose supporting coverage note / tooltip that rank is contextual, not target-owned ad-performance fact.
+
+#### Rules
+- Rank context must not be mislabeled as a target-owned performance metric.
+- Do not backfill/invent rank for ambiguous ASIN coverage.
+
+#### Acceptance
+- [ ] Rank context is visible where trustworthy.
+- [ ] Organic and Sponsored ranks are readable in one cell.
+- [ ] Ambiguous coverage stays null-safe with explicit explanation.
 - [ ] `npm test` passes.
 - [ ] `npm run web:lint` passes.
 - [ ] `npm run web:build` passes.
@@ -454,6 +613,7 @@ Extend the workspace to Sponsored Brands after SP flow is stable.
 ### Rules
 - Do not back-port SD into this phase.
 - Do not add `All` mode until SB parity is stable enough to make it honest.
+- Start Phase 8 only after the requested Phase 7 / 7B SP checkpoint is stable enough to serve as a clean baseline.
 
 ### Phase 8 acceptance
 - [ ] SB flow can stage and generate supported update actions.
@@ -477,4 +637,4 @@ Extend the workspace to Sponsored Brands after SP flow is stable.
 - Do not silently change KPI definitions to “make the UI work”.
 - If a metric is not trustworthy at that scope, render it nullable with an explicit warning.
 - Prefer adding narrow helper modules over growing one large page file.
-- Update this checklist when a phase is completed.
+- Update this checklist when a phase/subphase is completed.

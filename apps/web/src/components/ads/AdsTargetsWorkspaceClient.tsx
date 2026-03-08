@@ -174,8 +174,8 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
       <KpiCards items={props.kpiItems} />
 
       <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
             <div className="text-xs uppercase tracking-[0.25em] text-muted">
               {props.entityCountLabel}
             </div>
@@ -184,7 +184,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
             </div>
             <div className="mt-2 max-w-2xl text-sm text-muted">{draftSummary}</div>
           </div>
-          <div className="rounded-2xl border border-border bg-surface-2 px-4 py-3 text-right">
+          <div className="rounded-2xl border border-border bg-surface-2 px-4 py-3 text-left lg:text-right">
             <div className="text-[11px] uppercase tracking-[0.18em] text-muted">Draft queue</div>
             <div className="mt-1 text-lg font-semibold text-foreground">{draftBadgeText}</div>
             <div className="mt-1 text-xs text-muted">
