@@ -1,6 +1,9 @@
 import AdsWorkspaceGridTable, {
   type AdsWorkspaceGridColumn,
 } from '@/components/ads/AdsWorkspaceGridTable';
+import AdsWorkspaceRowActionsMenu, {
+  type AdsWorkspaceRowActionItem,
+} from '@/components/ads/AdsWorkspaceRowActionsMenu';
 import type { SpCampaignsWorkspaceRow } from '@/lib/ads/spWorkspaceTablesModel';
 import type { AdsWorkspaceSurfaceSettings } from '@/lib/ads-workspace/adsWorkspaceUiSettings';
 import type { SpActiveDraftRowTone } from '@/lib/ads-workspace/spActiveDraftHighlights';
@@ -31,10 +34,9 @@ const formatPercent = (value?: number | null) => {
 
 type SpCampaignsTableProps = {
   rows: SpCampaignsWorkspaceRow[];
-  onOpenComposer?: (row: SpCampaignsWorkspaceRow) => void;
   activeDraftName?: string | null;
   showIds?: boolean;
-  onDrilldownToAdGroups?: (row: SpCampaignsWorkspaceRow) => void;
+  getRowActions?: (row: SpCampaignsWorkspaceRow) => AdsWorkspaceRowActionItem[];
   surfaceSettings?: AdsWorkspaceSurfaceSettings | null;
   settingsSaveStateLabel?: string | null;
   onSurfaceSettingsChange: (settings: AdsWorkspaceSurfaceSettings) => void;
@@ -67,10 +69,9 @@ const statusPill = (status: string | null) => {
 
 export default function SpCampaignsTable({
   rows,
-  onOpenComposer,
   activeDraftName,
   showIds = false,
-  onDrilldownToAdGroups,
+  getRowActions,
   surfaceSettings,
   settingsSaveStateLabel,
   onSurfaceSettingsChange,
@@ -250,33 +251,12 @@ export default function SpCampaignsTable({
     },
     {
       key: 'actions',
-      label: 'Action',
-      width: 170,
+      label: 'Actions',
+      width: 180,
       alwaysVisible: true,
       renderCell: (row) => (
         <div className="flex min-w-[140px] flex-col gap-2">
-          {onDrilldownToAdGroups ? (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onDrilldownToAdGroups(row);
-              }}
-              className="rounded-xl border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground"
-            >
-              View ad groups
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenComposer?.(row);
-            }}
-            className="rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
-          >
-            Stage change
-          </button>
+          <AdsWorkspaceRowActionsMenu items={getRowActions?.(row) ?? []} />
           {row.coverage_note ? (
             <div className="text-xs text-muted">{row.coverage_note}</div>
           ) : null}
@@ -297,14 +277,6 @@ export default function SpCampaignsTable({
       surfaceSettings={surfaceSettings}
       settingsSaveStateLabel={settingsSaveStateLabel}
       onSurfaceSettingsChange={onSurfaceSettingsChange}
-      rowLinkRole={onDrilldownToAdGroups ? 'link' : undefined}
-      onRowClick={onDrilldownToAdGroups}
-      onRowKeyDown={(row, event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onDrilldownToAdGroups?.(row);
-        }
-      }}
       rowClassName={(row) =>
         `border-b border-border last:border-b-0 ${stagedRowClassName(
           rowHighlightTones?.get(row.campaign_id)

@@ -24,6 +24,10 @@ const targetsTablePath = path.join(
   process.cwd(),
   'apps/web/src/components/ads/SpTargetsTable.tsx'
 );
+const placementsTablePath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads/SpPlacementsTable.tsx'
+);
 const trendPath = path.join(
   process.cwd(),
   'apps/web/src/components/ads/AdsWorkspaceTrendClient.tsx'
@@ -43,6 +47,14 @@ const gridTablePath = path.join(
 const queueReviewPath = path.join(
   process.cwd(),
   'apps/web/src/components/ads/AdsWorkspaceQueueReview.tsx'
+);
+const rowActionsMenuPath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads/AdsWorkspaceRowActionsMenu.tsx'
+);
+const rowActionsLibPath = path.join(
+  process.cwd(),
+  'apps/web/src/lib/ads/adsWorkspaceRowActions.ts'
 );
 
 describe('ads workspace 7B-B UI wiring', () => {
@@ -67,15 +79,27 @@ describe('ads workspace 7B-B UI wiring', () => {
     const adGroupsTableSource = fs.readFileSync(adGroupsTablePath, 'utf-8');
     const trendSource = fs.readFileSync(trendPath, 'utf-8');
     const stateBarSource = fs.readFileSync(stateBarPath, 'utf-8');
+    const rowActionsMenuSource = fs.readFileSync(rowActionsMenuPath, 'utf-8');
+    const rowActionsLibSource = fs.readFileSync(rowActionsLibPath, 'utf-8');
 
-    expect(campaignsTableSource).toContain("View ad groups");
-    expect(campaignsTableSource).toContain("rowLinkRole={onDrilldownToAdGroups ? 'link' : undefined}");
-    expect(adGroupsTableSource).toContain("View targets");
-    expect(adGroupsTableSource).toContain("rowLinkRole={onDrilldownToTargets ? 'link' : undefined}");
-    expect(clientSource).toContain("params.set('campaign_scope_name', scope.campaignScopeLabel)");
-    expect(clientSource).toContain("params.set('ad_group_scope_name', scope.adGroupScopeLabel)");
-    expect(clientSource).toContain("params.set('campaign_scope', scope.campaignScopeId)");
-    expect(clientSource).toContain("params.set('ad_group_scope', scope.adGroupScopeId)");
+    expect(campaignsTableSource).toContain('AdsWorkspaceRowActionsMenu');
+    expect(adGroupsTableSource).toContain('AdsWorkspaceRowActionsMenu');
+    expect(clientSource).toContain('buildCampaignRowActions');
+    expect(clientSource).toContain('buildAdGroupRowActions');
+    expect(clientSource).toContain('buildPlacementRowActions');
+    expect(clientSource).toContain('buildTargetRowActions');
+    expect(clientSource).toContain('buildSearchTermRowActions');
+    expect(clientSource).toContain('buildAdsWorkspaceNavigationHref');
+    expect(clientSource).toContain('view: descriptor.view');
+    expect(clientSource).toContain('trendEntityId: descriptor.trendEntityId');
+    expect(rowActionsMenuSource).toContain('No valid actions for this row.');
+    expect(rowActionsMenuSource).toContain('href={item.href}');
+    expect(rowActionsMenuSource).toContain("role=\"menuitem\"");
+    expect(rowActionsLibSource).toContain('buildSearchTermRowActions');
+    expect(rowActionsLibSource).toContain("key: 'stage_change'");
+    expect(rowActionsLibSource).toContain("key: 'trend'");
+    expect(rowActionsLibSource).toContain("view: 'trend'");
+    expect(rowActionsLibSource).toContain("level: 'placements'");
     expect(trendSource).toContain('Trend');
     expect(trendSource).toContain('buildMiniBarMetrics');
     expect(trendSource).toContain('useLocalContrastScaling');
@@ -182,17 +206,31 @@ describe('ads workspace 7B-C UI wiring', () => {
     expect(queueReviewSource).toContain('Remove Item');
   });
 
-  it('renders targets rank context as a gated contextual column', () => {
+  it('keeps Target Table free of rank context and row-click drilldown while Actions menus stay explicit', () => {
     const targetsTableSource = fs.readFileSync(targetsTablePath, 'utf-8');
+    const placementsTableSource = fs.readFileSync(placementsTablePath, 'utf-8');
+    const searchTermsSource = fs.readFileSync(searchTermsTablePath, 'utf-8');
+    const campaignsTableSource = fs.readFileSync(campaignsTablePath, 'utf-8');
+    const adGroupsTableSource = fs.readFileSync(adGroupsTablePath, 'utf-8');
 
-    expect(targetsTableSource).toContain("key: 'rank_context'");
-    expect(targetsTableSource).toContain("label: 'Rank context'");
+    expect(targetsTableSource).not.toContain("key: 'rank_context'");
+    expect(targetsTableSource).not.toContain("label: 'Rank context'");
+    expect(targetsTableSource).toContain("key: 'actions'");
+    expect(targetsTableSource).toContain('AdsWorkspaceRowActionsMenu');
+    expect(targetsTableSource).not.toContain('Draft staging');
+    expect(targetsTableSource).not.toContain('Stage target, ad group, campaign, and campaign placement modifier edits');
+    expect(targetsTableSource).not.toContain('Organic');
+    expect(targetsTableSource).not.toContain('Sponsored');
     expect(targetsTableSource).not.toContain("key: 'stis'");
     expect(targetsTableSource).not.toContain("key: 'stir'");
     expect(targetsTableSource).not.toContain("key: 'tos_is'");
-    expect(targetsTableSource).toContain('selected ASIN and exact keyword coverage');
-    expect(targetsTableSource).toContain("row.rank_context_note ?? 'context gated'");
-    expect(targetsTableSource).toContain('Organic');
-    expect(targetsTableSource).toContain('Sponsored');
+    expect(placementsTableSource).toContain('AdsWorkspaceRowActionsMenu');
+    expect(searchTermsSource).toContain("key: 'actions'");
+    expect(searchTermsSource).toContain('AdsWorkspaceRowActionsMenu');
+    expect(searchTermsSource).toContain('Stage changes from the child row with the concrete keyword or target context.');
+    expect(campaignsTableSource).not.toContain('rowLinkRole=');
+    expect(adGroupsTableSource).not.toContain('rowLinkRole=');
+    expect(campaignsTableSource).not.toContain('onRowClick=');
+    expect(adGroupsTableSource).not.toContain('onRowClick=');
   });
 });

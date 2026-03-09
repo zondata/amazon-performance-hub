@@ -9,8 +9,18 @@ import SpAdGroupsTable from '@/components/ads/SpAdGroupsTable';
 import SpCampaignsTable from '@/components/ads/SpCampaignsTable';
 import SpChangeComposer from '@/components/ads/SpChangeComposer';
 import SpPlacementsTable from '@/components/ads/SpPlacementsTable';
+import type { AdsWorkspaceRowActionItem } from '@/components/ads/AdsWorkspaceRowActionsMenu';
 import SpSearchTermsTable from '@/components/ads/SpSearchTermsTable';
 import SpTargetsTable from '@/components/ads/SpTargetsTable';
+import {
+  buildAdGroupRowActions,
+  buildCampaignRowActions,
+  buildPlacementRowActions,
+  buildSearchTermRowActions,
+  buildTargetRowActions,
+  type AdsWorkspaceRowActionDescriptor,
+} from '@/lib/ads/adsWorkspaceRowActions';
+import { buildAdsWorkspaceNavigationHref } from '@/lib/ads/adsWorkspaceNavigation';
 import type {
   SpSearchTermsWorkspaceChildRow,
   SpSearchTermsWorkspaceRow,
@@ -183,47 +193,38 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
     return `Active draft ${activeDraft.name} with ${activeDraft.queueCount.toLocaleString('en-US')} staged item(s).`;
   }, [activeDraft]);
 
-  const drilldownToLevel = (
-    nextLevel: WorkspaceLevel,
-    scope: {
-      campaignScopeId?: string | null;
-      adGroupScopeId?: string | null;
-      campaignScopeLabel?: string | null;
-      adGroupScopeLabel?: string | null;
-    }
-  ) => {
-    startRouting(() => {
-      const params = new URLSearchParams(searchParams?.toString() ?? '');
-      params.set('panel', 'workspace');
-      params.set('view', 'table');
-      params.set('level', nextLevel);
-      params.delete('trend_entity');
-      params.delete('compose_level');
-      params.delete('compose_row');
-      params.delete('compose_child');
-      if (scope.campaignScopeId) {
-        params.set('campaign_scope', scope.campaignScopeId);
-      } else {
-        params.delete('campaign_scope');
+  const buildRowActionItems = <TRow extends SpWorkspaceComposerRow | SpSearchTermsWorkspaceRow>(
+    row: TRow,
+    descriptors: AdsWorkspaceRowActionDescriptor[],
+    composerRow?: SpWorkspaceComposerRow | null
+  ): AdsWorkspaceRowActionItem[] =>
+    descriptors.map((descriptor) => {
+      if (descriptor.type === 'action') {
+        return {
+          key: descriptor.key,
+          label: descriptor.label,
+          onSelect: () => {
+            const nextComposerRow = composerRow ?? (row as SpWorkspaceComposerRow);
+            if (!nextComposerRow) return;
+            setFlashMessage(null);
+            syncComposerRouteState(nextComposerRow);
+          },
+        };
       }
-      if (scope.campaignScopeLabel) {
-        params.set('campaign_scope_name', scope.campaignScopeLabel);
-      } else {
-        params.delete('campaign_scope_name');
-      }
-      if (scope.adGroupScopeId) {
-        params.set('ad_group_scope', scope.adGroupScopeId);
-      } else {
-        params.delete('ad_group_scope');
-      }
-      if (scope.adGroupScopeLabel) {
-        params.set('ad_group_scope_name', scope.adGroupScopeLabel);
-      } else {
-        params.delete('ad_group_scope_name');
-      }
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+
+      return {
+        key: descriptor.key,
+        label: descriptor.label,
+        href: buildAdsWorkspaceNavigationHref({
+          pathname,
+          search: searchParams?.toString() ?? '',
+          level: descriptor.level,
+          scope: descriptor.scope,
+          view: descriptor.view,
+          trendEntityId: descriptor.trendEntityId,
+        }),
+      };
     });
-  };
 
   const updateSurfaceSettings = (
     surfaceKey: AdsWorkspaceTableSurfaceKey,
@@ -260,24 +261,13 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
       return (
         <SpCampaignsTable
           rows={props.rows as SpCampaignsWorkspaceRow[]}
-          onOpenComposer={(row) => {
-            setFlashMessage(null);
-            syncComposerRouteState(row);
-          }}
+          getRowActions={(row) => buildRowActionItems(row, buildCampaignRowActions(row), row)}
           activeDraftName={activeDraft?.name ?? null}
           showIds={props.showIds}
           surfaceSettings={currentSurfaceSettings}
           settingsSaveStateLabel={settingsSaveStateLabel}
           onSurfaceSettingsChange={(settings) => updateSurfaceSettings(currentSurfaceKey, settings)}
           rowHighlightTones={activeDraftHighlights.campaigns}
-          onDrilldownToAdGroups={(row) =>
-            drilldownToLevel('adgroups', {
-              campaignScopeId: row.campaign_id,
-              campaignScopeLabel: row.campaign_name,
-              adGroupScopeId: null,
-              adGroupScopeLabel: null,
-            })
-          }
         />
       );
     }
@@ -285,24 +275,13 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
       return (
         <SpAdGroupsTable
           rows={props.rows as SpAdGroupsWorkspaceRow[]}
-          onOpenComposer={(row) => {
-            setFlashMessage(null);
-            syncComposerRouteState(row);
-          }}
+          getRowActions={(row) => buildRowActionItems(row, buildAdGroupRowActions(row), row)}
           activeDraftName={activeDraft?.name ?? null}
           showIds={props.showIds}
           surfaceSettings={currentSurfaceSettings}
           settingsSaveStateLabel={settingsSaveStateLabel}
           onSurfaceSettingsChange={(settings) => updateSurfaceSettings(currentSurfaceKey, settings)}
           rowHighlightTones={activeDraftHighlights.adGroups}
-          onDrilldownToTargets={(row) =>
-            drilldownToLevel('targets', {
-              campaignScopeId: row.campaign_id,
-              campaignScopeLabel: row.campaign_name,
-              adGroupScopeId: row.ad_group_id,
-              adGroupScopeLabel: row.ad_group_name,
-            })
-          }
         />
       );
     }
@@ -310,10 +289,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
       return (
         <SpPlacementsTable
           rows={props.rows as SpPlacementsWorkspaceRow[]}
-          onOpenComposer={(row) => {
-            setFlashMessage(null);
-            syncComposerRouteState(row);
-          }}
+          getRowActions={(row) => buildRowActionItems(row, buildPlacementRowActions(row), row)}
           activeDraftName={activeDraft?.name ?? null}
           showIds={props.showIds}
           surfaceSettings={currentSurfaceSettings}
@@ -331,6 +307,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
             setFlashMessage(null);
             syncComposerRouteState(row);
           }}
+          getRowActions={(row) => buildRowActionItems(row, buildSearchTermRowActions(row), null)}
           activeDraftName={activeDraft?.name ?? null}
           showIds={props.showIds}
           surfaceSettings={currentSurfaceSettings}
@@ -342,10 +319,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
     return (
       <SpTargetsTable
         rows={props.rows as SpTargetsWorkspaceRow[]}
-        onOpenComposer={(row) => {
-          setFlashMessage(null);
-          syncComposerRouteState(row);
-        }}
+        getRowActions={(row) => buildRowActionItems(row, buildTargetRowActions(row), row)}
         activeDraftName={activeDraft?.name ?? null}
         showIds={props.showIds}
         surfaceSettings={currentSurfaceSettings}

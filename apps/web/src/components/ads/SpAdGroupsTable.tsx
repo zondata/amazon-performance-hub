@@ -1,6 +1,9 @@
 import AdsWorkspaceGridTable, {
   type AdsWorkspaceGridColumn,
 } from '@/components/ads/AdsWorkspaceGridTable';
+import AdsWorkspaceRowActionsMenu, {
+  type AdsWorkspaceRowActionItem,
+} from '@/components/ads/AdsWorkspaceRowActionsMenu';
 import type { SpAdGroupsWorkspaceRow } from '@/lib/ads/spWorkspaceTablesModel';
 import type { AdsWorkspaceSurfaceSettings } from '@/lib/ads-workspace/adsWorkspaceUiSettings';
 import type { SpActiveDraftRowTone } from '@/lib/ads-workspace/spActiveDraftHighlights';
@@ -31,10 +34,9 @@ const formatPercent = (value?: number | null) => {
 
 type SpAdGroupsTableProps = {
   rows: SpAdGroupsWorkspaceRow[];
-  onOpenComposer?: (row: SpAdGroupsWorkspaceRow) => void;
   activeDraftName?: string | null;
   showIds?: boolean;
-  onDrilldownToTargets?: (row: SpAdGroupsWorkspaceRow) => void;
+  getRowActions?: (row: SpAdGroupsWorkspaceRow) => AdsWorkspaceRowActionItem[];
   surfaceSettings?: AdsWorkspaceSurfaceSettings | null;
   settingsSaveStateLabel?: string | null;
   onSurfaceSettingsChange: (settings: AdsWorkspaceSurfaceSettings) => void;
@@ -67,10 +69,9 @@ const statusPill = (status: string | null) => {
 
 export default function SpAdGroupsTable({
   rows,
-  onOpenComposer,
   activeDraftName,
   showIds = false,
-  onDrilldownToTargets,
+  getRowActions,
   surfaceSettings,
   settingsSaveStateLabel,
   onSurfaceSettingsChange,
@@ -247,33 +248,12 @@ export default function SpAdGroupsTable({
     },
     {
       key: 'actions',
-      label: 'Action',
-      width: 170,
+      label: 'Actions',
+      width: 180,
       alwaysVisible: true,
       renderCell: (row) => (
         <div className="flex min-w-[140px] flex-col gap-2">
-          {onDrilldownToTargets ? (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onDrilldownToTargets(row);
-              }}
-              className="rounded-xl border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground"
-            >
-              View targets
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenComposer?.(row);
-            }}
-            className="rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
-          >
-            Stage change
-          </button>
+          <AdsWorkspaceRowActionsMenu items={getRowActions?.(row) ?? []} />
           {row.coverage_note ? <div className="text-xs text-muted">{row.coverage_note}</div> : null}
         </div>
       ),
@@ -292,14 +272,6 @@ export default function SpAdGroupsTable({
       surfaceSettings={surfaceSettings}
       settingsSaveStateLabel={settingsSaveStateLabel}
       onSurfaceSettingsChange={onSurfaceSettingsChange}
-      rowLinkRole={onDrilldownToTargets ? 'link' : undefined}
-      onRowClick={onDrilldownToTargets}
-      onRowKeyDown={(row, event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onDrilldownToTargets?.(row);
-        }
-      }}
       rowClassName={(row) =>
         `border-b border-border last:border-b-0 ${stagedRowClassName(
           rowHighlightTones?.get(row.ad_group_id)

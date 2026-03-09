@@ -46,27 +46,33 @@ Use AI for diagnosis and prioritization, but keep execution manual, staged, revi
 5. **Targets row behavior**
    - Parent row = full target totals.
    - Expanded child rows = search terms under that target.
+   - Stage change must be reachable from the main row-end actions entry point; expansion is for diagnostics, not primary actions.
    - Do not replace target totals with one search-term slice.
    - If same-text search term exists, it may be pinned first inside the expanded section, but it does not replace the parent totals.
 
-6. **Trend mode rules**
+6. **Row actions and navigation**
+   - Use one consistent row-end actions entry point across supported Ads Workspace levels.
+   - Row menus must show only deterministic destinations for that row and current scope.
+   - Prefer hiding an ambiguous destination over linking to an over-broad surface.
+
+7. **Trend mode rules**
    - Trend mode is diagnostic-first, not the default editing surface.
    - Table mode remains the default for filtering, comparison, and editing.
    - Daily change markers must use chips / markers / borders, not full-row highlight by default.
 
-7. **Product filter semantics (SP v1)**
+8. **Product filter semantics (SP v1)**
    - Product filter is an **entity inclusion filter** based on advertised ASIN scope.
    - Use deterministic product-ad / advertised-product mappings to decide which SP campaigns, ad groups, targets, and search-term groups belong to the selected ASIN.
    - Unless a dataset is truly ASIN-sliced at the entity level, row metrics remain entity totals.
    - Do not pretend campaign/target metrics are ASIN-only when the facts layer cannot prove that.
    - When coverage is ambiguous (for example multi-ASIN campaign scope), surface a warning / coverage badge rather than false precision.
 
-8. **Economics integrity**
+9. **Economics integrity**
    - P&L and break-even bid are valuable, but they must not be shown as exact facts when the economics scope is ambiguous.
    - In SP v1, treat entity-level P&L / break-even bid as nullable derived metrics.
    - Show them only when the row has deterministic product economics coverage; otherwise return `null` / `—` with a coverage note.
 
-9. **Phase discipline**
+10. **Phase discipline**
    - Follow `docs/ads-workspace/BUILD_PLAN.md` in order.
    - Mark checklist items done only after code, tests, lint, and build pass for that phase.
    - Do not jump ahead to a later phase while earlier acceptance checks are still open.

@@ -1,6 +1,9 @@
 import AdsWorkspaceGridTable, {
   type AdsWorkspaceGridColumn,
 } from '@/components/ads/AdsWorkspaceGridTable';
+import AdsWorkspaceRowActionsMenu, {
+  type AdsWorkspaceRowActionItem,
+} from '@/components/ads/AdsWorkspaceRowActionsMenu';
 import type {
   SpSearchTermsWorkspaceChildRow,
   SpSearchTermsWorkspaceRow,
@@ -36,6 +39,7 @@ type SpSearchTermsTableProps = {
   onOpenComposer?: (row: SpSearchTermsWorkspaceChildRow) => void;
   activeDraftName?: string | null;
   showIds?: boolean;
+  getRowActions?: (row: SpSearchTermsWorkspaceRow) => AdsWorkspaceRowActionItem[];
   surfaceSettings?: AdsWorkspaceSurfaceSettings | null;
   settingsSaveStateLabel?: string | null;
   onSurfaceSettingsChange: (settings: AdsWorkspaceSurfaceSettings) => void;
@@ -63,6 +67,7 @@ export default function SpSearchTermsTable({
   onOpenComposer,
   activeDraftName,
   showIds = false,
+  getRowActions,
   surfaceSettings,
   settingsSaveStateLabel,
   onSurfaceSettingsChange,
@@ -213,6 +218,20 @@ export default function SpSearchTermsTable({
       align: 'right',
       getSortValue: () => null,
       renderCell: () => <span className="text-muted">—</span>,
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      width: 180,
+      alwaysVisible: true,
+      renderCell: (row) => (
+        <div className="flex min-w-[140px] flex-col gap-2">
+          <AdsWorkspaceRowActionsMenu items={getRowActions?.(row) ?? []} />
+          {row.coverage_note ? (
+            <div className="text-xs text-muted">{row.coverage_note}</div>
+          ) : null}
+        </div>
+      ),
     },
   ];
 

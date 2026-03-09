@@ -1,6 +1,9 @@
 import AdsWorkspaceGridTable, {
   type AdsWorkspaceGridColumn,
 } from '@/components/ads/AdsWorkspaceGridTable';
+import AdsWorkspaceRowActionsMenu, {
+  type AdsWorkspaceRowActionItem,
+} from '@/components/ads/AdsWorkspaceRowActionsMenu';
 import type { SpPlacementsWorkspaceRow } from '@/lib/ads/spWorkspaceTablesModel';
 import type { AdsWorkspaceSurfaceSettings } from '@/lib/ads-workspace/adsWorkspaceUiSettings';
 import type { SpActiveDraftRowTone } from '@/lib/ads-workspace/spActiveDraftHighlights';
@@ -31,9 +34,9 @@ const formatPercent = (value?: number | null) => {
 
 type SpPlacementsTableProps = {
   rows: SpPlacementsWorkspaceRow[];
-  onOpenComposer?: (row: SpPlacementsWorkspaceRow) => void;
   activeDraftName?: string | null;
   showIds?: boolean;
+  getRowActions?: (row: SpPlacementsWorkspaceRow) => AdsWorkspaceRowActionItem[];
   surfaceSettings?: AdsWorkspaceSurfaceSettings | null;
   settingsSaveStateLabel?: string | null;
   onSurfaceSettingsChange: (settings: AdsWorkspaceSurfaceSettings) => void;
@@ -49,9 +52,9 @@ const stagedRowClassName = (tone: SpActiveDraftRowTone | undefined) =>
 
 export default function SpPlacementsTable({
   rows,
-  onOpenComposer,
   activeDraftName,
   showIds = false,
+  getRowActions,
   surfaceSettings,
   settingsSaveStateLabel,
   onSurfaceSettingsChange,
@@ -233,18 +236,12 @@ export default function SpPlacementsTable({
     },
     {
       key: 'actions',
-      label: 'Action',
-      width: 160,
+      label: 'Actions',
+      width: 180,
       alwaysVisible: true,
       renderCell: (row) => (
         <div className="flex min-w-[140px] flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => onOpenComposer?.(row)}
-            className="rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
-          >
-            Stage change
-          </button>
+          <AdsWorkspaceRowActionsMenu items={getRowActions?.(row) ?? []} />
           {row.coverage_note ? <div className="text-xs text-muted">{row.coverage_note}</div> : null}
         </div>
       ),

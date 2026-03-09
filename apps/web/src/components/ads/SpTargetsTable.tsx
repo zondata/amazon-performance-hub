@@ -1,6 +1,9 @@
 import AdsWorkspaceGridTable, {
   type AdsWorkspaceGridColumn,
 } from '@/components/ads/AdsWorkspaceGridTable';
+import AdsWorkspaceRowActionsMenu, {
+  type AdsWorkspaceRowActionItem,
+} from '@/components/ads/AdsWorkspaceRowActionsMenu';
 import type { SpTargetsWorkspaceRow } from '@/lib/ads/spTargetsWorkspaceModel';
 import type { AdsWorkspaceSurfaceSettings } from '@/lib/ads-workspace/adsWorkspaceUiSettings';
 import type { SpActiveDraftRowTone } from '@/lib/ads-workspace/spActiveDraftHighlights';
@@ -36,9 +39,9 @@ const formatRank = (value?: number | null) => {
 
 type SpTargetsTableProps = {
   rows: SpTargetsWorkspaceRow[];
-  onOpenComposer?: (row: SpTargetsWorkspaceRow) => void;
   activeDraftName?: string | null;
   showIds?: boolean;
+  getRowActions?: (row: SpTargetsWorkspaceRow) => AdsWorkspaceRowActionItem[];
   surfaceSettings?: AdsWorkspaceSurfaceSettings | null;
   settingsSaveStateLabel?: string | null;
   onSurfaceSettingsChange: (settings: AdsWorkspaceSurfaceSettings) => void;
@@ -71,9 +74,9 @@ const statusPill = (status: string | null) => {
 
 export default function SpTargetsTable({
   rows,
-  onOpenComposer,
   activeDraftName,
   showIds = false,
+  getRowActions,
   surfaceSettings,
   settingsSaveStateLabel,
   onSurfaceSettingsChange,
@@ -177,41 +180,6 @@ export default function SpTargetsTable({
           <div className={context.wrapLongLabels ? 'whitespace-normal break-all text-foreground' : 'line-clamp-2 break-all text-foreground'}>
             {row.match_type ?? '—'}
           </div>
-        </div>
-      ),
-    },
-    {
-      key: 'rank_context',
-      label: 'Rank context',
-      width: 138,
-      align: 'right',
-      getSortValue: (row) => row.rank_context?.organic_rank ?? null,
-      getNumericValue: (row) => row.rank_context?.organic_rank ?? null,
-      renderCell: (row) => (
-        <div
-          title="Rank is contextual to the selected ASIN and exact keyword coverage. It is not a target-owned performance metric."
-        >
-          {row.rank_context ? (
-            <>
-              <div className="text-[10px] uppercase tracking-[0.14em] text-muted">Organic</div>
-              <div className="font-semibold text-foreground">
-                {formatRank(row.rank_context.organic_rank)}
-              </div>
-              <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-muted">
-                Sponsored
-              </div>
-              <div className="text-foreground/80">
-                {formatRank(row.rank_context.sponsored_rank)}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="text-foreground">—</div>
-              <div className="mt-1 text-[11px] text-muted">
-                {row.rank_context_note ?? 'context gated'}
-              </div>
-            </>
-          )}
         </div>
       ),
     },
@@ -347,6 +315,18 @@ export default function SpTargetsTable({
       getSortValue: (row) => row.last_activity,
       renderCell: (row) => <span className="text-foreground">{row.last_activity ?? '—'}</span>,
     },
+    {
+      key: 'actions',
+      label: 'Actions',
+      width: 180,
+      alwaysVisible: true,
+      renderCell: (row) => (
+        <div className="flex min-w-[140px] flex-col gap-2">
+          <AdsWorkspaceRowActionsMenu items={getRowActions?.(row) ?? []} />
+          {row.coverage_note ? <div className="text-xs text-muted">{row.coverage_note}</div> : null}
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -369,27 +349,6 @@ export default function SpTargetsTable({
       expandedRowClassName="border-t border-border border-l-[6px] border-l-border bg-surface-2 px-4 py-4 shadow-[inset_0_1px_0_rgba(0,0,0,0.08)]"
       renderExpanded={(row) => (
         <>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background/90 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-            <div>
-              <div className="text-xs uppercase tracking-[0.18em] text-muted">Draft staging</div>
-              <div className="mt-1 text-sm text-foreground">
-                Stage target, ad group, campaign, and campaign placement modifier edits without writing to logbook facts yet.
-              </div>
-              <div className="mt-1 text-xs text-muted">
-                {activeDraftName ? `Active draft: ${activeDraftName}` : 'A draft queue is created on first save.'}
-              </div>
-            </div>
-            {onOpenComposer ? (
-              <button
-                type="button"
-                onClick={() => onOpenComposer(row)}
-                className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
-              >
-                Stage change
-              </button>
-            ) : null}
-          </div>
-
           <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
             <section className="rounded-xl border border-border bg-surface p-4">
               <div className="flex items-center justify-between gap-3">
