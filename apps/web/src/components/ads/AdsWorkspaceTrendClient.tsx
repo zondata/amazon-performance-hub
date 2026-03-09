@@ -554,6 +554,7 @@ export default function AdsWorkspaceTrendClient({
                   {trendData.metricRows.map((metric) => {
                     const miniBars = buildMiniBarMetrics(metric.cells, metric.kind);
                     const showInlineSupportNote =
+                      !(level === 'targets' && (metric.key === 'stis' || metric.key === 'stir')) &&
                       metric.key !== 'organic_rank' &&
                       metric.key !== 'sponsored_rank' &&
                       metric.key !== 'tos_is';

@@ -255,7 +255,7 @@ type TargetAccumulator = {
   sales: number;
   spend: number;
   last_activity: string | null;
-  stis: { value: number | null; date: string | null; exported_at: string | null } | null;
+  tos_is: { value: number | null; date: string | null; exported_at: string | null } | null;
 };
 
 type SearchTermAccumulator = {
@@ -354,6 +354,19 @@ const formatState = (value: string | null | undefined): string | null => {
   const normalized = trimString(value);
   if (!normalized) return null;
   return normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
+};
+
+const compareRepresentativeChildRow = (
+  left: Pick<SpTargetsWorkspaceChildRow, 'same_text' | 'impressions' | 'clicks' | 'spend' | 'last_activity' | 'search_term'>,
+  right: Pick<SpTargetsWorkspaceChildRow, 'same_text' | 'impressions' | 'clicks' | 'spend' | 'last_activity' | 'search_term'>
+) => {
+  if (left.same_text !== right.same_text) return left.same_text ? -1 : 1;
+  if (left.impressions !== right.impressions) return right.impressions - left.impressions;
+  if (left.clicks !== right.clicks) return right.clicks - left.clicks;
+  if (left.spend !== right.spend) return right.spend - left.spend;
+  const lastActivity = compareNullableDesc(left.last_activity, right.last_activity);
+  if (lastActivity !== 0) return lastActivity;
+  return left.search_term.localeCompare(right.search_term);
 };
 
 export const resolveSpProductScopeSummary = (params: {
@@ -593,7 +606,7 @@ export const buildSpTargetsWorkspaceModel = (params: {
       sales: 0,
       spend: 0,
       last_activity: null,
-      stis: null,
+      tos_is: null,
     };
 
     existing.impressions += numberValue(row.impressions);
@@ -608,15 +621,15 @@ export const buildSpTargetsWorkspaceModel = (params: {
     existing.spend += numberValue(row.spend);
     existing.last_activity = updateLastActivity(existing.last_activity, trimString(row.date));
 
-    const nextStisValue = toFiniteNumberOrNull(row.top_of_search_impression_share);
-    if (nextStisValue !== null) {
+    const nextTosIsValue = toFiniteNumberOrNull(row.top_of_search_impression_share);
+    if (nextTosIsValue !== null) {
       const nextDiagnostic = {
-        value: nextStisValue,
+        value: nextTosIsValue,
         date: trimString(row.date),
         exported_at: trimString(row.exported_at),
       };
-      if (compareDiagnostic(existing.stis, nextDiagnostic) <= 0) {
-        existing.stis = nextDiagnostic;
+      if (compareDiagnostic(existing.tos_is, nextDiagnostic) <= 0) {
+        existing.tos_is = nextDiagnostic;
       }
     }
 
@@ -689,16 +702,8 @@ export const buildSpTargetsWorkspaceModel = (params: {
 
       const parentDiagnosticChild =
         [...searchTerms]
-          .filter((row) => row.stir !== null)
-          .sort((left, right) => {
-            if (left.same_text !== right.same_text) return left.same_text ? -1 : 1;
-            if (left.impressions !== right.impressions) return right.impressions - left.impressions;
-            if (left.clicks !== right.clicks) return right.clicks - left.clicks;
-            if (left.spend !== right.spend) return right.spend - left.spend;
-            const lastActivity = compareNullableDesc(left.last_activity, right.last_activity);
-            if (lastActivity !== 0) return lastActivity;
-            return left.search_term.localeCompare(right.search_term);
-          })[0] ?? null;
+          .filter((row) => row.stis !== null || row.stir !== null)
+          .sort(compareRepresentativeChildRow)[0] ?? null;
       const coverageNote = ambiguousCampaignIds.has(target.campaign_id)
         ? 'This campaign served more than one advertised ASIN in the selected window. Metrics remain full entity totals.'
         : null;
@@ -718,9 +723,9 @@ export const buildSpTargetsWorkspaceModel = (params: {
         match_type: resolvedMatchType,
         rank_context: rankContext,
         rank_context_note: rankContextNote,
-        stis: target.stis?.value ?? null,
+        stis: parentDiagnosticChild?.stis ?? null,
         stir: parentDiagnosticChild?.stir ?? null,
-        tos_is: null,
+        tos_is: target.tos_is?.value ?? null,
         impressions: target.impressions,
         clicks: target.clicks,
         orders: target.orders,

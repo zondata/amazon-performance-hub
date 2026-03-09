@@ -26,7 +26,7 @@ describe('resolveSpProductScopeSummary', () => {
 });
 
 describe('buildSpTargetsWorkspaceModel', () => {
-  it('keeps parent totals intact, uses latest diagnostics, and pins same-text child rows first', () => {
+  it('keeps parent totals intact, uses representative child STIS/STIR, and pins same-text child rows first', () => {
     const model = buildSpTargetsWorkspaceModel({
       targetRows: [
         {
@@ -180,8 +180,9 @@ describe('buildSpTargetsWorkspaceModel', () => {
     expect(row?.clicks).toBe(15);
     expect(row?.sales).toBe(175);
     expect(row?.spend).toBe(35);
-    expect(row?.stis).toBeCloseTo(0.32, 6);
+    expect(row?.stis).toBeCloseTo(0.41, 6);
     expect(row?.stir).toBe(3);
+    expect(row?.tos_is).toBeCloseTo(0.32, 6);
     expect(row?.status).toBe('Enabled');
     expect(row?.coverage_label).toBe('Shared campaign');
     expect(row?.search_terms[0]?.search_term).toBe('blue shoes');
@@ -262,7 +263,9 @@ describe('buildSpTargetsWorkspaceModel', () => {
     });
 
     expect(model.rows).toHaveLength(1);
+    expect(model.rows[0]?.stis).toBeCloseTo(0.22, 6);
     expect(model.rows[0]?.stir).toBe(5);
+    expect(model.rows[0]?.tos_is).toBeCloseTo(0.14, 6);
     expect(model.rows[0]?.units).toBeNull();
     expect(model.rows[0]?.search_terms[0]?.units).toBeNull();
     expect(model.rows[0]?.search_terms[1]?.units).toBe(0);

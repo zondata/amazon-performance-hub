@@ -216,48 +216,6 @@ export default function SpTargetsTable({
       ),
     },
     {
-      key: 'stis',
-      label: 'STIS',
-      width: 95,
-      align: 'right',
-      getSortValue: (row) => row.stis,
-      getNumericValue: (row) => row.stis,
-      renderCell: (row) => (
-        <div>
-          <div className="text-foreground">{formatPercent(row.stis)}</div>
-          <div className="mt-1 text-[11px] text-muted">latest target diagnostic</div>
-        </div>
-      ),
-    },
-    {
-      key: 'stir',
-      label: 'STIR',
-      width: 110,
-      align: 'right',
-      getSortValue: (row) => row.stir,
-      getNumericValue: (row) => row.stir,
-      renderCell: (row) => (
-        <div>
-          <div className="text-foreground">{formatRank(row.stir)}</div>
-          <div className="mt-1 text-[11px] text-muted">same-text, else best child</div>
-        </div>
-      ),
-    },
-    {
-      key: 'tos_is',
-      label: 'TOS IS',
-      width: 110,
-      align: 'right',
-      getSortValue: (row) => row.tos_is,
-      getNumericValue: (row) => row.tos_is,
-      renderCell: () => (
-        <div>
-          <div className="text-foreground">—</div>
-          <div className="mt-1 text-[11px] text-muted">campaign placement context below</div>
-        </div>
-      ),
-    },
-    {
       key: 'impressions',
       label: 'Impr.',
       width: 95,
@@ -520,11 +478,6 @@ export default function SpTargetsTable({
                           ? '—'
                           : `${row.placement_context.top_of_search_modifier_pct.toFixed(0)}%`}
                       </div>
-                    </div>
-                    <div className="rounded-lg border border-border bg-surface-2 px-3 py-3">
-                      <div className="text-[11px] uppercase tracking-[0.16em] text-muted">TOS IS</div>
-                      <div className="mt-1 text-lg font-semibold text-foreground">—</div>
-                      <div className="mt-1 text-[11px] text-muted">Not derived from placement performance facts.</div>
                     </div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">

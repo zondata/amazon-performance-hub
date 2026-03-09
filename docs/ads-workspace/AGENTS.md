@@ -37,6 +37,9 @@ Use AI for diagnosis and prioritization, but keep execution manual, staged, revi
    - Placement metrics are campaign-level facts.
    - Do **not** flatten placement metrics into target-level facts.
    - In the Targets tab, placement metrics may appear only as clearly labeled campaign-level context.
+   - STIS comes from `search_term_impression_share` and STIR comes from `search_term_impression_rank` on SP STIS coverage.
+   - TOS IS on SP target surfaces comes from `top_of_search_impression_share` on SP Targeting rows.
+   - Campaign-level TOS IS requires its own campaign-grain source and must not be inferred from target rows.
    - STIS / STIR / TOS IS are non-additive diagnostics. Do not average them across time or entities.
    - Follow `docs/skills/library/ads_kpi_scope_glossary.md`.
 

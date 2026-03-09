@@ -50,10 +50,14 @@ describe('spWorkspaceTrendModel', () => {
 
     const unitsRow = trend.metricRows.find((row) => row.key === 'units');
     const stisRow = trend.metricRows.find((row) => row.key === 'stis');
+    const stirRow = trend.metricRows.find((row) => row.key === 'stir');
+    const tosIsRow = trend.metricRows.find((row) => row.key === 'tos_is');
 
     expect(unitsRow?.cells[0]?.value).toBe(3);
     expect(unitsRow?.cells[1]?.value).toBe(0);
     expect(stisRow?.cells[0]?.value).toBeNull();
+    expect(stirRow?.cells[0]?.value).toBeNull();
+    expect(tosIsRow?.cells[0]?.value).toBeNull();
     expect(trend.markersByDate['2026-03-02']).toEqual(['chg-1']);
     expect(trend.markers[0]?.fields).toEqual([
       {
@@ -95,7 +99,7 @@ describe('spWorkspaceTrendModel', () => {
     expect(trend.metricRows.find((row) => row.key === 'units')?.cells[0]?.value).toBe(4);
   });
 
-  it('picks same-text STIR for target trend rows and keeps TOS IS null-safe', () => {
+  it('uses the same representative child for target trend STIS/STIR and keeps TOS IS on targeting rows', () => {
     const { markers, markersByDate } = buildTrendMarkers([]);
 
     const trend = buildTargetTrendData({
@@ -126,6 +130,7 @@ describe('spWorkspaceTrendModel', () => {
           targeting_norm: 'blue shoes',
           customer_search_term_raw: 'blue shoes',
           customer_search_term_norm: 'blue shoes',
+          search_term_impression_share: 0.33,
           search_term_impression_rank: 4,
           impressions: 25,
           clicks: 3,
@@ -138,6 +143,7 @@ describe('spWorkspaceTrendModel', () => {
           targeting_norm: 'blue shoes',
           customer_search_term_raw: 'buy blue shoes',
           customer_search_term_norm: 'buy blue shoes',
+          search_term_impression_share: 0.61,
           search_term_impression_rank: 1,
           impressions: 40,
           clicks: 4,
@@ -149,12 +155,79 @@ describe('spWorkspaceTrendModel', () => {
       markersByDate,
     });
 
-    expect(trend.metricRows.find((row) => row.key === 'stis')?.cells[0]?.value).toBeCloseTo(0.22, 6);
+    expect(trend.metricRows.find((row) => row.key === 'stis')?.cells[0]?.value).toBeCloseTo(0.33, 6);
     expect(trend.metricRows.find((row) => row.key === 'stir')?.cells[0]?.value).toBe(4);
-    expect(trend.metricRows.find((row) => row.key === 'tos_is')?.cells[0]?.value).toBeNull();
-    expect(trend.metricRows.find((row) => row.key === 'tos_is')?.support_note).toMatch(
-      /null-safe/i
+    expect(trend.metricRows.find((row) => row.key === 'tos_is')?.cells[0]?.value).toBeCloseTo(0.22, 6);
+    expect(trend.metricRows.find((row) => row.key === 'stis')?.support_note).toMatch(
+      /search-term impression-share coverage/i
     );
+    expect(trend.metricRows.find((row) => row.key === 'stir')?.support_note).toMatch(
+      /same representative child/i
+    );
+    expect(trend.metricRows.find((row) => row.key === 'tos_is')?.support_note).toMatch(
+      /target targeting-report coverage/i
+    );
+  });
+
+  it('uses impressions, clicks, spend, and recency to pick one non-same-text target trend diagnostic child', () => {
+    const { markers, markersByDate } = buildTrendMarkers([]);
+
+    const trend = buildTargetTrendData({
+      entityCountLabel: 'Targets',
+      entities: [{ id: 't2', label: 'brown boots', subtitle: 'Campaign B · Phrase', badge: null }],
+      selectedEntityId: 't2',
+      selectedEntityLabel: 'brown boots',
+      start: '2026-03-02',
+      end: '2026-03-02',
+      targetRows: [
+        {
+          date: '2026-03-02',
+          target_id: 't2',
+          impressions: 120,
+          clicks: 12,
+          spend: 24,
+          sales: 72,
+          orders: 3,
+          units: 3,
+          top_of_search_impression_share: 0.18,
+          exported_at: '2026-03-03T00:00:00Z',
+        },
+      ],
+      stirRows: [
+        {
+          date: '2026-03-02',
+          target_id: 't2',
+          targeting_norm: 'brown boots',
+          customer_search_term_raw: 'winter boots',
+          customer_search_term_norm: 'winter boots',
+          search_term_impression_share: 0.27,
+          search_term_impression_rank: 8,
+          impressions: 50,
+          clicks: 6,
+          spend: 12,
+          exported_at: '2026-03-03T00:00:00Z',
+        },
+        {
+          date: '2026-03-02',
+          target_id: 't2',
+          targeting_norm: 'brown boots',
+          customer_search_term_raw: 'boots for winter',
+          customer_search_term_norm: 'boots for winter',
+          search_term_impression_share: 0.19,
+          search_term_impression_rank: 5,
+          impressions: 50,
+          clicks: 6,
+          spend: 12,
+          exported_at: '2026-03-04T00:00:00Z',
+        },
+      ],
+      markers,
+      markersByDate,
+    });
+
+    expect(trend.metricRows.find((row) => row.key === 'stis')?.cells[0]?.value).toBeCloseTo(0.19, 6);
+    expect(trend.metricRows.find((row) => row.key === 'stir')?.cells[0]?.value).toBe(5);
+    expect(trend.metricRows.find((row) => row.key === 'tos_is')?.cells[0]?.value).toBeCloseTo(0.18, 6);
   });
 
   it('renders Organic Rank and Sponsored Rank as separate target trend rows', () => {

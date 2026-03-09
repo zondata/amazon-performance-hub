@@ -136,7 +136,7 @@ const loadTargetTrendRows = async (params: {
       await supabaseAdmin
         .from('sp_stis_daily_fact_latest')
         .select(
-          'date,target_id,targeting_norm,customer_search_term_raw,customer_search_term_norm,search_term_impression_rank,impressions,clicks,spend,exported_at'
+          'date,target_id,targeting_norm,customer_search_term_raw,customer_search_term_norm,search_term_impression_share,search_term_impression_rank,impressions,clicks,spend,exported_at'
         )
         .eq('account_id', params.accountId)
         .eq('target_id', params.targetId)
@@ -437,7 +437,7 @@ export const getSpWorkspaceTrendData = async ({
     );
   } else {
     warnings.push(
-      'Targets trend is diagnostic-first. STIS/STIR stay target diagnostics, TOS IS remains null-safe because campaign placement diagnostics are not flattened into target facts, and rank stays contextual to single-ASIN keyword coverage.'
+      'Targets trend is diagnostic-first. STIS/STIR come from search-term impression-share coverage, TOS IS comes from target targeting-report coverage, and rank stays contextual to single-ASIN keyword coverage.'
     );
   }
 

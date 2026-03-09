@@ -81,6 +81,7 @@ describe('ads workspace 7B-B UI wiring', () => {
     expect(trendSource).toContain('useLocalContrastScaling');
     expect(trendSource).toContain('MINI_BAR_MIN_VISIBLE_HEIGHT');
     expect(trendSource).toContain('className="max-h-[62vh] overflow-auto xl:max-h-[720px]"');
+    expect(trendSource).toContain("!(level === 'targets' && (metric.key === 'stis' || metric.key === 'stir')) &&");
     expect(trendSource).toContain("metric.key !== 'organic_rank' &&");
     expect(trendSource).toContain("metric.key !== 'sponsored_rank' &&");
     expect(trendSource).toContain("metric.key !== 'tos_is';");
@@ -186,6 +187,9 @@ describe('ads workspace 7B-C UI wiring', () => {
 
     expect(targetsTableSource).toContain("key: 'rank_context'");
     expect(targetsTableSource).toContain("label: 'Rank context'");
+    expect(targetsTableSource).not.toContain("key: 'stis'");
+    expect(targetsTableSource).not.toContain("key: 'stir'");
+    expect(targetsTableSource).not.toContain("key: 'tos_is'");
     expect(targetsTableSource).toContain('selected ASIN and exact keyword coverage');
     expect(targetsTableSource).toContain("row.rank_context_note ?? 'context gated'");
     expect(targetsTableSource).toContain('Organic');

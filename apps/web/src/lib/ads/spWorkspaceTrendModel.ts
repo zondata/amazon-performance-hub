@@ -121,6 +121,7 @@ export type SpTrendTargetStirRow = {
   targeting_norm: string | null;
   customer_search_term_raw: string | null;
   customer_search_term_norm: string | null;
+  search_term_impression_share: NumericLike;
   search_term_impression_rank: NumericLike;
   impressions: NumericLike;
   clicks: NumericLike;
@@ -153,14 +154,15 @@ type TargetDayAccumulator = {
   orders: number;
   units: number;
   units_state: 'missing' | 'known';
-  stis: number | null;
+  tos_is: number | null;
   has_row: boolean;
 };
 
 type TargetStirCandidate = {
   search_term_norm: string | null;
   targeting_norm: string | null;
-  stir: number;
+  stis: number | null;
+  stir: number | null;
   impressions: number;
   clicks: number;
   spend: number;
@@ -502,7 +504,7 @@ export const buildTargetTrendData = (params: {
       orders: 0,
       units: 0,
       units_state: 'missing',
-      stis: null,
+      tos_is: null,
       has_row: false,
     });
   }
@@ -522,26 +524,28 @@ export const buildTargetTrendData = (params: {
       existing.units += units;
       existing.units_state = 'known';
     }
-    const stis = toFiniteNumberOrNull(row.top_of_search_impression_share);
-    if (stis !== null) {
-      existing.stis = stis;
+    const tosIs = toFiniteNumberOrNull(row.top_of_search_impression_share);
+    if (tosIs !== null) {
+      existing.tos_is = tosIs;
     }
   }
 
   for (const row of params.stirRows) {
     const date = trimString(row.date);
+    const stis = toFiniteNumberOrNull(row.search_term_impression_share);
     const stir = toFiniteNumberOrNull(row.search_term_impression_rank);
-    if (!date || stir === null || !stirByDate.has(date)) {
+    if (!date || (stis === null && stir === null) || !stirByDate.has(date)) {
       if (date && !stirByDate.has(date) && byDate.has(date)) {
         stirByDate.set(date, []);
       }
     }
-    if (!date || stir === null || !byDate.has(date)) continue;
+    if (!date || (stis === null && stir === null) || !byDate.has(date)) continue;
 
     const existing = stirByDate.get(date) ?? [];
     existing.push({
       search_term_norm: normalizeText(row.customer_search_term_norm ?? row.customer_search_term_raw),
       targeting_norm: normalizeText(row.targeting_norm),
+      stis,
       stir,
       impressions: numberValue(row.impressions),
       clicks: numberValue(row.clicks),
@@ -567,8 +571,7 @@ export const buildTargetTrendData = (params: {
   const valuesByDate = new Map<string, Record<SpTrendMetricKey, number | null>>();
   for (const date of dates) {
     const daily = byDate.get(date)!;
-    const stir =
-      [...(stirByDate.get(date) ?? [])].sort(compareTargetStirCandidate)[0]?.stir ?? null;
+    const representativeChild = [...(stirByDate.get(date) ?? [])].sort(compareTargetStirCandidate)[0] ?? null;
     const rank = rankByDate.get(date) ?? null;
     valuesByDate.set(date, {
       spend: daily.has_row ? daily.spend : 0,
@@ -581,9 +584,9 @@ export const buildTargetTrendData = (params: {
       cpc: daily.has_row ? safeDivide(daily.spend, daily.clicks) : 0,
       organic_rank: rank?.organic_rank ?? null,
       sponsored_rank: rank?.sponsored_rank ?? null,
-      stis: daily.stis,
-      stir,
-      tos_is: null,
+      stis: representativeChild?.stis ?? null,
+      stir: representativeChild?.stir ?? null,
+      tos_is: daily.tos_is,
     });
   }
 
@@ -605,8 +608,12 @@ export const buildTargetTrendData = (params: {
         sponsored_rank:
           params.rankSupportNote ??
           'Rank is contextual visibility data for the selected ASIN and exact keyword, not a target-owned performance fact.',
+        stis:
+          'STIS comes from search-term impression-share coverage under the selected target. Each date shows one representative child diagnostic.',
+        stir:
+          'STIR comes from search-term impression-share coverage under the selected target. Each date uses the same representative child as STIS.',
         tos_is:
-          'TOS IS stays null-safe in Targets trend. Campaign placement diagnostics are not flattened into target-owned facts.',
+          'TOS IS comes from target targeting-report coverage (`top_of_search_impression_share`), not from campaign placement rollups.',
       },
     }),
     markers: params.markers,
