@@ -181,6 +181,41 @@ export default function SpTargetsTable({
       ),
     },
     {
+      key: 'rank_context',
+      label: 'Rank context',
+      width: 138,
+      align: 'right',
+      getSortValue: (row) => row.rank_context?.organic_rank ?? null,
+      getNumericValue: (row) => row.rank_context?.organic_rank ?? null,
+      renderCell: (row) => (
+        <div
+          title="Rank is contextual to the selected ASIN and exact keyword coverage. It is not a target-owned performance metric."
+        >
+          {row.rank_context ? (
+            <>
+              <div className="text-[10px] uppercase tracking-[0.14em] text-muted">Organic</div>
+              <div className="font-semibold text-foreground">
+                {formatRank(row.rank_context.organic_rank)}
+              </div>
+              <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-muted">
+                Sponsored
+              </div>
+              <div className="text-foreground/80">
+                {formatRank(row.rank_context.sponsored_rank)}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-foreground">—</div>
+              <div className="mt-1 text-[11px] text-muted">
+                {row.rank_context_note ?? 'context gated'}
+              </div>
+            </>
+          )}
+        </div>
+      ),
+    },
+    {
       key: 'stis',
       label: 'STIS',
       width: 95,

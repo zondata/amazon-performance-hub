@@ -139,6 +139,12 @@ export type SpTargetsPlacementContext = {
   spend: number;
 };
 
+export type SpTargetRankContext = {
+  organic_rank: number | null;
+  sponsored_rank: number | null;
+  observed_date: string | null;
+};
+
 export type SpTargetsComposerContext = {
   channel: 'sp';
   surface: 'targets';
@@ -187,6 +193,8 @@ export type SpTargetsWorkspaceRow = {
   campaign_name: string | null;
   ad_group_name: string | null;
   match_type: string | null;
+  rank_context: SpTargetRankContext | null;
+  rank_context_note: string | null;
   stis: number | null;
   stir: number | null;
   tos_is: number | null;
@@ -535,11 +543,15 @@ export const buildSpTargetsWorkspaceModel = (params: {
   currentCampaignsById?: Map<string, SpCurrentCampaignContext>;
   currentPlacementModifiers?: SpCurrentPlacementModifier[];
   ambiguousCampaignIds?: Set<string>;
+  rankContextByKeywordNorm?: Map<string, SpTargetRankContext>;
+  rankContextTrustworthy?: boolean;
 }): SpTargetsWorkspaceModel => {
   const currentTargetsById = params.currentTargetsById ?? new Map<string, SpCurrentTargetContext>();
   const currentAdGroupsById = params.currentAdGroupsById ?? new Map<string, SpCurrentAdGroupContext>();
   const currentCampaignsById = params.currentCampaignsById ?? new Map<string, SpCurrentCampaignContext>();
   const ambiguousCampaignIds = params.ambiguousCampaignIds ?? new Set<string>();
+  const rankContextByKeywordNorm = params.rankContextByKeywordNorm ?? new Map<string, SpTargetRankContext>();
+  const rankContextTrustworthy = params.rankContextTrustworthy ?? false;
 
   const topPlacementModifierByCampaign = new Map<string, number | null>();
   for (const row of params.currentPlacementModifiers ?? []) {
@@ -618,6 +630,31 @@ export const buildSpTargetsWorkspaceModel = (params: {
         ? currentAdGroupsById.get(target.ad_group_id)
         : undefined;
       const currentCampaign = currentCampaignsById.get(target.campaign_id);
+      const resolvedTargetText =
+        trimString(currentTarget?.expression_raw) ??
+        trimString(target.targeting_raw) ??
+        target.targeting_norm ??
+        target.target_id;
+      const resolvedMatchType =
+        trimString(currentTarget?.match_type) ?? target.match_type_norm;
+      const resolvedTargetKeywordNorm = normalizeText(
+        currentTarget?.expression_raw ?? target.targeting_raw ?? target.targeting_norm
+      );
+      const rankContextEligible =
+        resolvedMatchType !== 'TARGETING_EXPRESSION' && currentTarget?.is_negative !== true;
+      const rankContext =
+        rankContextTrustworthy && rankContextEligible && resolvedTargetKeywordNorm
+          ? (rankContextByKeywordNorm.get(resolvedTargetKeywordNorm) ?? null)
+          : null;
+      const rankContextNote = rankContext
+        ? null
+        : !rankContextTrustworthy
+          ? 'single-ASIN only'
+          : !rankContextEligible
+            ? 'keyword only'
+            : resolvedTargetKeywordNorm
+              ? 'no rank snapshot'
+              : 'no deterministic mapping';
       const searchTerms = [...(searchTermsByTarget.get(target.target_id)?.values() ?? [])]
         .map((searchTerm) => {
           const sameText =
@@ -671,19 +708,16 @@ export const buildSpTargetsWorkspaceModel = (params: {
         campaign_id: target.campaign_id,
         ad_group_id: currentTarget?.ad_group_id ?? currentAdGroup?.ad_group_id ?? target.ad_group_id,
         status: formatState(currentTarget?.state),
-        target_text:
-          trimString(currentTarget?.expression_raw) ??
-          trimString(target.targeting_raw) ??
-          target.targeting_norm ??
-          target.target_id,
+        target_text: resolvedTargetText,
         type_label: targetTypeLabel(currentTarget, target.match_type_norm),
         portfolio_name: target.portfolio_name,
         campaign_name:
           trimString(currentCampaign?.campaign_name_raw) ?? target.campaign_name,
         ad_group_name:
           trimString(currentAdGroup?.ad_group_name_raw) ?? target.ad_group_name,
-        match_type:
-          trimString(currentTarget?.match_type) ?? target.match_type_norm,
+        match_type: resolvedMatchType,
+        rank_context: rankContext,
+        rank_context_note: rankContextNote,
         stis: target.stis?.value ?? null,
         stir: parentDiagnosticChild?.stir ?? null,
         tos_is: null,
@@ -710,12 +744,8 @@ export const buildSpTargetsWorkspaceModel = (params: {
           surface: 'targets',
           target: {
             id: target.target_id,
-            text:
-              trimString(currentTarget?.expression_raw) ??
-              trimString(target.targeting_raw) ??
-              target.targeting_norm ??
-              target.target_id,
-            match_type: trimString(currentTarget?.match_type) ?? target.match_type_norm,
+            text: resolvedTargetText,
+            match_type: resolvedMatchType,
             is_negative: currentTarget?.is_negative ?? false,
             current_state: trimString(currentTarget?.state),
             current_bid:

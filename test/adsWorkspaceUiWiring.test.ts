@@ -20,6 +20,10 @@ const adGroupsTablePath = path.join(
   process.cwd(),
   'apps/web/src/components/ads/SpAdGroupsTable.tsx'
 );
+const targetsTablePath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads/SpTargetsTable.tsx'
+);
 const trendPath = path.join(
   process.cwd(),
   'apps/web/src/components/ads/AdsWorkspaceTrendClient.tsx'
@@ -76,7 +80,22 @@ describe('ads workspace 7B-B UI wiring', () => {
     expect(trendSource).toContain('buildMiniBarMetrics');
     expect(trendSource).toContain('useLocalContrastScaling');
     expect(trendSource).toContain('MINI_BAR_MIN_VISIBLE_HEIGHT');
-    expect(trendSource).toContain('className="max-h-[720px] overflow-auto"');
+    expect(trendSource).toContain('className="max-h-[62vh] overflow-auto xl:max-h-[720px]"');
+    expect(trendSource).toContain("metric.key !== 'organic_rank' &&");
+    expect(trendSource).toContain("metric.key !== 'sponsored_rank' &&");
+    expect(trendSource).toContain("metric.key !== 'tos_is';");
+    expect(trendSource).toContain('function TrendInspectorPanel');
+    expect(trendSource).toContain("kind: 'marker'");
+    expect(trendSource).toContain("kind: 'cell'");
+    expect(trendSource).toContain("return { kind: 'empty' };");
+    expect(trendSource).toContain('Selected change detail takes priority over KPI hover.');
+    expect(trendSource).toContain('className="max-h-[32vh] overflow-y-auto xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)]"');
+    expect(trendSource).toContain('aria-pressed={activeMarkerDate === date}');
+    expect(trendSource).toContain('onClick={() => setHoveredMetric(metric, cell)}');
+    expect(trendSource).not.toContain('Hover drill-in');
+    expect(trendSource).not.toContain('scheduleHoverPanelTopUpdate');
+    expect(trendSource).not.toContain('updateHoverPanelTop');
+    expect(trendSource).not.toContain("bottom: 'calc(16px + 0.75rem + env(safe-area-inset-bottom))'");
     expect(stateBarSource).toContain('campaignScopeLabel');
     expect(stateBarSource).toContain('adGroupScopeLabel');
   });
@@ -160,5 +179,16 @@ describe('ads workspace 7B-C UI wiring', () => {
     expect(queueReviewSource).toContain('descriptor.secondaryIds');
     expect(queueReviewSource).toContain('Save Item');
     expect(queueReviewSource).toContain('Remove Item');
+  });
+
+  it('renders targets rank context as a gated contextual column', () => {
+    const targetsTableSource = fs.readFileSync(targetsTablePath, 'utf-8');
+
+    expect(targetsTableSource).toContain("key: 'rank_context'");
+    expect(targetsTableSource).toContain("label: 'Rank context'");
+    expect(targetsTableSource).toContain('selected ASIN and exact keyword coverage');
+    expect(targetsTableSource).toContain("row.rank_context_note ?? 'context gated'");
+    expect(targetsTableSource).toContain('Organic');
+    expect(targetsTableSource).toContain('Sponsored');
   });
 });

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { fetchAllRows } from '@/lib/supabaseFetchAll';
+import { getProductRankingDaily } from '@/lib/ranking/getProductRankingDaily';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getSpWorkspaceData, type SpWorkspaceLevel } from './getSpWorkspaceData';
 import type { SpTargetsWorkspaceRow } from './spTargetsWorkspaceModel';
@@ -14,6 +15,7 @@ import {
   type SpTrendCampaignDailyRow,
   type SpTrendLevel,
   type SpTrendPlacementUnitsRow,
+  type SpTrendTargetRankRow,
   type SpTrendTargetDailyRow,
   type SpTrendTargetStirRow,
   type SpWorkspaceTrendData,
@@ -58,6 +60,9 @@ const trimString = (value: string | null | undefined) => {
   const trimmed = String(value ?? '').trim();
   return trimmed.length > 0 ? trimmed : null;
 };
+
+const normalizeText = (value: string | null | undefined) =>
+  trimString(value)?.toLowerCase().replace(/\s+/g, ' ') ?? null;
 
 const fetchPaged = async <TRow,>(queryBuilder: (from: number, to: number) => Promise<{
   data: TRow[] | null;
@@ -343,40 +348,87 @@ export const getSpWorkspaceTrendData = async ({
     selectedEntityId: resolvedSelectedEntityId,
   });
 
-  const trendData =
-    level === 'campaigns'
-      ? buildCampaignTrendData({
-          entityCountLabel: workspaceData.entityCountLabel,
-          entities,
-          selectedEntityId: resolvedSelectedEntityId,
-          selectedEntityLabel: resolvedSelectedEntity.label,
+  let trendData: SpWorkspaceTrendData;
+  if (level === 'campaigns') {
+    trendData = buildCampaignTrendData({
+      entityCountLabel: workspaceData.entityCountLabel,
+      entities,
+      selectedEntityId: resolvedSelectedEntityId,
+      selectedEntityLabel: resolvedSelectedEntity.label,
+      start,
+      end,
+      ...(await loadCampaignTrendRows({
+        accountId,
+        campaignId: resolvedSelectedEntityId,
+        start,
+        end,
+      })),
+      markers,
+      markersByDate,
+    });
+  } else {
+    const selectedTarget = targetRows.find((row) => row.target_id === resolvedSelectedEntityId) ?? null;
+    const targetTrendRows = await loadTargetTrendRows({
+      accountId,
+      targetId: resolvedSelectedEntityId,
+      start,
+      end,
+    });
+    const selectedTargetKeywordNorm = normalizeText(selectedTarget?.target_text);
+    const rankEligible = asinFilter !== 'all' && selectedTarget?.type_label === 'Keyword';
+    let rankRows: SpTrendTargetRankRow[] = [];
+    let rankSupportNote =
+      asinFilter === 'all'
+        ? 'Rank stays null-safe here until a single ASIN is selected.'
+        : selectedTarget?.type_label !== 'Keyword'
+          ? 'Rank context is keyword-only and remains hidden for non-keyword targets.'
+          : 'No rank snapshot was found for this exact keyword in the selected ASIN window.';
+
+    if (rankEligible && selectedTargetKeywordNorm) {
+      try {
+        const rankingRows = await getProductRankingDaily({
+          accountId,
+          marketplace,
+          asin: asinFilter,
           start,
           end,
-          ...(await loadCampaignTrendRows({
-            accountId,
-            campaignId: resolvedSelectedEntityId,
-            start,
-            end,
-          })),
-          markers,
-          markersByDate,
-        })
-      : buildTargetTrendData({
-          entityCountLabel: workspaceData.entityCountLabel,
-          entities,
-          selectedEntityId: resolvedSelectedEntityId,
-          selectedEntityLabel: resolvedSelectedEntity.label,
-          start,
-          end,
-          ...(await loadTargetTrendRows({
-            accountId,
-            targetId: resolvedSelectedEntityId,
-            start,
-            end,
-          })),
-          markers,
-          markersByDate,
         });
+        rankRows = rankingRows
+          .filter(
+            (row) =>
+              normalizeText(row.keyword_norm ?? row.keyword_raw) === selectedTargetKeywordNorm
+          )
+          .map((row) => ({
+            observed_date: row.observed_date,
+            organic_rank_value: row.organic_rank_value,
+            sponsored_pos_value: row.sponsored_pos_value,
+          }));
+        if (rankRows.length > 0) {
+          rankSupportNote =
+            'Rank is contextual to the selected ASIN and exact keyword coverage. It is not a target-owned performance fact.';
+        }
+      } catch (error) {
+        rankSupportNote =
+          error instanceof Error
+            ? `Rank context is unavailable for this target trend: ${error.message}`
+            : 'Rank context is unavailable for this target trend.';
+      }
+    }
+
+    trendData = buildTargetTrendData({
+      entityCountLabel: workspaceData.entityCountLabel,
+      entities,
+      selectedEntityId: resolvedSelectedEntityId,
+      selectedEntityLabel: resolvedSelectedEntity.label,
+      start,
+      end,
+      ...targetTrendRows,
+      rankRows,
+      rankSupportNote,
+      markers,
+      markersByDate,
+    });
+  }
 
   const warnings = [...workspaceWarnings];
   if (level === 'campaigns') {
@@ -385,7 +437,7 @@ export const getSpWorkspaceTrendData = async ({
     );
   } else {
     warnings.push(
-      'Targets trend is the first diagnostic slice for STIS/STIR. TOS IS remains null-safe because campaign placement diagnostics are not flattened into target facts.'
+      'Targets trend is diagnostic-first. STIS/STIR stay target diagnostics, TOS IS remains null-safe because campaign placement diagnostics are not flattened into target facts, and rank stays contextual to single-ASIN keyword coverage.'
     );
   }
 

@@ -156,4 +156,97 @@ describe('spWorkspaceTrendModel', () => {
       /null-safe/i
     );
   });
+
+  it('renders Organic Rank and Sponsored Rank as separate target trend rows', () => {
+    const { markers, markersByDate } = buildTrendMarkers([]);
+
+    const trend = buildTargetTrendData({
+      entityCountLabel: 'Targets',
+      entities: [{ id: 't1', label: 'blue shoes', subtitle: 'Campaign A · Exact', badge: null }],
+      selectedEntityId: 't1',
+      selectedEntityLabel: 'blue shoes',
+      start: '2026-03-01',
+      end: '2026-03-02',
+      targetRows: [
+        {
+          date: '2026-03-01',
+          target_id: 't1',
+          impressions: 80,
+          clicks: 8,
+          spend: 16,
+          sales: 40,
+          orders: 2,
+          units: 2,
+          top_of_search_impression_share: 0.22,
+          exported_at: '2026-03-02T00:00:00Z',
+        },
+      ],
+      stirRows: [],
+      rankRows: [
+        {
+          observed_date: '2026-03-01',
+          organic_rank_value: 6,
+          sponsored_pos_value: 2,
+        },
+        {
+          observed_date: '2026-03-02',
+          organic_rank_value: 4,
+          sponsored_pos_value: 1,
+        },
+      ],
+      rankSupportNote:
+        'Rank is contextual to the selected ASIN and exact keyword coverage. It is not a target-owned performance fact.',
+      markers,
+      markersByDate,
+    });
+
+    const organicRankRow = trend.metricRows.find((row) => row.key === 'organic_rank');
+    const sponsoredRankRow = trend.metricRows.find((row) => row.key === 'sponsored_rank');
+
+    expect(organicRankRow?.label).toBe('Organic Rank');
+    expect(organicRankRow?.cells.map((cell) => cell.value)).toEqual([6, 4]);
+    expect(sponsoredRankRow?.label).toBe('Sponsored Rank');
+    expect(sponsoredRankRow?.cells.map((cell) => cell.value)).toEqual([2, 1]);
+  });
+
+  it('keeps rank trend rows null-safe when rank coverage is unavailable', () => {
+    const { markers, markersByDate } = buildTrendMarkers([]);
+
+    const trend = buildTargetTrendData({
+      entityCountLabel: 'Targets',
+      entities: [{ id: 't1', label: 'blue shoes', subtitle: 'Campaign A · Exact', badge: null }],
+      selectedEntityId: 't1',
+      selectedEntityLabel: 'blue shoes',
+      start: '2026-03-01',
+      end: '2026-03-01',
+      targetRows: [
+        {
+          date: '2026-03-01',
+          target_id: 't1',
+          impressions: 80,
+          clicks: 8,
+          spend: 16,
+          sales: 40,
+          orders: 2,
+          units: 2,
+          top_of_search_impression_share: 0.22,
+          exported_at: '2026-03-02T00:00:00Z',
+        },
+      ],
+      stirRows: [],
+      rankRows: [],
+      rankSupportNote: 'Rank stays null-safe here until a single ASIN is selected.',
+      markers,
+      markersByDate,
+    });
+
+    expect(trend.metricRows.find((row) => row.key === 'organic_rank')?.cells[0]?.value).toBeNull();
+    expect(trend.metricRows.find((row) => row.key === 'sponsored_rank')?.cells[0]?.value).toBeNull();
+    expect(trend.metricRows.find((row) => row.key === 'organic_rank')?.support_note).toMatch(
+      /single ASIN/i
+    );
+    expect(trend.metricRows.find((row) => row.key === 'sponsored_rank')?.support_note).toMatch(
+      /single ASIN/i
+    );
+  });
 });

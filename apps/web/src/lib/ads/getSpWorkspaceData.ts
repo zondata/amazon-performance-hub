@@ -4,6 +4,7 @@ import { fetchCurrentSpData } from '@/lib/bulksheets/fetchCurrent';
 import { fetchByDateChunks } from '@/lib/logbook/aiPack/fetchByDateChunks';
 import { isStatementTimeoutMessage } from '@/lib/logbook/aiPack/fetchByDateChunks';
 import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
+import { getProductRankingDaily, type ProductRankingRow } from '@/lib/ranking/getProductRankingDaily';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { fetchAllRows } from '@/lib/supabaseFetchAll';
 import { normalizeSpAdvertisedAsin } from './spAdvertisedAsinScope';
@@ -33,6 +34,7 @@ import {
   type SpPlacementFactRow,
   type SpScopeAdvertisedProductRow,
   type SpSearchTermFactRow,
+  type SpTargetRankContext,
   type SpTargetFactRow,
 } from './spTargetsWorkspaceModel';
 
@@ -125,6 +127,25 @@ const uniqueBy = <TRow,>(rows: TRow[], getKey: (row: TRow) => string) => {
     deduped.set(getKey(row), row);
   }
   return Array.from(deduped.values());
+};
+
+const normalizeRankKeyword = (value: string | null | undefined): string | null => {
+  const trimmed = trimString(value);
+  return trimmed ? trimmed.toLowerCase().replace(/\s+/g, ' ') : null;
+};
+
+const buildLatestRankContextByKeyword = (rows: ProductRankingRow[]) => {
+  const byKeyword = new Map<string, SpTargetRankContext>();
+  for (const row of rows) {
+    const keywordNorm = normalizeRankKeyword(row.keyword_norm ?? row.keyword_raw);
+    if (!keywordNorm || byKeyword.has(keywordNorm)) continue;
+    byKeyword.set(keywordNorm, {
+      organic_rank: row.organic_rank_value,
+      sponsored_rank: row.sponsored_pos_value,
+      observed_date: trimString(row.observed_date),
+    });
+  }
+  return byKeyword;
 };
 
 const fetchRowsByIdChunks = async <TRow,>(params: {
@@ -665,6 +686,8 @@ export const getSpWorkspaceData = async ({
   let placementRows: SpPlacementWorkspaceFactRow[] = [];
   let searchTermRows: SpSearchTermFactRow[] = [];
   let searchTermChunkErrors: Array<{ chunkStart: string; chunkEnd: string; message: string }> = [];
+  let targetRankContextByKeywordNorm = new Map<string, SpTargetRankContext>();
+  let targetRankContextTrustworthy = false;
 
   if (level === 'campaigns') {
     campaignRows = await fetchCampaignRowsChunked({
@@ -806,6 +829,26 @@ export const getSpWorkspaceData = async ({
     if (searchTermChunkErrors.length > 0) {
       warnings.push(
         `Search-term coverage is partial. ${searchTermChunkErrors.length} STIS range(s) failed to load; showing successful chunks only.`
+      );
+    }
+  }
+
+  if (level === 'targets' && asinFilter !== 'all') {
+    targetRankContextTrustworthy = true;
+    try {
+      const rankingRows = await getProductRankingDaily({
+        accountId,
+        marketplace,
+        asin: asinFilter,
+        start,
+        end,
+      });
+      targetRankContextByKeywordNorm = buildLatestRankContextByKeyword(rankingRows);
+    } catch (error) {
+      warnings.push(
+        error instanceof Error
+          ? `Rank context is unavailable for the selected ASIN: ${error.message}`
+          : 'Rank context is unavailable for the selected ASIN.'
       );
     }
   }
@@ -1067,6 +1110,8 @@ export const getSpWorkspaceData = async ({
     currentCampaignsById,
     currentPlacementModifiers,
     ambiguousCampaignIds,
+    rankContextByKeywordNorm: targetRankContextByKeywordNorm,
+    rankContextTrustworthy: targetRankContextTrustworthy,
   });
 
   return {

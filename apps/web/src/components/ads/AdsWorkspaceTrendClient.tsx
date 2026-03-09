@@ -18,6 +18,27 @@ type KpiItem = {
   subvalue?: string;
 };
 
+type HoveredTrendMetric = {
+  metricLabel: string;
+  kind: string;
+  cell: SpTrendMetricCell;
+  note: string | null;
+};
+
+type TrendInspectorState =
+  | {
+      kind: 'marker';
+      activeDate: string;
+      markers: SpTrendMarker[];
+    }
+  | {
+      kind: 'cell';
+      hovered: HoveredTrendMetric;
+    }
+  | {
+      kind: 'empty';
+    };
+
 type AdsWorkspaceTrendClientProps = {
   level: 'campaigns' | 'targets';
   kpiItems: KpiItem[];
@@ -161,6 +182,136 @@ const buildMiniBarMetrics = (cells: SpTrendMetricCell[], kind: string) => {
   };
 };
 
+type TrendInspectorPanelProps = {
+  state: TrendInspectorState;
+  onClearMarkerSelection: () => void;
+  className?: string;
+};
+
+function TrendInspectorPanel({
+  state,
+  onClearMarkerSelection,
+  className,
+}: TrendInspectorPanelProps) {
+  return (
+    <section
+      className={`rounded-2xl border border-border bg-surface/95 p-5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-surface/85 ${className ?? ''}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs uppercase tracking-[0.2em] text-muted">Inspector</div>
+          <div className="mt-1 text-sm text-muted">
+            {state.kind === 'marker'
+              ? 'Selected change detail takes priority over KPI hover.'
+              : state.kind === 'cell'
+                ? 'Hovered or focused KPI detail from the current SP facts layer.'
+                : 'Click a change chip or hover, focus, or tap a KPI cell to inspect it here.'}
+          </div>
+        </div>
+        {state.kind === 'marker' ? (
+          <button
+            type="button"
+            onClick={onClearMarkerSelection}
+            className="shrink-0 text-xs font-semibold text-muted"
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+
+      {state.kind === 'marker' ? (
+        <div className="mt-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-700">
+              Change detail
+            </span>
+            <span className="text-sm font-semibold text-foreground">{state.activeDate}</span>
+            <span className="text-xs text-muted">
+              {state.markers.length} marker{state.markers.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          {state.markers.length > 0 ? (
+            <div className="space-y-3">
+              {state.markers.map((marker) => (
+                <div
+                  key={marker.change_id}
+                  className="rounded-2xl border border-border bg-surface-2/60 p-4"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">
+                      {markerTitle(marker)}
+                    </span>
+                    <span
+                      className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${validationTone(marker.validation_status)}`}
+                    >
+                      {marker.validation_status ?? 'unvalidated'}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-sm text-foreground">{marker.summary}</div>
+                  {marker.why ? (
+                    <div className="mt-2 text-sm text-muted">{marker.why}</div>
+                  ) : null}
+                  <div className="mt-2 text-xs text-muted">
+                    {formatDateTime(marker.occurred_at)}
+                    {marker.validated_snapshot_date
+                      ? ` · validated snapshot ${marker.validated_snapshot_date}`
+                      : ''}
+                  </div>
+                  {marker.fields.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      {marker.fields.map((field) => (
+                        <div key={`${marker.change_id}:${field.key}`} className="text-xs text-muted">
+                          <span className="font-semibold text-foreground">{field.label}:</span>{' '}
+                          {field.before ?? '—'} → {field.after ?? '—'}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-border bg-background/30 px-4 py-5 text-sm text-muted">
+              No frozen change details were found for this date.
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {state.kind === 'cell' ? (
+        <div className="mt-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex rounded-full border border-border bg-background/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+              KPI detail
+            </span>
+            <span className="text-sm font-semibold text-foreground">
+              {state.hovered.metricLabel}
+            </span>
+          </div>
+          <div className="mt-2 text-sm text-muted">{state.hovered.cell.date}</div>
+          <div className="mt-4 text-3xl font-semibold text-foreground">
+            {formatCellValue(state.hovered.cell.value, state.hovered.kind)}
+          </div>
+          <div className="mt-3 text-sm text-muted">
+            {state.hovered.note ?? 'Daily value from the current SP facts layer for the selected entity.'}
+          </div>
+          <div className="mt-3 text-xs text-muted">
+            {state.hovered.cell.marker_ids.length > 0
+              ? `${state.hovered.cell.marker_ids.length} change marker(s) also exist on this date. Click the date chip above to inspect the frozen change detail.`
+              : 'No frozen change markers exist on this date.'}
+          </div>
+        </div>
+      ) : null}
+
+      {state.kind === 'empty' ? (
+        <div className="mt-4 rounded-2xl border border-dashed border-border bg-background/30 px-4 py-5 text-sm text-muted">
+          Use this inspector for two things: click a header change chip to review generated or validated intervention details, or hover, focus, or tap a KPI cell to inspect the daily value behind the trend grid.
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export default function AdsWorkspaceTrendClient({
   level,
   kpiItems,
@@ -183,26 +334,41 @@ export default function AdsWorkspaceTrendClient({
   const [activeDraft, setActiveDraft] = useState(initialActiveDraft);
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
   const [activeMarkerDate, setActiveMarkerDate] = useState<string | null>(null);
-  const [hovered, setHovered] = useState<{ metricLabel: string; kind: string; cell: SpTrendMetricCell; note: string | null } | null>(null);
+  const [hovered, setHovered] = useState<HoveredTrendMetric | null>(null);
 
   const activeMarkerIds = activeMarkerDate ? trendData.markersByDate[activeMarkerDate] ?? [] : [];
   const activeMarkers = activeMarkerIds
     .map((markerId) => trendData.markers.find((marker) => marker.change_id === markerId) ?? null)
     .filter((marker): marker is SpTrendMarker => Boolean(marker));
 
-  const defaultHovered = useMemo(() => {
-    const firstMetric = trendData.metricRows[0];
-    const firstCell = firstMetric?.cells[0];
-    if (!firstMetric || !firstCell) return null;
-    return {
-      metricLabel: firstMetric.label,
-      kind: firstMetric.kind,
-      cell: firstCell,
-      note: firstMetric.support_note,
-    };
-  }, [trendData.metricRows]);
+  const inspectorState = useMemo<TrendInspectorState>(() => {
+    if (activeMarkerDate) {
+      return {
+        kind: 'marker',
+        activeDate: activeMarkerDate,
+        markers: activeMarkers,
+      };
+    }
+    if (hovered) {
+      return {
+        kind: 'cell',
+        hovered,
+      };
+    }
+    return { kind: 'empty' };
+  }, [activeMarkerDate, activeMarkers, hovered]);
 
-  const hoveredCell = hovered ?? defaultHovered;
+  const setHoveredMetric = (
+    metric: { key: string; label: string; kind: string; support_note: string | null },
+    cell: SpTrendMetricCell
+  ) => {
+    setHovered({
+      metricLabel: metric.label,
+      kind: metric.kind,
+      cell,
+      note: metric.support_note,
+    });
+  };
 
   const changeEntity = (nextEntityId: string) => {
     startRouting(() => {
@@ -335,7 +501,11 @@ export default function AdsWorkspaceTrendClient({
               Dates stay horizontal, KPIs stay vertical, and change markers open frozen logbook details.
             </div>
           </div>
-          <div data-aph-hscroll data-aph-hscroll-axis="x" className="max-h-[720px] overflow-auto">
+          <div
+            data-aph-hscroll
+            data-aph-hscroll-axis="x"
+            className="max-h-[62vh] overflow-auto xl:max-h-[720px]"
+          >
             <table
               className="min-w-[calc(180px+96px*7+160px)] w-full text-left text-sm"
               style={{
@@ -366,6 +536,7 @@ export default function AdsWorkspaceTrendClient({
                               onClick={() =>
                                 setActiveMarkerDate((current) => (current === date ? null : date))
                               }
+                              aria-pressed={activeMarkerDate === date}
                               className="mt-2 inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em] text-amber-700"
                             >
                               {markerIds.length} change{markerIds.length === 1 ? '' : 's'}
@@ -382,11 +553,18 @@ export default function AdsWorkspaceTrendClient({
                 <tbody className="divide-y divide-border">
                   {trendData.metricRows.map((metric) => {
                     const miniBars = buildMiniBarMetrics(metric.cells, metric.kind);
+                    const showInlineSupportNote =
+                      metric.key !== 'organic_rank' &&
+                      metric.key !== 'sponsored_rank' &&
+                      metric.key !== 'tos_is';
                     return (
-                    <tr key={metric.key} className="bg-surface/70">
+                    <tr
+                      key={metric.key}
+                      className="bg-surface/70"
+                    >
                       <th className="sticky left-0 z-10 w-[var(--metric-col-w)] border-r border-border bg-surface px-3 py-3 text-left shadow-[2px_0_0_rgba(0,0,0,0.04)]">
                         <div className="font-semibold text-foreground">{metric.label}</div>
-                        {metric.support_note ? (
+                        {showInlineSupportNote && metric.support_note ? (
                           <div className="mt-1 text-xs font-normal normal-case tracking-normal text-muted">
                             {metric.support_note}
                           </div>
@@ -401,29 +579,16 @@ export default function AdsWorkspaceTrendClient({
                               hasMarkers ? 'border-t-2 border-t-amber-400/60' : ''
                             }`}
                           >
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              onMouseEnter={() =>
-                                setHovered({
-                                  metricLabel: metric.label,
-                                  kind: metric.kind,
-                                  cell,
-                                  note: metric.support_note,
-                                })
-                              }
-                              onFocus={() =>
-                                setHovered({
-                                  metricLabel: metric.label,
-                                  kind: metric.kind,
-                                  cell,
-                                  note: metric.support_note,
-                                })
-                              }
-                              className="rounded-xl border border-transparent px-2 py-2 text-right text-sm text-foreground outline-none transition hover:border-border hover:bg-surface-2/60 focus:border-primary/30 focus:bg-surface-2/60"
+                            <button
+                              type="button"
+                              onClick={() => setHoveredMetric(metric, cell)}
+                              onMouseEnter={() => setHoveredMetric(metric, cell)}
+                              onFocus={() => setHoveredMetric(metric, cell)}
+                              aria-label={`Inspect ${metric.label} on ${cell.date}`}
+                              className="w-full rounded-xl border border-transparent px-2 py-2 text-right text-sm text-foreground outline-none transition hover:border-border hover:bg-surface-2/60 focus:border-primary/30 focus:bg-surface-2/60"
                             >
                               {formatCellValue(cell.value, metric.kind)}
-                            </div>
+                            </button>
                           </td>
                         );
                       })}
@@ -444,22 +609,10 @@ export default function AdsWorkspaceTrendClient({
                                   <button
                                     key={`${metric.key}-mini-${cell.date}`}
                                     type="button"
-                                    onMouseEnter={() =>
-                                      setHovered({
-                                        metricLabel: metric.label,
-                                        kind: metric.kind,
-                                        cell,
-                                        note: metric.support_note,
-                                      })
-                                    }
-                                    onFocus={() =>
-                                      setHovered({
-                                        metricLabel: metric.label,
-                                        kind: metric.kind,
-                                        cell,
-                                        note: metric.support_note,
-                                      })
-                                    }
+                                    onClick={() => setHoveredMetric(metric, cell)}
+                                    onMouseEnter={() => setHoveredMetric(metric, cell)}
+                                    onFocus={() => setHoveredMetric(metric, cell)}
+                                    aria-label={`Inspect ${metric.label} trend bar for ${cell.date}`}
                                     className="relative flex-1 rounded-sm outline-none focus:ring-2 focus:ring-ring"
                                   >
                                     {height !== null ? (
@@ -496,91 +649,11 @@ export default function AdsWorkspaceTrendClient({
         </div>
 
         <div className="min-w-0 space-y-6">
-          <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
-            <div className="text-xs uppercase tracking-[0.2em] text-muted">Hover drill-in</div>
-            {hoveredCell ? (
-              <>
-                <div className="mt-2 text-lg font-semibold text-foreground">
-                  {hoveredCell.metricLabel}
-                </div>
-                <div className="mt-1 text-sm text-muted">{hoveredCell.cell.date}</div>
-                <div className="mt-4 text-3xl font-semibold text-foreground">
-                  {formatCellValue(hoveredCell.cell.value, hoveredCell.kind)}
-                </div>
-                <div className="mt-3 text-sm text-muted">
-                  {hoveredCell.note ?? 'Daily value from the current SP facts layer for the selected entity.'}
-                </div>
-                <div className="mt-3 text-xs text-muted">
-                  {hoveredCell.cell.marker_ids.length > 0
-                    ? `${hoveredCell.cell.marker_ids.length} change marker(s) on this date.`
-                    : 'No frozen change markers on this date.'}
-                </div>
-              </>
-            ) : (
-              <div className="mt-2 text-sm text-muted">Hover a daily KPI cell to inspect it.</div>
-            )}
-          </div>
-
-          <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-xs uppercase tracking-[0.2em] text-muted">Change markers</div>
-              {activeMarkerDate ? (
-                <button
-                  type="button"
-                  onClick={() => setActiveMarkerDate(null)}
-                  className="text-xs font-semibold text-muted"
-                >
-                  Close
-                </button>
-              ) : null}
-            </div>
-            {activeMarkerDate ? (
-              <div className="mt-3 space-y-3">
-                <div className="text-sm font-semibold text-foreground">{activeMarkerDate}</div>
-                {activeMarkers.map((marker) => (
-                  <div
-                    key={marker.change_id}
-                    className="rounded-2xl border border-border bg-surface-2/60 p-4"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-foreground">
-                        {markerTitle(marker)}
-                      </span>
-                      <span
-                        className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${validationTone(marker.validation_status)}`}
-                      >
-                        {marker.validation_status ?? 'unvalidated'}
-                      </span>
-                    </div>
-                    <div className="mt-2 text-sm text-foreground">{marker.summary}</div>
-                    {marker.why ? (
-                      <div className="mt-2 text-sm text-muted">{marker.why}</div>
-                    ) : null}
-                    <div className="mt-2 text-xs text-muted">
-                      {formatDateTime(marker.occurred_at)}
-                      {marker.validated_snapshot_date
-                        ? ` · validated snapshot ${marker.validated_snapshot_date}`
-                        : ''}
-                    </div>
-                    {marker.fields.length > 0 ? (
-                      <div className="mt-3 space-y-2">
-                        {marker.fields.map((field) => (
-                          <div key={`${marker.change_id}:${field.key}`} className="text-xs text-muted">
-                            <span className="font-semibold text-foreground">{field.label}:</span>{' '}
-                            {field.before ?? '—'} → {field.after ?? '—'}
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-2 text-sm text-muted">
-                Click a date chip in the trend header to inspect generated/validated change details.
-              </div>
-            )}
-          </div>
+          <TrendInspectorPanel
+            state={inspectorState}
+            onClearMarkerSelection={() => setActiveMarkerDate(null)}
+            className="max-h-[32vh] overflow-y-auto xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)]"
+          />
 
           {initialComposerRow ? (
             <div className="xl:sticky xl:top-4">

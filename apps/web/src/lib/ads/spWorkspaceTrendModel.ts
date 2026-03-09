@@ -18,6 +18,8 @@ export type SpTrendMetricKey =
   | 'roas'
   | 'ctr'
   | 'cpc'
+  | 'organic_rank'
+  | 'sponsored_rank'
   | 'stis'
   | 'stir'
   | 'tos_is';
@@ -126,6 +128,12 @@ export type SpTrendTargetStirRow = {
   exported_at: string | null;
 };
 
+export type SpTrendTargetRankRow = {
+  observed_date: string | null;
+  organic_rank_value: NumericLike;
+  sponsored_pos_value: NumericLike;
+};
+
 type CampaignDayAccumulator = {
   impressions: number;
   clicks: number;
@@ -182,6 +190,8 @@ const METRIC_DEFS: Array<{
   { key: 'roas', label: 'ROAS', kind: 'ratio' },
   { key: 'ctr', label: 'CTR', kind: 'percent' },
   { key: 'cpc', label: 'CPC', kind: 'currency' },
+  { key: 'organic_rank', label: 'Organic Rank', kind: 'rank' },
+  { key: 'sponsored_rank', label: 'Sponsored Rank', kind: 'rank' },
   { key: 'stis', label: 'STIS', kind: 'percent' },
   { key: 'stir', label: 'STIR', kind: 'rank' },
   { key: 'tos_is', label: 'TOS IS', kind: 'percent' },
@@ -403,6 +413,8 @@ export const buildCampaignTrendData = (params: {
       roas: value.has_row ? safeDivide(value.sales, value.spend) : 0,
       ctr: value.has_row ? safeDivide(value.clicks, value.impressions) : 0,
       cpc: value.has_row ? safeDivide(value.spend, value.clicks) : 0,
+      organic_rank: null,
+      sponsored_rank: null,
       stis: null,
       stir: null,
       tos_is: null,
@@ -423,6 +435,8 @@ export const buildCampaignTrendData = (params: {
       supportNotes: {
         stis: unavailableNote,
         stir: unavailableNote,
+        organic_rank: unavailableNote,
+        sponsored_rank: unavailableNote,
         tos_is:
           'TOS IS remains null-safe here until a deterministic campaign-level daily source is wired.',
       },
@@ -466,12 +480,18 @@ export const buildTargetTrendData = (params: {
   end: string;
   targetRows: SpTrendTargetDailyRow[];
   stirRows: SpTrendTargetStirRow[];
+  rankRows?: SpTrendTargetRankRow[];
+  rankSupportNote?: string | null;
   markers: SpTrendMarker[];
   markersByDate: Map<string, string[]>;
 }): SpWorkspaceTrendData => {
   const dates = buildDateColumns(params.start, params.end);
   const byDate = new Map<string, TargetDayAccumulator>();
   const stirByDate = new Map<string, TargetStirCandidate[]>();
+  const rankByDate = new Map<
+    string,
+    { organic_rank: number | null; sponsored_rank: number | null }
+  >();
 
   for (const date of dates) {
     byDate.set(date, {
@@ -535,11 +555,21 @@ export const buildTargetTrendData = (params: {
     stirByDate.set(date, existing);
   }
 
+  for (const row of params.rankRows ?? []) {
+    const date = trimString(row.observed_date);
+    if (!date || !byDate.has(date) || rankByDate.has(date)) continue;
+    rankByDate.set(date, {
+      organic_rank: toFiniteNumberOrNull(row.organic_rank_value),
+      sponsored_rank: toFiniteNumberOrNull(row.sponsored_pos_value),
+    });
+  }
+
   const valuesByDate = new Map<string, Record<SpTrendMetricKey, number | null>>();
   for (const date of dates) {
     const daily = byDate.get(date)!;
     const stir =
       [...(stirByDate.get(date) ?? [])].sort(compareTargetStirCandidate)[0]?.stir ?? null;
+    const rank = rankByDate.get(date) ?? null;
     valuesByDate.set(date, {
       spend: daily.has_row ? daily.spend : 0,
       sales: daily.has_row ? daily.sales : 0,
@@ -549,6 +579,8 @@ export const buildTargetTrendData = (params: {
       roas: daily.has_row ? safeDivide(daily.sales, daily.spend) : 0,
       ctr: daily.has_row ? safeDivide(daily.clicks, daily.impressions) : 0,
       cpc: daily.has_row ? safeDivide(daily.spend, daily.clicks) : 0,
+      organic_rank: rank?.organic_rank ?? null,
+      sponsored_rank: rank?.sponsored_rank ?? null,
       stis: daily.stis,
       stir,
       tos_is: null,
@@ -567,6 +599,12 @@ export const buildTargetTrendData = (params: {
       markersByDate: params.markersByDate,
       valuesByDate,
       supportNotes: {
+        organic_rank:
+          params.rankSupportNote ??
+          'Rank is contextual visibility data for the selected ASIN and exact keyword, not a target-owned performance fact.',
+        sponsored_rank:
+          params.rankSupportNote ??
+          'Rank is contextual visibility data for the selected ASIN and exact keyword, not a target-owned performance fact.',
         tos_is:
           'TOS IS stays null-safe in Targets trend. Campaign placement diagnostics are not flattened into target-owned facts.',
       },

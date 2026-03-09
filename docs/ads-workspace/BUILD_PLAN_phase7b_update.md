@@ -601,25 +601,28 @@ Make currently staged SP draft edits visually obvious in the workspace so operat
 Add rank context to Targets in a way that is explicit about scope and coverage.
 
 #### Tasks
-- [ ] Add **Rank context** cell/column to Targets.
-- [ ] Show Organic rank on top (bold) and Sponsored rank below in the same cell.
-- [ ] Gate rank context to trustworthy coverage only, such as:
-  - [ ] single-ASIN context
+- [x] Add **Rank context** cell/column to Targets.
+- [x] Show Organic rank on top (bold) and Sponsored rank below in the same cell.
+- [x] In Targets Trend view, show **Organic Rank** and **Sponsored Rank** as separate KPI rows.
+- [x] Keep Targets Trend rank rows null-safe under the same trustworthy-coverage rules.
+- [x] Gate rank context to trustworthy coverage only, such as:
+  - [x] single-ASIN context
   - [ ] or another deterministic rank-context mapping with explicit rules
-- [ ] Keep null-safe display when rank context is not trustworthy.
-- [ ] If useful, expose supporting coverage note / tooltip that rank is contextual, not target-owned ad-performance fact.
+- [x] Keep null-safe display when rank context is not trustworthy.
+- [x] If useful, expose supporting coverage note / tooltip that rank is contextual, not target-owned ad-performance fact.
 
 #### Rules
 - Rank context must not be mislabeled as a target-owned performance metric.
 - Do not backfill/invent rank for ambiguous ASIN coverage.
 
 #### Acceptance
-- [ ] Rank context is visible where trustworthy.
-- [ ] Organic and Sponsored ranks are readable in one cell.
-- [ ] Ambiguous coverage stays null-safe with explicit explanation.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] Rank context is visible where trustworthy.
+- [x] Organic and Sponsored ranks are readable in one cell.
+- [x] Targets Trend shows Organic Rank and Sponsored Rank as separate diagnostic rows.
+- [x] Ambiguous coverage stays null-safe with explicit explanation.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 

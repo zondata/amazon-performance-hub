@@ -268,4 +268,128 @@ describe('buildSpTargetsWorkspaceModel', () => {
     expect(model.rows[0]?.search_terms[1]?.units).toBe(0);
     expect(model.totals.units).toBeNull();
   });
+
+  it('shows single-ASIN rank context when exact keyword mapping is available', () => {
+    const model = buildSpTargetsWorkspaceModel({
+      targetRows: [
+        {
+          date: '2026-03-03',
+          exported_at: '2026-03-04T00:00:00.000Z',
+          target_id: 't3',
+          campaign_id: 'c3',
+          ad_group_id: 'ag3',
+          portfolio_name_raw: 'Portfolio C',
+          campaign_name_raw: 'Campaign C',
+          ad_group_name_raw: 'Ad Group C',
+          targeting_raw: 'Blue Shoes',
+          targeting_norm: 'blue shoes',
+          match_type_norm: 'EXACT',
+          impressions: 20,
+          clicks: 2,
+          spend: 4,
+          sales: 12,
+          orders: 1,
+          units: 1,
+          top_of_search_impression_share: null,
+        },
+      ],
+      searchTermRows: [],
+      placementRows: [],
+      rankContextTrustworthy: true,
+      rankContextByKeywordNorm: new Map([
+        [
+          'blue shoes',
+          {
+            organic_rank: 6,
+            sponsored_rank: 2,
+            observed_date: '2026-03-04',
+          },
+        ],
+      ]),
+    });
+
+    expect(model.rows[0]?.rank_context).toEqual({
+      organic_rank: 6,
+      sponsored_rank: 2,
+      observed_date: '2026-03-04',
+    });
+    expect(model.rows[0]?.rank_context_note).toBeNull();
+  });
+
+  it('stays null-safe when rank context is not trustworthy even if rank rows exist', () => {
+    const model = buildSpTargetsWorkspaceModel({
+      targetRows: [
+        {
+          date: '2026-03-03',
+          exported_at: '2026-03-04T00:00:00.000Z',
+          target_id: 't4',
+          campaign_id: 'c4',
+          ad_group_id: 'ag4',
+          portfolio_name_raw: 'Portfolio D',
+          campaign_name_raw: 'Campaign D',
+          ad_group_name_raw: 'Ad Group D',
+          targeting_raw: 'Red Boots',
+          targeting_norm: 'red boots',
+          match_type_norm: 'PHRASE',
+          impressions: 20,
+          clicks: 2,
+          spend: 4,
+          sales: 12,
+          orders: 1,
+          units: 1,
+          top_of_search_impression_share: null,
+        },
+      ],
+      searchTermRows: [],
+      placementRows: [],
+      rankContextTrustworthy: false,
+      rankContextByKeywordNorm: new Map([
+        [
+          'red boots',
+          {
+            organic_rank: 12,
+            sponsored_rank: 7,
+            observed_date: '2026-03-04',
+          },
+        ],
+      ]),
+    });
+
+    expect(model.rows[0]?.rank_context).toBeNull();
+    expect(model.rows[0]?.rank_context_note).toBe('single-ASIN only');
+  });
+
+  it('stays null-safe when no rank snapshot exists for the exact keyword', () => {
+    const model = buildSpTargetsWorkspaceModel({
+      targetRows: [
+        {
+          date: '2026-03-03',
+          exported_at: '2026-03-04T00:00:00.000Z',
+          target_id: 't5',
+          campaign_id: 'c5',
+          ad_group_id: 'ag5',
+          portfolio_name_raw: 'Portfolio E',
+          campaign_name_raw: 'Campaign E',
+          ad_group_name_raw: 'Ad Group E',
+          targeting_raw: 'Green Sandals',
+          targeting_norm: 'green sandals',
+          match_type_norm: 'BROAD',
+          impressions: 20,
+          clicks: 2,
+          spend: 4,
+          sales: 12,
+          orders: 1,
+          units: 1,
+          top_of_search_impression_share: null,
+        },
+      ],
+      searchTermRows: [],
+      placementRows: [],
+      rankContextTrustworthy: true,
+      rankContextByKeywordNorm: new Map(),
+    });
+
+    expect(model.rows[0]?.rank_context).toBeNull();
+    expect(model.rows[0]?.rank_context_note).toBe('no rank snapshot');
+  });
 });
