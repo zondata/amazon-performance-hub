@@ -60,6 +60,58 @@ const SummaryCard = (props: { label: string; value: string; detail?: string }) =
   </div>
 );
 
+const getCoverageItems = (row: AdsOptimizerTargetProfileSnapshotView) => [
+  { label: 'TOS', status: row.coverage.statuses.tosIs },
+  { label: 'STIS', status: row.coverage.statuses.stis },
+  { label: 'STIR', status: row.coverage.statuses.stir },
+  { label: 'Place', status: row.coverage.statuses.placementContext },
+  { label: 'Terms', status: row.coverage.statuses.searchTerms },
+  { label: 'BE', status: row.coverage.statuses.breakEvenInputs },
+] as const;
+
+const getCoverageSummary = (row: AdsOptimizerTargetProfileSnapshotView) => {
+  const counts = { ready: 0, missing: 0, partial: 0 };
+
+  for (const item of getCoverageItems(row)) {
+    counts[item.status] += 1;
+  }
+
+  return counts;
+};
+
+const coverageSummaryTextClass = (status: 'ready' | 'partial' | 'missing', count: number) => {
+  if (count <= 0) return 'text-muted';
+  if (status === 'ready') return 'text-emerald-700';
+  if (status === 'partial') return 'text-amber-700';
+  return 'text-rose-700';
+};
+
+const CoverageDetailsToggle = (props: {
+  items: ReadonlyArray<{ label: string; status: 'ready' | 'partial' | 'missing' }>;
+  notes: string[];
+  daysObserved: number;
+  targetSnapshotId: string;
+}) => (
+  <details className="inline text-xs text-muted">
+    <summary className="inline cursor-pointer font-semibold text-primary">
+      View coverage
+    </summary>
+    <div className="mt-2 rounded-lg border border-border bg-surface-2 p-3">
+      <div>Observed {formatNumber(props.daysObserved)} day(s)</div>
+      <div className="mt-2 flex max-w-[280px] flex-wrap gap-1.5">
+        {props.items.map((item) => (
+          <CoverageBadge key={`${props.targetSnapshotId}:${item.label}`} label={item.label} status={item.status} />
+        ))}
+      </div>
+      <div className="mt-2 space-y-1">
+        {props.notes.map((note) => (
+          <div key={`${props.targetSnapshotId}:${note}`}>{note}</div>
+        ))}
+      </div>
+    </div>
+  </details>
+);
+
 export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps) {
   if (props.asin === 'all') {
     return (
@@ -296,28 +348,38 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                           : row.derived.organicLeverageProxy.toFixed(3)}
                       </td>
                       <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-2">
-                          <CoverageBadge label="TOS" status={row.coverage.statuses.tosIs} />
-                          <CoverageBadge label="STIS" status={row.coverage.statuses.stis} />
-                          <CoverageBadge label="STIR" status={row.coverage.statuses.stir} />
-                          <CoverageBadge
-                            label="Place"
-                            status={row.coverage.statuses.placementContext}
-                          />
-                          <CoverageBadge label="Terms" status={row.coverage.statuses.searchTerms} />
-                          <CoverageBadge
-                            label="BE"
-                            status={row.coverage.statuses.breakEvenInputs}
-                          />
+                        {(() => {
+                          const coverageSummary = getCoverageSummary(row);
+
+                          return (
+                        <div className="text-xs text-muted">
+                              <span
+                                className={`font-medium ${coverageSummaryTextClass('ready', coverageSummary.ready)}`}
+                              >
+                                Ready {coverageSummary.ready}
+                              </span>{' '}
+                              ·{' '}
+                              <span
+                                className={`font-medium ${coverageSummaryTextClass('missing', coverageSummary.missing)}`}
+                              >
+                                Missing {coverageSummary.missing}
+                              </span>{' '}
+                              ·{' '}
+                              <span
+                                className={`font-medium ${coverageSummaryTextClass('partial', coverageSummary.partial)}`}
+                              >
+                                Partial {coverageSummary.partial}
+                              </span>{' '}
+                              ·{' '}
+                              <CoverageDetailsToggle
+                                items={getCoverageItems(row)}
+                                notes={row.coverage.notes}
+                                daysObserved={row.coverage.daysObserved}
+                                targetSnapshotId={row.targetSnapshotId}
+                              />
                         </div>
-                        <div className="mt-2 text-xs text-muted">
-                          Observed {formatNumber(row.coverage.daysObserved)} day(s)
-                        </div>
-                        <div className="mt-2 space-y-1 text-xs text-muted">
-                          {row.coverage.notes.slice(0, 3).map((note) => (
-                            <div key={`${row.targetSnapshotId}:${note}`}>{note}</div>
-                          ))}
-                        </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))}

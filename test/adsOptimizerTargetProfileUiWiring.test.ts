@@ -29,6 +29,11 @@ describe('ads optimizer phase 5 target profile wiring', () => {
     expect(source).toContain('No state engine, role engine, recommendation logic, or execution handoff');
     expect(source).toContain('No captured target profiles exist for this ASIN/date range yet.');
     expect(source).toContain('Coverage gaps stay explicit instead of being guessed.');
+    expect(source).toContain('View coverage');
+    expect(source).toContain('CoverageDetailsToggle');
+    expect(source).toContain("coverageSummaryTextClass('ready', coverageSummary.ready)");
+    expect(source).toContain("coverageSummaryTextClass('missing', coverageSummary.missing)");
+    expect(source).toContain("coverageSummaryTextClass('partial', coverageSummary.partial)");
   });
 
   it('pulls exact-window run snapshots instead of inventing live optimizer output', () => {
