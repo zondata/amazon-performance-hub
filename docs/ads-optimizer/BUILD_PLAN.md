@@ -160,45 +160,45 @@ Create the persistent, versioned settings backbone for the optimizer.
 Compute product-level optimizer inputs without touching current product profile behavior.
 
 ### Tasks
-- [ ] Build product-level metrics loader using existing facts tables/views.
-- [ ] Compute product-level raw metrics:
-  - [ ] sales
-  - [ ] orders
-  - [ ] units
-  - [ ] ad spend
-  - [ ] ad sales
-  - [ ] TACOS
-  - [ ] average price
-  - [ ] cost coverage
-  - [ ] break-even ACoS
-  - [ ] contribution before ads per unit
-  - [ ] contribution after ads
-- [ ] Compute product-level visibility inputs:
-  - [ ] organic rank coverage where available
-  - [ ] hero-query rank trend where available
-  - [ ] SQP demand coverage where available
-- [ ] Implement product state classification:
-  - [ ] structurally weak
-  - [ ] loss
-  - [ ] break even
-  - [ ] profitable
-- [ ] Implement product objective recommendation:
-  - [ ] recover
-  - [ ] break even
-  - [ ] harvest profit
-  - [ ] scale profit
-  - [ ] rank growth
-  - [ ] rank defense
-- [ ] Add product command-center overview UI for the selected ASIN.
-- [ ] Add safe coverage notes when required inputs are missing.
+- [x] Build product-level metrics loader using existing facts tables/views.
+- [x] Compute product-level raw metrics:
+  - [x] sales
+  - [x] orders
+  - [x] units
+  - [x] ad spend
+  - [x] ad sales
+  - [x] TACOS
+  - [x] average price
+  - [x] cost coverage
+  - [x] break-even ACoS
+  - [x] contribution before ads per unit
+  - [x] contribution after ads
+- [x] Compute product-level visibility inputs:
+  - [x] organic rank coverage where available
+  - [x] hero-query rank trend where available
+  - [x] SQP demand coverage where available
+- [x] Implement product state classification:
+  - [x] structurally weak
+  - [x] loss
+  - [x] break even
+  - [x] profitable
+- [x] Implement product objective recommendation:
+  - [x] recover
+  - [x] break even
+  - [x] harvest profit
+  - [x] scale profit
+  - [x] rank growth
+  - [x] rank defense
+- [x] Add product command-center overview UI for the selected ASIN.
+- [x] Add safe coverage notes when required inputs are missing.
 
 ### Phase 3 acceptance
-- [ ] A selected ASIN shows product state + recommended objective.
-- [ ] Missing economics or rank inputs are clearly surfaced, not silently guessed.
-- [ ] No current product overview editor behavior is broken.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] A selected ASIN shows product state + recommended objective.
+- [x] Missing economics or rank inputs are clearly surfaced, not silently guessed.
+- [x] No current product overview editor behavior is broken.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 

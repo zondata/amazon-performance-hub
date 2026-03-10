@@ -1,12 +1,14 @@
 import { notFound } from 'next/navigation';
 
 import OptimizerConfigManager from '@/components/ads-optimizer/OptimizerConfigManager';
+import OptimizerOverviewPanel from '@/components/ads-optimizer/OptimizerOverviewPanel';
 import Tabs from '@/components/Tabs';
 import {
   activateAdsOptimizerRulePackVersionAction,
   createAdsOptimizerDraftVersionAction,
 } from '@/app/ads/optimizer/actions';
 import { isAdsOptimizerEnabled } from '@/lib/ads-optimizer/featureFlag';
+import { getAdsOptimizerOverviewData } from '@/lib/ads-optimizer/overview';
 import { getAdsOptimizerConfigViewData } from '@/lib/ads-optimizer/repoConfig';
 import {
   ADS_OPTIMIZER_VIEWS,
@@ -50,10 +52,10 @@ const EMPTY_STATE_COPY: Record<
   }
 > = {
   overview: {
-    eyebrow: 'Overview placeholder',
-    title: 'No optimizer overview is available yet.',
+    eyebrow: 'Overview scope',
+    title: 'Select one ASIN to load the product command-center.',
     body:
-      'Phase 1 only ships the shell. Product command-center metrics, objective classification, and recommendation summaries arrive in later phases.',
+      'Current Build Plan Phase 3 is product-scoped. Select one ASIN above to compute product inputs, state classification, and objective guidance.',
   },
   targets: {
     eyebrow: 'Targets placeholder',
@@ -123,6 +125,16 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
   }));
   const emptyState = EMPTY_STATE_COPY[view];
   const returnTo = buildOptimizerHref({ start, end, asin, view });
+  const overviewData =
+    view === 'overview' && asin !== 'all'
+      ? await getAdsOptimizerOverviewData({
+          accountId: env.accountId,
+          marketplace: env.marketplace,
+          asin,
+          start,
+          end,
+        })
+      : null;
   const configData = view === 'config' ? await getAdsOptimizerConfigViewData() : null;
 
   return (
@@ -223,12 +235,18 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
             </div>
           </div>
           <div className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted">
-            {view === 'config' ? 'Config foundation only' : 'Recommendation shell only'}
+            {view === 'config'
+              ? 'Config foundation only'
+              : view === 'overview'
+                ? 'Product inputs only'
+                : 'Recommendation shell only'}
           </div>
         </div>
       </section>
 
-      {view === 'config' ? (
+      {view === 'overview' ? (
+        <OptimizerOverviewPanel asin={asin} start={start} end={end} data={overviewData} />
+      ) : view === 'config' ? (
         <OptimizerConfigManager
           returnTo={returnTo}
           rulePack={configData?.rulePack ?? null}
