@@ -1,0 +1,211 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+type RulePackRow = {
+  rule_pack_id: string;
+  account_id: string;
+  marketplace: string;
+  channel: 'sp';
+  scope_type: 'account' | 'product';
+  scope_value: string | null;
+  name: string;
+  description: string | null;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type RulePackVersionRow = {
+  rule_pack_version_id: string;
+  rule_pack_id: string;
+  version_label: string;
+  status: 'draft' | 'active' | 'archived';
+  change_summary: string;
+  change_payload_json: Record<string, unknown>;
+  created_from_version_id: string | null;
+  created_at: string;
+  activated_at: string | null;
+  archived_at: string | null;
+};
+
+const state = {
+  rulePacks: [] as RulePackRow[],
+  insertedVersions: [] as RulePackVersionRow[],
+  versionListResponses: [] as RulePackVersionRow[][],
+  versionListCallCount: 0,
+  idCounter: 1,
+};
+
+const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+const resetState = () => {
+  state.rulePacks = [];
+  state.insertedVersions = [];
+  state.versionListResponses = [];
+  state.versionListCallCount = 0;
+  state.idCounter = 1;
+};
+
+const nextId = () => `version-${state.idCounter++}`;
+
+const resolveVersionList = () => {
+  const response = state.versionListResponses[state.versionListCallCount];
+  state.versionListCallCount += 1;
+  if (response) {
+    return clone(response);
+  }
+  return clone(state.insertedVersions);
+};
+
+const createQuery = (table: string) => {
+  const filters: Array<{ type: 'eq' | 'is' | 'neq'; column: string; value: unknown }> = [];
+  let pendingInsert: Record<string, unknown> | null = null;
+  let shouldSelectAfterMutate = false;
+
+  const matchesFilters = (row: Record<string, unknown>) =>
+    filters.every((filter) => {
+      if (filter.type === 'eq') {
+        return row[filter.column] === filter.value;
+      }
+      if (filter.type === 'is') {
+        return row[filter.column] === filter.value;
+      }
+      return row[filter.column] !== filter.value;
+    });
+
+  const readRulePack = () => clone(state.rulePacks.find((row) => matchesFilters(row)) ?? null);
+
+  const readRulePackVersion = () => {
+    if (filters.some((filter) => filter.column === 'rule_pack_version_id')) {
+      return clone(state.insertedVersions.find((row) => matchesFilters(row)) ?? null);
+    }
+    return resolveVersionList().filter((row) => matchesFilters(row));
+  };
+
+  const query: any = {
+    select: () => {
+      shouldSelectAfterMutate = true;
+      return query;
+    },
+    eq: (column: string, value: unknown) => {
+      filters.push({ type: 'eq', column, value });
+      return query;
+    },
+    is: (column: string, value: unknown) => {
+      filters.push({ type: 'is', column, value });
+      return query;
+    },
+    neq: (column: string, value: unknown) => {
+      filters.push({ type: 'neq', column, value });
+      return query;
+    },
+    order: () => query,
+    insert: (value: Record<string, unknown>) => {
+      pendingInsert = value;
+      return query;
+    },
+    maybeSingle: async () => {
+      if (table === 'ads_optimizer_rule_packs') {
+        return { data: readRulePack(), error: null };
+      }
+      if (table === 'ads_optimizer_rule_pack_versions') {
+        const result = readRulePackVersion();
+        return {
+          data: Array.isArray(result) ? result[0] ?? null : result,
+          error: null,
+        };
+      }
+      throw new Error(`Unsupported maybeSingle table in test: ${table}`);
+    },
+    single: async () => {
+      if (!pendingInsert || !shouldSelectAfterMutate) {
+        throw new Error(`Unsupported single() usage in test for table: ${table}`);
+      }
+
+      if (table === 'ads_optimizer_rule_pack_versions') {
+        const inserted: RulePackVersionRow = {
+          rule_pack_version_id: nextId(),
+          rule_pack_id: String(pendingInsert.rule_pack_id),
+          version_label: String(pendingInsert.version_label),
+          status: pendingInsert.status as RulePackVersionRow['status'],
+          change_summary: String(pendingInsert.change_summary),
+          change_payload_json: clone(
+            (pendingInsert.change_payload_json ?? {}) as Record<string, unknown>
+          ),
+          created_from_version_id:
+            (pendingInsert.created_from_version_id as string | null | undefined) ?? null,
+          created_at: `2026-03-10T00:00:0${state.idCounter}Z`,
+          activated_at: (pendingInsert.activated_at as string | null | undefined) ?? null,
+          archived_at: (pendingInsert.archived_at as string | null | undefined) ?? null,
+        };
+        state.insertedVersions = [inserted, ...state.insertedVersions];
+        return { data: clone(inserted), error: null };
+      }
+
+      throw new Error(`Unsupported insert table in test: ${table}`);
+    },
+  };
+
+  query.then = (resolve: (value: { data: RulePackVersionRow[]; error: null }) => unknown) => {
+    if (table !== 'ads_optimizer_rule_pack_versions') {
+      throw new Error(`Unsupported list query table in test: ${table}`);
+    }
+    return Promise.resolve({
+      data: readRulePackVersion() as RulePackVersionRow[],
+      error: null,
+    }).then(resolve);
+  };
+
+  return query;
+};
+
+vi.mock('../apps/web/src/lib/env', () => ({
+  env: {
+    supabaseUrl: 'https://example.supabase.co',
+    supabaseServiceRoleKey: 'service-role-key',
+    accountId: 'acct',
+    marketplace: 'US',
+  },
+}));
+
+vi.mock('../apps/web/src/lib/supabaseAdmin', () => ({
+  supabaseAdmin: {
+    from: (table: string) => createQuery(table),
+  },
+}));
+
+import { getAdsOptimizerConfigViewData } from '../apps/web/src/lib/ads-optimizer/repoConfig';
+
+describe('ads optimizer config repo initialization', () => {
+  beforeEach(() => {
+    resetState();
+    state.rulePacks = [
+      {
+        rule_pack_id: 'pack-1',
+        account_id: 'acct',
+        marketplace: 'US',
+        channel: 'sp',
+        scope_type: 'account',
+        scope_value: null,
+        name: 'SP V1 Default Rule Pack',
+        description: 'Default config foundation.',
+        is_archived: false,
+        created_at: '2026-03-10T00:00:00Z',
+        updated_at: '2026-03-10T00:00:00Z',
+      },
+    ];
+  });
+
+  it('returns the created seed version immediately when repairing a pack-only foundation', async () => {
+    state.versionListResponses = [[], []];
+
+    const result = await getAdsOptimizerConfigViewData();
+
+    expect(result.seeded).toBe(true);
+    expect(result.seedMessage).toContain('Repaired the optimizer config foundation');
+    expect(result.rulePack.rule_pack_id).toBe('pack-1');
+    expect(result.versions).toHaveLength(1);
+    expect(result.versions[0]?.version_label).toBe('sp_v1_seed');
+    expect(result.versions[0]?.status).toBe('active');
+    expect(result.activeVersion?.rule_pack_version_id).toBe(result.versions[0]?.rule_pack_version_id);
+  });
+});

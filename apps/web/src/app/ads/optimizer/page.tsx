@@ -1,7 +1,13 @@
 import { notFound } from 'next/navigation';
 
+import OptimizerConfigManager from '@/components/ads-optimizer/OptimizerConfigManager';
 import Tabs from '@/components/Tabs';
+import {
+  activateAdsOptimizerRulePackVersionAction,
+  createAdsOptimizerDraftVersionAction,
+} from '@/app/ads/optimizer/actions';
 import { isAdsOptimizerEnabled } from '@/lib/ads-optimizer/featureFlag';
+import { getAdsOptimizerConfigViewData } from '@/lib/ads-optimizer/repoConfig';
 import {
   ADS_OPTIMIZER_VIEWS,
   normalizeAdsOptimizerView,
@@ -73,6 +79,11 @@ type AdsOptimizerPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
+const pickSearchParam = (value: string | string[] | undefined) => {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] ?? null : value;
+};
+
 export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPageProps) {
   if (!isAdsOptimizerEnabled()) {
     notFound();
@@ -101,6 +112,8 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
 
   const asin = paramValue('asin') ?? 'all';
   const view = normalizeAdsOptimizerView(paramValue('view'));
+  const notice = pickSearchParam(params?.notice);
+  const error = pickSearchParam(params?.error);
   const asinOptions = await fetchAsinOptions(env.accountId, env.marketplace);
   const selectedAsin = asinOptions.find((option) => option.asin === asin) ?? null;
   const viewTabs = ADS_OPTIMIZER_VIEWS.map((item) => ({
@@ -109,6 +122,8 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
     href: buildOptimizerHref({ start, end, asin, view: item.value }),
   }));
   const emptyState = EMPTY_STATE_COPY[view];
+  const returnTo = buildOptimizerHref({ start, end, asin, view });
+  const configData = view === 'config' ? await getAdsOptimizerConfigViewData() : null;
 
   return (
     <div className="space-y-8">
@@ -208,21 +223,36 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
             </div>
           </div>
           <div className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted">
-            Recommendation shell only
+            {view === 'config' ? 'Config foundation only' : 'Recommendation shell only'}
           </div>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-        <div className="text-xs uppercase tracking-[0.3em] text-muted">{emptyState.eyebrow}</div>
-        <div className="mt-2 text-lg font-semibold text-foreground">{emptyState.title}</div>
-        <div className="mt-2 max-w-3xl text-sm text-muted">{emptyState.body}</div>
-        <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
-          No optimizer tables or recommendation rows are queried in Phase 1. The selected view
-          remains interactive via URL state only so later loaders and engines can plug into this
-          shell without changing the route contract.
-        </div>
-      </section>
+      {view === 'config' ? (
+        <OptimizerConfigManager
+          returnTo={returnTo}
+          rulePack={configData?.rulePack ?? null}
+          activeVersion={configData?.activeVersion ?? null}
+          versions={configData?.versions ?? []}
+          seeded={configData?.seeded ?? false}
+          seedMessage={configData?.seedMessage ?? null}
+          notice={notice}
+          error={error}
+          createDraftAction={createAdsOptimizerDraftVersionAction}
+          activateVersionAction={activateAdsOptimizerRulePackVersionAction}
+        />
+      ) : (
+        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <div className="text-xs uppercase tracking-[0.3em] text-muted">{emptyState.eyebrow}</div>
+          <div className="mt-2 text-lg font-semibold text-foreground">{emptyState.title}</div>
+          <div className="mt-2 max-w-3xl text-sm text-muted">{emptyState.body}</div>
+          <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
+            No optimizer tables or recommendation rows are queried in this view yet. The selected
+            view remains interactive via URL state only so later loaders and engines can plug into
+            this shell without changing the route contract.
+          </div>
+        </section>
+      )}
     </div>
   );
 }

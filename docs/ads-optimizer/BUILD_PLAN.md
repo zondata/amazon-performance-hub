@@ -96,26 +96,26 @@ Add the new optimizer section without touching current behavior.
 Create the persistent, versioned settings backbone for the optimizer.
 
 ### Tasks
-- [ ] Add Supabase migration(s) for optimizer config tables.
-- [ ] Create `ads_optimizer_rule_packs`.
-- [ ] Create `ads_optimizer_rule_pack_versions`.
-- [ ] Create `ads_optimizer_product_settings`.
-- [ ] Create `ads_optimizer_manual_overrides`.
-- [ ] Add indexes for product, active-version, and date lookups.
-- [ ] Add TS types under `apps/web/src/lib/ads-optimizer`.
+- [x] Add Supabase migration(s) for optimizer config tables.
+- [x] Create `ads_optimizer_rule_packs`.
+- [x] Create `ads_optimizer_rule_pack_versions`.
+- [x] Create `ads_optimizer_product_settings`.
+- [x] Create `ads_optimizer_manual_overrides`.
+- [x] Add indexes for product, active-version, and date lookups.
+- [x] Add TS types under `apps/web/src/lib/ads-optimizer`.
 - [ ] Add repository helpers for:
-  - [ ] create/list/archive rule packs
-  - [ ] create/list/activate/archive rule pack versions
-  - [ ] assign rule pack version to product
-  - [ ] save product optimizer settings
-  - [ ] save manual strategic overrides
-- [ ] Seed one default rule pack version for SP V1.
-- [ ] Support version metadata:
-  - [ ] version label
-  - [ ] change summary
-  - [ ] created_from_version_id nullable
-  - [ ] activated_at
-  - [ ] archived_at nullable
+  - [x] create/list/archive rule packs
+  - [x] create/list/activate/archive rule pack versions
+  - [x] assign rule pack version to product
+  - [x] save product optimizer settings
+  - [x] save manual strategic overrides
+- [x] Seed one default rule pack version for SP V1.
+- [x] Support version metadata:
+  - [x] version label
+  - [x] change summary
+  - [x] created_from_version_id nullable
+  - [x] activated_at
+  - [x] archived_at nullable
 
 ### Required settings fields
 #### `ads_optimizer_product_settings`
@@ -144,13 +144,13 @@ Create the persistent, versioned settings backbone for the optimizer.
 - archived_at nullable
 
 ### Phase 2 acceptance
-- [ ] Config tables migrate cleanly.
-- [ ] One product can be assigned to one active rule pack version.
-- [ ] Rule pack versions are immutable after activation except for archive/activation metadata.
-- [ ] Rollback is possible by switching product assignment to an older version.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] Config tables migrate cleanly.
+- [x] One product can be assigned to one active rule pack version.
+- [x] Rule pack versions are immutable after activation except for archive/activation metadata.
+- [x] Rollback is possible by switching product assignment to an older version.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 
