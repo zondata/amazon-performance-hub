@@ -208,29 +208,29 @@ Compute product-level optimizer inputs without touching current product profile 
 Create auditable optimizer runs and persist product/target snapshots.
 
 ### Tasks
-- [ ] Add migration(s) for runtime tables.
-- [ ] Create `ads_optimizer_runs`.
-- [ ] Create `ads_optimizer_product_snapshot`.
-- [ ] Create `ads_optimizer_target_snapshot`.
-- [ ] Create `ads_optimizer_role_transition_log`.
-- [ ] Create `ads_optimizer_recommendation_snapshot`.
-- [ ] Create run status fields:
-  - [ ] `pending`
-  - [ ] `running`
-  - [ ] `completed`
-  - [ ] `failed`
-- [ ] Add a manual “Run optimizer now” action or CLI path for V1.
-- [ ] Snapshot the exact inputs used for each run.
-- [ ] Snapshot the exact outputs used for each target decision.
-- [ ] Prevent silent overwrite of prior runs.
+- [x] Add migration(s) for runtime tables.
+- [x] Create `ads_optimizer_runs`.
+- [x] Create `ads_optimizer_product_snapshot`.
+- [x] Create `ads_optimizer_target_snapshot`.
+- [x] Create `ads_optimizer_role_transition_log`.
+- [x] Create `ads_optimizer_recommendation_snapshot`.
+- [x] Create run status fields:
+  - [x] `pending`
+  - [x] `running`
+  - [x] `completed`
+  - [x] `failed`
+- [x] Add a manual “Run optimizer now” action or CLI path for V1.
+- [x] Snapshot the exact inputs used for each run.
+- [x] Snapshot the exact outputs used for each target decision.
+- [x] Prevent silent overwrite of prior runs.
 
 ### Phase 4 acceptance
-- [ ] A manual run can be created for one ASIN and date range.
-- [ ] A completed run stores product + target snapshots.
-- [ ] A failed run stores diagnostics instead of partial silent success.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] A manual run can be created for one ASIN and date range.
+- [x] A completed run stores product + target snapshots.
+- [x] A failed run stores diagnostics instead of partial silent success.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 

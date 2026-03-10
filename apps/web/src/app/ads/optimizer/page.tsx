@@ -1,15 +1,18 @@
 import { notFound } from 'next/navigation';
 
 import OptimizerConfigManager from '@/components/ads-optimizer/OptimizerConfigManager';
+import OptimizerHistoryPanel from '@/components/ads-optimizer/OptimizerHistoryPanel';
 import OptimizerOverviewPanel from '@/components/ads-optimizer/OptimizerOverviewPanel';
 import Tabs from '@/components/Tabs';
 import {
   activateAdsOptimizerRulePackVersionAction,
   createAdsOptimizerDraftVersionAction,
+  runAdsOptimizerNowAction,
 } from '@/app/ads/optimizer/actions';
 import { isAdsOptimizerEnabled } from '@/lib/ads-optimizer/featureFlag';
 import { getAdsOptimizerOverviewData } from '@/lib/ads-optimizer/overview';
 import { getAdsOptimizerConfigViewData } from '@/lib/ads-optimizer/repoConfig';
+import { getAdsOptimizerHistoryViewData } from '@/lib/ads-optimizer/runtime';
 import {
   ADS_OPTIMIZER_VIEWS,
   normalizeAdsOptimizerView,
@@ -136,6 +139,15 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
         })
       : null;
   const configData = view === 'config' ? await getAdsOptimizerConfigViewData() : null;
+  const historyData = view === 'history' ? await getAdsOptimizerHistoryViewData(asin) : null;
+  const phaseBadge =
+    view === 'config'
+      ? 'Config foundation only'
+      : view === 'overview'
+        ? 'Product inputs only'
+        : view === 'history'
+          ? 'Run + snapshot backbone'
+          : 'Recommendation shell only';
 
   return (
     <div className="space-y-8">
@@ -235,11 +247,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
             </div>
           </div>
           <div className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted">
-            {view === 'config'
-              ? 'Config foundation only'
-              : view === 'overview'
-                ? 'Product inputs only'
-                : 'Recommendation shell only'}
+            {phaseBadge}
           </div>
         </div>
       </section>
@@ -258,6 +266,18 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           error={error}
           createDraftAction={createAdsOptimizerDraftVersionAction}
           activateVersionAction={activateAdsOptimizerRulePackVersionAction}
+        />
+      ) : view === 'history' ? (
+        <OptimizerHistoryPanel
+          asin={asin}
+          start={start}
+          end={end}
+          returnTo={returnTo}
+          activeVersionLabel={historyData?.activeVersionLabel ?? '—'}
+          runs={historyData?.runs ?? []}
+          notice={notice}
+          error={error}
+          runNowAction={runAdsOptimizerNowAction}
         />
       ) : (
         <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">

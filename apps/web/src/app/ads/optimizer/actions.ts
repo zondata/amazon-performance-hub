@@ -8,6 +8,7 @@ import {
   activateRulePackVersion,
   createRulePackVersionDraft,
 } from '@/lib/ads-optimizer/repoConfig';
+import { executeAdsOptimizerManualRun } from '@/lib/ads-optimizer/runtime';
 
 const trimToNull = (value: FormDataEntryValue | null): string | null => {
   if (typeof value !== 'string') return null;
@@ -15,9 +16,9 @@ const trimToNull = (value: FormDataEntryValue | null): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-const ensureReturnTo = (value: string | null) => {
+const ensureReturnTo = (value: string | null, fallback = '/ads/optimizer?view=config') => {
   if (!value || !value.startsWith('/ads/optimizer')) {
-    return '/ads/optimizer?view=config';
+    return fallback;
   }
   return value;
 };
@@ -98,6 +99,51 @@ export async function activateAdsOptimizerRulePackVersionAction(formData: FormDa
     rethrowRedirectError(error);
     redirectWithFlash(returnTo, {
       error: error instanceof Error ? error.message : 'Failed to activate optimizer rule pack version.',
+    });
+  }
+}
+
+export async function runAdsOptimizerNowAction(formData: FormData) {
+  const returnTo = ensureReturnTo(
+    trimToNull(formData.get('return_to')),
+    '/ads/optimizer?view=history'
+  );
+
+  try {
+    const asin = trimToNull(formData.get('asin'));
+    const start = trimToNull(formData.get('start'));
+    const end = trimToNull(formData.get('end'));
+
+    if (!asin || !start || !end) {
+      throw new Error('asin, start, and end are required.');
+    }
+
+    const result = await executeAdsOptimizerManualRun({
+      asin,
+      start,
+      end,
+    });
+
+    revalidatePath('/ads/optimizer');
+    if (result.status === 'failed') {
+      redirectWithFlash(returnTo, {
+        error: `Optimizer run ${result.runId} failed. Diagnostics were saved to history.`,
+      });
+    }
+
+    if (result.diagnostics && result.targetSnapshotCount === 0) {
+      redirectWithFlash(returnTo, {
+        notice: `Optimizer run ${result.runId} completed with 0 target snapshot(s). Diagnostics were saved to history.`,
+      });
+    }
+
+    redirectWithFlash(returnTo, {
+      notice: `Optimizer run ${result.runId} completed with ${result.targetSnapshotCount} target snapshot(s).`,
+    });
+  } catch (error) {
+    rethrowRedirectError(error);
+    redirectWithFlash(returnTo, {
+      error: error instanceof Error ? error.message : 'Failed to run the optimizer snapshot.',
     });
   }
 }
