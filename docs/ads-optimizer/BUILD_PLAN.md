@@ -319,46 +319,46 @@ Classify targets before role assignment.
 Resolve desired/current role and the allowed action envelope.
 
 ### Tasks
-- [ ] Implement desired roles:
-  - [ ] Discover
-  - [ ] Harvest
-  - [ ] Scale
-  - [ ] Rank Push
-  - [ ] Rank Defend
-  - [ ] Suppress
-- [ ] Implement current-role resolution from:
-  - [ ] previous role
-  - [ ] desired role
-  - [ ] current data
-  - [ ] transition rules
-- [ ] Implement dynamic guardrail categories:
-  - [ ] no-sale spend cap
-  - [ ] no-sale click cap
-  - [ ] max loss per cycle
-  - [ ] max bid increase per cycle
-  - [ ] max bid decrease per cycle
-  - [ ] max placement bias increase per cycle
-  - [ ] rank-push time limit
-  - [ ] manual approval threshold
-  - [ ] auto-pause threshold
-  - [ ] min bid floor / max bid ceiling
-- [ ] Resolve guardrails from:
-  - [ ] rule pack version
-  - [ ] product objective
-  - [ ] role
-  - [ ] archetype
-  - [ ] confidence
-  - [ ] importance
-  - [ ] product overrides
-- [ ] Log role transitions with reason codes.
+- [x] Implement desired roles:
+  - [x] Discover
+  - [x] Harvest
+  - [x] Scale
+  - [x] Rank Push
+  - [x] Rank Defend
+  - [x] Suppress
+- [x] Implement current-role resolution from:
+  - [x] previous role
+  - [x] desired role
+  - [x] current data
+  - [x] transition rules
+- [x] Implement dynamic guardrail categories:
+  - [x] no-sale spend cap
+  - [x] no-sale click cap
+  - [x] max loss per cycle
+  - [x] max bid increase per cycle
+  - [x] max bid decrease per cycle
+  - [x] max placement bias increase per cycle
+  - [x] rank-push time limit
+  - [x] manual approval threshold
+  - [x] auto-pause threshold
+  - [x] min bid floor / max bid ceiling
+- [x] Resolve guardrails from:
+  - [x] rule pack version
+  - [x] product objective
+  - [x] role
+  - [x] archetype
+  - [x] confidence
+  - [x] importance
+  - [x] product overrides
+- [x] Log role transitions with reason codes.
 
 ### Phase 7 acceptance
-- [ ] Targets receive desired role + current role + resolved guardrails.
-- [ ] Role changes change operating mode, not only labels.
-- [ ] Transition reasons are saved.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] Targets receive desired role + current role + resolved guardrails.
+- [x] Role changes change operating mode, not only labels.
+- [x] Transition reasons are saved.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 

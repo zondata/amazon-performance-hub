@@ -67,9 +67,9 @@ const EMPTY_STATE_COPY: Record<
   },
   targets: {
     eyebrow: 'Targets scope',
-    title: 'Select one ASIN and capture a run to review target states.',
+    title: 'Select one ASIN and capture a run to review target roles.',
     body:
-      'Phase 6 renders persisted target profile + state rows from the matching manual run. Role-engine and recommendation logic remain out of scope here.',
+      'Phase 7 renders persisted target profile, state, role, and guardrail-ready rows from the matching manual run. Recommendation logic remains out of scope here.',
   },
   config: {
     eyebrow: 'Config placeholder',
@@ -159,7 +159,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
       : view === 'overview'
         ? 'Product inputs only'
         : view === 'targets'
-          ? 'State engine'
+          ? 'Role + guardrails'
         : view === 'history'
           ? 'Run + snapshot backbone'
           : 'Recommendation shell only';

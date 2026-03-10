@@ -391,6 +391,55 @@ describe('ads optimizer phase 5 target profile engine', () => {
           },
           reason_codes: ['EFFICIENCY_POSITIVE_CONTRIBUTION_AFTER_ADS', 'IMPORTANCE_DOMINANT_SPEND_SHARE'],
         },
+        role_engine: {
+          engine_version: 'phase7_v1',
+          coverage_status: 'ready',
+          previous_role: 'Harvest',
+          desired_role: {
+            value: 'Scale',
+            label: 'Scale',
+            detail: 'Scale role',
+            coverage_status: 'ready',
+            reason_codes: ['ROLE_DESIRED_PROFIT_SCALE'],
+          },
+          current_role: {
+            value: 'Scale',
+            label: 'Scale',
+            detail: 'Scale now',
+            coverage_status: 'ready',
+            reason_codes: ['CURRENT_ROLE_TRANSITION_APPLIED'],
+          },
+          transition: {
+            rule: 'apply_desired_transition',
+            reason_codes: ['CURRENT_ROLE_TRANSITION_APPLIED'],
+          },
+          guardrails: {
+            coverage_status: 'ready',
+            categories: {
+              no_sale_spend_cap: 20,
+              no_sale_click_cap: 12,
+              max_loss_per_cycle: 25,
+              max_bid_increase_per_cycle_pct: 9,
+              max_bid_decrease_per_cycle_pct: 18,
+              max_placement_bias_increase_per_cycle_pct: 8,
+              rank_push_time_limit_days: 14,
+              manual_approval_threshold: 'medium',
+              auto_pause_threshold: 40,
+              min_bid_floor: 0.2,
+              max_bid_ceiling: 3,
+            },
+            flags: {
+              requires_manual_approval: true,
+              auto_pause_eligible: false,
+              bid_changes_allowed: true,
+              placement_changes_allowed: true,
+              transition_locked: false,
+            },
+            reason_codes: ['GUARDRAIL_ROLE_SCALE'],
+            notes: ['Coverage explicit'],
+          },
+          reason_codes: ['ROLE_DESIRED_PROFIT_SCALE', 'CURRENT_ROLE_TRANSITION_APPLIED'],
+        },
       },
     });
 
@@ -403,6 +452,9 @@ describe('ads optimizer phase 5 target profile engine', () => {
     expect(row.state.confidence.value).toBe('confirmed');
     expect(row.state.importance.value).toBe('tier_1_dominant');
     expect(row.state.opportunityScore).toBe(82);
+    expect(row.role.previousRole).toBe('Harvest');
+    expect(row.role.currentRole.value).toBe('Scale');
+    expect(row.role.guardrails.categories.maxBidIncreasePerCyclePct).toBe(9);
   });
 
   it('does not collapse multiple unresolved target identities into one row', async () => {

@@ -5,6 +5,8 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 import { ensureDefaultRulePackVersion } from './repoConfig';
 import type {
+  AdsOptimizerRoleTransitionLog,
+  AdsOptimizerRoleTransitionLogRow,
   AdsOptimizerProductSnapshot,
   AdsOptimizerProductSnapshotRow,
   AdsOptimizerRecommendationSnapshot,
@@ -14,9 +16,11 @@ import type {
   AdsOptimizerRunStatus,
   AdsOptimizerTargetSnapshot,
   AdsOptimizerTargetSnapshotRow,
+  CreateAdsOptimizerRoleTransitionLogPayload,
   JsonObject,
 } from './runtimeTypes';
 import {
+  mapAdsOptimizerRoleTransitionLogRow,
   mapAdsOptimizerProductSnapshotRow,
   mapAdsOptimizerRecommendationSnapshotRow,
   mapAdsOptimizerRunRow,
@@ -85,6 +89,20 @@ const RECOMMENDATION_SNAPSHOT_SELECT = [
   'action_type',
   'reason_codes_json',
   'snapshot_payload_json',
+  'created_at',
+].join(',');
+
+const ROLE_TRANSITION_LOG_SELECT = [
+  'role_transition_log_id',
+  'run_id',
+  'target_snapshot_id',
+  'account_id',
+  'marketplace',
+  'asin',
+  'target_id',
+  'from_role',
+  'to_role',
+  'transition_reason_json',
   'created_at',
 ].join(',');
 
@@ -314,6 +332,37 @@ export const insertAdsOptimizerRecommendationSnapshots = async (
 
   return ((data ?? []) as unknown as AdsOptimizerRecommendationSnapshotRow[]).map(
     mapAdsOptimizerRecommendationSnapshotRow
+  );
+};
+
+export const insertAdsOptimizerRoleTransitionLogs = async (
+  rows: CreateAdsOptimizerRoleTransitionLogPayload[]
+): Promise<AdsOptimizerRoleTransitionLog[]> => {
+  if (rows.length === 0) return [];
+
+  const { data, error } = await supabaseAdmin
+    .from('ads_optimizer_role_transition_log')
+    .insert(
+      rows.map((row) => ({
+        run_id: row.runId,
+        target_snapshot_id: row.targetSnapshotId,
+        account_id: env.accountId,
+        marketplace: env.marketplace,
+        asin: row.asin,
+        target_id: row.targetId,
+        from_role: row.fromRole,
+        to_role: row.toRole,
+        transition_reason_json: row.transitionReason,
+      }))
+    )
+    .select(ROLE_TRANSITION_LOG_SELECT);
+
+  if (error) {
+    throw new Error(`Failed to insert optimizer role transition logs: ${error.message}`);
+  }
+
+  return ((data ?? []) as unknown as AdsOptimizerRoleTransitionLogRow[]).map(
+    mapAdsOptimizerRoleTransitionLogRow
   );
 };
 

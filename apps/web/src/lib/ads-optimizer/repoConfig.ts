@@ -499,6 +499,24 @@ export const saveProductOptimizerSettings = async (
   return mapAdsOptimizerProductSettingsRow(data as unknown as AdsOptimizerProductSettingsRow);
 };
 
+export const getProductOptimizerSettingsByProductId = async (
+  productId: string
+): Promise<AdsOptimizerProductSettings | null> => {
+  const { data, error } = await supabaseAdmin
+    .from('ads_optimizer_product_settings')
+    .select(PRODUCT_SETTINGS_SELECT)
+    .eq('account_id', env.accountId)
+    .eq('marketplace', env.marketplace)
+    .eq('product_id', productId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load optimizer product settings: ${error.message}`);
+  }
+
+  return data ? mapAdsOptimizerProductSettingsRow(data as unknown as AdsOptimizerProductSettingsRow) : null;
+};
+
 export const assignRulePackVersionToProduct = async (args: {
   productId: string;
   rulePackVersionId: string;

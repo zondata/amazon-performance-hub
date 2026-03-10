@@ -96,6 +96,16 @@ export type AdsOptimizerRoleTransitionLog = {
   created_at: string;
 };
 
+export type CreateAdsOptimizerRoleTransitionLogPayload = {
+  runId: string;
+  targetSnapshotId: string | null;
+  asin: string;
+  targetId: string | null;
+  fromRole: string | null;
+  toRole: string | null;
+  transitionReason: JsonObject | null;
+};
+
 export type AdsOptimizerRunRow = Omit<
   AdsOptimizerRun,
   'input_summary_json' | 'diagnostics_json'

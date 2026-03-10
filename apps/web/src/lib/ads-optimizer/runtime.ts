@@ -2,13 +2,21 @@ import 'server-only';
 
 import { env } from '@/lib/env';
 
+import { getProductOptimizerSettingsByProductId } from './repoConfig';
 import { getAdsOptimizerOverviewData, type AdsOptimizerOverviewData } from './overview';
+import {
+  buildAdsOptimizerRoleTransitionReason,
+  enrichAdsOptimizerTargetSnapshotRolePayload,
+  readAdsOptimizerTargetRunRole,
+  type AdsOptimizerTargetRole,
+} from './role';
 import {
   createAdsOptimizerRun,
   findOptimizerProductByAsin,
   getAdsOptimizerRuntimeContext,
   insertAdsOptimizerProductSnapshots,
   insertAdsOptimizerRecommendationSnapshots,
+  insertAdsOptimizerRoleTransitionLogs,
   insertAdsOptimizerTargetSnapshots,
   listAdsOptimizerProductSnapshotsByRun,
   listAdsOptimizerRuns,
@@ -89,6 +97,11 @@ type ExecuteManualRunDeps = {
   getRuntimeContext: typeof getAdsOptimizerRuntimeContext;
   createRun: typeof createAdsOptimizerRun;
   updateRun: typeof updateAdsOptimizerRun;
+  getProductSettings: typeof getProductOptimizerSettingsByProductId;
+  loadPreviousRoleMap: (args: {
+    asin: string;
+    currentRunId: string;
+  }) => Promise<Map<string, AdsOptimizerTargetRole>>;
   loadProductSnapshotInput: (args: {
     asin: string;
     start: string;
@@ -97,6 +110,7 @@ type ExecuteManualRunDeps = {
   loadTargetSnapshotInputs: (args: TargetSnapshotLoadArgs) => Promise<TargetSnapshotLoadResult>;
   insertProductSnapshots: typeof insertAdsOptimizerProductSnapshots;
   insertTargetSnapshots: typeof insertAdsOptimizerTargetSnapshots;
+  insertRoleTransitionLogs: typeof insertAdsOptimizerRoleTransitionLogs;
   insertRecommendationSnapshots: typeof insertAdsOptimizerRecommendationSnapshots;
 };
 
@@ -109,7 +123,7 @@ const normalizeManualRunInput = (input: CreateAdsOptimizerManualRunInput) => {
   const end = input.end.trim();
 
   if (!asin || asin === 'all') {
-    throw new Error('Manual optimizer runs require one selected ASIN in Phase 6.');
+    throw new Error('Manual optimizer runs require one selected ASIN in Phase 7.');
   }
   if (!DATE_RE.test(start) || !DATE_RE.test(end)) {
     throw new Error('start and end must be valid YYYY-MM-DD dates.');
@@ -200,15 +214,48 @@ const buildFailureDiagnostics = (stage: string, error: unknown): JsonObject => (
   recorded_at: new Date().toISOString(),
 });
 
+const loadPreviousRoleMap = async (args: {
+  asin: string;
+  currentRunId: string;
+}): Promise<Map<string, AdsOptimizerTargetRole>> => {
+  const runs = await listAdsOptimizerRuns({
+    asin: args.asin,
+    limit: 30,
+  });
+  const previousCompletedRun = runs.find(
+    (run) => run.run_id !== args.currentRunId && run.status === 'completed'
+  );
+
+  if (!previousCompletedRun) {
+    return new Map();
+  }
+
+  const snapshots = await listAdsOptimizerTargetSnapshotsByRun(previousCompletedRun.run_id);
+  const roles = new Map<string, AdsOptimizerTargetRole>();
+
+  for (const snapshot of snapshots) {
+    const role = readAdsOptimizerTargetRunRole(snapshot.snapshot_payload_json);
+    const currentRole = role?.currentRole.value ?? role?.desiredRole.value ?? null;
+    if (currentRole) {
+      roles.set(snapshot.target_id, currentRole);
+    }
+  }
+
+  return roles;
+};
+
 const defaultDeps: ExecuteManualRunDeps = {
   now: () => new Date().toISOString(),
   getRuntimeContext: getAdsOptimizerRuntimeContext,
   createRun: createAdsOptimizerRun,
   updateRun: updateAdsOptimizerRun,
+  getProductSettings: getProductOptimizerSettingsByProductId,
+  loadPreviousRoleMap,
   loadProductSnapshotInput,
   loadTargetSnapshotInputs,
   insertProductSnapshots: insertAdsOptimizerProductSnapshots,
   insertTargetSnapshots: insertAdsOptimizerTargetSnapshots,
+  insertRoleTransitionLogs: insertAdsOptimizerRoleTransitionLogs,
   insertRecommendationSnapshots: insertAdsOptimizerRecommendationSnapshots,
 };
 
@@ -225,7 +272,7 @@ export const executeAdsOptimizerManualRun = async (
     rulePackVersionId: runtimeContext.activeVersion.rule_pack_version_id,
     rulePackVersionLabel: runtimeContext.activeVersion.version_label,
     inputSummary: {
-      phase: 6,
+      phase: 7,
       requested_scope: {
         asin: args.asin,
         start: args.start,
@@ -242,6 +289,7 @@ export const executeAdsOptimizerManualRun = async (
         target_snapshot_source: TARGET_SOURCE_SCOPE,
         target_profile_engine: 'phase5_target_profile_engine',
         state_engine: 'phase6_state_engine',
+        role_engine: 'phase7_role_guardrail_engine',
         recommendation_snapshot_behavior:
           'Recommendation snapshots remain placeholders only. No recommendation engine is active yet.',
         execution_boundary: 'Existing Ads Workspace remains the execution path.',
@@ -258,9 +306,16 @@ export const executeAdsOptimizerManualRun = async (
 
   try {
     const productSnapshot = await deps.loadProductSnapshotInput(args);
+    const productSettings = productSnapshot.productId
+      ? await deps.getProductSettings(productSnapshot.productId)
+      : null;
     const productSnapshotPayload = enrichAdsOptimizerProductSnapshotPayload({
       payload: productSnapshot.snapshotPayload,
       overview: productSnapshot.overview,
+    });
+    const previousRoleMap = await deps.loadPreviousRoleMap({
+      asin: args.asin,
+      currentRunId: run.run_id,
     });
     const targetSnapshotLoad = await deps.loadTargetSnapshotInputs({
       ...args,
@@ -268,9 +323,15 @@ export const executeAdsOptimizerManualRun = async (
     });
     const targetSnapshotRows = targetSnapshotLoad.rows.map((row) => ({
       ...row,
-      snapshotPayload: enrichAdsOptimizerTargetSnapshotPayload({
-        payload: row.snapshotPayload,
+      snapshotPayload: enrichAdsOptimizerTargetSnapshotRolePayload({
+        payload: enrichAdsOptimizerTargetSnapshotPayload({
+          payload: row.snapshotPayload,
+          rulePackPayload: runtimeContext.activeVersion.change_payload_json,
+        }),
         rulePackPayload: runtimeContext.activeVersion.change_payload_json,
+        previousRole: previousRoleMap.get(row.targetId) ?? null,
+        archetype: productSettings?.archetype ?? null,
+        productOverrides: productSettings?.guardrail_overrides_json ?? null,
       }),
     }));
 
@@ -294,6 +355,36 @@ export const executeAdsOptimizerManualRun = async (
         coverageNote: row.coverageNote,
         snapshotPayload: row.snapshotPayload,
       }))
+    );
+
+    const insertedRoleTransitions = await deps.insertRoleTransitionLogs(
+      insertedTargetSnapshots.flatMap((snapshot, index) => {
+        const role = readAdsOptimizerTargetRunRole(targetSnapshotRows[index]?.snapshotPayload ?? {});
+        if (!role?.currentRole.value) {
+          return [];
+        }
+
+        const transitionReason = buildAdsOptimizerRoleTransitionReason({
+          role,
+          targetSnapshotId: snapshot.target_snapshot_id,
+          targetId: snapshot.target_id,
+        });
+        if (!transitionReason) {
+          return [];
+        }
+
+        return [
+          {
+            runId: run.run_id,
+            targetSnapshotId: snapshot.target_snapshot_id,
+            asin: snapshot.asin,
+            targetId: snapshot.target_id,
+            fromRole: role.previousRole,
+            toRole: role.currentRole.value,
+            transitionReason,
+          },
+        ];
+      })
     );
 
     const insertedRecommendationSnapshots = await deps.insertRecommendationSnapshots(
@@ -322,7 +413,7 @@ export const executeAdsOptimizerManualRun = async (
       productSnapshotCount: insertedProductSnapshots.length,
       targetSnapshotCount: insertedTargetSnapshots.length,
       recommendationSnapshotCount: insertedRecommendationSnapshots.length,
-      roleTransitionCount: 0,
+      roleTransitionCount: insertedRoleTransitions.length,
       completedAt: deps.now(),
     });
 

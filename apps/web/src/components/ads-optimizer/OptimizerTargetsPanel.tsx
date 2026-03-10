@@ -3,6 +3,7 @@
 import { Fragment, type ReactNode, useState } from 'react';
 import Link from 'next/link';
 
+import type { AdsOptimizerTargetRole } from '@/lib/ads-optimizer/role';
 import type { AdsOptimizerRun } from '@/lib/ads-optimizer/runtimeTypes';
 import type { AdsOptimizerProductRunState } from '@/lib/ads-optimizer/state';
 import type { AdsOptimizerTargetProfileSnapshotView } from '@/lib/ads-optimizer/targetProfile';
@@ -22,7 +23,7 @@ type OptimizerTargetsPanelProps = {
   rows: AdsOptimizerTargetProfileSnapshotView[];
 };
 
-const TARGET_TABLE_COL_COUNT = 30;
+const TARGET_TABLE_COL_COUNT = 32;
 
 const formatNumber = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return '—';
@@ -42,6 +43,14 @@ const formatPercent = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return '—';
   return `${(value * 100).toFixed(1)}%`;
 };
+
+const labelize = (value: string | null) =>
+  value
+    ? value
+        .split(/[_\s]+/)
+        .map((part) => (part ? part[0]!.toUpperCase() + part.slice(1) : part))
+        .join(' ')
+    : 'Not captured';
 
 const coverageBadgeClass = (status: 'ready' | 'partial' | 'missing') => {
   if (status === 'ready') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
@@ -123,6 +132,26 @@ const StatePill = (props: {
   <span
     className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap ${statePillClass(
       props.kind,
+      props.value
+    )}`}
+  >
+    {props.label}
+  </span>
+);
+
+const rolePillClass = (value: AdsOptimizerTargetRole | null) => {
+  if (value === 'Scale') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+  if (value === 'Harvest') return 'border-sky-200 bg-sky-50 text-sky-800';
+  if (value === 'Rank Push') return 'border-amber-200 bg-amber-50 text-amber-800';
+  if (value === 'Rank Defend') return 'border-violet-200 bg-violet-50 text-violet-800';
+  if (value === 'Suppress') return 'border-rose-200 bg-rose-50 text-rose-800';
+  if (value === 'Discover') return 'border-cyan-200 bg-cyan-50 text-cyan-800';
+  return 'border-border bg-surface-2 text-muted';
+};
+
+const RolePill = (props: { value: AdsOptimizerTargetRole | null; label: string }) => (
+  <span
+    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap ${rolePillClass(
       props.value
     )}`}
   >
@@ -231,8 +260,8 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           Select one ASIN to review target states.
         </div>
         <div className="mt-2 max-w-3xl text-sm text-muted">
-          Phase 6 state review is captured and audited per selected ASIN only. Pick one ASIN, then
-          run the optimizer from History to persist reviewable target state rows.
+          Phase 7 role review is captured and audited per selected ASIN only. Pick one ASIN, then
+          run the optimizer from History to persist reviewable target role rows.
         </div>
       </section>
     );
@@ -243,12 +272,12 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
       <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="text-xs uppercase tracking-[0.3em] text-muted">Targets run state</div>
         <div className="mt-2 text-lg font-semibold text-foreground">
-          No captured target states exist for this ASIN/date range yet.
+          No captured target roles exist for this ASIN/date range yet.
         </div>
         <div className="mt-2 max-w-3xl text-sm text-muted">
-          Phase 6 reads the latest completed optimizer run that exactly matches the current ASIN
-          and date range. Create a manual run first so the persisted target profile and state rows
-          can be reviewed here.
+          Phase 7 reads the latest completed optimizer run that exactly matches the current ASIN
+          and date range. Create a manual run first so the persisted target profile, state, role,
+          and guardrail rows can be reviewed here.
         </div>
         {props.latestCompletedRun ? (
           <div className="mt-4 rounded-xl border border-border bg-surface-2 px-4 py-4 text-sm text-muted">
@@ -280,12 +309,13 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">State engine</div>
             <div className="mt-2 text-lg font-semibold text-foreground">
-              Target profiles plus deterministic pre-role states
+              Target profiles plus deterministic role + guardrail outputs
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
-              Phase 6 reads the exact run’s target profiles and persists deterministic efficiency,
-              confidence, tier, opportunity, and risk states. No role engine, guardrail resolution,
-              recommendation logic, or execution handoff is active in this view.
+              Phase 7 reads the exact run’s target profiles and persists deterministic efficiency,
+              confidence, tier, opportunity, risk, desired role, current role, and resolved
+              guardrail envelopes. No recommendation logic or execution handoff is active in this
+              view.
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -297,7 +327,7 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-5">
+      <section className="grid gap-4 xl:grid-cols-6">
         <SummaryCard
           label="Captured run"
           value={formatUiDateRange(props.run.date_start, props.run.date_end)}
@@ -317,9 +347,14 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           }
         />
         <SummaryCard
-          label="Target state rows"
+          label="Target role rows"
           value={formatNumber(props.rows.length)}
           detail="Read-only rows persisted from the matching manual run."
+        />
+        <SummaryCard
+          label="Role transitions"
+          value={formatNumber(props.run.role_transition_count)}
+          detail="Append-only transition logs saved for this run."
         />
         <SummaryCard
           label="Coverage notes"
@@ -351,8 +386,8 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">Target rows</div>
             <div className="mt-2 text-sm text-muted">
-              Showing persisted Phase 6 profiles and states for {props.asin} from the exact run
-              window {formatUiDateRange(props.start, props.end)}.
+              Showing persisted Phase 7 profiles, states, roles, and guardrails for {props.asin}{' '}
+              from the exact run window {formatUiDateRange(props.start, props.end)}.
             </div>
           </div>
           <Link href={props.historyHref} className="text-sm font-semibold text-primary">
@@ -362,12 +397,12 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
 
         {props.rows.length === 0 ? (
           <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
-            The selected run exists, but no target state rows were returned from snapshot storage.
+            The selected run exists, but no target role rows were returned from snapshot storage.
           </div>
         ) : (
           <div className="mt-4 overflow-y-auto">
             <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
-              <table className="min-w-[2300px] table-auto border-collapse text-left text-sm">
+              <table className="min-w-[2520px] table-auto border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                     <th className="px-3 py-2">Target</th>
@@ -376,6 +411,8 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                     <th className="px-3 py-2">Efficiency</th>
                     <th className="px-3 py-2">Confidence</th>
                     <th className="px-3 py-2">Tier</th>
+                    <th className="px-3 py-2">Desired role</th>
+                    <th className="px-3 py-2">Current role</th>
                     <th className="px-3 py-2">Opportunity</th>
                     <th className="px-3 py-2">Risk</th>
                     <th className="px-3 py-2">Impr</th>
@@ -456,6 +493,18 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                             kind="importance"
                             value={row.state.importance.value}
                             label={row.state.importance.label}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <RolePill
+                            value={row.role.desiredRole.value}
+                            label={row.role.desiredRole.label}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <RolePill
+                            value={row.role.currentRole.value}
+                            label={row.role.currentRole.label}
                           />
                         </td>
                         <td className="px-3 py-3 text-foreground">
@@ -565,6 +614,14 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                                     </div>
                                   </div>
                                   <div className="flex flex-wrap gap-2">
+                                    <RolePill
+                                      value={row.role.currentRole.value}
+                                      label={`Current ${row.role.currentRole.label}`}
+                                    />
+                                    <RolePill
+                                      value={row.role.desiredRole.value}
+                                      label={`Desired ${row.role.desiredRole.label}`}
+                                    />
                                     <StatePill
                                       kind="efficiency"
                                       value={row.state.efficiency.value}
@@ -621,6 +678,48 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                                       </div>
                                     </div>
 
+                                    <div className="rounded-xl border border-border bg-surface-2 p-4">
+                                      <div className="text-xs uppercase tracking-wide text-muted">
+                                        Role resolution
+                                      </div>
+                                      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                                        <DetailSection label="Desired role" subtle>
+                                          <div className="space-y-3">
+                                            <RolePill
+                                              value={row.role.desiredRole.value}
+                                              label={row.role.desiredRole.label}
+                                            />
+                                            <div>{row.role.desiredRole.detail}</div>
+                                            <ReasonCodes codes={row.role.desiredRole.reasonCodes} />
+                                          </div>
+                                        </DetailSection>
+                                        <DetailSection label="Current role" subtle>
+                                          <div className="space-y-3">
+                                            <RolePill
+                                              value={row.role.currentRole.value}
+                                              label={row.role.currentRole.label}
+                                            />
+                                            <div>{row.role.currentRole.detail}</div>
+                                            <ReasonCodes codes={row.role.currentRole.reasonCodes} />
+                                          </div>
+                                        </DetailSection>
+                                        <DetailSection label="Transition" subtle>
+                                          <div className="space-y-3">
+                                            <div>
+                                              Previous role: {row.role.previousRole ?? 'None captured'}
+                                            </div>
+                                            <div>Transition rule: {labelize(row.role.transitionRule)}</div>
+                                            <ReasonCodes codes={row.role.transitionReasonCodes} />
+                                          </div>
+                                        </DetailSection>
+                                      </div>
+                                      <div className="mt-4 border-t border-border pt-4">
+                                        <DetailSection label="Role summary reason codes">
+                                          <ReasonCodes codes={row.role.summaryReasonCodes} />
+                                        </DetailSection>
+                                      </div>
+                                    </div>
+
                                     <div className="grid gap-4 xl:grid-cols-2">
                                       <DetailSection label="Demand proxies" subtle>
                                         Demand proxies: {formatNumber(row.demandProxies.searchTermCount)}{' '}
@@ -645,6 +744,115 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                                   </div>
 
                                   <div className="space-y-4">
+                                    <div className="rounded-xl border border-border bg-surface-2 p-4">
+                                      <div className="text-xs uppercase tracking-wide text-muted">
+                                        Guardrail-ready envelope
+                                      </div>
+                                      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                                        <DetailSection label="Control flags" subtle>
+                                          <div className="space-y-2">
+                                            <div>
+                                              Manual approval:{' '}
+                                              {row.role.guardrails.flags.requiresManualApproval
+                                                ? 'Required'
+                                                : 'Not required'}
+                                            </div>
+                                            <div>
+                                              Auto-pause eligible:{' '}
+                                              {row.role.guardrails.flags.autoPauseEligible
+                                                ? 'Yes'
+                                                : 'No'}
+                                            </div>
+                                            <div>
+                                              Bid changes allowed:{' '}
+                                              {row.role.guardrails.flags.bidChangesAllowed ? 'Yes' : 'No'}
+                                            </div>
+                                            <div>
+                                              Placement changes allowed:{' '}
+                                              {row.role.guardrails.flags.placementChangesAllowed
+                                                ? 'Yes'
+                                                : 'No'}
+                                            </div>
+                                            <div>
+                                              Transition locked:{' '}
+                                              {row.role.guardrails.flags.transitionLocked ? 'Yes' : 'No'}
+                                            </div>
+                                          </div>
+                                        </DetailSection>
+                                        <DetailSection label="Guardrail categories" subtle>
+                                          <div className="grid gap-2 sm:grid-cols-2">
+                                            <div>
+                                              No-sale spend cap:{' '}
+                                              {formatCurrency(row.role.guardrails.categories.noSaleSpendCap)}
+                                            </div>
+                                            <div>
+                                              No-sale click cap:{' '}
+                                              {formatNumber(row.role.guardrails.categories.noSaleClickCap)}
+                                            </div>
+                                            <div>
+                                              Max loss / cycle:{' '}
+                                              {formatCurrency(row.role.guardrails.categories.maxLossPerCycle)}
+                                            </div>
+                                            <div>
+                                              Max bid increase / cycle:{' '}
+                                              {row.role.guardrails.categories.maxBidIncreasePerCyclePct === null
+                                                ? '—'
+                                                : `${row.role.guardrails.categories.maxBidIncreasePerCyclePct}%`}
+                                            </div>
+                                            <div>
+                                              Max bid decrease / cycle:{' '}
+                                              {row.role.guardrails.categories.maxBidDecreasePerCyclePct === null
+                                                ? '—'
+                                                : `${row.role.guardrails.categories.maxBidDecreasePerCyclePct}%`}
+                                            </div>
+                                            <div>
+                                              Max placement bias increase / cycle:{' '}
+                                              {row.role.guardrails.categories
+                                                .maxPlacementBiasIncreasePerCyclePct === null
+                                                ? '—'
+                                                : `${row.role.guardrails.categories.maxPlacementBiasIncreasePerCyclePct}%`}
+                                            </div>
+                                            <div>
+                                              Rank-push time limit:{' '}
+                                              {formatNumber(row.role.guardrails.categories.rankPushTimeLimitDays)} day(s)
+                                            </div>
+                                            <div>
+                                              Manual approval threshold:{' '}
+                                              {labelize(row.role.guardrails.categories.manualApprovalThreshold)}
+                                            </div>
+                                            <div>
+                                              Auto-pause threshold:{' '}
+                                              {formatNumber(row.role.guardrails.categories.autoPauseThreshold)}
+                                            </div>
+                                            <div>
+                                              Min bid floor:{' '}
+                                              {formatCurrency(row.role.guardrails.categories.minBidFloor)}
+                                            </div>
+                                            <div>
+                                              Max bid ceiling:{' '}
+                                              {formatCurrency(row.role.guardrails.categories.maxBidCeiling)}
+                                            </div>
+                                          </div>
+                                        </DetailSection>
+                                      </div>
+                                      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                                        <DetailSection label="Guardrail reason codes" subtle>
+                                          <ReasonCodes codes={row.role.guardrails.reasonCodes} />
+                                        </DetailSection>
+                                        <DetailSection label="Guardrail notes" subtle>
+                                          {row.role.guardrails.notes.length > 0 ? (
+                                            <div className="space-y-2 text-sm text-foreground">
+                                              {row.role.guardrails.notes.map((note) => (
+                                                <div key={`${row.targetSnapshotId}:${note}`}>{note}</div>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            'No additional guardrail notes were captured.'
+                                          )}
+                                        </DetailSection>
+                                      </div>
+                                    </div>
+
                                     <DetailSection label="Representative search term" subtle>
                                       Representative search term:{' '}
                                       {row.searchTermDiagnostics.representativeSearchTerm ?? '—'}

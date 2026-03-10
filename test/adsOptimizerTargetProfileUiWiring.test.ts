@@ -13,7 +13,7 @@ const runtimePath = path.join(
   'apps/web/src/lib/ads-optimizer/runtime.ts'
 );
 
-describe('ads optimizer phase 6 target state wiring', () => {
+describe('ads optimizer phase 7 target role wiring', () => {
   it('loads targets view data only for the targets view and renders the targets panel', () => {
     const source = fs.readFileSync(pagePath, 'utf-8');
 
@@ -22,26 +22,31 @@ describe('ads optimizer phase 6 target state wiring', () => {
     expect(source).toContain('<OptimizerTargetsPanel');
   });
 
-  it('keeps the targets panel honest about state-engine review-only behavior', () => {
+  it('keeps the targets panel honest about role-engine review-only behavior', () => {
     const source = fs.readFileSync(panelPath, 'utf-8');
 
     expect(source).toContain("'use client';");
     expect(source).toContain('useState');
-    expect(source).toContain('Target profiles plus deterministic pre-role states');
-    expect(source).toContain('No role engine, guardrail resolution');
-    expect(source).toContain('recommendation logic, or execution handoff');
-    expect(source).toContain('No captured target states exist for this ASIN/date range yet.');
+    expect(source).toContain('Target profiles plus deterministic role + guardrail outputs');
+    expect(source).toContain('desired role, current role, and resolved');
+    expect(source).toContain('guardrail envelopes. No recommendation logic or execution handoff');
+    expect(source).toContain('No captured target roles exist for this ASIN/date range yet.');
     expect(source).toContain('Coverage gaps stay explicit instead of being guessed.');
     expect(source).toContain('View coverage');
     expect(source).toContain('CoverageDetailsToggle');
     expect(source).toContain('StatePill');
+    expect(source).toContain('RolePill');
     expect(source).toContain('DetailSection');
     expect(source).toContain('Product state snapshot');
     expect(source).toContain('Summary reason codes');
+    expect(source).toContain('Role resolution');
+    expect(source).toContain('Guardrail-ready envelope');
+    expect(source).toContain('Desired role');
+    expect(source).toContain('Current role');
     expect(source).toContain('Top search-term diagnostics');
     expect(source).toContain('font-mono text-[11px] leading-4 text-foreground');
     expect(source).toContain('xl:grid-cols-2');
-    expect(source).toContain('const TARGET_TABLE_COL_COUNT = 30;');
+    expect(source).toContain('const TARGET_TABLE_COL_COUNT = 32;');
     expect(source).toContain('setExpandedTargetSnapshotId');
     expect(source).toContain('aria-controls={`target-detail-panel-${row.targetSnapshotId}`}');
     expect(source).toContain('colSpan={TARGET_TABLE_COL_COUNT}');
@@ -62,5 +67,7 @@ describe('ads optimizer phase 6 target state wiring', () => {
     expect(source).toContain('readAdsOptimizerProductRunState');
     expect(source).toContain('listAdsOptimizerTargetSnapshotsByRun');
     expect(source).toContain('mapTargetSnapshotToProfileView');
+    expect(source).toContain('role_engine');
+    expect(source).toContain('insertAdsOptimizerRoleTransitionLogs');
   });
 });

@@ -37,8 +37,9 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     const source = fs.readFileSync(panelPath, 'utf-8');
 
     expect(source).toContain('Manual runs capture auditable snapshots only');
-    expect(source).toContain('No recommendation engine,');
-    expect(source).toContain('target-role engine, or Ads Workspace execution handoff');
+    expect(source).toContain('Phase 7 role + guardrail capture');
+    expect(source).toContain('no recommendation engine or Ads Workspace');
+    expect(source).toContain('execution handoff is running yet');
     expect(source).toContain('Run optimizer now');
     expect(source).toContain('Phase 4 manual runs support one ASIN at a time.');
   });

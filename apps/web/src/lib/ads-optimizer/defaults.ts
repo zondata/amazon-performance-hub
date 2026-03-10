@@ -23,10 +23,21 @@ export const buildDefaultAdsOptimizerRulePackPayload = (): AdsOptimizerRulePackP
   },
   guardrail_templates: {
     default: {
-      notes: 'Placeholder guardrail template. Concrete rule resolution arrives in later phases.',
+      notes: 'Phase 7 deterministic guardrail foundation for role-aware operating envelopes. Execution still remains outside the optimizer.',
       thresholds: {
         min_clicks_directional: 20,
         min_orders_confirmed: 2,
+        no_sale_spend_cap: 20,
+        no_sale_click_cap: 12,
+        max_loss_per_cycle: 25,
+        max_bid_increase_per_cycle_pct: 12,
+        max_bid_decrease_per_cycle_pct: 18,
+        max_placement_bias_increase_per_cycle_pct: 8,
+        rank_push_time_limit_days: 14,
+        manual_approval_threshold: 'medium',
+        auto_pause_threshold: 40,
+        min_bid_floor: 0.2,
+        max_bid_ceiling: 3,
       },
     },
   },

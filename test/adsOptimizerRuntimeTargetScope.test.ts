@@ -153,6 +153,11 @@ vi.mock('../apps/web/src/lib/ads-optimizer/repoRuntime', () => ({
       'insertAdsOptimizerRecommendationSnapshots should not be called in target scope tests'
     );
   },
+  insertAdsOptimizerRoleTransitionLogs: async () => {
+    throw new Error(
+      'insertAdsOptimizerRoleTransitionLogs should not be called in target scope tests'
+    );
+  },
   insertAdsOptimizerTargetSnapshots: async () => {
     throw new Error('insertAdsOptimizerTargetSnapshots should not be called in target scope tests');
   },

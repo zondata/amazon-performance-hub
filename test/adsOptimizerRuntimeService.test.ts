@@ -70,6 +70,7 @@ describe('ads optimizer phase 4 manual run service', () => {
     let insertedRecommendationRows: Array<Record<string, unknown>> = [];
     let insertedProductRows: Array<Record<string, unknown>> = [];
     let insertedTargetRows: Array<Record<string, unknown>> = [];
+    let insertedRoleTransitionRows: Array<Record<string, unknown>> = [];
 
     const result = await executeAdsOptimizerManualRun(
       {
@@ -88,12 +89,15 @@ describe('ads optimizer phase 4 manual run service', () => {
         createRun: async (payload) => {
           expect(payload.selectedAsin).toBe('B001TEST');
           expect(payload.rulePackVersionLabel).toBe('sp_v1_seed');
-          expect(payload.inputSummary.phase).toBe(6);
+          expect(payload.inputSummary.phase).toBe(7);
           expect(payload.inputSummary.snapshot_boundaries).toBeTruthy();
           expect(payload.inputSummary.snapshot_boundaries.target_profile_engine).toBe(
             'phase5_target_profile_engine'
           );
           expect(payload.inputSummary.snapshot_boundaries.state_engine).toBe('phase6_state_engine');
+          expect(payload.inputSummary.snapshot_boundaries.role_engine).toBe(
+            'phase7_role_guardrail_engine'
+          );
           return makeRun();
         },
         updateRun: async (_runId, payload) => {
@@ -110,6 +114,22 @@ describe('ads optimizer phase 4 manual run service', () => {
             role_transition_count: payload.roleTransitionCount ?? 0,
           };
         },
+        getProductSettings: async () => ({
+          product_id: 'product-1',
+          account_id: 'acct',
+          marketplace: 'US',
+          archetype: 'hybrid',
+          optimizer_enabled: true,
+          default_objective_mode: null,
+          rule_pack_version_id: 'version-1',
+          strategic_notes: null,
+          guardrail_overrides_json: {
+            max_bid_increase_per_cycle_pct: 9,
+          },
+          created_at: '2026-03-10T00:00:00Z',
+          updated_at: '2026-03-10T00:00:00Z',
+        }),
+        loadPreviousRoleMap: async () => new Map([['target-1', 'Harvest']]),
         loadProductSnapshotInput: async () => ({
           productId: 'product-1',
           asin: 'B001TEST',
@@ -305,6 +325,22 @@ describe('ads optimizer phase 4 manual run service', () => {
             created_at: '2026-03-10T01:03:00Z',
           }));
         },
+        insertRoleTransitionLogs: async (rows) => {
+          insertedRoleTransitionRows = rows as unknown as Array<Record<string, unknown>>;
+          return rows.map((row, index) => ({
+            role_transition_log_id: `transition-${index + 1}`,
+            run_id: row.runId,
+            target_snapshot_id: row.targetSnapshotId,
+            account_id: 'acct',
+            marketplace: 'US',
+            asin: row.asin,
+            target_id: row.targetId,
+            from_role: row.fromRole,
+            to_role: row.toRole,
+            transition_reason_json: row.transitionReason,
+            created_at: '2026-03-10T01:03:30Z',
+          }));
+        },
       }
     );
 
@@ -325,6 +361,7 @@ describe('ads optimizer phase 4 manual run service', () => {
       productSnapshotCount: 1,
       targetSnapshotCount: 1,
       recommendationSnapshotCount: 1,
+      roleTransitionCount: 1,
       completedAt: '2026-03-10T01:05:00Z',
     });
     expect(insertedRecommendationRows[0]?.status).toBe('pending_phase5');
@@ -336,13 +373,18 @@ describe('ads optimizer phase 4 manual run service', () => {
     expect(insertedProductRows[0]?.snapshotPayload.state_engine.product_state.value).toBe(
       'profitable'
     );
-    expect(insertedTargetRows[0]?.snapshotPayload.phase).toBe(6);
+    expect(insertedTargetRows[0]?.snapshotPayload.phase).toBe(7);
     expect(insertedTargetRows[0]?.snapshotPayload.state_engine.efficiency.value).toBe(
       'profitable'
     );
     expect(insertedTargetRows[0]?.snapshotPayload.state_engine.confidence.value).toBe(
       'confirmed'
     );
+    expect(insertedTargetRows[0]?.snapshotPayload.role_engine.desired_role.value).toBe('Scale');
+    expect(insertedTargetRows[0]?.snapshotPayload.role_engine.current_role.value).toBe('Scale');
+    expect(insertedTargetRows[0]?.snapshotPayload.role_engine.guardrails.categories.max_bid_increase_per_cycle_pct).toBe(9);
+    expect(insertedRoleTransitionRows[0]?.fromRole).toBe('Harvest');
+    expect(insertedRoleTransitionRows[0]?.toRole).toBe('Scale');
   });
 
   it('marks the run as failed and stores diagnostics when snapshot loading fails', async () => {
@@ -377,6 +419,8 @@ describe('ads optimizer phase 4 manual run service', () => {
             role_transition_count: payload.roleTransitionCount ?? 0,
           };
         },
+        getProductSettings: async () => null,
+        loadPreviousRoleMap: async () => new Map(),
         loadProductSnapshotInput: async () => ({
           productId: 'product-1',
           asin: 'B001TEST',
@@ -451,6 +495,9 @@ describe('ads optimizer phase 4 manual run service', () => {
         insertRecommendationSnapshots: async () => {
           throw new Error('insertRecommendationSnapshots should not be called on failure');
         },
+        insertRoleTransitionLogs: async () => {
+          throw new Error('insertRoleTransitionLogs should not be called on failure');
+        },
       }
     );
 
@@ -502,6 +549,8 @@ describe('ads optimizer phase 4 manual run service', () => {
             role_transition_count: payload.roleTransitionCount ?? 0,
           };
         },
+        getProductSettings: async () => null,
+        loadPreviousRoleMap: async () => new Map(),
         loadProductSnapshotInput: async () => ({
           productId: 'product-1',
           asin: 'B001TEST',
@@ -583,6 +632,7 @@ describe('ads optimizer phase 4 manual run service', () => {
             created_at: '2026-03-10T03:01:00Z',
           })),
         insertTargetSnapshots: async () => [],
+        insertRoleTransitionLogs: async () => [],
         insertRecommendationSnapshots: async () => [],
       }
     );

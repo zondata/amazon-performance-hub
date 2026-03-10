@@ -62,8 +62,9 @@ export default function OptimizerHistoryPanel(props: OptimizerHistoryPanelProps)
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
               Runs persist auditable product snapshots plus Phase 5 target profile snapshots, while
-              recommendation rows remain frozen placeholders only. No recommendation engine,
-              target-role engine, or Ads Workspace execution handoff is running yet.
+              recommendation rows remain frozen placeholders only. Phase 7 role + guardrail capture
+              is now part of the snapshot path, but no recommendation engine or Ads Workspace
+              execution handoff is running yet.
             </div>
           </div>
           <div className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted">
@@ -164,7 +165,7 @@ export default function OptimizerHistoryPanel(props: OptimizerHistoryPanelProps)
                         <MetricCard
                           label="Role transitions"
                           value={String(run.role_transition_count)}
-                          detail="Expected to remain zero before Phase 7"
+                          detail="Append-only transition logs captured during Phase 7 runs."
                         />
                       </div>
                     </div>

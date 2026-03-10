@@ -18,6 +18,11 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getAdsOptimizerOverviewData, type AdsOptimizerOverviewData } from './overview';
 import type { JsonObject } from './runtimeTypes';
 import {
+  readAdsOptimizerTargetRunRole,
+  type AdsOptimizerTargetRole,
+  type AdsOptimizerTargetRoleRunState,
+} from './role';
+import {
   readAdsOptimizerTargetRunState,
   type AdsOptimizerStateCoverageStatus,
   type AdsOptimizerTargetConfidenceState,
@@ -182,6 +187,27 @@ export type AdsOptimizerTargetProfileSnapshotView = {
     opportunityReasonCodes: string[];
     riskReasonCodes: string[];
     summaryReasonCodes: string[];
+  };
+  role: {
+    desiredRole: {
+      value: AdsOptimizerTargetRole | null;
+      label: string;
+      detail: string;
+      coverageStatus: AdsOptimizerStateCoverageStatus;
+      reasonCodes: string[];
+    };
+    currentRole: {
+      value: AdsOptimizerTargetRole | null;
+      label: string;
+      detail: string;
+      coverageStatus: AdsOptimizerStateCoverageStatus;
+      reasonCodes: string[];
+    };
+    previousRole: AdsOptimizerTargetRole | null;
+    transitionRule: string;
+    transitionReasonCodes: string[];
+    summaryReasonCodes: string[];
+    guardrails: AdsOptimizerTargetRoleRunState['guardrails'];
   };
 };
 
@@ -914,6 +940,12 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
       'This run predates Phase 6 state enrichment, so efficiency, confidence, tier, opportunity, and risk remain uncaptured.'
     );
   }
+  const targetRole = readAdsOptimizerTargetRunRole(payload);
+  if (!targetRole) {
+    coverageNotes.push(
+      'This run predates Phase 7 role enrichment, so desired role, current role, and resolved guardrails remain uncaptured.'
+    );
+  }
 
   const identityStatus = readNestedString(identity, 'target_identity_status');
   const rawTargetId = readNestedString(identity, 'raw_target_id');
@@ -1084,6 +1116,55 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
       opportunityReasonCodes: targetState?.opportunityReasonCodes ?? [],
       riskReasonCodes: targetState?.riskReasonCodes ?? [],
       summaryReasonCodes: targetState?.summaryReasonCodes ?? [],
+    },
+    role: {
+      desiredRole: {
+        value: targetRole?.desiredRole.value ?? null,
+        label: targetRole?.desiredRole.label ?? 'Not captured',
+        detail:
+          targetRole?.desiredRole.detail ??
+          'This run predates Phase 7 role capture.',
+        coverageStatus: targetRole?.desiredRole.coverageStatus ?? 'missing',
+        reasonCodes: targetRole?.desiredRole.reasonCodes ?? [],
+      },
+      currentRole: {
+        value: targetRole?.currentRole.value ?? null,
+        label: targetRole?.currentRole.label ?? 'Not captured',
+        detail:
+          targetRole?.currentRole.detail ??
+          'This run predates Phase 7 role capture.',
+        coverageStatus: targetRole?.currentRole.coverageStatus ?? 'missing',
+        reasonCodes: targetRole?.currentRole.reasonCodes ?? [],
+      },
+      previousRole: targetRole?.previousRole ?? null,
+      transitionRule: targetRole?.transitionRule ?? 'missing_role_engine',
+      transitionReasonCodes: targetRole?.transitionReasonCodes ?? [],
+      summaryReasonCodes: targetRole?.summaryReasonCodes ?? [],
+      guardrails: targetRole?.guardrails ?? {
+        coverageStatus: 'missing',
+        categories: {
+          noSaleSpendCap: null,
+          noSaleClickCap: null,
+          maxLossPerCycle: null,
+          maxBidIncreasePerCyclePct: null,
+          maxBidDecreasePerCyclePct: null,
+          maxPlacementBiasIncreasePerCyclePct: null,
+          rankPushTimeLimitDays: null,
+          manualApprovalThreshold: 'medium',
+          autoPauseThreshold: null,
+          minBidFloor: null,
+          maxBidCeiling: null,
+        },
+        flags: {
+          requiresManualApproval: true,
+          autoPauseEligible: false,
+          bidChangesAllowed: false,
+          placementChangesAllowed: false,
+          transitionLocked: false,
+        },
+        reasonCodes: [],
+        notes: [],
+      },
     },
   };
 };
