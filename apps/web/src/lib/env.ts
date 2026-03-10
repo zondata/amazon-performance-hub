@@ -18,6 +18,7 @@ export const env = {
   accountId: requireEnv('APP_ACCOUNT_ID', process.env.APP_ACCOUNT_ID),
   marketplace: requireEnv('APP_MARKETPLACE', process.env.APP_MARKETPLACE),
   pendingReconcileDir: process.env.PENDING_RECONCILE_DIR,
+  enableAdsOptimizer: process.env.ENABLE_ADS_OPTIMIZER === '1',
   enableSpendReconciliation: process.env.ENABLE_SPEND_RECONCILIATION === '1',
   bulkgenOutRoot: process.env.BULKGEN_OUT_ROOT,
   bulkgenPendingDir: process.env.BULKGEN_PENDING_RECONCILE_DIR,

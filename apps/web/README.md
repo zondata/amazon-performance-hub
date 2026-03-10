@@ -18,6 +18,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 APP_ACCOUNT_ID=US
 APP_MARKETPLACE=US
 PENDING_RECONCILE_DIR=/mnt/c/Users/User/Dropbox/AmazonReports/_PENDING_RECONCILE
+ENABLE_ADS_OPTIMIZER=0
 ENABLE_SPEND_RECONCILIATION=0
 BULKGEN_OUT_ROOT=/mnt/c/Users/User/Dropbox/AmazonReports/_BULKGEN_OUT
 BULKGEN_PENDING_RECONCILE_DIR=/mnt/c/Users/User/Dropbox/AmazonReports/_PENDING_RECONCILE
@@ -28,6 +29,8 @@ BULKGEN_TEMPLATE_SB_UPDATE=
 BULKGEN_TEMPLATE_SP_CREATE=
 ENABLE_BULKGEN_SPAWN=0
 ```
+
+`ENABLE_ADS_OPTIMIZER` is optional. Keep it at `0` (default) to hide the in-progress `/ads/optimizer` shell. Set it to `1` to expose the new route and sidebar entry locally.
 
 `ENABLE_SPEND_RECONCILIATION` is optional. Keep it at `0` (default) to skip the spend reconciliation query. Set to `1` to enable it.
 

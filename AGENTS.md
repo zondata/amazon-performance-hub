@@ -212,6 +212,7 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
   Current shipped page still has campaigns implemented first; the staged Ads Workspace rebuild is documented in:
   - `docs/ads-workspace/AGENTS.md`
   - `docs/ads-workspace/BUILD_PLAN.md`
+- Ads Optimizer work is tracked separately in `docs/ads-optimizer/AGENTS.md`.
 - Sales Center: `/sales`.
 - Sales Trend (URL + params): `/sales/trend` supports `granularity=daily|weekly|monthly|quarterly`, `cols=<int>`, `last=YYYY-MM-DD`. When present, start/end are derived from calendar buckets and kept in the URL for tab switching.
 - Sales Trend (chart): uses straight (linear) line segments (no curve smoothing).

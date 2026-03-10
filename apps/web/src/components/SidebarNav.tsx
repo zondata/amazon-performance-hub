@@ -22,11 +22,14 @@ type NavItem = {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
 };
 
-const NAV_ITEMS: NavItem[] = [
+const BASE_NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: DashboardIcon },
   { label: 'Sales', href: '/sales/trend', icon: SalesIcon },
   { label: 'Products', href: '/products', icon: ProductsIcon },
   { label: 'Ads', href: '/ads/performance', icon: AdsIcon },
+];
+
+const SECONDARY_NAV_ITEMS: NavItem[] = [
   { label: 'SQP', href: '#', icon: GenericItemIcon },
   { label: 'Ranking', href: '#', icon: GenericItemIcon },
   { label: 'Logbook', href: '/logbook/experiments', icon: LogbookIcon },
@@ -35,18 +38,31 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Settings', href: '/settings/keyword-ai-packs', icon: SettingsIcon },
 ];
 
+const ADS_OPTIMIZER_NAV_ITEM: NavItem = {
+  label: 'Ads Optimizer',
+  href: '/ads/optimizer',
+  icon: GenericItemIcon,
+};
+
+type SidebarNavProps = {
+  enableAdsOptimizer?: boolean;
+};
+
 const isActive = (pathname: string, href: string) => {
   if (href === '#') return false;
   if (href === '/dashboard') return pathname === '/' || pathname.startsWith('/dashboard');
   return pathname.startsWith(href);
 };
 
-export default function SidebarNav() {
+export default function SidebarNav({ enableAdsOptimizer = false }: SidebarNavProps) {
   const pathname = usePathname();
+  const navItems = enableAdsOptimizer
+    ? [...BASE_NAV_ITEMS, ADS_OPTIMIZER_NAV_ITEM, ...SECONDARY_NAV_ITEMS]
+    : [...BASE_NAV_ITEMS, ...SECONDARY_NAV_ITEMS];
 
   return (
     <nav className="space-y-2 text-sm">
-      {NAV_ITEMS.map((item) => {
+      {navItems.map((item) => {
         const active = isActive(pathname, item.href);
         const Icon = item.icon;
         return (
