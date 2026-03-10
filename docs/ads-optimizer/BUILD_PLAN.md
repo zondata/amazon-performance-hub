@@ -240,42 +240,42 @@ Create auditable optimizer runs and persist product/target snapshots.
 Build the raw + derived target profile object.
 
 ### Tasks
-- [ ] Build target-level raw metrics loader from existing SP facts.
-- [ ] Pull target-level raw inputs:
-  - [ ] impressions
-  - [ ] clicks
-  - [ ] spend
-  - [ ] orders
-  - [ ] sales
-  - [ ] CPC
-  - [ ] CTR
-  - [ ] CVR
-  - [ ] ACoS
-  - [ ] ROAS
-  - [ ] TOS IS
-  - [ ] STIS
-  - [ ] STIR
-  - [ ] campaign / ad group / target identity chain
-  - [ ] demand proxies
-  - [ ] placement context
-  - [ ] search term diagnostics
-- [ ] Compute target derived metrics:
-  - [ ] contribution after ads
-  - [ ] break-even gap
-  - [ ] max CPC support gap
-  - [ ] loss dollars / profit dollars
-  - [ ] click velocity
-  - [ ] impression velocity
-  - [ ] organic leverage proxy
-- [ ] Store full target profile snapshot per run.
+- [x] Build target-level raw metrics loader from existing SP facts.
+- [x] Pull target-level raw inputs:
+  - [x] impressions
+  - [x] clicks
+  - [x] spend
+  - [x] orders
+  - [x] sales
+  - [x] CPC
+  - [x] CTR
+  - [x] CVR
+  - [x] ACoS
+  - [x] ROAS
+  - [x] TOS IS
+  - [x] STIS
+  - [x] STIR
+  - [x] campaign / ad group / target identity chain
+  - [x] demand proxies
+  - [x] placement context
+  - [x] search term diagnostics
+- [x] Compute target derived metrics:
+  - [x] contribution after ads
+  - [x] break-even gap
+  - [x] max CPC support gap
+  - [x] loss dollars / profit dollars
+  - [x] click velocity
+  - [x] impression velocity
+  - [x] organic leverage proxy
+- [x] Store full target profile snapshot per run.
 
 ### Phase 5 acceptance
-- [ ] Target profile rows render for a selected ASIN.
-- [ ] Every row has both raw and derived fields.
-- [ ] Coverage gaps are explicit.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] Target profile rows render for a selected ASIN.
+- [x] Every row has both raw and derived fields.
+- [x] Coverage gaps are explicit.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 

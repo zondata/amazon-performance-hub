@@ -85,7 +85,11 @@ describe('ads optimizer phase 4 manual run service', () => {
         createRun: async (payload) => {
           expect(payload.selectedAsin).toBe('B001TEST');
           expect(payload.rulePackVersionLabel).toBe('sp_v1_seed');
+          expect(payload.inputSummary.phase).toBe(5);
           expect(payload.inputSummary.snapshot_boundaries).toBeTruthy();
+          expect(payload.inputSummary.snapshot_boundaries.target_profile_engine).toBe(
+            'phase5_target_profile_engine'
+          );
           return makeRun();
         },
         updateRun: async (_runId, payload) => {

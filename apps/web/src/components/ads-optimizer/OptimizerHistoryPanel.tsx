@@ -61,9 +61,9 @@ export default function OptimizerHistoryPanel(props: OptimizerHistoryPanelProps)
               Manual runs capture auditable snapshots only
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
-              Phase 4 persists run headers, product snapshots, target snapshots, and frozen
-              recommendation placeholder rows. No recommendation engine, target-role engine, or
-              Ads Workspace execution handoff is running yet.
+              Runs persist auditable product snapshots plus Phase 5 target profile snapshots, while
+              recommendation rows remain frozen placeholders only. No recommendation engine,
+              target-role engine, or Ads Workspace execution handoff is running yet.
             </div>
           </div>
           <div className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted">
@@ -101,8 +101,8 @@ export default function OptimizerHistoryPanel(props: OptimizerHistoryPanelProps)
               </div>
             ) : (
               <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-4 text-sm text-sky-800">
-                This creates a manual run record and stores product + target snapshots for {props.asin}.
-                Recommendation snapshots remain Phase 4 placeholders only.
+                This creates a manual run record and stores product + target profile snapshots for{' '}
+                {props.asin}. Recommendation snapshots remain placeholders only.
               </div>
             )}
             <button

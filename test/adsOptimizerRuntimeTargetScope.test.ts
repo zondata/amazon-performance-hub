@@ -71,9 +71,61 @@ vi.mock('../apps/web/src/lib/supabaseAdmin', () => ({
 }));
 
 vi.mock('../apps/web/src/lib/ads-optimizer/overview', () => ({
-  getAdsOptimizerOverviewData: async () => {
-    throw new Error('getAdsOptimizerOverviewData should not be called in target scope tests');
-  },
+  getAdsOptimizerOverviewData: async () => ({
+    product: {
+      asin: 'B001TEST',
+      title: 'Test product',
+      shortName: 'Test',
+      displayName: 'Test',
+    },
+    economics: {
+      sales: 1000,
+      orders: 20,
+      units: 20,
+      adSpend: 200,
+      adSales: 600,
+      tacos: 0.2,
+      averagePrice: 50,
+      costCoverage: 0.6,
+      breakEvenAcos: 0.34,
+      contributionBeforeAdsPerUnit: 18,
+      contributionAfterAds: 140,
+    },
+    visibility: {
+      rankingCoverage: {
+        status: 'ready',
+        trackedKeywords: 1,
+        detail: 'ready',
+      },
+      heroQueryTrend: {
+        status: 'ready',
+        keyword: 'blue widget',
+        searchVolume: 1200,
+        latestOrganicRank: 10,
+        baselineOrganicRank: 12,
+        rankDelta: 2,
+        detail: 'ready',
+      },
+      sqpCoverage: {
+        status: 'ready',
+        selectedWeekEnd: '2026-03-08',
+        trackedQueries: 1,
+        totalSearchVolume: 1200,
+        topQuery: 'blue widget',
+        detail: 'ready',
+      },
+    },
+    state: {
+      value: 'profitable',
+      label: 'Profitable',
+      reason: 'ready',
+    },
+    objective: {
+      value: 'Scale Profit',
+      reason: 'ready',
+    },
+    warnings: [],
+  }),
 }));
 
 vi.mock('../apps/web/src/lib/ads-optimizer/repoRuntime', () => ({
@@ -168,10 +220,14 @@ describe('ads optimizer phase 4 target snapshot scope loading', () => {
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0]?.targetId).toBe('target-1');
     expect(result.rows[0]?.sourceScope).toBe('asin_via_sp_advertised_product_membership');
-    expect(result.rows[0]?.snapshotPayload.scope_resolution).toMatchObject({
-      advertised_product_rows: 1,
-      ad_group_ids: 1,
-      campaign_ids: 1,
+    expect(result.rows[0]?.snapshotPayload.demand_proxies).toMatchObject({
+      search_term_count: 0,
+      same_text_search_term_count: 0,
     });
+    expect(result.rows[0]?.snapshotPayload.derived_metrics.contribution_after_ads).toBeCloseTo(10.6);
+    expect(result.rows[0]?.snapshotPayload.derived_metrics.break_even_gap).toBeCloseTo(
+      0.11777777777777781
+    );
+    expect(result.rows[0]?.snapshotPayload.derived_metrics.click_velocity).toBe(8);
   });
 });

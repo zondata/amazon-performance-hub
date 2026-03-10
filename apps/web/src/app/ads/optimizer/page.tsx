@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import OptimizerConfigManager from '@/components/ads-optimizer/OptimizerConfigManager';
 import OptimizerHistoryPanel from '@/components/ads-optimizer/OptimizerHistoryPanel';
 import OptimizerOverviewPanel from '@/components/ads-optimizer/OptimizerOverviewPanel';
+import OptimizerTargetsPanel from '@/components/ads-optimizer/OptimizerTargetsPanel';
 import Tabs from '@/components/Tabs';
 import {
   activateAdsOptimizerRulePackVersionAction,
@@ -12,7 +13,10 @@ import {
 import { isAdsOptimizerEnabled } from '@/lib/ads-optimizer/featureFlag';
 import { getAdsOptimizerOverviewData } from '@/lib/ads-optimizer/overview';
 import { getAdsOptimizerConfigViewData } from '@/lib/ads-optimizer/repoConfig';
-import { getAdsOptimizerHistoryViewData } from '@/lib/ads-optimizer/runtime';
+import {
+  getAdsOptimizerHistoryViewData,
+  getAdsOptimizerTargetsViewData,
+} from '@/lib/ads-optimizer/runtime';
 import {
   ADS_OPTIMIZER_VIEWS,
   normalizeAdsOptimizerView,
@@ -62,10 +66,10 @@ const EMPTY_STATE_COPY: Record<
       'Current Build Plan Phase 3 is product-scoped. Select one ASIN above to compute product inputs, state classification, and objective guidance.',
   },
   targets: {
-    eyebrow: 'Targets placeholder',
-    title: 'No target recommendations are loaded yet.',
+    eyebrow: 'Targets scope',
+    title: 'Select one ASIN and capture a run to review target profiles.',
     body:
-      'Target snapshots, reason codes, and recommendation rows depend on the later optimizer runtime tables and engines. This view stays empty by design for now.',
+      'Phase 5 renders persisted target profile rows from the matching manual run. State-engine, role-engine, and recommendation logic remain out of scope here.',
   },
   config: {
     eyebrow: 'Config placeholder',
@@ -141,11 +145,21 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
       : null;
   const configData = view === 'config' ? await getAdsOptimizerConfigViewData() : null;
   const historyData = view === 'history' ? await getAdsOptimizerHistoryViewData(asin) : null;
+  const targetsData =
+    view === 'targets' && asin !== 'all'
+      ? await getAdsOptimizerTargetsViewData({
+          asin,
+          start,
+          end,
+        })
+      : null;
   const phaseBadge =
     view === 'config'
       ? 'Config foundation only'
       : view === 'overview'
         ? 'Product inputs only'
+        : view === 'targets'
+          ? 'Target profile engine'
         : view === 'history'
           ? 'Run + snapshot backbone'
           : 'Recommendation shell only';
@@ -279,6 +293,16 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           notice={notice}
           error={error}
           runNowAction={runAdsOptimizerNowAction}
+        />
+      ) : view === 'targets' ? (
+        <OptimizerTargetsPanel
+          asin={asin}
+          start={start}
+          end={end}
+          historyHref={buildOptimizerHref({ start, end, asin, view: 'history' })}
+          run={targetsData?.run ?? null}
+          latestCompletedRun={targetsData?.latestCompletedRun ?? null}
+          rows={targetsData?.rows ?? []}
         />
       ) : (
         <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">

@@ -341,6 +341,26 @@ export const listAdsOptimizerRuns = async (args: {
   return ((data ?? []) as unknown as AdsOptimizerRunRow[]).map(mapAdsOptimizerRunRow);
 };
 
+export const listAdsOptimizerTargetSnapshotsByRun = async (
+  runId: string
+): Promise<AdsOptimizerTargetSnapshot[]> => {
+  const { data, error } = await supabaseAdmin
+    .from('ads_optimizer_target_snapshot')
+    .select(TARGET_SNAPSHOT_SELECT)
+    .eq('account_id', env.accountId)
+    .eq('marketplace', env.marketplace)
+    .eq('run_id', runId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to list optimizer target snapshots: ${error.message}`);
+  }
+
+  return ((data ?? []) as unknown as AdsOptimizerTargetSnapshotRow[]).map(
+    mapAdsOptimizerTargetSnapshotRow
+  );
+};
+
 export const findOptimizerProductByAsin = async (asin: string) => {
   const { data, error } = await supabaseAdmin
     .from('products')

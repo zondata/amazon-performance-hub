@@ -37,7 +37,8 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     const source = fs.readFileSync(panelPath, 'utf-8');
 
     expect(source).toContain('Manual runs capture auditable snapshots only');
-    expect(source).toContain('No recommendation engine, target-role engine, or');
+    expect(source).toContain('No recommendation engine,');
+    expect(source).toContain('target-role engine, or Ads Workspace execution handoff');
     expect(source).toContain('Run optimizer now');
     expect(source).toContain('Phase 4 manual runs support one ASIN at a time.');
   });
@@ -47,6 +48,6 @@ describe('ads optimizer phase 4 runtime wiring', () => {
 
     expect(source).toContain("status: 'pending_phase5'");
     expect(source).toContain('NO_RECOMMENDATION_ENGINE_ACTIVE');
-    expect(source).toContain('Phase 4 persists recommendation placeholders only.');
+    expect(source).toContain('Recommendation snapshots remain placeholders only.');
   });
 });
