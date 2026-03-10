@@ -11,11 +11,14 @@ const resetState = () => {
 };
 
 const createQuery = (table: string) => {
-  const filters: Array<{ type: 'eq' | 'in'; column: string; value: unknown }> = [];
+  const filters: Array<{ type: 'eq' | 'in' | 'is'; column: string; value: unknown }> = [];
 
   const matches = (row: Record<string, unknown>) =>
     filters.every((filter) => {
       if (filter.type === 'eq') {
+        return row[filter.column] === filter.value;
+      }
+      if (filter.type === 'is') {
         return row[filter.column] === filter.value;
       }
       if (!Array.isArray(filter.value)) {
@@ -38,6 +41,10 @@ const createQuery = (table: string) => {
     select: () => query,
     eq: (column: string, value: unknown) => {
       filters.push({ type: 'eq', column, value });
+      return query;
+    },
+    is: (column: string, value: unknown) => {
+      filters.push({ type: 'is', column, value });
       return query;
     },
     gte: () => query,

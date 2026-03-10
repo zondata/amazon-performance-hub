@@ -15,11 +15,14 @@ const resetState = () => {
 };
 
 const createQuery = (table: string) => {
-  const filters: Array<{ type: 'eq' | 'in'; column: string; value: unknown }> = [];
+  const filters: Array<{ type: 'eq' | 'in' | 'is'; column: string; value: unknown }> = [];
 
   const matches = (row: Record<string, unknown>) =>
     filters.every((filter) => {
       if (filter.type === 'eq') {
+        return row[filter.column] === filter.value;
+      }
+      if (filter.type === 'is') {
         return row[filter.column] === filter.value;
       }
       if (!Array.isArray(filter.value)) {
@@ -46,6 +49,10 @@ const createQuery = (table: string) => {
     select: () => query,
     eq: (column: string, value: unknown) => {
       filters.push({ type: 'eq', column, value });
+      return query;
+    },
+    is: (column: string, value: unknown) => {
+      filters.push({ type: 'is', column, value });
       return query;
     },
     gte: () => query,
@@ -360,5 +367,83 @@ describe('ads optimizer phase 5 target profile engine', () => {
     expect(row.derived.profitDollars).toBe(10.6);
     expect(row.coverage.statuses.breakEvenInputs).toBe('ready');
     expect(row.searchTermDiagnostics.topTerms).toHaveLength(1);
+  });
+
+  it('does not collapse multiple unresolved target identities into one row', async () => {
+    state.advertisedRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        advertised_asin_norm: 'B001TEST',
+        impressions: 100,
+        clicks: 10,
+        spend: 25,
+        sales: 120,
+        orders: 3,
+        units: 3,
+      },
+    ];
+    state.targetingRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        exported_at: '2026-03-10T00:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: null,
+        target_id: 'UNKNOWN',
+        portfolio_name_raw: 'Portfolio',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: null,
+        targeting_raw: 'blue widget exact',
+        targeting_norm: 'blue widget exact',
+        match_type_norm: 'exact',
+        impressions: 40,
+        clicks: 4,
+        spend: 12,
+        sales: 48,
+        orders: 1,
+        units: 1,
+        top_of_search_impression_share: null,
+      },
+      {
+        account_id: 'acct',
+        date: '2026-03-04',
+        exported_at: '2026-03-10T00:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: null,
+        target_id: 'UNKNOWN',
+        portfolio_name_raw: 'Portfolio',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: null,
+        targeting_raw: 'blue widget broad',
+        targeting_norm: 'blue widget broad',
+        match_type_norm: 'broad',
+        impressions: 60,
+        clicks: 5,
+        spend: 14,
+        sales: 52,
+        orders: 1,
+        units: 1,
+        top_of_search_impression_share: null,
+      },
+    ];
+
+    const result = await loadAdsOptimizerTargetProfiles({
+      asin: 'B001TEST',
+      start: '2026-03-01',
+      end: '2026-03-10',
+    });
+
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows.map((row) => row.targetId)).toEqual([
+      'weak::campaign_1::missing::blue_widget_broad::broad',
+      'weak::campaign_1::missing::blue_widget_exact::exact',
+    ]);
+    expect(
+      result.rows.every((row) => row.snapshotPayload.identity.target_identity_status === 'unresolved')
+    ).toBe(true);
+    expect(result.rows[0]?.snapshotPayload.identity.target_text).not.toContain('weak::');
   });
 });

@@ -26,6 +26,7 @@ const PLACEMENT_CONTEXT_NOTE =
 const SEARCH_TERM_DIAGNOSTICS_NOTE =
   'Search-term diagnostics are contextual only and do not imply direct attribution beyond the existing SP STIS facts.';
 const TARGET_PROFILE_VERSION = 'phase5_v1';
+const UNRESOLVED_AD_GROUP_PREFIX = '__ads_optimizer_unresolved_ad_group__';
 
 type SpAdvertisedProductRow = SpScopeAdvertisedProductRow & {
   date: string | null;
@@ -162,6 +163,107 @@ const trimString = (value: string | null | undefined): string | null => {
   const trimmed = String(value ?? '').trim();
   return trimmed.length > 0 ? trimmed : null;
 };
+
+const normalizeIdentityToken = (value: string | null | undefined) =>
+  trimString(value)?.toLowerCase().replace(/\s+/g, ' ') ?? null;
+
+const isWeakIdentityToken = (value: string | null | undefined) => {
+  const normalized = normalizeIdentityToken(value);
+  if (!normalized) return true;
+  return (
+    normalized === 'unknown' ||
+    normalized === 'n/a' ||
+    normalized === 'na' ||
+    normalized === '--' ||
+    normalized === 'null'
+  );
+};
+
+const encodeIdentityPart = (value: string | null | undefined) =>
+  (normalizeIdentityToken(value) ?? 'missing').replace(/[^a-z0-9]+/g, '_');
+
+const buildTargetProfileKey = (row: {
+  campaign_id: string | null;
+  ad_group_id: string | null;
+  target_id: string | null;
+  targeting_raw?: string | null;
+  targeting_norm?: string | null;
+  match_type_norm?: string | null;
+}) => {
+  const rawTargetId = trimString(row.target_id);
+  if (!isWeakIdentityToken(rawTargetId)) {
+    return rawTargetId as string;
+  }
+
+  return [
+    'weak',
+    encodeIdentityPart(row.campaign_id),
+    encodeIdentityPart(row.ad_group_id),
+    encodeIdentityPart(row.targeting_norm ?? row.targeting_raw),
+    encodeIdentityPart(row.match_type_norm),
+  ].join('::');
+};
+
+const buildPersistedAdGroupKey = (row: {
+  campaign_id: string | null;
+  ad_group_id: string | null;
+  target_id: string | null;
+  targeting_raw?: string | null;
+  targeting_norm?: string | null;
+  match_type_norm?: string | null;
+}) => {
+  const adGroupId = trimString(row.ad_group_id);
+  if (adGroupId) return adGroupId;
+
+  return [
+    UNRESOLVED_AD_GROUP_PREFIX,
+    encodeIdentityPart(row.campaign_id),
+    encodeIdentityPart(row.target_id),
+    encodeIdentityPart(row.targeting_norm ?? row.targeting_raw),
+    encodeIdentityPart(row.match_type_norm),
+  ].join('::');
+};
+
+const buildSnapshotTargetLabel = (
+  target: SpTargetsWorkspaceRow,
+  rawIdentity: {
+    targetingRaw: string | null;
+    targetingNorm: string | null;
+  } | null
+) => {
+  const normalizedText = normalizeIdentityToken(target.target_text);
+  const looksSynthetic =
+    target.target_text === target.target_id ||
+    target.target_id.startsWith('weak::') ||
+    target.target_id.startsWith(UNRESOLVED_AD_GROUP_PREFIX);
+  if (normalizedText && normalizedText !== 'unknown' && !looksSynthetic) {
+    return target.target_text;
+  }
+
+  const fallback = trimString(rawIdentity?.targetingRaw ?? rawIdentity?.targetingNorm);
+  if (fallback && !isWeakIdentityToken(fallback)) {
+    return fallback;
+  }
+
+  return 'Unresolved target identity';
+};
+
+const normalizeTargetingRowsForProfiles = (rows: SpTargetFactRow[]): SpTargetFactRow[] =>
+  rows.map((row) => {
+    const profileKey = buildTargetProfileKey(row);
+    return {
+      ...row,
+      target_id: profileKey,
+      ad_group_id: buildPersistedAdGroupKey(row),
+    };
+  });
+
+const normalizeSearchTermRowsForProfiles = (rows: SpSearchTermFactRow[]): SpSearchTermFactRow[] =>
+  rows.map((row) => ({
+    ...row,
+    target_id: buildTargetProfileKey(row),
+    ad_group_id: buildPersistedAdGroupKey(row),
+  }));
 
 const chunk = <T,>(items: T[], size: number) => {
   const buckets: T[][] = [];
@@ -338,12 +440,13 @@ const loadTargetingRowsByScope = async (args: {
   ids: string[];
   start: string;
   end: string;
+  onlyNullAdGroup?: boolean;
 }): Promise<SpTargetFactRow[]> => {
   const rows: SpTargetFactRow[] = [];
 
   for (const batch of chunk(args.ids, 100)) {
-    const fetched = await fetchAllRows<SpTargetFactRow>((from, to) =>
-      supabaseAdmin
+    const fetched = await fetchAllRows<SpTargetFactRow>((from, to) => {
+      let query = supabaseAdmin
         .from('sp_targeting_daily_fact_latest')
         .select(
           [
@@ -370,25 +473,31 @@ const loadTargetingRowsByScope = async (args: {
         .eq('account_id', env.accountId)
         .gte('date', args.start)
         .lte('date', args.end)
-        .in(args.idColumn, batch)
-        .range(from, to)
-    );
+        .in(args.idColumn, batch);
+      if (args.onlyNullAdGroup) {
+        query = query.is('ad_group_id', null);
+      }
+      return query.range(from, to);
+    });
     rows.push(...fetched);
   }
 
   return rows;
 };
 
-const loadSearchTermRowsByTargetIds = async (args: {
-  targetIds: string[];
+const loadSearchTermRowsByScope = async (args: {
+  idColumn: 'ad_group_id' | 'campaign_id';
+  ids: string[];
   start: string;
   end: string;
+  onlyNullAdGroup?: boolean;
 }): Promise<SpSearchTermFactRow[]> => {
   const rows: SpSearchTermFactRow[] = [];
 
-  for (const batch of chunk(args.targetIds, 100)) {
+  for (const batch of chunk(args.ids, 100)) {
     const fetched = await fetchAllRows<SpSearchTermFactRow>((from, to) =>
-      supabaseAdmin
+      {
+        let query = supabaseAdmin
         .from('sp_stis_daily_fact_latest')
         .select(
           [
@@ -418,8 +527,12 @@ const loadSearchTermRowsByTargetIds = async (args: {
         .eq('account_id', env.accountId)
         .gte('date', args.start)
         .lte('date', args.end)
-        .in('target_id', batch)
-        .range(from, to)
+        .in(args.idColumn, batch);
+        if (args.onlyNullAdGroup) {
+          query = query.is('ad_group_id', null);
+        }
+        return query.range(from, to);
+      }
     );
     rows.push(...fetched);
   }
@@ -461,6 +574,12 @@ const buildTargetProfileViewRow = (args: {
   requestedStart: string;
   requestedEnd: string;
   target: SpTargetsWorkspaceRow;
+  rawIdentity: {
+    rawTargetId: string | null;
+    rawAdGroupId: string | null;
+    targetingRaw: string | null;
+    targetingNorm: string | null;
+  } | null;
   coverageWindow: TargetCoverageWindow | null;
   membership: {
     firstDate: string | null;
@@ -551,10 +670,20 @@ const buildTargetProfileViewRow = (args: {
       identity: {
         campaign_id: args.target.campaign_id,
         campaign_name: args.target.campaign_name,
-        ad_group_id: args.target.ad_group_id,
+        ad_group_id: args.rawIdentity?.rawAdGroupId ?? args.target.ad_group_id,
         ad_group_name: args.target.ad_group_name,
         target_id: args.target.target_id,
-        target_text: args.target.target_text,
+        raw_target_id: args.rawIdentity?.rawTargetId ?? null,
+        raw_ad_group_id: args.rawIdentity?.rawAdGroupId ?? null,
+        target_identity_status:
+          args.rawIdentity?.rawTargetId && !isWeakIdentityToken(args.rawIdentity.rawTargetId)
+            ? 'resolved'
+            : 'unresolved',
+        ad_group_identity_status: args.rawIdentity?.rawAdGroupId ? 'resolved' : 'unresolved',
+        target_profile_key: args.target.target_id,
+        targeting_raw: args.rawIdentity?.targetingRaw ?? null,
+        targeting_norm: args.rawIdentity?.targetingNorm ?? null,
+        target_text: buildSnapshotTargetLabel(args.target, args.rawIdentity),
         match_type: args.target.match_type,
         type_label: args.target.type_label,
       },
@@ -745,6 +874,17 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
     coverageNotes.push('This run predates Phase 5 target-profile enrichment, so derived fields remain null.');
   }
 
+  const identityStatus = readNestedString(identity, 'target_identity_status');
+  const rawTargetId = readNestedString(identity, 'raw_target_id');
+  const rawAdGroupId = readNestedString(identity, 'raw_ad_group_id');
+  const targetingRaw = readNestedString(identity, 'targeting_raw');
+  const targetingNorm = readNestedString(identity, 'targeting_norm');
+  const resolvedTargetText =
+    readNestedString(identity, 'target_text') ??
+    targetingRaw ??
+    targetingNorm ??
+    (identityStatus === 'unresolved' ? 'Unresolved target identity' : snapshot.target_id);
+
   return {
     targetSnapshotId: snapshot.target_snapshot_id,
     runId: snapshot.run_id,
@@ -752,13 +892,13 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
     asin: snapshot.asin,
     campaignId: snapshot.campaign_id,
     campaignName: readNestedString(identity, 'campaign_name'),
-    adGroupId: snapshot.ad_group_id,
+    adGroupId: rawAdGroupId ?? 'Unresolved ad group ID',
     adGroupName: readNestedString(identity, 'ad_group_name'),
-    targetId: snapshot.target_id,
-    targetText:
-      readNestedString(identity, 'target_text') ??
-      readNestedString(identity, 'targeting_raw') ??
-      snapshot.target_id,
+    targetId:
+      rawTargetId && !isWeakIdentityToken(rawTargetId)
+        ? rawTargetId
+        : 'Unresolved target ID',
+    targetText: resolvedTargetText,
     matchType:
       readNestedString(identity, 'match_type') ?? readNestedString(identity, 'match_type_norm'),
     typeLabel: readNestedString(identity, 'type_label'),
@@ -946,16 +1086,6 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
   }
 
   const membershipByAdGroup = buildMembershipByAdGroup(advertisedRows);
-  const campaignsWithAdGroupScope = new Set(
-    advertisedRows
-      .filter((row) => trimString(row.ad_group_id) !== null)
-      .map((row) => trimString(row.campaign_id))
-      .filter((value): value is string => value !== null)
-  );
-  const campaignIdsWithoutAdGroupScope = scopeSummary.campaignIds.filter(
-    (campaignId) => !campaignsWithAdGroupScope.has(campaignId)
-  );
-
   const targetingRows = await loadTargetingRowsByScope({
     idColumn: 'ad_group_id',
     ids: scopeSummary.adGroupIds,
@@ -963,17 +1093,19 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
     end: args.end,
   });
   const campaignFallbackRows =
-    campaignIdsWithoutAdGroupScope.length > 0
+    scopeSummary.campaignIds.length > 0
       ? await loadTargetingRowsByScope({
           idColumn: 'campaign_id',
-          ids: campaignIdsWithoutAdGroupScope,
+          ids: scopeSummary.campaignIds,
           start: args.start,
           end: args.end,
+          onlyNullAdGroup: true,
         })
       : [];
   const allTargetingRows = [...targetingRows, ...campaignFallbackRows];
+  const normalizedTargetingRows = normalizeTargetingRowsForProfiles(allTargetingRows);
 
-  if (allTargetingRows.length === 0) {
+  if (normalizedTargetingRows.length === 0) {
     return {
       rows: [],
       zeroTargetDiagnostics: {
@@ -989,54 +1121,86 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
           ad_group_ids: scopeSummary.adGroupIds.length,
           campaign_ids: scopeSummary.campaignIds.length,
           ambiguous_campaign_ids: scopeSummary.ambiguousCampaignIds.size,
-          campaign_fallback_ids: campaignIdsWithoutAdGroupScope.length,
+          campaign_fallback_ids: scopeSummary.campaignIds.length,
         },
       },
     };
   }
 
-  const targetIds = Array.from(
-    new Set(allTargetingRows.map((row) => trimString(row.target_id)).filter(Boolean) as string[])
-  );
   const scopedCampaignIds = Array.from(
-    new Set(allTargetingRows.map((row) => trimString(row.campaign_id)).filter(Boolean) as string[])
+    new Set(
+      normalizedTargetingRows
+        .map((row) => trimString(row.campaign_id))
+        .filter(Boolean) as string[]
+    )
   );
-  const [searchTermRows, placementRows, overviewData] = await Promise.all([
-    targetIds.length > 0
-      ? loadSearchTermRowsByTargetIds({
-          targetIds,
-          start: args.start,
-          end: args.end,
-        })
-      : Promise.resolve([] as SpSearchTermFactRow[]),
-    scopedCampaignIds.length > 0
-      ? loadPlacementRowsByCampaignIds({
-          campaignIds: scopedCampaignIds,
-          start: args.start,
-          end: args.end,
-        })
-      : Promise.resolve([] as SpPlacementFactRow[]),
-    args.overviewData
-      ? Promise.resolve(args.overviewData)
-      : getAdsOptimizerOverviewData({
-          accountId: env.accountId,
-          marketplace: env.marketplace,
-          asin: args.asin,
-          start: args.start,
-          end: args.end,
-        }),
-  ]);
+  const [searchTermRowsByAdGroup, searchTermRowsByCampaignFallback, placementRows, overviewData] =
+    await Promise.all([
+      scopeSummary.adGroupIds.length > 0
+        ? loadSearchTermRowsByScope({
+            idColumn: 'ad_group_id',
+            ids: scopeSummary.adGroupIds,
+            start: args.start,
+            end: args.end,
+          })
+        : Promise.resolve([] as SpSearchTermFactRow[]),
+      scopeSummary.campaignIds.length > 0
+        ? loadSearchTermRowsByScope({
+            idColumn: 'campaign_id',
+            ids: scopeSummary.campaignIds,
+            start: args.start,
+            end: args.end,
+            onlyNullAdGroup: true,
+          })
+        : Promise.resolve([] as SpSearchTermFactRow[]),
+      scopedCampaignIds.length > 0
+        ? loadPlacementRowsByCampaignIds({
+            campaignIds: scopedCampaignIds,
+            start: args.start,
+            end: args.end,
+          })
+        : Promise.resolve([] as SpPlacementFactRow[]),
+      args.overviewData
+        ? Promise.resolve(args.overviewData)
+        : getAdsOptimizerOverviewData({
+            accountId: env.accountId,
+            marketplace: env.marketplace,
+            asin: args.asin,
+            start: args.start,
+            end: args.end,
+          }),
+    ]);
+  const searchTermRows = [...searchTermRowsByAdGroup, ...searchTermRowsByCampaignFallback];
 
-  const coverageByTarget = buildTargetCoverageById(allTargetingRows);
+  const normalizedSearchTermRows = normalizeSearchTermRowsForProfiles(searchTermRows);
+  const coverageByTarget = buildTargetCoverageById(normalizedTargetingRows);
+  const rawIdentityByProfileKey = new Map<
+    string,
+    {
+      rawTargetId: string | null;
+      rawAdGroupId: string | null;
+      targetingRaw: string | null;
+      targetingNorm: string | null;
+    }
+  >();
+  allTargetingRows.forEach((row) => {
+    const key = buildTargetProfileKey(row);
+    if (rawIdentityByProfileKey.has(key)) return;
+    rawIdentityByProfileKey.set(key, {
+      rawTargetId: trimString(row.target_id),
+      rawAdGroupId: trimString(row.ad_group_id),
+      targetingRaw: trimString(row.targeting_raw),
+      targetingNorm: trimString(row.targeting_norm),
+    });
+  });
   const workspaceModel = buildSpTargetsWorkspaceModel({
-    targetRows: allTargetingRows,
-    searchTermRows,
+    targetRows: normalizedTargetingRows,
+    searchTermRows: normalizedSearchTermRows,
     placementRows,
     ambiguousCampaignIds: scopeSummary.ambiguousCampaignIds,
   });
 
-  const profileRows = workspaceModel.rows.filter((target) => trimString(target.ad_group_id) !== null);
-  const rows = profileRows
+  const rows = workspaceModel.rows
     .sort((left, right) => right.spend - left.spend || left.target_id.localeCompare(right.target_id))
     .map((target) =>
       buildTargetProfileViewRow({
@@ -1044,8 +1208,13 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
         requestedStart: args.start,
         requestedEnd: args.end,
         target,
+        rawIdentity: rawIdentityByProfileKey.get(target.target_id) ?? null,
         coverageWindow: coverageByTarget.get(target.target_id) ?? null,
-        membership: target.ad_group_id ? membershipByAdGroup.get(target.ad_group_id) ?? null : null,
+        membership:
+          rawIdentityByProfileKey.get(target.target_id)?.rawAdGroupId
+            ? membershipByAdGroup.get(rawIdentityByProfileKey.get(target.target_id)?.rawAdGroupId ?? '') ??
+              null
+            : null,
         overview: overviewData,
       })
     );
