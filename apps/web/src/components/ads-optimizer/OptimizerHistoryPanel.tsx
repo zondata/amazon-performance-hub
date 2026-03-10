@@ -1,4 +1,8 @@
 import type { AdsOptimizerRun } from '@/lib/ads-optimizer/runtimeTypes';
+import {
+  formatUiDateRange,
+  formatUiDateTime as formatDateTime,
+} from '@/lib/time/formatUiDate';
 
 type OptimizerHistoryPanelProps = {
   asin: string;
@@ -10,13 +14,6 @@ type OptimizerHistoryPanelProps = {
   notice: string | null;
   error: string | null;
   runNowAction: (formData: FormData) => Promise<void>;
-};
-
-const formatDateTime = (value: string | null) => {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString('en-US');
 };
 
 const statusBadgeClass = (status: AdsOptimizerRun['status']) => {
@@ -137,7 +134,7 @@ export default function OptimizerHistoryPanel(props: OptimizerHistoryPanelProps)
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-3">
                         <div className="text-base font-semibold text-foreground">
-                          {run.selected_asin} · {run.date_start} → {run.date_end}
+                          {run.selected_asin} · {formatUiDateRange(run.date_start, run.date_end)}
                         </div>
                         <span
                           className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusBadgeClass(

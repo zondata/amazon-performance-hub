@@ -13,6 +13,7 @@ import {
   uploadTemplate,
 } from '@/lib/bulksheets/templateStore';
 import { env } from '@/lib/env';
+import { formatUiDateTime as formatDateTime } from '@/lib/time/formatUiDate';
 
 const TEMPLATE_LABELS: Record<TemplateKey, string> = {
   sp_update: 'SP Update',
@@ -39,13 +40,6 @@ const formatBytes = (value: number | null) => {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
   return `${(value / (1024 * 1024)).toFixed(2)} MB`;
-};
-
-const formatDateTime = (value: string | null) => {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString('en-US');
 };
 
 const containsAny = (value: string, terms: string[]) => terms.some((term) => value.includes(term));

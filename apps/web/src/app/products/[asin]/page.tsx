@@ -53,6 +53,10 @@ import { getProductSqpTrendSeries } from '@/lib/sqp/getProductSqpTrendSeries';
 import { listResolvedSkills, resolveSkillsByIds } from '@/lib/skills/resolveSkills';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
+import {
+  formatUiDateRange,
+  formatUiDateTime as formatDateTime,
+} from '@/lib/time/formatUiDate';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -81,19 +85,6 @@ const formatNumber = (value?: number | null) => {
 const formatPercent = (value?: number | null) => {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
   return `${(value * 100).toFixed(1)}%`;
-};
-
-const formatDateTime = (value?: string | null) => {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString('en-US');
-};
-
-const formatDateOnly = (value?: string | null) => {
-  if (!value) return '—';
-  if (!DATE_RE.test(value)) return value;
-  return value;
 };
 
 const asObject = (value: unknown): Record<string, unknown> | null => {
@@ -1322,7 +1313,7 @@ export default async function ProductDetailPage({
               {displayName}
             </div>
             <div className="mt-1 text-sm text-muted">
-              ASIN {asin} · {start} → {end}
+              ASIN {asin} · {formatUiDateRange(start, end)}
             </div>
             {showTitle ? (
               <div className="mt-2 text-sm text-muted">{title}</div>
@@ -1571,7 +1562,7 @@ export default async function ProductDetailPage({
                             <div className="text-xs text-muted">{group.experiment.objective}</div>
                           </td>
                           <td className="px-3 py-2 text-muted">
-                            {formatDateOnly(group.start_date)} → {formatDateOnly(group.end_date)}
+                            {formatUiDateRange(group.start_date, group.end_date)}
                           </td>
                           <td className="px-3 py-2">
                             <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium uppercase text-primary">
@@ -1648,7 +1639,7 @@ export default async function ProductDetailPage({
                               {group.experiment.objective}
                             </div>
                             <div className="mt-1 text-xs text-muted">
-                              {formatDateOnly(group.start_date)} → {formatDateOnly(group.end_date)}
+                              {formatUiDateRange(group.start_date, group.end_date)}
                             </div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -1983,7 +1974,10 @@ export default async function ProductDetailPage({
                               {formatDateTime(group.latest_evaluation.evaluated_at)}
                               {group.latest_evaluation.window_start ||
                               group.latest_evaluation.window_end
-                                ? ` · ${group.latest_evaluation.window_start ?? '—'} → ${group.latest_evaluation.window_end ?? '—'}`
+                                ? ` · ${formatUiDateRange(
+                                    group.latest_evaluation.window_start,
+                                    group.latest_evaluation.window_end
+                                  )}`
                                 : ''}
                             </div>
                             <div className="mt-1 text-sm text-muted">
@@ -2287,7 +2281,7 @@ export default async function ProductDetailPage({
                   Changes Explorer for {asin}
                 </div>
                 <div className="mt-1 text-sm text-muted">
-                  Showing {start} → {end}
+                  Showing {formatUiDateRange(start, end)}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">

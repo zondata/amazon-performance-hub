@@ -5,14 +5,8 @@ import { getExperimentOptions } from '@/lib/logbook/getExperimentOptions';
 import SpUpdateRunner from '@/components/bulksheets/SpUpdateRunner';
 import { runSpUpdateGenerator } from '@/lib/bulksheets/runGenerators';
 import { downloadTemplateToLocalPath, getTemplateStatus } from '@/lib/bulksheets/templateStore';
+import { formatUiDateTime } from '@/lib/time/formatUiDate';
 import type { SpUpdateAction } from '../../../../../../src/bulksheet_gen_sp/types';
-
-const formatDateTime = (value: string | null) => {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString('en-US');
-};
 
 export default async function SpUpdatePage() {
   const experiments = await getExperimentOptions();
@@ -21,7 +15,9 @@ export default async function SpUpdatePage() {
   const missingConfig = !env.bulkgenOutRoot;
   const spawnDisabled = !env.enableBulkgenSpawn;
   const templateMissing = spTemplateStatus.source === 'missing';
-  const templateUpdatedAt = formatDateTime(spTemplateStatus.updatedAt);
+  const templateUpdatedAt = spTemplateStatus.updatedAt
+    ? formatUiDateTime(spTemplateStatus.updatedAt)
+    : null;
   const templateStatusLine =
     spTemplateStatus.source === 'storage'
       ? `Stored in system${templateUpdatedAt ? ` (updated ${templateUpdatedAt})` : ''}`

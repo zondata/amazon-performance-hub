@@ -16,6 +16,7 @@ import {
   getRankHue,
 } from '@/lib/ranking/rankBands';
 import type { ProductRankingRow } from '@/lib/ranking/getProductRankingDaily';
+import { formatUiDateRange } from '@/lib/time/formatUiDate';
 
 const normalizeKeyword = (value: string): string =>
   value
@@ -342,7 +343,7 @@ export default function ProductRankingHeatmap({
         <div>
           <div className="text-xs uppercase tracking-[0.3em] text-muted">Ranking</div>
           <div className="mt-2 text-lg font-semibold text-foreground">
-            {asin} · {start} → {end}
+            {asin} · {formatUiDateRange(start, end)}
           </div>
           <div className="mt-1 text-xs text-muted">
             {visibleDates.length} columns · {filteredCount} keywords

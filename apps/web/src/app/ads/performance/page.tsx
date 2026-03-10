@@ -14,6 +14,7 @@ import { env } from '@/lib/env';
 import { getExperimentOptions } from '@/lib/logbook/getExperimentOptions';
 import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
 import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
+import { formatUiDateRange, formatUiDateTime } from '@/lib/time/formatUiDate';
 import { getPageSettings } from '@/lib/uiSettings/getPageSettings';
 import type { SpSearchTermsWorkspaceChildRow } from '@/lib/ads/spSearchTermsWorkspaceModel';
 import type {
@@ -50,13 +51,6 @@ const formatNumber = (value?: number | null) => {
 const formatPercent = (value?: number | null) => {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
   return `${(value * 100).toFixed(1)}%`;
-};
-
-const formatDateTime = (value: string | null | undefined) => {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString('en-US');
 };
 
 type AdsPageProps = {
@@ -365,7 +359,9 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
 
     experimentOptions = await getExperimentOptions();
     const spTemplateStatus = await getTemplateStatus('sp_update');
-    const templateUpdatedAt = formatDateTime(spTemplateStatus.updatedAt);
+    const templateUpdatedAt = spTemplateStatus.updatedAt
+      ? formatUiDateTime(spTemplateStatus.updatedAt)
+      : null;
     templateMissing = spTemplateStatus.source === 'missing';
     templateStatusLine =
       spTemplateStatus.source === 'storage'
@@ -568,7 +564,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
               Ads workspace
             </div>
             <div className="mt-2 text-lg font-semibold text-foreground">
-              {start} → {end}
+              {formatUiDateRange(start, end)}
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
               SP-first workspace shell. Table mode is operational for campaigns, ad groups, targets, placements, and search terms. Phase 7 currently ships a diagnostic-first trend slice for Campaigns and Targets.

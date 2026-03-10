@@ -1,4 +1,5 @@
 import type { AdsOptimizerOverviewData } from '@/lib/ads-optimizer/overview';
+import { formatUiDateRange } from '@/lib/time/formatUiDate';
 
 type OptimizerOverviewPanelProps = {
   asin: string;
@@ -96,7 +97,7 @@ export default function OptimizerOverviewPanel(props: OptimizerOverviewPanelProp
         </div>
         <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
           Scope is currently set to all advertised ASINs. Choose a single ASIN above, then apply
-          the filters to render the command-center for {props.start} → {props.end}.
+          the filters to render the command-center for {formatUiDateRange(props.start, props.end)}.
         </div>
       </section>
     );
@@ -112,7 +113,7 @@ export default function OptimizerOverviewPanel(props: OptimizerOverviewPanelProp
             <div className="text-xs uppercase tracking-[0.3em] text-muted">Product command-center</div>
             <div className="mt-2 text-2xl font-semibold text-foreground">{data.product.displayName}</div>
             <div className="mt-2 text-sm text-muted">
-              ASIN {data.product.asin} · {props.start} → {props.end}
+              ASIN {data.product.asin} · {formatUiDateRange(props.start, props.end)}
             </div>
             {data.product.shortName && data.product.title ? (
               <div className="mt-1 text-sm text-muted">{data.product.title}</div>

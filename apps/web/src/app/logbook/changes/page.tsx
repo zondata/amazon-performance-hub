@@ -4,8 +4,7 @@ import InlineFilters from '@/components/InlineFilters';
 import PageHeader from '@/components/PageHeader';
 import Table from '@/components/Table';
 import { getChanges } from '@/lib/logbook/getChanges';
-
-const formatDateTime = (value: string) => new Date(value).toLocaleString();
+import { formatUiDateTime as formatDateTime } from '@/lib/time/formatUiDate';
 
 type ChangesPageProps = {
   searchParams?: {

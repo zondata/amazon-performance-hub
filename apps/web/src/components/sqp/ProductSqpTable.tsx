@@ -18,6 +18,7 @@ import type {
 } from '@/lib/sqp/getProductSqpWeekly';
 import type { SqpTrendRow } from '@/lib/sqp/getProductSqpTrendSeries';
 import { ALL_COLUMNS, IMPORTANT_COLUMNS } from '@/lib/sqp/sqpColumns';
+import { formatUiDateRange } from '@/lib/time/formatUiDate';
 
 const formatNumber = (value?: number | null): string => {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
@@ -277,7 +278,7 @@ export default function ProductSqpTable({
           </div>
           <div className="mt-1 text-xs text-muted">
             {selectedWeekEnd
-              ? `${selectedWeek?.week_start ?? '—'} → ${selectedWeekEnd}`
+              ? formatUiDateRange(selectedWeek?.week_start, selectedWeekEnd)
               : 'No weeks available'}{' '}
             · {sortedRows.length} rows
           </div>
@@ -305,7 +306,7 @@ export default function ProductSqpTable({
                 <option
                   key={week.week_end}
                   value={week.week_end}
-                  title={`${week.week_start} → ${week.week_end}`}
+                  title={formatUiDateRange(week.week_start, week.week_end)}
                 >
                   {formatSqpWeekLabel(week.week_end)}
                 </option>

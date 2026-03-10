@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import TrendChart from '@/components/TrendChart';
 import { getDashboardData } from '@/lib/dashboard/getDashboardData';
+import { formatUiDateRange } from '@/lib/time/formatUiDate';
 
 type DashboardPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -63,7 +64,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               Dashboard filters
             </div>
             <div className="mt-2 text-lg font-semibold text-foreground">
-              {data.filters.start} → {data.filters.end}
+              {formatUiDateRange(data.filters.start, data.filters.end)}
             </div>
           </div>
           <form method="get" className="flex flex-wrap items-end gap-3">

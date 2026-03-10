@@ -4,6 +4,7 @@ import KpiCards from '@/components/KpiCards';
 import { env } from '@/lib/env';
 import { getProductsData } from '@/lib/products/getProductsData';
 import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
+import { formatUiDateRange } from '@/lib/time/formatUiDate';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -184,7 +185,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
               Products
             </div>
             <div className="mt-2 text-lg font-semibold text-foreground">
-              {start} → {end}
+              {formatUiDateRange(start, end)}
             </div>
           </div>
           <div className="space-y-3">

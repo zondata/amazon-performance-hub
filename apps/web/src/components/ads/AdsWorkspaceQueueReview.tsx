@@ -15,6 +15,7 @@ import type {
   JsonObject,
 } from '@/lib/ads-workspace/types';
 import type { ExperimentOption } from '@/lib/logbook/getExperimentOptions';
+import { formatUiDateTime as formatDateTime } from '@/lib/time/formatUiDate';
 
 type ChangeSetLink = {
   id: string;
@@ -36,12 +37,6 @@ type AdsWorkspaceQueueReviewProps = {
   returnTo: string;
   notice: string | null;
   error: string | null;
-};
-
-const formatDateTime = (value: string) => {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString('en-US');
 };
 
 const formatValue = (value: string | number | null) => {

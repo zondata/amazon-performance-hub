@@ -10,6 +10,7 @@ import { runSpCreateGenerator } from '@/lib/bulksheets/runGenerators';
 import { buildSpCreateActions } from '@/lib/bulksheets/actionBuilders';
 import { ensureOutRoot, safeJoin } from '@/lib/bulksheets/fsPaths';
 import { downloadTemplateToLocalPath, getTemplateStatus } from '@/lib/bulksheets/templateStore';
+import { formatUiDateTime } from '@/lib/time/formatUiDate';
 import type { SpCreateAction } from '../../../../../../src/bulksheet_gen_sp_create/types';
 
 const parseKeywords = (raw: string) => {
@@ -31,13 +32,6 @@ const parseKeywords = (raw: string) => {
   });
 };
 
-const formatDateTime = (value: string | null) => {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString('en-US');
-};
-
 export default async function SpCreatePage() {
   const experiments = await getExperimentOptions();
   const templateStatus = await getTemplateStatus();
@@ -45,7 +39,9 @@ export default async function SpCreatePage() {
   const missingConfig = !env.bulkgenOutRoot;
   const spawnDisabled = !env.enableBulkgenSpawn;
   const templateMissing = spCreateTemplateStatus.source === 'missing';
-  const templateUpdatedAt = formatDateTime(spCreateTemplateStatus.updatedAt);
+  const templateUpdatedAt = spCreateTemplateStatus.updatedAt
+    ? formatUiDateTime(spCreateTemplateStatus.updatedAt)
+    : null;
   const templateStatusLine =
     spCreateTemplateStatus.source === 'storage'
       ? `Stored in system${templateUpdatedAt ? ` (updated ${templateUpdatedAt})` : ''}`

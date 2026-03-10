@@ -5,8 +5,7 @@ import PageHeader from '@/components/PageHeader';
 import Table from '@/components/Table';
 import { getExperiments } from '@/lib/logbook/getExperiments';
 import { getOutcomePillClassName } from '@/lib/logbook/outcomePill';
-
-const formatDate = (value: string) => new Date(value).toLocaleDateString();
+import { formatUiDate as formatDate } from '@/lib/time/formatUiDate';
 
 const truncate = (value: string, max = 80) =>
   value.length > max ? `${value.slice(0, max).trim()}…` : value;

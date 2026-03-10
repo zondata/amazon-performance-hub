@@ -1,4 +1,5 @@
 import type { AdsOptimizerRulePack, AdsOptimizerRulePackVersion } from '@/lib/ads-optimizer/types';
+import { formatUiDateTime as formatDateTime } from '@/lib/time/formatUiDate';
 
 type OptimizerConfigManagerProps = {
   returnTo: string;
@@ -11,13 +12,6 @@ type OptimizerConfigManagerProps = {
   error: string | null;
   createDraftAction: (formData: FormData) => Promise<void>;
   activateVersionAction: (formData: FormData) => Promise<void>;
-};
-
-const formatDateTime = (value: string | null) => {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString('en-US');
 };
 
 const statusBadgeClass = (status: AdsOptimizerRulePackVersion['status']) => {

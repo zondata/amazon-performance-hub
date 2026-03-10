@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { formatUiDateTime as formatDateTime } from '@/lib/time/formatUiDate';
 
 type TimelineEvent = {
   id: string;
@@ -34,13 +35,6 @@ const asString = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
   return normalized ? normalized : null;
-};
-
-const formatDateTime = (value?: string | null): string => {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
 };
 
 const formatEventTypeLabel = (value: string): string => value.replace(/_/g, ' ');

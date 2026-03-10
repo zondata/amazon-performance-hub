@@ -7,6 +7,7 @@ import { getDataHealth, type DataHealthResult } from '@/lib/health/getDataHealth
 import { getImportsHealthSettings } from '@/lib/imports/preferences';
 import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
 import { seedProductsFromSalesLatest } from '@/lib/products/seedProductsFromSalesLatest';
+import { formatUiDate, formatUiDateRange } from '@/lib/time/formatUiDate';
 
 const SOURCE_GROUPS: Array<{ title: string; sources: string[] }> = [
   { title: 'Bulksheets', sources: ['bulk'] },
@@ -38,17 +39,6 @@ const SOURCE_GROUPS: Array<{ title: string; sources: string[] }> = [
   { title: 'SQP', sources: ['sqp'] },
   { title: 'Ranking', sources: ['h10_keyword_tracker'] },
 ];
-
-const formatDate = (value?: string | null) => {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString('en-US', {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
-  });
-};
 
 const formatNumber = (value?: number | string | null) => {
   if (value === null || value === undefined) return '—';
@@ -118,11 +108,11 @@ const renderUploadTable = (
                     {row.source_type}
                   </td>
                   <td className="py-3 text-muted">
-                    {formatDate(getLatestTimestamp(row))}
+                    {formatUiDate(getLatestTimestamp(row))}
                   </td>
                   <td className="py-3 text-muted">
                     {row.coverage_start || row.coverage_end
-                      ? `${row.coverage_start ?? '—'} → ${row.coverage_end ?? '—'}`
+                      ? formatUiDateRange(row.coverage_start, row.coverage_end)
                       : '—'}
                   </td>
                   <td className="py-3 text-muted">
@@ -360,7 +350,7 @@ export default async function ImportsHealthPage({
             {data.spendReconciliation.enabled &&
             'latest_flag_date' in data.spendReconciliation ? (
               <div className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm text-muted">
-                Latest flag: {formatDate(data.spendReconciliation.latest_flag_date)}
+                Latest flag: {formatUiDate(data.spendReconciliation.latest_flag_date)}
               </div>
             ) : null}
           </div>

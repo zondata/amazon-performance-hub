@@ -18,6 +18,7 @@ import {
   type SalesMetricKey,
 } from '@/lib/sales/salesMetrics';
 import { saveSalesTrendSettings } from '@/app/sales/trend/actions';
+import { formatUiDateRange } from '@/lib/time/formatUiDate';
 
 type AsinOption = {
   asin: string;
@@ -320,7 +321,7 @@ export default function SalesTrendInteractive({
             Sales trend
           </div>
           <div className="mt-2 text-lg font-semibold text-foreground">
-            {filters.start} → {filters.end}
+            {formatUiDateRange(filters.start, filters.end)}
           </div>
           <div className="mt-1 text-xs text-muted">
             {bucketConfig.granularity} - {buckets.length} periods

@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { formatUiDateTime as formatDateTime } from '@/lib/time/formatUiDate';
 
 type KivItem = {
   kiv_id: string;
@@ -25,13 +26,6 @@ type Props = {
 const readErrorText = async (response: Response): Promise<string> => {
   const text = await response.text();
   return text.trim().length > 0 ? text : `Request failed (${response.status})`;
-};
-
-const formatDateTime = (value?: string | null) => {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
 };
 
 const parseTagsInput = (value: string): string[] =>

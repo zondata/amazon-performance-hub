@@ -21,6 +21,7 @@ import {
 import { env } from '@/lib/env';
 import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
 import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
+import { formatUiDateRange } from '@/lib/time/formatUiDate';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -158,7 +159,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
               Ads optimizer
             </div>
             <div className="mt-2 text-lg font-semibold text-foreground">
-              {start} → {end}
+              {formatUiDateRange(start, end)}
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
               Feature-flagged SP recommendation shell. This route is isolated from the current Ads

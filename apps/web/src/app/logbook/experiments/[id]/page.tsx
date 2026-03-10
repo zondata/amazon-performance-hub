@@ -29,22 +29,12 @@ import {
   type ReviewSortMode,
 } from '@/lib/logbook/reviewProposedChangesDisplayModel';
 import { listResolvedSkills } from '@/lib/skills/resolveSkills';
+import {
+  formatUiDate as formatDateOnly,
+  formatUiDateRange,
+  formatUiDateTime as formatDateTime,
+} from '@/lib/time/formatUiDate';
 import { getPageSettings } from '@/lib/uiSettings/getPageSettings';
-
-const formatDateTime = (value?: string | null) => {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
-};
-
-const formatDateOnly = (value?: string | null) => {
-  if (!value) return '—';
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toISOString().slice(0, 10);
-};
 
 const formatJson = (value: unknown) => (value ? JSON.stringify(value, null, 2) : '—');
 
@@ -445,7 +435,7 @@ export default async function ExperimentDetailPage({
         <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="text-xs uppercase tracking-wider text-muted">Window</div>
           <div className="mt-2 text-sm font-semibold text-foreground">
-            {formatDateOnly(context.date_window.startDate)} → {formatDateOnly(context.date_window.endDate)}
+            {formatUiDateRange(context.date_window.startDate, context.date_window.endDate)}
           </div>
           <div className="mt-1 text-xs text-muted">Source: {context.date_window.source}</div>
         </div>
@@ -474,7 +464,10 @@ export default async function ExperimentDetailPage({
           </div>
           <div className="mt-1 text-xs text-muted">
             {context.latest_evaluation?.window_start || context.latest_evaluation?.window_end
-              ? `${context.latest_evaluation?.window_start ?? '—'} → ${context.latest_evaluation?.window_end ?? '—'}`
+              ? formatUiDateRange(
+                  context.latest_evaluation?.window_start,
+                  context.latest_evaluation?.window_end
+                )
               : '—'}
           </div>
         </div>
@@ -715,7 +708,7 @@ export default async function ExperimentDetailPage({
                     </span>
                   </div>
                   <div className="mt-1 text-xs text-muted">
-                    Window {evaluation.window_start ?? '—'} → {evaluation.window_end ?? '—'}
+                    Window {formatUiDateRange(evaluation.window_start, evaluation.window_end)}
                   </div>
                   <div className="mt-1 text-sm text-muted">
                     Summary: {summary ?? evaluation.notes ?? '—'}

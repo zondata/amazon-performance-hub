@@ -4,6 +4,7 @@ import { env } from '@/lib/env';
 import { computeMovingAverages } from '@/lib/sales/computeMovingAverages';
 import { getSalesDaily } from '@/lib/sales/getSalesDaily';
 import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
+import { formatUiDateRange } from '@/lib/time/formatUiDate';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -68,7 +69,7 @@ export default async function SalesMovingAveragePage({
             Moving averages
           </div>
           <div className="mt-2 text-lg font-semibold text-foreground">
-            {start} → {end}
+            {formatUiDateRange(start, end)}
           </div>
         </div>
         <form method="get" className="flex flex-wrap items-end gap-3">

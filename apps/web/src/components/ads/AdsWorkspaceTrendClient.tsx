@@ -11,6 +11,7 @@ import type { SpTargetsWorkspaceRow } from '@/lib/ads/spTargetsWorkspaceModel';
 import type { SaveSpDraftActionState } from '@/lib/ads-workspace/spChangeComposerState';
 import type { AdsObjectivePreset, JsonObject } from '@/lib/ads-workspace/types';
 import type { SpTrendMarker, SpTrendMetricCell, SpWorkspaceTrendData } from '@/lib/ads/spWorkspaceTrendModel';
+import { formatUiDateTime } from '@/lib/time/formatUiDate';
 
 type KpiItem = {
   label: string;
@@ -71,8 +72,7 @@ const formatDateHeader = (value: string) => {
 };
 
 const formatDateTime = (value: string) => {
-  const parsed = new Date(value);
-  return parsed.toLocaleString('en-US');
+  return formatUiDateTime(value);
 };
 
 const formatCellValue = (value: number | null, kind: string) => {
