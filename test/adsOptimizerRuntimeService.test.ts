@@ -31,6 +31,7 @@ const makeActiveVersion = () => ({
     role_templates: {},
     guardrail_templates: {},
     scoring_weights: {},
+    state_engine: {},
     action_policy: {},
   },
   created_from_version_id: null,
@@ -67,6 +68,8 @@ describe('ads optimizer phase 4 manual run service', () => {
   it('creates a completed run with product, target, and recommendation snapshots', async () => {
     const updateCalls: Array<Record<string, unknown>> = [];
     let insertedRecommendationRows: Array<Record<string, unknown>> = [];
+    let insertedProductRows: Array<Record<string, unknown>> = [];
+    let insertedTargetRows: Array<Record<string, unknown>> = [];
 
     const result = await executeAdsOptimizerManualRun(
       {
@@ -85,11 +88,12 @@ describe('ads optimizer phase 4 manual run service', () => {
         createRun: async (payload) => {
           expect(payload.selectedAsin).toBe('B001TEST');
           expect(payload.rulePackVersionLabel).toBe('sp_v1_seed');
-          expect(payload.inputSummary.phase).toBe(5);
+          expect(payload.inputSummary.phase).toBe(6);
           expect(payload.inputSummary.snapshot_boundaries).toBeTruthy();
           expect(payload.inputSummary.snapshot_boundaries.target_profile_engine).toBe(
             'phase5_target_profile_engine'
           );
+          expect(payload.inputSummary.snapshot_boundaries.state_engine).toBe('phase6_state_engine');
           return makeRun();
         },
         updateRun: async (_runId, payload) => {
@@ -109,9 +113,75 @@ describe('ads optimizer phase 4 manual run service', () => {
         loadProductSnapshotInput: async () => ({
           productId: 'product-1',
           asin: 'B001TEST',
+          overview: {
+            product: {
+              asin: 'B001TEST',
+              title: 'Test product',
+              shortName: 'Test',
+              displayName: 'Test',
+            },
+            economics: {
+              sales: 1800,
+              orders: 30,
+              units: 32,
+              adSpend: 420,
+              adSales: 950,
+              tacos: 0.23,
+              averagePrice: 56.25,
+              costCoverage: 0.62,
+              breakEvenAcos: 0.34,
+              contributionBeforeAdsPerUnit: 18,
+              contributionAfterAds: 226,
+            },
+            visibility: {
+              rankingCoverage: {
+                status: 'ready' as const,
+                trackedKeywords: 5,
+                detail: 'ready',
+              },
+              heroQueryTrend: {
+                status: 'ready' as const,
+                keyword: 'blue widget',
+                searchVolume: 2200,
+                latestOrganicRank: 9,
+                baselineOrganicRank: 13,
+                rankDelta: 4,
+                detail: 'ready',
+              },
+              sqpCoverage: {
+                status: 'ready' as const,
+                selectedWeekEnd: '2026-03-08',
+                trackedQueries: 4,
+                totalSearchVolume: 4200,
+                topQuery: 'blue widget',
+                detail: 'ready',
+              },
+            },
+            state: {
+              value: 'profitable' as const,
+              label: 'Profitable',
+              reason: 'ready',
+            },
+            objective: {
+              value: 'Scale Profit' as const,
+              reason: 'ready',
+            },
+            warnings: [],
+          },
           snapshotPayload: {
             phase: 4,
             capture_type: 'product_snapshot',
+            overview: {
+              state: {
+                value: 'profitable',
+                label: 'Profitable',
+                reason: 'ready',
+              },
+              objective: {
+                value: 'Scale Profit',
+                reason: 'ready',
+              },
+            },
           },
         }),
         loadTargetSnapshotInputs: async () => ({
@@ -124,15 +194,74 @@ describe('ads optimizer phase 4 manual run service', () => {
               sourceScope: 'asin_via_sp_advertised_product_membership',
               coverageNote: 'Coverage note.',
               snapshotPayload: {
-                phase: 4,
+                phase: 5,
                 capture_type: 'target_snapshot',
+                totals: {
+                  impressions: 80,
+                  clicks: 8,
+                  spend: 20,
+                  orders: 2,
+                  sales: 90,
+                  cpc: 2.5,
+                  ctr: 0.1,
+                  cvr: 0.25,
+                  acos: 0.22,
+                  roas: 4.5,
+                },
+                non_additive_diagnostics: {
+                  top_of_search_impression_share_latest: 0.34,
+                  representative_stis_latest: 0.22,
+                  representative_stir_latest: 7,
+                },
+                derived_metrics: {
+                  contribution_after_ads: 10.6,
+                  break_even_gap: 0.12,
+                  max_cpc_support_gap: 1.82,
+                  loss_dollars: null,
+                  profit_dollars: 10.6,
+                  click_velocity: 8,
+                  impression_velocity: 80,
+                  organic_leverage_proxy: 0.031,
+                },
+                demand_proxies: {
+                  search_term_count: 1,
+                  same_text_search_term_count: 1,
+                  total_search_term_impressions: 50,
+                  total_search_term_clicks: 6,
+                  representative_click_share: 0.75,
+                },
+                asin_scope_membership: {
+                  product_ad_spend: 120,
+                  product_ad_sales: 360,
+                  product_orders: 10,
+                  product_units: 10,
+                },
+                product_context: {
+                  break_even_acos: 0.34,
+                  average_price: 56.25,
+                  product_state: 'profitable',
+                  product_objective: 'Scale Profit',
+                },
+                coverage: {
+                  days_observed: 5,
+                  statuses: {
+                    tos_is: 'ready',
+                    stis: 'ready',
+                    stir: 'ready',
+                    placement_context: 'ready',
+                    search_terms: 'ready',
+                    break_even_inputs: 'ready',
+                  },
+                  notes: ['Coverage note.'],
+                },
               },
             },
           ],
           zeroTargetDiagnostics: null,
         }),
-        insertProductSnapshots: async (rows) =>
-          rows.map((row, index) => ({
+        insertProductSnapshots: async (rows) => {
+          insertedProductRows = rows as unknown as Array<Record<string, unknown>>;
+          return rows.map((row, index) => ({
             product_snapshot_id: `product-snapshot-${index + 1}`,
             run_id: row.runId,
             account_id: 'acct',
@@ -141,9 +270,11 @@ describe('ads optimizer phase 4 manual run service', () => {
             asin: row.asin,
             snapshot_payload_json: row.snapshotPayload,
             created_at: '2026-03-10T01:01:00Z',
-          })),
-        insertTargetSnapshots: async (rows) =>
-          rows.map((row, index) => ({
+          }));
+        },
+        insertTargetSnapshots: async (rows) => {
+          insertedTargetRows = rows as unknown as Array<Record<string, unknown>>;
+          return rows.map((row, index) => ({
             target_snapshot_id: `target-snapshot-${index + 1}`,
             run_id: row.runId,
             account_id: 'acct',
@@ -156,7 +287,8 @@ describe('ads optimizer phase 4 manual run service', () => {
             coverage_note: row.coverageNote,
             snapshot_payload_json: row.snapshotPayload,
             created_at: '2026-03-10T01:02:00Z',
-          })),
+          }));
+        },
         insertRecommendationSnapshots: async (rows) => {
           insertedRecommendationRows = rows as unknown as Array<Record<string, unknown>>;
           return rows.map((row, index) => ({
@@ -200,6 +332,17 @@ describe('ads optimizer phase 4 manual run service', () => {
       'PHASE4_BACKBONE_ONLY',
       'NO_RECOMMENDATION_ENGINE_ACTIVE',
     ]);
+    expect(updateCalls[1]?.targetSnapshotCount).toBe(1);
+    expect(insertedProductRows[0]?.snapshotPayload.state_engine.product_state.value).toBe(
+      'profitable'
+    );
+    expect(insertedTargetRows[0]?.snapshotPayload.phase).toBe(6);
+    expect(insertedTargetRows[0]?.snapshotPayload.state_engine.efficiency.value).toBe(
+      'profitable'
+    );
+    expect(insertedTargetRows[0]?.snapshotPayload.state_engine.confidence.value).toBe(
+      'confirmed'
+    );
   });
 
   it('marks the run as failed and stores diagnostics when snapshot loading fails', async () => {
@@ -237,6 +380,61 @@ describe('ads optimizer phase 4 manual run service', () => {
         loadProductSnapshotInput: async () => ({
           productId: 'product-1',
           asin: 'B001TEST',
+          overview: {
+            product: {
+              asin: 'B001TEST',
+              title: 'Test product',
+              shortName: 'Test',
+              displayName: 'Test',
+            },
+            economics: {
+              sales: 1800,
+              orders: 30,
+              units: 32,
+              adSpend: 420,
+              adSales: 950,
+              tacos: 0.23,
+              averagePrice: 56.25,
+              costCoverage: 0.62,
+              breakEvenAcos: 0.34,
+              contributionBeforeAdsPerUnit: 18,
+              contributionAfterAds: 226,
+            },
+            visibility: {
+              rankingCoverage: {
+                status: 'ready' as const,
+                trackedKeywords: 5,
+                detail: 'ready',
+              },
+              heroQueryTrend: {
+                status: 'ready' as const,
+                keyword: 'blue widget',
+                searchVolume: 2200,
+                latestOrganicRank: 9,
+                baselineOrganicRank: 13,
+                rankDelta: 4,
+                detail: 'ready',
+              },
+              sqpCoverage: {
+                status: 'ready' as const,
+                selectedWeekEnd: '2026-03-08',
+                trackedQueries: 4,
+                totalSearchVolume: 4200,
+                topQuery: 'blue widget',
+                detail: 'ready',
+              },
+            },
+            state: {
+              value: 'profitable' as const,
+              label: 'Profitable',
+              reason: 'ready',
+            },
+            objective: {
+              value: 'Scale Profit' as const,
+              reason: 'ready',
+            },
+            warnings: [],
+          },
           snapshotPayload: {
             phase: 4,
           },
@@ -307,6 +505,61 @@ describe('ads optimizer phase 4 manual run service', () => {
         loadProductSnapshotInput: async () => ({
           productId: 'product-1',
           asin: 'B001TEST',
+          overview: {
+            product: {
+              asin: 'B001TEST',
+              title: 'Test product',
+              shortName: 'Test',
+              displayName: 'Test',
+            },
+            economics: {
+              sales: 1800,
+              orders: 30,
+              units: 32,
+              adSpend: 420,
+              adSales: 950,
+              tacos: 0.23,
+              averagePrice: 56.25,
+              costCoverage: 0.62,
+              breakEvenAcos: 0.34,
+              contributionBeforeAdsPerUnit: 18,
+              contributionAfterAds: 226,
+            },
+            visibility: {
+              rankingCoverage: {
+                status: 'ready' as const,
+                trackedKeywords: 5,
+                detail: 'ready',
+              },
+              heroQueryTrend: {
+                status: 'ready' as const,
+                keyword: 'blue widget',
+                searchVolume: 2200,
+                latestOrganicRank: 9,
+                baselineOrganicRank: 13,
+                rankDelta: 4,
+                detail: 'ready',
+              },
+              sqpCoverage: {
+                status: 'ready' as const,
+                selectedWeekEnd: '2026-03-08',
+                trackedQueries: 4,
+                totalSearchVolume: 4200,
+                topQuery: 'blue widget',
+                detail: 'ready',
+              },
+            },
+            state: {
+              value: 'profitable' as const,
+              label: 'Profitable',
+              reason: 'ready',
+            },
+            objective: {
+              value: 'Scale Profit' as const,
+              reason: 'ready',
+            },
+            warnings: [],
+          },
           snapshotPayload: {
             phase: 4,
           },

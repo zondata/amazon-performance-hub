@@ -13,7 +13,7 @@ const runtimePath = path.join(
   'apps/web/src/lib/ads-optimizer/runtime.ts'
 );
 
-describe('ads optimizer phase 5 target profile wiring', () => {
+describe('ads optimizer phase 6 target state wiring', () => {
   it('loads targets view data only for the targets view and renders the targets panel', () => {
     const source = fs.readFileSync(pagePath, 'utf-8');
 
@@ -22,18 +22,34 @@ describe('ads optimizer phase 5 target profile wiring', () => {
     expect(source).toContain('<OptimizerTargetsPanel');
   });
 
-  it('keeps the targets panel honest about raw + derived review-only behavior', () => {
+  it('keeps the targets panel honest about state-engine review-only behavior', () => {
     const source = fs.readFileSync(panelPath, 'utf-8');
 
-    expect(source).toContain('Raw + derived target profiles only');
-    expect(source).toContain('No state engine, role engine, recommendation logic, or execution handoff');
-    expect(source).toContain('No captured target profiles exist for this ASIN/date range yet.');
+    expect(source).toContain("'use client';");
+    expect(source).toContain('useState');
+    expect(source).toContain('Target profiles plus deterministic pre-role states');
+    expect(source).toContain('No role engine, guardrail resolution');
+    expect(source).toContain('recommendation logic, or execution handoff');
+    expect(source).toContain('No captured target states exist for this ASIN/date range yet.');
     expect(source).toContain('Coverage gaps stay explicit instead of being guessed.');
     expect(source).toContain('View coverage');
     expect(source).toContain('CoverageDetailsToggle');
-    expect(source).toContain("coverageSummaryTextClass('ready', coverageSummary.ready)");
-    expect(source).toContain("coverageSummaryTextClass('missing', coverageSummary.missing)");
-    expect(source).toContain("coverageSummaryTextClass('partial', coverageSummary.partial)");
+    expect(source).toContain('StatePill');
+    expect(source).toContain('DetailSection');
+    expect(source).toContain('Product state snapshot');
+    expect(source).toContain('Summary reason codes');
+    expect(source).toContain('Top search-term diagnostics');
+    expect(source).toContain('font-mono text-[11px] leading-4 text-foreground');
+    expect(source).toContain('xl:grid-cols-2');
+    expect(source).toContain('const TARGET_TABLE_COL_COUNT = 30;');
+    expect(source).toContain('setExpandedTargetSnapshotId');
+    expect(source).toContain('aria-controls={`target-detail-panel-${row.targetSnapshotId}`}');
+    expect(source).toContain('colSpan={TARGET_TABLE_COL_COUNT}');
+    expect(source).toContain('Target details');
+    expect(source).toContain('const coverageSummary = getCoverageSummary(row);');
+    expect(source).toContain('Ready {coverageSummary.ready}');
+    expect(source).toContain('Missing {coverageSummary.missing}');
+    expect(source).toContain('Partial {coverageSummary.partial}');
   });
 
   it('pulls exact-window run snapshots instead of inventing live optimizer output', () => {
@@ -42,6 +58,8 @@ describe('ads optimizer phase 5 target profile wiring', () => {
     expect(source).toContain('export const getAdsOptimizerTargetsViewData');
     expect(source).toContain("run.status === 'completed'");
     expect(source).toContain('run.date_start === args.start && run.date_end === args.end');
+    expect(source).toContain('listAdsOptimizerProductSnapshotsByRun');
+    expect(source).toContain('readAdsOptimizerProductRunState');
     expect(source).toContain('listAdsOptimizerTargetSnapshotsByRun');
     expect(source).toContain('mapTargetSnapshotToProfileView');
   });

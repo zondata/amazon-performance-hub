@@ -17,6 +17,13 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 import { getAdsOptimizerOverviewData, type AdsOptimizerOverviewData } from './overview';
 import type { JsonObject } from './runtimeTypes';
+import {
+  readAdsOptimizerTargetRunState,
+  type AdsOptimizerStateCoverageStatus,
+  type AdsOptimizerTargetConfidenceState,
+  type AdsOptimizerTargetEfficiencyState,
+  type AdsOptimizerTargetImportanceTier,
+} from './state';
 
 const TARGET_SOURCE_SCOPE = 'asin_via_sp_advertised_product_membership';
 const TARGET_COVERAGE_NOTE =
@@ -147,6 +154,34 @@ export type AdsOptimizerTargetProfileSnapshotView = {
       breakEvenInputs: AdsOptimizerTargetCoverageStatus;
     };
     notes: string[];
+  };
+  state: {
+    efficiency: {
+      value: AdsOptimizerTargetEfficiencyState | null;
+      label: string;
+      detail: string;
+      coverageStatus: AdsOptimizerStateCoverageStatus;
+      reasonCodes: string[];
+    };
+    confidence: {
+      value: AdsOptimizerTargetConfidenceState | null;
+      label: string;
+      detail: string;
+      coverageStatus: AdsOptimizerStateCoverageStatus;
+      reasonCodes: string[];
+    };
+    importance: {
+      value: AdsOptimizerTargetImportanceTier | null;
+      label: string;
+      detail: string;
+      coverageStatus: AdsOptimizerStateCoverageStatus;
+      reasonCodes: string[];
+    };
+    opportunityScore: number | null;
+    riskScore: number | null;
+    opportunityReasonCodes: string[];
+    riskReasonCodes: string[];
+    summaryReasonCodes: string[];
   };
 };
 
@@ -870,8 +905,14 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
   if (coverageNotes.length === 0 && snapshot.coverage_note) {
     coverageNotes.push(snapshot.coverage_note);
   }
-  if ((payload.phase as number | undefined) !== 5) {
+  if (numberValue(payload.phase as number | string | null | undefined) < 5) {
     coverageNotes.push('This run predates Phase 5 target-profile enrichment, so derived fields remain null.');
+  }
+  const targetState = readAdsOptimizerTargetRunState(payload);
+  if (!targetState) {
+    coverageNotes.push(
+      'This run predates Phase 6 state enrichment, so efficiency, confidence, tier, opportunity, and risk remain uncaptured.'
+    );
   }
 
   const identityStatus = readNestedString(identity, 'target_identity_status');
@@ -1009,6 +1050,40 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
           ) as AdsOptimizerTargetCoverageStatus | null) ?? 'missing',
       },
       notes: coverageNotes,
+    },
+    state: {
+      efficiency: {
+        value: targetState?.efficiency.value ?? null,
+        label: targetState?.efficiency.label ?? 'Not captured',
+        detail:
+          targetState?.efficiency.detail ??
+          'This run predates Phase 6 state capture.',
+        coverageStatus: targetState?.efficiency.coverageStatus ?? 'missing',
+        reasonCodes: targetState?.efficiency.reasonCodes ?? [],
+      },
+      confidence: {
+        value: targetState?.confidence.value ?? null,
+        label: targetState?.confidence.label ?? 'Not captured',
+        detail:
+          targetState?.confidence.detail ??
+          'This run predates Phase 6 state capture.',
+        coverageStatus: targetState?.confidence.coverageStatus ?? 'missing',
+        reasonCodes: targetState?.confidence.reasonCodes ?? [],
+      },
+      importance: {
+        value: targetState?.importance.value ?? null,
+        label: targetState?.importance.label ?? 'Not captured',
+        detail:
+          targetState?.importance.detail ??
+          'This run predates Phase 6 state capture.',
+        coverageStatus: targetState?.importance.coverageStatus ?? 'missing',
+        reasonCodes: targetState?.importance.reasonCodes ?? [],
+      },
+      opportunityScore: targetState ? targetState.opportunityScore : null,
+      riskScore: targetState ? targetState.riskScore : null,
+      opportunityReasonCodes: targetState?.opportunityReasonCodes ?? [],
+      riskReasonCodes: targetState?.riskReasonCodes ?? [],
+      summaryReasonCodes: targetState?.summaryReasonCodes ?? [],
     },
   };
 };

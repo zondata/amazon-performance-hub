@@ -10,10 +10,17 @@ import {
   insertAdsOptimizerProductSnapshots,
   insertAdsOptimizerRecommendationSnapshots,
   insertAdsOptimizerTargetSnapshots,
+  listAdsOptimizerProductSnapshotsByRun,
   listAdsOptimizerRuns,
   listAdsOptimizerTargetSnapshotsByRun,
   updateAdsOptimizerRun,
 } from './repoRuntime';
+import {
+  enrichAdsOptimizerProductSnapshotPayload,
+  enrichAdsOptimizerTargetSnapshotPayload,
+  readAdsOptimizerProductRunState,
+  type AdsOptimizerProductRunState,
+} from './state';
 import type { AdsOptimizerRun, JsonObject } from './runtimeTypes';
 import {
   loadAdsOptimizerTargetProfiles,
@@ -30,6 +37,7 @@ type CreateAdsOptimizerManualRunInput = {
 type ProductSnapshotInput = {
   productId: string | null;
   asin: string;
+  overview: AdsOptimizerOverviewData;
   snapshotPayload: JsonObject;
 };
 
@@ -72,6 +80,7 @@ export type AdsOptimizerHistoryViewData = {
 export type AdsOptimizerTargetsViewData = {
   run: AdsOptimizerRun | null;
   latestCompletedRun: AdsOptimizerRun | null;
+  productState: AdsOptimizerProductRunState | null;
   rows: AdsOptimizerTargetProfileSnapshotView[];
 };
 
@@ -100,7 +109,7 @@ const normalizeManualRunInput = (input: CreateAdsOptimizerManualRunInput) => {
   const end = input.end.trim();
 
   if (!asin || asin === 'all') {
-    throw new Error('Manual optimizer runs require one selected ASIN in Phase 5.');
+    throw new Error('Manual optimizer runs require one selected ASIN in Phase 6.');
   }
   if (!DATE_RE.test(start) || !DATE_RE.test(end)) {
     throw new Error('start and end must be valid YYYY-MM-DD dates.');
@@ -153,6 +162,7 @@ const loadProductSnapshotInput = async (args: {
   return {
     productId: productMeta?.productId ?? null,
     asin: args.asin,
+    overview,
     snapshotPayload: buildProductSnapshotPayload(args.asin, args.start, args.end, overview),
   };
 };
@@ -215,7 +225,7 @@ export const executeAdsOptimizerManualRun = async (
     rulePackVersionId: runtimeContext.activeVersion.rule_pack_version_id,
     rulePackVersionLabel: runtimeContext.activeVersion.version_label,
     inputSummary: {
-      phase: 5,
+      phase: 6,
       requested_scope: {
         asin: args.asin,
         start: args.start,
@@ -231,6 +241,7 @@ export const executeAdsOptimizerManualRun = async (
         product_snapshot_source: 'phase3_product_command_center',
         target_snapshot_source: TARGET_SOURCE_SCOPE,
         target_profile_engine: 'phase5_target_profile_engine',
+        state_engine: 'phase6_state_engine',
         recommendation_snapshot_behavior:
           'Recommendation snapshots remain placeholders only. No recommendation engine is active yet.',
         execution_boundary: 'Existing Ads Workspace remains the execution path.',
@@ -247,22 +258,33 @@ export const executeAdsOptimizerManualRun = async (
 
   try {
     const productSnapshot = await deps.loadProductSnapshotInput(args);
+    const productSnapshotPayload = enrichAdsOptimizerProductSnapshotPayload({
+      payload: productSnapshot.snapshotPayload,
+      overview: productSnapshot.overview,
+    });
     const targetSnapshotLoad = await deps.loadTargetSnapshotInputs({
       ...args,
-      overviewData: readSnapshotOverview(productSnapshot.snapshotPayload),
+      overviewData: readSnapshotOverview(productSnapshotPayload),
     });
+    const targetSnapshotRows = targetSnapshotLoad.rows.map((row) => ({
+      ...row,
+      snapshotPayload: enrichAdsOptimizerTargetSnapshotPayload({
+        payload: row.snapshotPayload,
+        rulePackPayload: runtimeContext.activeVersion.change_payload_json,
+      }),
+    }));
 
     const insertedProductSnapshots = await deps.insertProductSnapshots([
       {
         runId: run.run_id,
         productId: productSnapshot.productId,
         asin: productSnapshot.asin,
-        snapshotPayload: productSnapshot.snapshotPayload,
+        snapshotPayload: productSnapshotPayload,
       },
     ]);
 
     const insertedTargetSnapshots = await deps.insertTargetSnapshots(
-      targetSnapshotLoad.rows.map((row) => ({
+      targetSnapshotRows.map((row) => ({
         runId: run.run_id,
         asin: row.asin,
         campaignId: row.campaignId,
@@ -366,14 +388,21 @@ export const getAdsOptimizerTargetsViewData = async (args: {
     return {
       run: null,
       latestCompletedRun,
+      productState: null,
       rows: [],
     };
   }
 
-  const snapshots = await listAdsOptimizerTargetSnapshotsByRun(exactRun.run_id);
+  const [productSnapshots, snapshots] = await Promise.all([
+    listAdsOptimizerProductSnapshotsByRun(exactRun.run_id),
+    listAdsOptimizerTargetSnapshotsByRun(exactRun.run_id),
+  ]);
   return {
     run: exactRun,
     latestCompletedRun,
+    productState: productSnapshots[0]
+      ? readAdsOptimizerProductRunState(productSnapshots[0].snapshot_payload_json)
+      : null,
     rows: snapshots.map(mapTargetSnapshotToProfileView),
   };
 };

@@ -359,6 +359,38 @@ describe('ads optimizer phase 5 target profile engine', () => {
           },
           notes: ['Coverage explicit'],
         },
+        state_engine: {
+          engine_version: 'phase6_v1',
+          coverage_status: 'ready',
+          efficiency: {
+            value: 'profitable',
+            label: 'Profitable',
+            detail: 'Positive contribution after ads.',
+            coverage_status: 'ready',
+            reason_codes: ['EFFICIENCY_POSITIVE_CONTRIBUTION_AFTER_ADS'],
+          },
+          confidence: {
+            value: 'confirmed',
+            label: 'Confirmed',
+            detail: 'Orders and days met the threshold.',
+            coverage_status: 'ready',
+            reason_codes: ['CONFIDENCE_ORDER_THRESHOLD_MET'],
+          },
+          importance: {
+            value: 'tier_1_dominant',
+            label: 'Tier 1 dominant',
+            detail: 'High spend share.',
+            coverage_status: 'ready',
+            reason_codes: ['IMPORTANCE_DOMINANT_SPEND_SHARE'],
+          },
+          scores: {
+            opportunity: 82,
+            risk: 18,
+            opportunity_reason_codes: ['OPPORTUNITY_PROFITABLE_BASELINE'],
+            risk_reason_codes: ['RISK_PARTIAL_COVERAGE'],
+          },
+          reason_codes: ['EFFICIENCY_POSITIVE_CONTRIBUTION_AFTER_ADS', 'IMPORTANCE_DOMINANT_SPEND_SHARE'],
+        },
       },
     });
 
@@ -367,6 +399,10 @@ describe('ads optimizer phase 5 target profile engine', () => {
     expect(row.derived.profitDollars).toBe(10.6);
     expect(row.coverage.statuses.breakEvenInputs).toBe('ready');
     expect(row.searchTermDiagnostics.topTerms).toHaveLength(1);
+    expect(row.state.efficiency.value).toBe('profitable');
+    expect(row.state.confidence.value).toBe('confirmed');
+    expect(row.state.importance.value).toBe('tier_1_dominant');
+    expect(row.state.opportunityScore).toBe(82);
   });
 
   it('does not collapse multiple unresolved target identities into one row', async () => {

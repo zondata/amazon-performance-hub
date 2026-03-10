@@ -285,31 +285,31 @@ Build the raw + derived target profile object.
 Classify targets before role assignment.
 
 ### Tasks
-- [ ] Implement efficiency states:
-  - [ ] no data
-  - [ ] learning / no sale
-  - [ ] converting but loss-making
-  - [ ] break-even
-  - [ ] profitable
-- [ ] Implement confidence states:
-  - [ ] insufficient
-  - [ ] directional
-  - [ ] confirmed
-- [ ] Implement importance states / tiers:
-  - [ ] Tier 1 dominant
-  - [ ] Tier 2 core
-  - [ ] Tier 3 test / long-tail
-- [ ] Compute opportunity score.
-- [ ] Compute risk score.
-- [ ] Store reason codes for each state decision.
+- [x] Implement efficiency states:
+  - [x] no data
+  - [x] learning / no sale
+  - [x] converting but loss-making
+  - [x] break-even
+  - [x] profitable
+- [x] Implement confidence states:
+  - [x] insufficient
+  - [x] directional
+  - [x] confirmed
+- [x] Implement importance states / tiers:
+  - [x] Tier 1 dominant
+  - [x] Tier 2 core
+  - [x] Tier 3 test / long-tail
+- [x] Compute opportunity score.
+- [x] Compute risk score.
+- [x] Store reason codes for each state decision.
 
 ### Phase 6 acceptance
-- [ ] Known targets classify into sensible states.
-- [ ] Reason codes are visible and auditable.
-- [ ] Tiering is partly mathematical and partly configurable.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] Known targets classify into sensible states.
+- [x] Reason codes are visible and auditable.
+- [x] Tiering is partly mathematical and partly configurable.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 

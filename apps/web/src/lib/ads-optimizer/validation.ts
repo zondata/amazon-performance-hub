@@ -89,6 +89,7 @@ export const validateAdsOptimizerRulePackPayload = (
       payload.scoring_weights ?? {},
       'change_payload_json.scoring_weights'
     ) as AdsOptimizerRulePackPayload['scoring_weights'],
+    state_engine: asJsonObject(payload.state_engine ?? {}, 'change_payload_json.state_engine'),
     action_policy: asJsonObject(payload.action_policy ?? {}, 'change_payload_json.action_policy'),
   };
 };

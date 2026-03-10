@@ -67,9 +67,9 @@ const EMPTY_STATE_COPY: Record<
   },
   targets: {
     eyebrow: 'Targets scope',
-    title: 'Select one ASIN and capture a run to review target profiles.',
+    title: 'Select one ASIN and capture a run to review target states.',
     body:
-      'Phase 5 renders persisted target profile rows from the matching manual run. State-engine, role-engine, and recommendation logic remain out of scope here.',
+      'Phase 6 renders persisted target profile + state rows from the matching manual run. Role-engine and recommendation logic remain out of scope here.',
   },
   config: {
     eyebrow: 'Config placeholder',
@@ -159,7 +159,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
       : view === 'overview'
         ? 'Product inputs only'
         : view === 'targets'
-          ? 'Target profile engine'
+          ? 'State engine'
         : view === 'history'
           ? 'Run + snapshot backbone'
           : 'Recommendation shell only';
@@ -295,15 +295,16 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           runNowAction={runAdsOptimizerNowAction}
         />
       ) : view === 'targets' ? (
-        <OptimizerTargetsPanel
-          asin={asin}
-          start={start}
-          end={end}
-          historyHref={buildOptimizerHref({ start, end, asin, view: 'history' })}
-          run={targetsData?.run ?? null}
-          latestCompletedRun={targetsData?.latestCompletedRun ?? null}
-          rows={targetsData?.rows ?? []}
-        />
+            <OptimizerTargetsPanel
+              asin={asin}
+              start={start}
+              end={end}
+              historyHref={buildOptimizerHref({ start, end, asin, view: 'history' })}
+              run={targetsData?.run ?? null}
+              latestCompletedRun={targetsData?.latestCompletedRun ?? null}
+              productState={targetsData?.productState ?? null}
+              rows={targetsData?.rows ?? []}
+            />
       ) : (
         <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">{emptyState.eyebrow}</div>

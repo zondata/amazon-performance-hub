@@ -22,6 +22,7 @@ export type AdsOptimizerRulePackPayload = {
   guardrail_templates: JsonObject;
   scoring_weights: Record<string, number>;
   action_policy: JsonObject;
+  state_engine: JsonObject;
 };
 
 export type AdsOptimizerRulePack = {
