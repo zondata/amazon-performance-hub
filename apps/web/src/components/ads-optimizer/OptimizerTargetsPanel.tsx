@@ -1372,7 +1372,9 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                             onChange={(event) => toggleAllVisibleStageable(event.target.checked)}
                           />
                         </th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Target</th>
+                        <th className="sticky top-0 left-0 z-30 border-b border-border bg-surface px-3 py-2 shadow-sm">
+                          Target
+                        </th>
                         <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Priority</th>
                         <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Recommendations</th>
                         <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Workspace actions</th>
@@ -1417,7 +1419,11 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                                 }
                               />
                             </td>
-                            <td className="px-3 py-2.5">
+                            <td
+                              className={`sticky left-0 z-10 px-3 py-2.5 shadow-[inset_-1px_0_0_theme(colors.border)] ${
+                                isActive ? 'bg-primary/5' : 'bg-surface'
+                              }`}
+                            >
                               <div className="font-semibold text-foreground">{row.targetText}</div>
                               <div className="mt-0.5 line-clamp-1 text-xs text-muted">
                                 {row.typeLabel ?? 'Target'} · {row.matchType ?? '—'} · {row.targetId}

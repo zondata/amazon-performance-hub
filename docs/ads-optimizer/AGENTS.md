@@ -149,6 +149,14 @@ For every phase:
 - `/products/[asin]` must still work.
 - Only mark the phase complete after all checks pass.
 
+## Progressive Disclosure Workbench Pattern
+- Future dense optimizer review pages should prefer the Progressive Disclosure Workbench pattern when appropriate.
+- Keep top/context sections compact or collapsed by default so the main workbench owns most of the desktop height.
+- Treat queue and drawer as separate responsibilities: queue for scan/select/compare, drawer for full explanation and diagnostics.
+- Make scroll ownership explicit: queue owns its own scroll, drawer owns its own scroll, and the page shell should not accidentally become the effective scroll owner.
+- Sticky headers and frozen columns must attach to the real queue scroll pane, with explicit background and z-index layering.
+- Reference: [progressive-disclosure-workbench.md](/home/albert/code/amazon-performance-hub/docs/ui-patterns/progressive-disclosure-workbench.md)
+
 ## When in doubt
 Choose the safer option that:
 - isolates new behavior,

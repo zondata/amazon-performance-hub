@@ -84,6 +84,8 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('target-detail-drawer-');
     expect(source).toContain('xl:overflow-auto xl:overscroll-contain');
     expect(source).toContain('sticky top-0 z-20 border-b border-border bg-surface');
+    expect(source).toContain('sticky top-0 left-0 z-30 border-b border-border bg-surface');
+    expect(source).toContain("sticky left-0 z-10 px-3 py-2.5");
     expect(source).not.toContain('data-aph-hscroll');
     expect(source).not.toContain('const TARGET_TABLE_COL_COUNT = 32;');
   });
