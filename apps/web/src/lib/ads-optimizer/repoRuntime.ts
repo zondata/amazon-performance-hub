@@ -170,7 +170,34 @@ const asJsonObject = (value: unknown, fieldName: string): JsonObject => {
   return value as JsonObject;
 };
 
-const assertPhase8RecommendationSnapshotContract = (args: {
+const normalizeJsonValueForInsert = (value: unknown, fieldName: string): unknown => {
+  if (value === undefined) return null;
+  if (value === null) return null;
+  if (typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry, index) =>
+      normalizeJsonValueForInsert(entry, `${fieldName}[${index}]`)
+    );
+  }
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+        key,
+        normalizeJsonValueForInsert(entry, `${fieldName}.${key}`),
+      ])
+    );
+  }
+
+  throw new Error(`${fieldName} contains unsupported JSON value type ${typeof value}.`);
+};
+
+const normalizeJsonObjectForInsert = (value: unknown, fieldName: string): JsonObject =>
+  asJsonObject(normalizeJsonValueForInsert(value, fieldName), fieldName);
+
+const assertPhase11RecommendationSnapshotContract = (args: {
   row:
     | CreateAdsOptimizerRecommendationSnapshotPayload
     | AdsOptimizerRecommendationSnapshot;
@@ -217,8 +244,25 @@ const assertPhase8RecommendationSnapshotContract = (args: {
       `${args.fieldPrefix}[${args.index}] must persist writes_execution_tables=false.`
     );
   }
-  if (payload.phase !== 8) {
-    throw new Error(`${args.fieldPrefix}[${args.index}] must persist phase=8 recommendation rows.`);
+  if (payload.phase !== 11) {
+    throw new Error(`${args.fieldPrefix}[${args.index}] must persist phase=11 recommendation rows.`);
+  }
+  asJsonObject(
+    payload.portfolio_controls,
+    `${args.fieldPrefix}[${args.index}].snapshot_payload_json.portfolio_controls`
+  );
+  asJsonObject(
+    payload.query_diagnostics,
+    `${args.fieldPrefix}[${args.index}].snapshot_payload_json.query_diagnostics`
+  );
+  asJsonObject(
+    payload.placement_diagnostics,
+    `${args.fieldPrefix}[${args.index}].snapshot_payload_json.placement_diagnostics`
+  );
+  if (!Array.isArray(payload.exception_signals)) {
+    throw new Error(
+      `${args.fieldPrefix}[${args.index}].snapshot_payload_json.exception_signals must be an array.`
+    );
   }
   if (status === 'generated' && (!actionType || actionType.trim().length === 0)) {
     throw new Error(
@@ -377,8 +421,17 @@ export const insertAdsOptimizerRecommendationSnapshots = async (
   rows: CreateAdsOptimizerRecommendationSnapshotPayload[]
 ): Promise<AdsOptimizerRecommendationSnapshot[]> => {
   if (rows.length === 0) return [];
-  rows.forEach((row, index) =>
-    assertPhase8RecommendationSnapshotContract({
+  const preparedRows = rows.map((row, index) => ({
+    ...row,
+    reasonCodes: (row.reasonCodes ?? []).filter((code): code is string => typeof code === 'string'),
+    snapshotPayload: normalizeJsonObjectForInsert(
+      row.snapshotPayload,
+      `ads_optimizer_recommendation_snapshot.insert[${index}].snapshot_payload_json`
+    ),
+  }));
+
+  preparedRows.forEach((row, index) =>
+    assertPhase11RecommendationSnapshotContract({
       row,
       index,
       fieldPrefix: 'ads_optimizer_recommendation_snapshot.insert',
@@ -388,7 +441,7 @@ export const insertAdsOptimizerRecommendationSnapshots = async (
   const { data, error } = await supabaseAdmin
     .from('ads_optimizer_recommendation_snapshot')
     .insert(
-      rows.map((row) => ({
+      preparedRows.map((row) => ({
         run_id: row.runId,
         target_snapshot_id: row.targetSnapshotId,
         account_id: env.accountId,
@@ -410,7 +463,7 @@ export const insertAdsOptimizerRecommendationSnapshots = async (
     mapAdsOptimizerRecommendationSnapshotRow
   );
   mapped.forEach((row, index) =>
-    assertPhase8RecommendationSnapshotContract({
+    assertPhase11RecommendationSnapshotContract({
       row,
       index,
       fieldPrefix: 'ads_optimizer_recommendation_snapshot.persisted',

@@ -466,32 +466,32 @@ Reuse the current execution system instead of inventing a second one.
 Add the higher-order controls that stop local decisions from hurting the whole ASIN.
 
 ### Tasks
-- [ ] Add ASIN-level portfolio caps:
-  - [ ] max active Discover targets
-  - [ ] learning budget cap
-  - [ ] total stop-loss cap
-  - [ ] max budget share per target
-- [ ] Add query-level diagnostics:
-  - [ ] same-text query pinning
-  - [ ] promote-to-exact candidates
-  - [ ] negative candidates
-  - [ ] isolate candidates
-- [ ] Add placement diagnostics:
-  - [ ] stronger vs weaker placement bias recommendation
-  - [ ] explicit campaign-level context labels
-- [ ] Add exception queue for:
-  - [ ] guardrail breaches
-  - [ ] major role changes
-  - [ ] main-driver degradation
-  - [ ] low-confidence high-spend targets
+- [x] Add ASIN-level portfolio caps:
+  - [x] max active Discover targets
+  - [x] learning budget cap
+  - [x] total stop-loss cap
+  - [x] max budget share per target
+- [x] Add query-level diagnostics:
+  - [x] same-text query pinning
+  - [x] promote-to-exact candidates
+  - [x] negative candidates
+  - [x] isolate candidates
+- [x] Add placement diagnostics:
+  - [x] stronger vs weaker placement bias recommendation
+  - [x] explicit campaign-level context labels
+- [x] Add exception queue for:
+  - [x] guardrail breaches
+  - [x] major role changes
+  - [x] main-driver degradation
+  - [x] low-confidence high-spend targets
 
 ### Phase 11 acceptance
-- [ ] Portfolio caps materially affect recommendation output where expected.
-- [ ] Query/placement advice is visible and not flattened incorrectly into target facts.
-- [ ] Exception queue is usable.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] Portfolio caps materially affect recommendation output where expected.
+- [x] Query/placement advice is visible and not flattened incorrectly into target facts.
+- [x] Exception queue is usable.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 

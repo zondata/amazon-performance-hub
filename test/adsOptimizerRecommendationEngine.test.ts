@@ -3,7 +3,18 @@ import { describe, expect, it } from 'vitest';
 import {
   buildAdsOptimizerRecommendationSnapshot,
   classifyAdsOptimizerRecommendations,
+  classifyAdsOptimizerRecommendationsBatch,
 } from '../apps/web/src/lib/ads-optimizer/recommendation';
+
+const makeRulePackPayload = (overrides?: Record<string, unknown>) => ({
+  schema_version: 1,
+  channel: 'sp' as const,
+  role_templates: {},
+  guardrail_templates: {},
+  scoring_weights: {},
+  state_engine: {},
+  action_policy: overrides ?? {},
+});
 
 const makePayload = () => ({
   phase: 7,
@@ -35,6 +46,15 @@ const makePayload = () => ({
     loss_dollars: null,
     profit_dollars: 20.96,
   },
+  placement_context: {
+    top_of_search_modifier_pct: 16,
+    impressions: 90,
+    clicks: 14,
+    orders: 3,
+    sales: 132,
+    spend: 24,
+    note: 'Campaign-level placement context only.',
+  },
   coverage: {
     statuses: {
       tos_is: 'ready',
@@ -48,6 +68,17 @@ const makePayload = () => ({
   },
   search_term_diagnostics: {
     top_terms: [
+      {
+        search_term: 'blue widget',
+        same_text: true,
+        impressions: 70,
+        clicks: 15,
+        orders: 2,
+        spend: 11,
+        sales: 72,
+        stis: 0.2,
+        stir: 6,
+      },
       {
         search_term: 'blue widget alt',
         same_text: false,
@@ -176,33 +207,17 @@ const makePayload = () => ({
   },
 });
 
-describe('ads optimizer phase 8 recommendation engine', () => {
-  it('generates deterministic read-only recommendation sets for the same input', () => {
+describe('ads optimizer phase 11 recommendation engine', () => {
+  it('generates deterministic read-only recommendation sets with diagnostics for the same input', () => {
     const payload = makePayload();
 
     const first = classifyAdsOptimizerRecommendations({
       payload,
-      rulePackPayload: {
-        schema_version: 1,
-        channel: 'sp',
-        role_templates: {},
-        guardrail_templates: {},
-        scoring_weights: {},
-        state_engine: {},
-        action_policy: {},
-      },
+      rulePackPayload: makeRulePackPayload(),
     });
     const second = classifyAdsOptimizerRecommendations({
       payload,
-      rulePackPayload: {
-        schema_version: 1,
-        channel: 'sp',
-        role_templates: {},
-        guardrail_templates: {},
-        scoring_weights: {},
-        state_engine: {},
-        action_policy: {},
-      },
+      rulePackPayload: makeRulePackPayload(),
     });
 
     expect(first).toEqual(second);
@@ -216,24 +231,25 @@ describe('ads optimizer phase 8 recommendation engine', () => {
       'negative_candidate',
       'change_review_cadence',
     ]);
+    expect(first.queryDiagnostics.sameTextQueryPinning.status).toBe('pinned');
+    expect(first.queryDiagnostics.isolateCandidates).toHaveLength(1);
+    expect(first.queryDiagnostics.negativeCandidates).toHaveLength(1);
+    expect(first.placementDiagnostics.biasRecommendation).toBe('stronger');
+    expect(first.exceptionSignals.map((signal) => signal.type)).toEqual([
+      'guardrail_breach',
+      'major_role_change',
+    ]);
   });
 
   it('blocks unsupported actions when current entity context does not support them', () => {
     const payload = makePayload();
     payload.execution_context.target.current_bid = null;
     payload.execution_context.placement.current_percentage = null;
+    payload.placement_context.top_of_search_modifier_pct = null;
 
     const result = classifyAdsOptimizerRecommendations({
       payload,
-      rulePackPayload: {
-        schema_version: 1,
-        channel: 'sp',
-        role_templates: {},
-        guardrail_templates: {},
-        scoring_weights: {},
-        state_engine: {},
-        action_policy: {},
-      },
+      rulePackPayload: makeRulePackPayload(),
     });
 
     expect(result.actions.map((action) => action.actionType)).toEqual([
@@ -249,25 +265,76 @@ describe('ads optimizer phase 8 recommendation engine', () => {
     );
   });
 
-  it('marks recommendation snapshots as read-only and optimizer-scoped', () => {
+  it('applies ASIN-level portfolio caps across the batch and changes blocked discover output', () => {
+    const leadingPayload = makePayload();
+    leadingPayload.identity.target_id = 'target-a';
+    leadingPayload.identity.raw_target_id = 'target-a';
+    leadingPayload.execution_context.target.id = 'target-a';
+    leadingPayload.execution_context.target.current_bid = 0.8;
+    leadingPayload.role_engine.previous_role = 'Discover';
+    leadingPayload.role_engine.desired_role.value = 'Discover';
+    leadingPayload.role_engine.desired_role.label = 'Discover';
+    leadingPayload.role_engine.current_role.value = 'Discover';
+    leadingPayload.role_engine.current_role.label = 'Discover';
+    leadingPayload.role_engine.reason_codes = ['ROLE_DISCOVER_ACTIVE'];
+
+    const blockedPayload = makePayload();
+    blockedPayload.identity.target_id = 'target-b';
+    blockedPayload.identity.raw_target_id = 'target-b';
+    blockedPayload.execution_context.target.id = 'target-b';
+    blockedPayload.execution_context.target.current_bid = 0.7;
+    blockedPayload.state_engine.scores.opportunity = 61;
+    blockedPayload.role_engine.previous_role = 'Discover';
+    blockedPayload.role_engine.desired_role.value = 'Discover';
+    blockedPayload.role_engine.desired_role.label = 'Discover';
+    blockedPayload.role_engine.current_role.value = 'Discover';
+    blockedPayload.role_engine.current_role.label = 'Discover';
+    blockedPayload.role_engine.reason_codes = ['ROLE_DISCOVER_ACTIVE'];
+
+    const result = classifyAdsOptimizerRecommendationsBatch({
+      rows: [
+        {
+          targetSnapshotId: 'snapshot-a',
+          targetId: 'target-a',
+          payload: leadingPayload,
+        },
+        {
+          targetSnapshotId: 'snapshot-b',
+          targetId: 'target-b',
+          payload: blockedPayload,
+        },
+      ],
+      rulePackPayload: makeRulePackPayload({
+        recommendation_thresholds: {
+          max_active_discover_targets: 1,
+        },
+      }),
+    });
+
+    expect(result[0]?.recommendation.portfolioControls.discoverCapBlocked).toBe(false);
+    expect(result[0]?.recommendation.spendDirection).toBe('hold');
+    expect(result[1]?.recommendation.portfolioControls.discoverCapBlocked).toBe(true);
+    expect(result[1]?.recommendation.reasonCodes).toContain('PORTFOLIO_CAP_MAX_ACTIVE_DISCOVER');
+    expect(result[1]?.recommendation.reasonCodes).toContain('SPEND_DIRECTION_DISCOVER_CAP_REDUCE');
+    expect(result[1]?.recommendation.spendDirection).toBe('reduce');
+  });
+
+  it('persists phase 11 snapshot payload fields for diagnostics and read-only boundaries', () => {
     const snapshot = buildAdsOptimizerRecommendationSnapshot({
       targetSnapshotId: 'snapshot-1',
       targetId: 'target-1',
       payload: makePayload(),
-      rulePackPayload: {
-        schema_version: 1,
-        channel: 'sp',
-        role_templates: {},
-        guardrail_templates: {},
-        scoring_weights: {},
-        state_engine: {},
-        action_policy: {},
-      },
+      rulePackPayload: makeRulePackPayload(),
     });
 
     expect(snapshot.status).toBe('generated');
+    expect(snapshot.snapshotPayload.phase).toBe(11);
     expect(snapshot.snapshotPayload.execution_boundary).toBe('read_only_recommendation_only');
     expect(snapshot.snapshotPayload.writes_execution_tables).toBe(false);
     expect(snapshot.snapshotPayload.workspace_handoff).toBe('not_started');
+    expect(snapshot.snapshotPayload.portfolio_controls).toBeTruthy();
+    expect(snapshot.snapshotPayload.query_diagnostics).toBeTruthy();
+    expect(snapshot.snapshotPayload.placement_diagnostics).toBeTruthy();
+    expect(snapshot.snapshotPayload.exception_signals).toBeTruthy();
   });
 });

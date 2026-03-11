@@ -10,7 +10,7 @@ import {
   readAdsOptimizerTargetRunRole,
   type AdsOptimizerTargetRole,
 } from './role';
-import { buildAdsOptimizerRecommendationSnapshot } from './recommendation';
+import { buildAdsOptimizerRecommendationSnapshots } from './recommendation';
 import {
   createAdsOptimizerRun,
   findOptimizerProductByAsin,
@@ -364,7 +364,7 @@ export const executeAdsOptimizerManualRun = async (
     rulePackVersionId: runtimeContext.activeVersion.rule_pack_version_id,
     rulePackVersionLabel: runtimeContext.activeVersion.version_label,
     inputSummary: {
-      phase: 8,
+      phase: 11,
       requested_scope: {
         asin: args.asin,
         start: args.start,
@@ -383,7 +383,7 @@ export const executeAdsOptimizerManualRun = async (
         state_engine: 'phase6_state_engine',
         role_engine: 'phase7_role_guardrail_engine',
         recommendation_snapshot_behavior:
-          'Phase 8 persists deterministic read-only recommendation sets inside optimizer-owned snapshot storage only. No Ads Workspace handoff or execution writes occur here.',
+          'Phase 11 persists deterministic recommendation sets with portfolio caps, query diagnostics, placement diagnostics, and exception signals inside optimizer-owned snapshot storage only. Ads Workspace remains the execution boundary.',
         execution_boundary: 'Existing Ads Workspace remains the execution path.',
       },
     },
@@ -479,25 +479,25 @@ export const executeAdsOptimizerManualRun = async (
       })
     );
 
-    const insertedRecommendationSnapshots = await deps.insertRecommendationSnapshots(
-      insertedTargetSnapshots.map((snapshot, index) => {
-        const recommendation = buildAdsOptimizerRecommendationSnapshot({
-          targetSnapshotId: snapshot.target_snapshot_id,
-          targetId: snapshot.target_id,
-          payload: targetSnapshotRows[index]?.snapshotPayload ?? {},
-          rulePackPayload: runtimeContext.activeVersion.change_payload_json,
-        });
+    const recommendationSnapshots = buildAdsOptimizerRecommendationSnapshots({
+      rows: insertedTargetSnapshots.map((snapshot, index) => ({
+        targetSnapshotId: snapshot.target_snapshot_id,
+        targetId: snapshot.target_id,
+        payload: targetSnapshotRows[index]?.snapshotPayload ?? {},
+      })),
+      rulePackPayload: runtimeContext.activeVersion.change_payload_json,
+    });
 
-        return {
-          runId: run.run_id,
-          targetSnapshotId: snapshot.target_snapshot_id,
-          asin: snapshot.asin,
-          status: recommendation.status,
-          actionType: recommendation.actionType,
-          reasonCodes: recommendation.reasonCodes,
-          snapshotPayload: recommendation.snapshotPayload,
-        };
-      })
+    const insertedRecommendationSnapshots = await deps.insertRecommendationSnapshots(
+      recommendationSnapshots.map((recommendation, index) => ({
+        runId: run.run_id,
+        targetSnapshotId: recommendation.targetSnapshotId,
+        asin: insertedTargetSnapshots[index]!.asin,
+        status: recommendation.status,
+        actionType: recommendation.actionType,
+        reasonCodes: recommendation.reasonCodes,
+        snapshotPayload: recommendation.snapshotPayload,
+      }))
     );
     assertPersistedRecommendationRows({
       targetSnapshotCount: insertedTargetSnapshots.length,

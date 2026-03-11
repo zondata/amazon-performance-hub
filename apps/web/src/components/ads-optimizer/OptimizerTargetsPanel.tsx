@@ -179,6 +179,22 @@ const ReasonCodeBadge = (props: { code: string }) => (
   </span>
 );
 
+const exceptionSeverityClass = (severity: 'high' | 'medium' | 'low') => {
+  if (severity === 'high') return 'border-rose-200 bg-rose-50 text-rose-800';
+  if (severity === 'medium') return 'border-amber-200 bg-amber-50 text-amber-800';
+  return 'border-sky-200 bg-sky-50 text-sky-800';
+};
+
+const ExceptionSeverityBadge = (props: { severity: 'high' | 'medium' | 'low' }) => (
+  <span
+    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap ${exceptionSeverityClass(
+      props.severity
+    )}`}
+  >
+    {props.severity}
+  </span>
+);
+
 const DetailSection = (props: { label: string; children: ReactNode }) => (
   <section className="rounded-xl border border-border bg-surface px-4 py-4">
     <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-muted">
@@ -213,6 +229,42 @@ const JsonBlock = (props: { value: Record<string, unknown> | null }) => {
   );
 };
 
+const QueryCandidateList = (props: {
+  label: string;
+  candidates: Array<{
+    searchTerm: string;
+    sameText: boolean;
+    clicks: number;
+    orders: number;
+    spend: number;
+    sales: number;
+  }>;
+  emptyLabel: string;
+}) => (
+  <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+    <div className="text-xs uppercase tracking-wide text-muted">{props.label}</div>
+    {props.candidates.length > 0 ? (
+      <div className="mt-3 space-y-2">
+        {props.candidates.map((candidate, index) => (
+          <div
+            key={`${props.label}:${candidate.searchTerm}:${index}`}
+            className="rounded-lg border border-border bg-surface px-3 py-3"
+          >
+            <div className="font-semibold text-foreground">{candidate.searchTerm}</div>
+            <div className="mt-1 text-xs text-muted">
+              same_text={String(candidate.sameText)} · clicks {formatNumber(candidate.clicks)} ·
+              orders {formatNumber(candidate.orders)} · spend {formatCurrency(candidate.spend)} ·
+              sales {formatCurrency(candidate.sales)}
+            </div>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div className="mt-2 text-sm text-muted">{props.emptyLabel}</div>
+    )}
+  </div>
+);
+
 const getCoverageItems = (row: AdsOptimizerTargetReviewRow) => [
   { label: 'TOS', status: row.coverage.statuses.tosIs },
   { label: 'STIS', status: row.coverage.statuses.stis },
@@ -240,6 +292,12 @@ const compareNullableNumber = (left: number | null, right: number | null) => {
 const buildPriorityLabel = (priority: number | null, actionType: string | null) => {
   if (priority === null) return 'Monitor only';
   return `P${Math.max(1, Math.round(priority / 10))} · ${labelize(actionType)}`;
+};
+
+const getSeverityRank = (severity: 'high' | 'medium' | 'low') => {
+  if (severity === 'high') return 3;
+  if (severity === 'medium') return 2;
+  return 1;
 };
 
 const isWorkspaceSupportedActionType = (
@@ -370,10 +428,10 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           Select one ASIN to open the optimizer command center.
         </div>
         <div className="mt-2 max-w-3xl text-sm text-muted">
-          Phase 10 review and handoff stays scoped to one selected ASIN and one exact date range.
+          Phase 11 review and handoff stays scoped to one selected ASIN and one exact date range.
           Pick an ASIN, then use History to capture a run that fills the command center, target
-          queue, and target detail drawer from persisted optimizer snapshots before handing any
-          supported actions into Ads Workspace.
+          queue, diagnostics, and exception queue from persisted optimizer snapshots before handing
+          any supported actions into Ads Workspace.
         </div>
       </section>
     );
@@ -387,10 +445,10 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           No persisted optimizer review run exists for this ASIN/date range yet.
         </div>
         <div className="mt-2 max-w-3xl text-sm text-muted">
-          Phase 10 only hands off persisted snapshots from the exact ASIN and exact date window
+          Phase 11 only hands off persisted snapshots from the exact ASIN and exact date window
           shown above. Create a manual run first so the target queue can load target profiles,
-          states, roles, guardrails, and recommendation snapshots before any supported actions are
-          staged into Ads Workspace.
+          states, roles, guardrails, diagnostics, and recommendation snapshots before any
+          supported actions are staged into Ads Workspace.
         </div>
         {props.latestCompletedRun ? (
           <div className="mt-4 rounded-xl border border-border bg-surface-2 px-4 py-4 text-sm text-muted">
@@ -455,6 +513,26 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
     (sum, row) => sum + getWorkspaceSupportedActions(row).length,
     0
   );
+  const portfolioReference =
+    props.rows.find((row) => row.recommendation?.portfolioControls)?.recommendation
+      ?.portfolioControls ?? null;
+  const budgetShareExceptions = props.rows.filter(
+    (row) => row.recommendation?.portfolioControls?.budgetShareExceeded
+  ).length;
+  const exceptionEntries = filteredRows
+    .flatMap((row) =>
+      (row.recommendation?.exceptionSignals ?? []).map((signal, index) => ({
+        key: `${row.targetSnapshotId}:${signal.type}:${index}`,
+        row,
+        signal,
+      }))
+    )
+    .sort(
+      (left, right) =>
+        getSeverityRank(right.signal.severity) - getSeverityRank(left.signal.severity) ||
+        compareNullableNumber(left.row.queue.priority, right.row.queue.priority) ||
+        left.row.targetText.localeCompare(right.row.targetText)
+    );
 
   const toggleSelectedRow = (targetSnapshotId: string, checked: boolean) => {
     setSelectedForHandoff((current) => {
@@ -491,9 +569,10 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
               Review persisted target outputs without leaving `/ads/optimizer`
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
-              This Phase 10 surface reads the exact run&apos;s persisted product state, target
-              state, role, guardrail, and recommendation snapshots. The optimizer still proposes,
-              while Ads Workspace remains the only place where staged and executable actions live.
+              This Phase 11 surface reads the exact run&apos;s persisted product state, target
+              state, role, portfolio caps, diagnostics, exception signals, and recommendation
+              snapshots. The optimizer still proposes, while Ads Workspace remains the only place
+              where staged and executable actions live.
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -502,7 +581,7 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
               SP only V1
             </div>
             <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
-              Review + handoff only
+              Review + diagnostics + handoff
             </div>
           </div>
         </div>
@@ -580,6 +659,82 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
+        <DetailSection label="Portfolio controls">
+          {portfolioReference ? (
+            <div className="space-y-3">
+              <DetailGrid
+                items={[
+                  {
+                    label: 'Active Discover targets',
+                    value: `${formatNumber(portfolioReference.activeDiscoverTargets)} / ${formatNumber(
+                      portfolioReference.maxActiveDiscoverTargets
+                    )}`,
+                  },
+                  {
+                    label: 'Learning budget cap',
+                    value: `${formatCurrency(portfolioReference.learningBudgetUsed)} / ${formatCurrency(
+                      portfolioReference.learningBudgetCap
+                    )}`,
+                  },
+                  {
+                    label: 'Total stop-loss cap',
+                    value: `${formatCurrency(portfolioReference.totalStopLossSpend)} / ${formatCurrency(
+                      portfolioReference.totalStopLossCap
+                    )}`,
+                  },
+                  {
+                    label: 'Budget share breaches',
+                    value: formatNumber(budgetShareExceptions),
+                  },
+                ]}
+              />
+              <div className="text-sm text-muted">
+                These caps are computed at the ASIN run level and can push individual targets from
+                increase to hold or reduce when the broader portfolio envelope is already full.
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-muted">
+              Portfolio-control diagnostics were not captured for this run.
+            </div>
+          )}
+        </DetailSection>
+
+        <DetailSection label="Exception queue">
+          {exceptionEntries.length > 0 ? (
+            <div className="space-y-3">
+              {exceptionEntries.slice(0, 10).map(({ key, row, signal }) => (
+                <button
+                  key={key}
+                  type="button"
+                  className="w-full rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-left transition hover:border-primary/40"
+                  onClick={() => setSelectedTargetSnapshotId(row.targetSnapshotId)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-foreground">{signal.title}</div>
+                      <div className="mt-1 text-xs text-muted">
+                        {row.targetText} · {labelize(signal.type)} · {buildPriorityLabel(
+                          row.queue.priority,
+                          row.queue.primaryActionType
+                        )}
+                      </div>
+                    </div>
+                    <ExceptionSeverityBadge severity={signal.severity} />
+                  </div>
+                  <div className="mt-2 text-sm text-foreground">{signal.detail}</div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-muted">
+              No exception signals were persisted for the current queue filters.
+            </div>
+          )}
+        </DetailSection>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
         <DetailSection label="Top risks">
           {topRiskRows.length === 0 ? (
             <div className="text-sm text-muted">No persisted risk scores were captured for this run.</div>
@@ -653,10 +808,10 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <div className="text-xs uppercase tracking-[0.3em] text-muted">Target queue</div>
-              <div className="mt-2 text-sm text-muted">
+                <div className="mt-2 text-sm text-muted">
                   Priority sorting uses the persisted recommendation action priority from the exact
-                  run. Filters stay within the current ASIN and date window only, and only
-                  workspace-supported actions can be handed off from this queue.
+                  run. Filters stay within the current ASIN and date window only, while exception
+                  signals and contextual diagnostics remain visible without bypassing Ads Workspace.
                 </div>
               </div>
               <Link href={props.historyHref} className="text-sm font-semibold text-primary">
@@ -802,7 +957,7 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
             ) : (
               <div className="mt-4 overflow-y-auto">
                 <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
-                  <table className="min-w-[1680px] table-auto border-collapse text-left text-sm">
+                  <table className="min-w-[1800px] table-auto border-collapse text-left text-sm">
                     <thead>
                       <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                         <th className="px-3 py-2">
@@ -823,6 +978,7 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                         <th className="px-3 py-2">Confidence</th>
                         <th className="px-3 py-2">Tier</th>
                         <th className="px-3 py-2">Spend direction</th>
+                        <th className="px-3 py-2">Exceptions</th>
                         <th className="px-3 py-2">Reason-code badges</th>
                         <th className="px-3 py-2">Coverage</th>
                         <th className="px-3 py-2">Detail</th>
@@ -837,6 +993,7 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                         const unsupportedReviewOnlyActions = getUnsupportedReviewOnlyActions(row);
                         const isSelected = selectedForHandoff.includes(row.targetSnapshotId);
                         const isStageable = workspaceSupportedActions.length > 0;
+                        const exceptionSignals = row.recommendation?.exceptionSignals ?? [];
 
                         return (
                           <tr
@@ -913,6 +1070,25 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                             </td>
                             <td className="px-3 py-3 text-foreground">
                               {labelize(row.queue.spendDirection)}
+                            </td>
+                            <td className="px-3 py-3">
+                              {exceptionSignals.length > 0 ? (
+                                <div className="space-y-2">
+                                  <div className="text-foreground">
+                                    {formatNumber(exceptionSignals.length)}
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {exceptionSignals.slice(0, 2).map((signal, index) => (
+                                      <ExceptionSeverityBadge
+                                        key={`${row.targetSnapshotId}:exception:${signal.type}:${index}`}
+                                        severity={signal.severity}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-xs text-muted">No exceptions</div>
+                              )}
                             </td>
                             <td className="px-3 py-3">
                               <div className="flex max-w-[320px] flex-wrap gap-1.5">
@@ -1139,6 +1315,40 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
 
                       <div className="space-y-2">
                         <div className="text-xs uppercase tracking-wide text-muted">
+                          Exception signals
+                        </div>
+                        {activeRow.recommendation.exceptionSignals.length > 0 ? (
+                          <div className="space-y-2">
+                            {activeRow.recommendation.exceptionSignals.map((signal, index) => (
+                              <div
+                                key={`${activeRow.targetSnapshotId}:exception-detail:${signal.type}:${index}`}
+                                className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="font-semibold text-foreground">{signal.title}</div>
+                                  <ExceptionSeverityBadge severity={signal.severity} />
+                                </div>
+                                <div className="mt-2 text-sm text-foreground">{signal.detail}</div>
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  {signal.reasonCodes.map((code) => (
+                                    <ReasonCodeBadge
+                                      key={`${activeRow.targetSnapshotId}:exception-reason:${signal.type}:${code}`}
+                                      code={code}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-muted">
+                            No exception signals were persisted for this target.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs uppercase tracking-wide text-muted">
                           Unsupported action blocks
                         </div>
                         <div className="flex flex-wrap gap-1.5">
@@ -1207,6 +1417,86 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                   ) : (
                     <div className="text-sm text-muted">
                       No recommendation snapshot was found for this target in the selected run.
+                    </div>
+                  )}
+                </DetailSection>
+
+                <DetailSection label="Portfolio controls">
+                  {activeRow.recommendation?.portfolioControls ? (
+                    <div className="space-y-3">
+                      <DetailGrid
+                        items={[
+                          {
+                            label: 'Discover rank',
+                            value:
+                              activeRow.recommendation.portfolioControls.discoverRank === null
+                                ? 'Not a Discover target'
+                                : `${formatNumber(activeRow.recommendation.portfolioControls.discoverRank)} of ${formatNumber(
+                                    activeRow.recommendation.portfolioControls.activeDiscoverTargets
+                                  )}`,
+                          },
+                          {
+                            label: 'Discover cap blocked',
+                            value: String(
+                              activeRow.recommendation.portfolioControls.discoverCapBlocked
+                            ),
+                          },
+                          {
+                            label: 'Learning budget',
+                            value: `${formatCurrency(activeRow.recommendation.portfolioControls.learningBudgetUsed)} / ${formatCurrency(
+                              activeRow.recommendation.portfolioControls.learningBudgetCap
+                            )}`,
+                          },
+                          {
+                            label: 'Learning budget exceeded',
+                            value: String(
+                              activeRow.recommendation.portfolioControls.learningBudgetExceeded
+                            ),
+                          },
+                          {
+                            label: 'Stop-loss spend',
+                            value: `${formatCurrency(activeRow.recommendation.portfolioControls.totalStopLossSpend)} / ${formatCurrency(
+                              activeRow.recommendation.portfolioControls.totalStopLossCap
+                            )}`,
+                          },
+                          {
+                            label: 'Stop-loss cap exceeded',
+                            value: String(
+                              activeRow.recommendation.portfolioControls.stopLossCapExceeded
+                            ),
+                          },
+                          {
+                            label: 'Target spend share',
+                            value: formatPercent(
+                              activeRow.recommendation.portfolioControls.targetSpendShare
+                            ),
+                          },
+                          {
+                            label: 'Budget share ceiling',
+                            value: formatPercent(
+                              activeRow.recommendation.portfolioControls.maxBudgetSharePerTarget
+                            ),
+                          },
+                        ]}
+                      />
+                      <div className="flex flex-wrap gap-1.5">
+                        {activeRow.recommendation.portfolioControls.reasonCodes.length > 0 ? (
+                          activeRow.recommendation.portfolioControls.reasonCodes.map((code) => (
+                            <ReasonCodeBadge
+                              key={`${activeRow.targetSnapshotId}:portfolio:${code}`}
+                              code={code}
+                            />
+                          ))
+                        ) : (
+                          <div className="text-sm text-muted">
+                            No ASIN-level portfolio caps were breached for this target.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted">
+                      Portfolio controls were not captured for this target in the selected run.
                     </div>
                   )}
                 </DetailSection>
@@ -1488,6 +1778,64 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
 
                 <DetailSection label="Query diagnostics">
                   <div className="space-y-3">
+                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+                      <div className="text-xs uppercase tracking-wide text-muted">
+                        Same-text query pinning
+                      </div>
+                      {activeRow.recommendation?.queryDiagnostics ? (
+                        <div className="mt-3 space-y-3">
+                          <DetailGrid
+                            items={[
+                              {
+                                label: 'Pinning status',
+                                value: labelize(
+                                  activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
+                                    .status
+                                ),
+                              },
+                              {
+                                label: 'Pinned query',
+                                value:
+                                  activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
+                                    .searchTerm ?? 'Not observed',
+                              },
+                              {
+                                label: 'Click share',
+                                value: formatPercent(
+                                  activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
+                                    .clickShare
+                                ),
+                              },
+                              {
+                                label: 'Order share proxy',
+                                value: formatPercent(
+                                  activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
+                                    .orderShareProxy
+                                ),
+                              },
+                            ]}
+                          />
+                          <div className="text-sm text-muted">
+                            {activeRow.recommendation.queryDiagnostics.note}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {activeRow.recommendation.queryDiagnostics.sameTextQueryPinning.reasonCodes.map(
+                              (code) => (
+                                <ReasonCodeBadge
+                                  key={`${activeRow.targetSnapshotId}:pinning:${code}`}
+                                  code={code}
+                                />
+                              )
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-sm text-muted">
+                          Same-text query diagnostics were not captured for this target.
+                        </div>
+                      )}
+                    </div>
+
                     <DetailGrid
                       items={[
                         {
@@ -1549,6 +1897,26 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                         </div>
                       )}
                     </div>
+
+                    {activeRow.recommendation?.queryDiagnostics ? (
+                      <div className="grid gap-3">
+                        <QueryCandidateList
+                          label="Promote-to-exact candidates"
+                          candidates={activeRow.recommendation.queryDiagnostics.promoteToExactCandidates}
+                          emptyLabel="No promote-to-exact candidates were persisted."
+                        />
+                        <QueryCandidateList
+                          label="Isolate candidates"
+                          candidates={activeRow.recommendation.queryDiagnostics.isolateCandidates}
+                          emptyLabel="No isolate candidates were persisted."
+                        />
+                        <QueryCandidateList
+                          label="Negative candidates"
+                          candidates={activeRow.recommendation.queryDiagnostics.negativeCandidates}
+                          emptyLabel="No negative candidates were persisted."
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 </DetailSection>
 
@@ -1583,11 +1951,39 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                           label: 'Placement sales',
                           value: formatCurrency(activeRow.placementContext.sales),
                         },
+                        {
+                          label: 'Bias recommendation',
+                          value: labelize(
+                            activeRow.recommendation?.placementDiagnostics?.biasRecommendation ??
+                              null
+                          ),
+                        },
+                        {
+                          label: 'Context scope',
+                          value:
+                            activeRow.recommendation?.placementDiagnostics?.contextScope ??
+                            'Not captured',
+                        },
                       ]}
                     />
                     <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
-                      {activeRow.placementContext.note ??
+                      {activeRow.recommendation?.placementDiagnostics?.note ??
+                        activeRow.placementContext.note ??
                         'Placement diagnostics were not captured for this target in the selected run.'}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {activeRow.recommendation?.placementDiagnostics?.reasonCodes.length ? (
+                        activeRow.recommendation.placementDiagnostics.reasonCodes.map((code) => (
+                          <ReasonCodeBadge
+                            key={`${activeRow.targetSnapshotId}:placement:${code}`}
+                            code={code}
+                          />
+                        ))
+                      ) : (
+                        <div className="text-sm text-muted">
+                          No placement-diagnostic reason codes were persisted.
+                        </div>
+                      )}
                     </div>
                   </div>
                 </DetailSection>

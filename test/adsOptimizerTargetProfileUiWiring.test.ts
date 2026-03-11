@@ -24,7 +24,7 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('handoffAdsOptimizerToWorkspaceAction');
   });
 
-  it('keeps the targets panel honest about phase 10 review + handoff behavior', () => {
+  it('keeps the targets panel honest about phase 11 review + diagnostics + handoff behavior', () => {
     const source = fs.readFileSync(panelPath, 'utf-8');
 
     expect(source).toContain("'use client';");
@@ -35,7 +35,7 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('Review persisted target outputs without leaving');
     expect(source).toContain('read_only_recommendation_only');
     expect(source).toContain('Workspace handoff');
-    expect(source).toContain('Review + handoff only');
+    expect(source).toContain('Review + diagnostics + handoff');
     expect(source).toContain('Handoff selected to Ads Workspace');
     expect(source).toContain('Handoff this target');
     expect(source).toContain('Open in Ads Workspace');
@@ -46,8 +46,12 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('No persisted optimizer review run exists for this ASIN/date range yet.');
     expect(source).toContain('Coverage gaps and null states are shown explicitly');
     expect(source).toContain('Priority sorting uses the persisted recommendation action priority');
+    expect(source).toContain('Portfolio controls');
+    expect(source).toContain('Exception queue');
     expect(source).toContain('Recent role transitions');
     expect(source).toContain('Recommended read-only actions');
+    expect(source).toContain('Same-text query pinning');
+    expect(source).toContain('Promote-to-exact candidates');
     expect(source).toContain('Query diagnostics');
     expect(source).toContain('Placement diagnostics');
     expect(source).toContain('Queue order');

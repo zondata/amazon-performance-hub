@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = {
   insertCalled: false,
+  insertedRows: [] as Record<string, unknown>[],
 };
 
 const resetState = () => {
   state.insertCalled = false;
+  state.insertedRows = [];
 };
 
 const createQuery = (table: string) => {
@@ -15,6 +17,7 @@ const createQuery = (table: string) => {
     insert: (value: Record<string, unknown>[]) => {
       pendingInsert = value;
       state.insertCalled = true;
+      state.insertedRows = value;
       return query;
     },
     select: async () => {
@@ -60,7 +63,7 @@ vi.mock('../apps/web/src/lib/supabaseAdmin', () => ({
 
 import { insertAdsOptimizerRecommendationSnapshots } from '../apps/web/src/lib/ads-optimizer/repoRuntime';
 
-describe('ads optimizer phase 8 recommendation persistence guard', () => {
+describe('ads optimizer phase 11 recommendation persistence guard', () => {
   beforeEach(() => {
     resetState();
   });
@@ -86,7 +89,7 @@ describe('ads optimizer phase 8 recommendation persistence guard', () => {
     expect(state.insertCalled).toBe(false);
   });
 
-  it('persists only read-only Phase 8 recommendation rows', async () => {
+  it('persists only read-only Phase 11 recommendation rows with diagnostics fields', async () => {
     const rows = await insertAdsOptimizerRecommendationSnapshots([
       {
         runId: 'run-1',
@@ -96,10 +99,20 @@ describe('ads optimizer phase 8 recommendation persistence guard', () => {
         actionType: 'update_target_bid',
         reasonCodes: ['SPEND_DIRECTION_INCREASE_SCALE_HEADROOM', 'ACTION_UPDATE_TARGET_BID_INCREASE'],
         snapshotPayload: {
-          phase: 8,
+          phase: 11,
           execution_boundary: 'read_only_recommendation_only',
           workspace_handoff: 'not_started',
           writes_execution_tables: false,
+          portfolio_controls: {
+            active_discover_targets: 1,
+          },
+          query_diagnostics: {
+            context_scope: 'search_term_context_only',
+          },
+          placement_diagnostics: {
+            context_scope: 'campaign_level_context_only',
+          },
+          exception_signals: [],
         },
       },
     ]);
@@ -108,10 +121,70 @@ describe('ads optimizer phase 8 recommendation persistence guard', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.status).toBe('generated');
     expect(rows[0]?.action_type).toBe('update_target_bid');
+    expect(rows[0]?.snapshot_payload_json.phase).toBe(11);
     expect(rows[0]?.snapshot_payload_json.execution_boundary).toBe(
       'read_only_recommendation_only'
     );
     expect(rows[0]?.snapshot_payload_json.workspace_handoff).toBe('not_started');
     expect(rows[0]?.snapshot_payload_json.writes_execution_tables).toBe(false);
+    expect(rows[0]?.snapshot_payload_json.portfolio_controls).toBeTruthy();
+    expect(rows[0]?.snapshot_payload_json.query_diagnostics).toBeTruthy();
+    expect(rows[0]?.snapshot_payload_json.placement_diagnostics).toBeTruthy();
+    expect(rows[0]?.snapshot_payload_json.exception_signals).toEqual([]);
+  });
+
+  it('normalizes undefined and non-finite Phase 11 payload values before insert', async () => {
+    const rows = await insertAdsOptimizerRecommendationSnapshots([
+      {
+        runId: 'run-1',
+        targetSnapshotId: 'target-snapshot-1',
+        asin: 'B001TEST',
+        status: 'generated',
+        actionType: 'update_target_bid',
+        reasonCodes: ['SPEND_DIRECTION_INCREASE_SCALE_HEADROOM'],
+        snapshotPayload: {
+          phase: 11,
+          execution_boundary: 'read_only_recommendation_only',
+          workspace_handoff: 'not_started',
+          writes_execution_tables: false,
+          portfolio_controls: {
+            active_discover_targets: 1,
+            discover_rank: undefined,
+          },
+          query_diagnostics: {
+            context_scope: 'search_term_context_only',
+            same_text_query_pinning: {
+              status: 'not_observed',
+              search_term: undefined,
+              click_share: Number.NaN,
+            },
+          },
+          placement_diagnostics: {
+            context_scope: 'campaign_level_context_only',
+            current_percentage: Number.POSITIVE_INFINITY,
+          },
+          exception_signals: [],
+        },
+      },
+    ]);
+
+    expect(state.insertCalled).toBe(true);
+    expect(state.insertedRows[0]?.snapshot_payload_json).toMatchObject({
+      phase: 11,
+      portfolio_controls: {
+        discover_rank: null,
+      },
+      query_diagnostics: {
+        same_text_query_pinning: {
+          search_term: null,
+          click_share: null,
+        },
+      },
+      placement_diagnostics: {
+        current_percentage: null,
+      },
+    });
+    expect(rows[0]?.snapshot_payload_json.query_diagnostics).toBeTruthy();
+    expect(rows[0]?.snapshot_payload_json.placement_diagnostics).toBeTruthy();
   });
 });

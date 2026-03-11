@@ -52,12 +52,14 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     expect(source).toContain('Phase 4 manual runs support one ASIN at a time.');
   });
 
-  it('stores recommendation snapshots as read-only Phase 8 recommendation sets', () => {
+  it('stores recommendation snapshots as read-only Phase 11 recommendation sets', () => {
     const runtimeSource = fs.readFileSync(runtimePath, 'utf-8');
     const recommendationSource = fs.readFileSync(recommendationPath, 'utf-8');
 
-    expect(runtimeSource).toContain('buildAdsOptimizerRecommendationSnapshot');
-    expect(recommendationSource).toContain("phase: 8");
+    expect(runtimeSource).toContain('buildAdsOptimizerRecommendationSnapshots');
+    expect(recommendationSource).toContain("phase: 11");
+    expect(recommendationSource).toContain('portfolio_controls');
+    expect(recommendationSource).toContain('exception_signals');
     expect(recommendationSource).toContain('read_only_recommendation_only');
   });
 });

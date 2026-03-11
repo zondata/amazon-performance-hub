@@ -89,7 +89,7 @@ describe('ads optimizer phase 4 manual run service', () => {
         createRun: async (payload) => {
           expect(payload.selectedAsin).toBe('B001TEST');
           expect(payload.rulePackVersionLabel).toBe('sp_v1_seed');
-          expect(payload.inputSummary.phase).toBe(8);
+          expect(payload.inputSummary.phase).toBe(11);
           expect(payload.inputSummary.snapshot_boundaries).toBeTruthy();
           expect(payload.inputSummary.snapshot_boundaries.target_profile_engine).toBe(
             'phase5_target_profile_engine'
@@ -99,7 +99,7 @@ describe('ads optimizer phase 4 manual run service', () => {
             'phase7_role_guardrail_engine'
           );
           expect(payload.inputSummary.snapshot_boundaries.recommendation_snapshot_behavior).toContain(
-            'Phase 8 persists deterministic read-only recommendation sets'
+            'Phase 11 persists deterministic recommendation sets with portfolio caps'
           );
           return makeRun();
         },
@@ -406,7 +406,12 @@ describe('ads optimizer phase 4 manual run service', () => {
       'read_only_recommendation_only'
     );
     expect(insertedRecommendationRows[0]?.snapshotPayload.writes_execution_tables).toBe(false);
-    expect(insertedRecommendationRows[0]?.snapshotPayload.actions).toHaveLength(3);
+    expect(insertedRecommendationRows[0]?.snapshotPayload.phase).toBe(11);
+    expect(insertedRecommendationRows[0]?.snapshotPayload.portfolio_controls).toBeTruthy();
+    expect(insertedRecommendationRows[0]?.snapshotPayload.query_diagnostics).toBeTruthy();
+    expect(insertedRecommendationRows[0]?.snapshotPayload.placement_diagnostics).toBeTruthy();
+    expect(insertedRecommendationRows[0]?.snapshotPayload.exception_signals).toBeTruthy();
+    expect(insertedRecommendationRows[0]?.snapshotPayload.actions).toHaveLength(2);
     expect(insertedRecommendationRows[0]?.snapshotPayload.actions[0]?.action_type).toBe(
       'update_target_bid'
     );
