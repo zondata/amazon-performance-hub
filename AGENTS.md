@@ -599,6 +599,11 @@ What we learned / common mapping issues & fixes:
 - STIS search-term rows:
   - If `customer_search_term_norm` is non-empty, target_id may be NULL and this is NOT an error.
   - Do NOT log mapping issues for target_id on STIS search-term rows.
+  - For SP auto-style `targeting_norm="*"` rows, do NOT assign `target_id` from naming heuristics or “only target in ad group” assumptions.
+  - Enrich `target_id` only when `sp_targeting_daily_fact_latest` has exactly one distinct auto target for the same `account_id + date + campaign_id + ad_group_id`, restricted to `close-match`, `loose-match`, `substitutes`, or `complements`.
+  - If that bridge has zero or multiple distinct auto targets, preserve unresolved roll-up behavior (`target_id = NULL` with deterministic `target_key`).
+  - This bridge enriches mapped STIS facts only; preserve raw STIS `targeting_*` and `match_type_*` fields exactly as imported.
+  - No schema migration is required for this rule; re-run STIS mapping for affected dates to apply it.
   - When target_id is NULL, `target_key` must be deterministic (targeting signature). Do NOT use a constant like `"__ROLLUP__"` or it can violate `sp_stis_daily_fact_uq`.
 - Category targeting is excluded (SP + SB):
   - Rationale: `category="name"` can map to multiple IDs; without API this is ambiguous and creates noisy unmapped issues; category targeting is not a primary sales driver.
