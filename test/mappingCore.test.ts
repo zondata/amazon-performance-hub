@@ -299,6 +299,125 @@ describe("mapSpStisRows", () => {
     expect(facts[0]?.target_key).toBe(expectedKey);
   });
 
+  it("resolves auto search-term '*' rows via a unique targeting bridge candidate", () => {
+    const lookup = emptyLookup();
+    lookup.campaignByName.set("camp", [{ campaign_id: "c1", portfolio_id: null }]);
+    lookup.campaignById.set("c1", { campaign_id: "c1", portfolio_id: null });
+    lookup.adGroupByCampaignName.set("c1::ag", [{ ad_group_id: "ag1", campaign_id: "c1" }]);
+    lookup.adGroupById.set("ag1", { ad_group_id: "ag1", campaign_id: "c1" });
+
+    const autoTargetBridge = new Map([["2025-01-01::c1::ag1", ["t-auto-1"]]]);
+
+    const { facts, issues } = mapSpStisRows({
+      rows: [
+        {
+          date: "2025-01-01",
+          portfolio_name_raw: null,
+          portfolio_name_norm: null,
+          campaign_name_raw: "Camp",
+          campaign_name_norm: "camp",
+          ad_group_name_raw: "Ag",
+          ad_group_name_norm: "ag",
+          targeting_raw: "*",
+          targeting_norm: "*",
+          match_type_raw: "-",
+          match_type_norm: "UNKNOWN",
+          customer_search_term_raw: "term",
+          customer_search_term_norm: "term",
+          search_term_impression_rank: 5,
+          search_term_impression_share: 0.12,
+          impressions: 11,
+          clicks: 2,
+          spend: 4,
+          sales: 8,
+          orders: 1,
+          units: 1,
+          cpc: 2,
+          ctr: 0.18,
+          acos: 0.5,
+          roas: 2,
+          conversion_rate: 0.5,
+        },
+      ],
+      lookup,
+      uploadId: "u1",
+      accountId: "a1",
+      exportedAt: "2025-01-02T00:00:00Z",
+      referenceDate: "2025-01-02",
+      autoTargetBridge,
+    });
+
+    expect(issues.length).toBe(0);
+    expect(facts.length).toBe(1);
+    expect(facts[0]?.target_id).toBe("t-auto-1");
+    expect(facts[0]?.target_key).toBe("t-auto-1");
+    expect(facts[0]?.targeting_raw).toBe("*");
+    expect(facts[0]?.match_type_raw).toBe("-");
+  });
+
+  it("keeps auto search-term '*' rows unresolved when the targeting bridge is ambiguous", () => {
+    const lookup = emptyLookup();
+    lookup.campaignByName.set("camp", [{ campaign_id: "c1", portfolio_id: null }]);
+    lookup.campaignById.set("c1", { campaign_id: "c1", portfolio_id: null });
+    lookup.adGroupByCampaignName.set("c1::ag", [{ ad_group_id: "ag1", campaign_id: "c1" }]);
+    lookup.adGroupById.set("ag1", { ad_group_id: "ag1", campaign_id: "c1" });
+
+    const autoTargetBridge = new Map([["2025-01-01::c1::ag1", ["t-auto-1", "t-auto-2"]]]);
+
+    const { facts, issues } = mapSpStisRows({
+      rows: [
+        {
+          date: "2025-01-01",
+          portfolio_name_raw: null,
+          portfolio_name_norm: null,
+          campaign_name_raw: "Camp",
+          campaign_name_norm: "camp",
+          ad_group_name_raw: "Ag",
+          ad_group_name_norm: "ag",
+          targeting_raw: "*",
+          targeting_norm: "*",
+          match_type_raw: "-",
+          match_type_norm: "UNKNOWN",
+          customer_search_term_raw: "term",
+          customer_search_term_norm: "term",
+          search_term_impression_rank: null,
+          search_term_impression_share: null,
+          impressions: 7,
+          clicks: 1,
+          spend: 1,
+          sales: 0,
+          orders: 0,
+          units: 0,
+          cpc: 1,
+          ctr: 0.14,
+          acos: null,
+          roas: null,
+          conversion_rate: 0,
+        },
+      ],
+      lookup,
+      uploadId: "u1",
+      accountId: "a1",
+      exportedAt: "2025-01-02T00:00:00Z",
+      referenceDate: "2025-01-02",
+      autoTargetBridge,
+    });
+
+    expect(issues.length).toBe(0);
+    expect(facts.length).toBe(1);
+    expect(facts[0]?.target_id).toBeNull();
+    expect(facts[0]?.target_key).toBe(
+      JSON.stringify({
+        campaign_name_norm: "camp",
+        portfolio_name_norm: null,
+        ad_group_name_norm: "ag",
+        targeting_norm: "*",
+        match_type_norm: "UNKNOWN",
+        is_negative: false,
+      })
+    );
+  });
+
   it("resolves canonical target_id for deterministic search-term rows", () => {
     const lookup = emptyLookup();
     lookup.campaignByName.set("camp", [{ campaign_id: "c1", portfolio_id: null }]);

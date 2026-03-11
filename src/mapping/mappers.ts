@@ -137,6 +137,7 @@ export type SpStisDailyFactRow = SpStisRawRow & {
   exported_at: string;
 };
 export type SpStisFactRow = SpStisDailyFactRow;
+export type SpStisAutoTargetBridge = Map<string, string[]>;
 
 export type SpAdvertisedProductRawRow = {
   date: string;
@@ -170,6 +171,22 @@ function issueKeyBase(row: { campaign_name_norm: string; portfolio_name_norm?: s
 }
 
 type PendingIssue = Omit<MappingIssue, "row_count"> & { row_count?: number };
+
+function buildSpStisAutoTargetBridgeKey(params: {
+  date: string;
+  campaignId: string;
+  adGroupId: string;
+}): string {
+  return `${params.date}::${params.campaignId}::${params.adGroupId}`;
+}
+
+function isAutoSearchTermBridgeCandidate(row: SpStisRawRow): boolean {
+  const hasSearchTerm =
+    !!row.customer_search_term_norm && row.customer_search_term_norm.trim() !== "";
+  const isUnknownMatchType =
+    row.match_type_raw === "-" || row.match_type_norm === "UNKNOWN";
+  return row.targeting_norm === "*" && hasSearchTerm && isUnknownMatchType;
+}
 
 export function mapSpCampaignRows(params: {
   rows: SpCampaignRawRow[];
@@ -474,8 +491,17 @@ export function mapSpStisRows(params: {
   accountId: string;
   exportedAt: string;
   referenceDate: string;
+  autoTargetBridge?: SpStisAutoTargetBridge;
 }): { facts: SpStisFactRow[]; issues: MappingIssue[] } {
-  const { rows, lookup, uploadId, accountId, exportedAt, referenceDate } = params;
+  const {
+    rows,
+    lookup,
+    uploadId,
+    accountId,
+    exportedAt,
+    referenceDate,
+    autoTargetBridge,
+  } = params;
   const facts: SpStisFactRow[] = [];
   const collector = createIssueCollector();
   const resolvedCampaignKeys = new Set<string>();
@@ -589,6 +615,16 @@ export function mapSpStisRows(params: {
           is_negative: inferIsNegative(row.match_type_raw),
         });
         resolvedTargetKeys.add(targetKey);
+      }
+    } else if (isAutoSearchTermBridgeCandidate(row)) {
+      const bridgeKey = buildSpStisAutoTargetBridgeKey({
+        date: row.date,
+        campaignId: campaignResult.id,
+        adGroupId: adGroupResult.id,
+      });
+      const candidates = autoTargetBridge?.get(bridgeKey) ?? [];
+      if (candidates.length === 1) {
+        targetId = candidates[0] ?? null;
       }
     }
 

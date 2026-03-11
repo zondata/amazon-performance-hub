@@ -13,6 +13,7 @@ import {
   mapSpAdvertisedProductRows,
   mapSpTargetingRows,
   mapSpStisRows,
+  SpStisAutoTargetBridge,
   SpAdvertisedProductRawRow,
   SpCampaignRawRow,
   SpPlacementRawRow,
@@ -21,6 +22,7 @@ import {
 } from "./mappers";
 
 const FETCH_LIMIT = 1000;
+const SP_AUTO_TARGETING_NORMS = ["close-match", "loose-match", "substitutes", "complements"] as const;
 
 type UploadRow = {
   upload_id: string;
@@ -635,6 +637,103 @@ async function insertIssues(
   await insertChunked("sp_mapping_issues", rows);
 }
 
+function buildSpStisAutoTargetBridgeKey(params: {
+  date: string;
+  campaignId: string;
+  adGroupId: string;
+}): string {
+  return `${params.date}::${params.campaignId}::${params.adGroupId}`;
+}
+
+type SpTargetingAutoBridgeRow = {
+  date: string;
+  campaign_id: string;
+  ad_group_id: string;
+  target_id: string | null;
+  targeting_norm: string;
+};
+
+export function buildSpStisAutoTargetBridge(
+  rows: SpTargetingAutoBridgeRow[]
+): SpStisAutoTargetBridge {
+  const bridge = new Map<string, Set<string>>();
+  for (const row of rows) {
+    if (!row.target_id) continue;
+    if (!SP_AUTO_TARGETING_NORMS.includes(row.targeting_norm as (typeof SP_AUTO_TARGETING_NORMS)[number])) {
+      continue;
+    }
+    const key = buildSpStisAutoTargetBridgeKey({
+      date: row.date,
+      campaignId: row.campaign_id,
+      adGroupId: row.ad_group_id,
+    });
+    const targetIds = bridge.get(key) ?? new Set<string>();
+    targetIds.add(row.target_id);
+    bridge.set(key, targetIds);
+  }
+
+  return new Map(
+    [...bridge.entries()].map(([key, targetIds]) => [key, [...targetIds].sort()])
+  );
+}
+
+async function fetchSpStisAutoTargetBridge(params: {
+  accountId: string;
+  coverageStart: string | null;
+  coverageEnd: string | null;
+  stisRows: SpStisRawRow[];
+}): Promise<SpStisAutoTargetBridge> {
+  const { accountId, coverageStart, coverageEnd, stisRows } = params;
+  const needsBridge = stisRows.some((row) => {
+    const hasSearchTerm =
+      !!row.customer_search_term_norm && row.customer_search_term_norm.trim() !== "";
+    const isUnknownMatchType =
+      row.match_type_raw === "-" || row.match_type_norm === "UNKNOWN";
+    return row.targeting_norm === "*" && hasSearchTerm && isUnknownMatchType;
+  });
+  if (!needsBridge) return new Map();
+
+  const distinctDates = [...new Set(stisRows.map((row) => row.date).filter(Boolean))].sort();
+  if (!coverageStart && !coverageEnd && distinctDates.length === 0) return new Map();
+
+  const client = getSupabaseClient();
+  const rows: SpTargetingAutoBridgeRow[] = [];
+  let offset = 0;
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let query = client
+      .from("sp_targeting_daily_fact_latest")
+      .select("date,campaign_id,ad_group_id,target_id,targeting_norm")
+      .eq("account_id", accountId)
+      .in("targeting_norm", [...SP_AUTO_TARGETING_NORMS])
+      .not("target_id", "is", null)
+      .range(offset, offset + FETCH_LIMIT - 1);
+
+    if (coverageStart) {
+      query = query.gte("date", coverageStart);
+    }
+    if (coverageEnd) {
+      query = query.lte("date", coverageEnd);
+    }
+    if (!coverageStart && !coverageEnd) {
+      query = query.in("date", distinctDates);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`Failed fetching sp_targeting_daily_fact_latest auto bridge rows: ${error.message}`);
+    }
+
+    const chunk = (data ?? []) as SpTargetingAutoBridgeRow[];
+    rows.push(...chunk);
+    if (chunk.length < FETCH_LIMIT) break;
+    offset += FETCH_LIMIT;
+  }
+
+  return buildSpStisAutoTargetBridge(rows);
+}
+
 async function refreshSpCampaignHourlyFactGold(uploadId: string) {
   const client = getSupabaseClient();
   const { error } = await client.rpc("refresh_sp_campaign_hourly_fact_gold", {
@@ -794,6 +893,12 @@ export async function mapUpload(
     "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,targeting_raw,targeting_norm,match_type_raw,match_type_norm,customer_search_term_raw,customer_search_term_norm,search_term_impression_rank,search_term_impression_share,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
     { upload_id: uploadId }
   );
+  const autoTargetBridge = await fetchSpStisAutoTargetBridge({
+    accountId: upload.account_id,
+    coverageStart: upload.coverage_start,
+    coverageEnd: upload.coverage_end,
+    stisRows: rows,
+  });
   const { facts, issues } = mapSpStisRows({
     rows,
     lookup,
@@ -801,6 +906,7 @@ export async function mapUpload(
     accountId: upload.account_id,
     exportedAt,
     referenceDate,
+    autoTargetBridge,
   });
   await insertChunked("sp_stis_daily_fact", facts);
   await insertIssues(upload.account_id, uploadId, reportType, issues);
