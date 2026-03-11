@@ -67,9 +67,9 @@ const EMPTY_STATE_COPY: Record<
   },
   targets: {
     eyebrow: 'Targets scope',
-    title: 'Select one ASIN and capture a run to review target roles.',
+    title: 'Select one ASIN and capture a run to review the target queue.',
     body:
-      'Phase 8 persists target profile, state, role, guardrail, and read-only recommendation snapshots from the matching manual run. Review surfaces remain intentionally limited here.',
+      'Phase 9 reads persisted target profile, state, role, guardrail, and read-only recommendation snapshots into an ASIN command center, target queue, and detail drawer. Execution handoff into Ads Workspace is still inactive.',
   },
   config: {
     eyebrow: 'Config placeholder',
@@ -159,7 +159,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
       : view === 'overview'
         ? 'Read-only optimizer active'
         : view === 'targets'
-          ? 'Recommendations read-only'
+          ? 'Read-only review queue'
         : view === 'history'
           ? 'Recommendation engine'
           : 'Recommendation shell only';

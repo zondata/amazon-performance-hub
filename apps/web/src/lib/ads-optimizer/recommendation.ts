@@ -47,6 +47,37 @@ export type AdsOptimizerRecommendationSet = {
   supportingMetrics: RuntimeJsonObject;
 };
 
+export type AdsOptimizerRecommendationSnapshotActionView = {
+  actionType: AdsOptimizerRecommendationActionType;
+  priority: number | null;
+  entityContext: RuntimeJsonObject | null;
+  proposedChange: RuntimeJsonObject | null;
+  reasonCodes: string[];
+  supportingMetrics: RuntimeJsonObject | null;
+};
+
+export type AdsOptimizerRecommendationSnapshotView = {
+  recommendationSnapshotId: string;
+  targetSnapshotId: string;
+  createdAt: string;
+  status: 'pending_phase5' | 'generated' | 'skipped';
+  actionType: string | null;
+  spendDirection: AdsOptimizerSpendDirection | null;
+  primaryActionType: AdsOptimizerRecommendationActionType | null;
+  actionCount: number;
+  reasonCodes: string[];
+  coverageFlags: string[];
+  confidenceNotes: string[];
+  unsupportedActionBlocks: string[];
+  executionBoundary: string | null;
+  workspaceHandoff: string | null;
+  writesExecutionTables: boolean | null;
+  manualReviewRequired: boolean | null;
+  outputState: string | null;
+  supportingMetrics: RuntimeJsonObject | null;
+  actions: AdsOptimizerRecommendationSnapshotActionView[];
+};
+
 type RecommendationConfig = {
   isolateQueryClicksMin: number;
   negativeQueryClicksMin: number;
@@ -88,6 +119,11 @@ const DEFAULT_RECOMMENDATION_CONFIG: RecommendationConfig = {
 const asJsonObject = (value: unknown): RuntimeJsonObject | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as RuntimeJsonObject;
+};
+
+const readStringArray = (value: RuntimeJsonObject | null, key: string) => {
+  const raw = value?.[key];
+  return Array.isArray(raw) ? raw.filter((entry): entry is string => typeof entry === 'string') : [];
 };
 
 const readNumber = (value: RuntimeJsonObject | RulePackJsonObject | null, key: string) => {
@@ -227,6 +263,53 @@ const buildCoverageFlags = (payload: RuntimeJsonObject): string[] => {
   if (!execution.snapshotDate) flags.push('CURRENT_BULK_CONTEXT_UNAVAILABLE');
 
   return withUnique(flags);
+};
+
+export const readAdsOptimizerRecommendationSnapshotView = (snapshot: {
+  recommendation_snapshot_id: string;
+  target_snapshot_id: string;
+  created_at: string;
+  status: 'pending_phase5' | 'generated' | 'skipped';
+  action_type: string | null;
+  snapshot_payload_json: RuntimeJsonObject;
+}) : AdsOptimizerRecommendationSnapshotView => {
+  const payload = asJsonObject(snapshot.snapshot_payload_json) ?? {};
+  const actions = Array.isArray(payload.actions) ? payload.actions : [];
+
+  return {
+    recommendationSnapshotId: snapshot.recommendation_snapshot_id,
+    targetSnapshotId: snapshot.target_snapshot_id,
+    createdAt: snapshot.created_at,
+    status: snapshot.status,
+    actionType: snapshot.action_type,
+    spendDirection: (readString(payload, 'spend_direction') as AdsOptimizerSpendDirection | null) ?? null,
+    primaryActionType:
+      (readString(payload, 'primary_action_type') as AdsOptimizerRecommendationActionType | null) ?? null,
+    actionCount: readNumber(payload, 'action_count') ?? 0,
+    reasonCodes: readStringArray(payload, 'reason_codes'),
+    coverageFlags: readStringArray(payload, 'coverage_flags'),
+    confidenceNotes: readStringArray(payload, 'confidence_notes'),
+    unsupportedActionBlocks: readStringArray(payload, 'unsupported_action_blocks'),
+    executionBoundary: readString(payload, 'execution_boundary'),
+    workspaceHandoff: readString(payload, 'workspace_handoff'),
+    writesExecutionTables: readBoolean(payload, 'writes_execution_tables'),
+    manualReviewRequired: readBoolean(payload, 'manual_review_required'),
+    outputState: readString(payload, 'output_state'),
+    supportingMetrics: asJsonObject(payload.supporting_metrics),
+    actions: actions
+      .map((entry) => asJsonObject(entry))
+      .filter((entry): entry is RuntimeJsonObject => entry !== null)
+      .map((entry) => ({
+        actionType:
+          (readString(entry, 'action_type') as AdsOptimizerRecommendationActionType | null) ??
+          'change_review_cadence',
+        priority: readNumber(entry, 'priority'),
+        entityContext: asJsonObject(entry.entity_context),
+        proposedChange: asJsonObject(entry.proposed_change),
+        reasonCodes: readStringArray(entry, 'reason_codes'),
+        supportingMetrics: asJsonObject(entry.supporting_metrics),
+      })),
+  };
 };
 
 const buildConfidenceNotes = (payload: RuntimeJsonObject): string[] => {

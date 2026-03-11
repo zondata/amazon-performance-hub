@@ -20,10 +20,16 @@ import {
   insertAdsOptimizerRoleTransitionLogs,
   insertAdsOptimizerTargetSnapshots,
   listAdsOptimizerProductSnapshotsByRun,
+  listAdsOptimizerRecommendationSnapshotsByRun,
+  listAdsOptimizerRoleTransitionLogsByAsin,
   listAdsOptimizerRuns,
   listAdsOptimizerTargetSnapshotsByRun,
   updateAdsOptimizerRun,
 } from './repoRuntime';
+import {
+  readAdsOptimizerRecommendationSnapshotView,
+  type AdsOptimizerRecommendationSnapshotView,
+} from './recommendation';
 import {
   enrichAdsOptimizerProductSnapshotPayload,
   enrichAdsOptimizerTargetSnapshotPayload,
@@ -90,7 +96,36 @@ export type AdsOptimizerTargetsViewData = {
   run: AdsOptimizerRun | null;
   latestCompletedRun: AdsOptimizerRun | null;
   productState: AdsOptimizerProductRunState | null;
-  rows: AdsOptimizerTargetProfileSnapshotView[];
+  rows: AdsOptimizerTargetReviewRow[];
+};
+
+export type AdsOptimizerTargetRoleHistoryEntry = {
+  roleTransitionLogId: string;
+  runId: string;
+  targetSnapshotId: string | null;
+  createdAt: string;
+  fromRole: string | null;
+  toRole: string | null;
+  desiredRole: string | null;
+  transitionRule: string | null;
+  transitionReasonCodes: string[];
+  roleReasonCodes: string[];
+  guardrailReasonCodes: string[];
+};
+
+export type AdsOptimizerTargetReviewRow = AdsOptimizerTargetProfileSnapshotView & {
+  persistedTargetKey: string;
+  recommendation: AdsOptimizerRecommendationSnapshotView | null;
+  roleHistory: AdsOptimizerTargetRoleHistoryEntry[];
+  queue: {
+    priority: number | null;
+    recommendationCount: number;
+    primaryActionType: string | null;
+    spendDirection: string | null;
+    reasonCodeBadges: string[];
+    readOnlyBoundary: string | null;
+    hasCoverageGaps: boolean;
+  };
 };
 
 type ExecuteManualRunDeps = {
@@ -214,6 +249,19 @@ const buildFailureDiagnostics = (stage: string, error: unknown): JsonObject => (
   error_message: error instanceof Error ? error.message : 'Unknown optimizer run failure.',
   recorded_at: new Date().toISOString(),
 });
+
+const asJsonObject = (value: unknown): JsonObject | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as JsonObject;
+};
+
+const readString = (value: JsonObject | null, key: string) =>
+  typeof value?.[key] === 'string' ? (value[key] as string) : null;
+
+const readStringArray = (value: JsonObject | null, key: string) => {
+  const raw = value?.[key];
+  return Array.isArray(raw) ? raw.filter((entry): entry is string => typeof entry === 'string') : [];
+};
 
 const assertPersistedRecommendationRows = (args: {
   targetSnapshotCount: number;
@@ -533,16 +581,77 @@ export const getAdsOptimizerTargetsViewData = async (args: {
     };
   }
 
-  const [productSnapshots, snapshots] = await Promise.all([
+  const [productSnapshots, snapshots, recommendationSnapshots, roleTransitionLogs] = await Promise.all([
     listAdsOptimizerProductSnapshotsByRun(exactRun.run_id),
     listAdsOptimizerTargetSnapshotsByRun(exactRun.run_id),
+    listAdsOptimizerRecommendationSnapshotsByRun(exactRun.run_id),
+    listAdsOptimizerRoleTransitionLogsByAsin({
+      asin: args.asin,
+      limit: 250,
+    }),
   ]);
+  const recommendationsByTargetSnapshotId = new Map(
+    recommendationSnapshots.map((snapshot) => [
+      snapshot.target_snapshot_id,
+      readAdsOptimizerRecommendationSnapshotView(snapshot),
+    ])
+  );
+  const roleHistoryByTargetId = new Map<string, AdsOptimizerTargetRoleHistoryEntry[]>();
+  roleTransitionLogs.forEach((log) => {
+    if (!log.target_id) return;
+
+    const transitionReason = asJsonObject(log.transition_reason_json);
+    const historyEntry: AdsOptimizerTargetRoleHistoryEntry = {
+      roleTransitionLogId: log.role_transition_log_id,
+      runId: log.run_id,
+      targetSnapshotId: log.target_snapshot_id,
+      createdAt: log.created_at,
+      fromRole: log.from_role,
+      toRole: log.to_role,
+      desiredRole: readString(transitionReason, 'desired_role'),
+      transitionRule: readString(transitionReason, 'transition_rule'),
+      transitionReasonCodes: readStringArray(transitionReason, 'transition_reason_codes'),
+      roleReasonCodes: readStringArray(transitionReason, 'role_reason_codes'),
+      guardrailReasonCodes: readStringArray(transitionReason, 'guardrail_reason_codes'),
+    };
+    const bucket = roleHistoryByTargetId.get(log.target_id) ?? [];
+    bucket.push(historyEntry);
+    roleHistoryByTargetId.set(log.target_id, bucket);
+  });
+
   return {
     run: exactRun,
     latestCompletedRun,
     productState: productSnapshots[0]
       ? readAdsOptimizerProductRunState(productSnapshots[0].snapshot_payload_json)
       : null,
-    rows: snapshots.map(mapTargetSnapshotToProfileView),
+    rows: snapshots.map((snapshot) => {
+      const baseRow = mapTargetSnapshotToProfileView(snapshot);
+      const recommendation = recommendationsByTargetSnapshotId.get(snapshot.target_snapshot_id) ?? null;
+
+      return {
+        ...baseRow,
+        persistedTargetKey: snapshot.target_id,
+        recommendation,
+        roleHistory: roleHistoryByTargetId.get(snapshot.target_id) ?? [],
+        queue: {
+          priority: recommendation?.actions[0]?.priority ?? null,
+          recommendationCount: recommendation?.actionCount ?? 0,
+          primaryActionType: recommendation?.primaryActionType ?? recommendation?.actionType ?? null,
+          spendDirection: recommendation?.spendDirection ?? null,
+          reasonCodeBadges:
+            recommendation && recommendation.reasonCodes.length > 0
+              ? recommendation.reasonCodes.slice(0, 3)
+              : baseRow.state.summaryReasonCodes.slice(0, 3),
+          readOnlyBoundary: recommendation?.executionBoundary ?? null,
+          hasCoverageGaps:
+            !recommendation ||
+            baseRow.coverage.notes.length > 0 ||
+            recommendation.coverageFlags.some(
+              (flag) => flag.includes('_MISSING') || flag.includes('_PARTIAL')
+            ),
+        },
+      };
+    }),
   };
 };

@@ -1,12 +1,13 @@
 'use client';
 
-import { Fragment, type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 
 import type { AdsOptimizerTargetRole } from '@/lib/ads-optimizer/role';
+import type { AdsOptimizerTargetReviewRow } from '@/lib/ads-optimizer/runtime';
 import type { AdsOptimizerRun } from '@/lib/ads-optimizer/runtimeTypes';
 import type { AdsOptimizerProductRunState } from '@/lib/ads-optimizer/state';
-import type { AdsOptimizerTargetProfileSnapshotView } from '@/lib/ads-optimizer/targetProfile';
 import {
   formatUiDateRange,
   formatUiDateTime as formatDateTime,
@@ -20,10 +21,11 @@ type OptimizerTargetsPanelProps = {
   run: AdsOptimizerRun | null;
   latestCompletedRun: AdsOptimizerRun | null;
   productState: AdsOptimizerProductRunState | null;
-  rows: AdsOptimizerTargetProfileSnapshotView[];
+  rows: AdsOptimizerTargetReviewRow[];
 };
 
-const TARGET_TABLE_COL_COUNT = 32;
+type QueueSort = 'priority' | 'risk' | 'opportunity' | 'target';
+type FilterValue = 'all' | string;
 
 const formatNumber = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return '—';
@@ -58,51 +60,10 @@ const coverageBadgeClass = (status: 'ready' | 'partial' | 'missing') => {
   return 'border-rose-200 bg-rose-50 text-rose-800';
 };
 
-const CoverageBadge = (props: { label: string; status: 'ready' | 'partial' | 'missing' }) => (
-  <span
-    className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${coverageBadgeClass(
-      props.status
-    )}`}
-  >
-    {props.label} {props.status}
-  </span>
-);
-
-const SummaryCard = (props: { label: string; value: string; detail?: string }) => (
-  <div className="rounded-xl border border-border bg-surface px-4 py-3">
-    <div className="text-xs uppercase tracking-wide text-muted">{props.label}</div>
-    <div className="mt-2 text-lg font-semibold text-foreground">{props.value}</div>
-    {props.detail ? <div className="mt-1 text-sm text-muted">{props.detail}</div> : null}
-  </div>
-);
-
-const getCoverageItems = (row: AdsOptimizerTargetProfileSnapshotView) => [
-  { label: 'TOS', status: row.coverage.statuses.tosIs },
-  { label: 'STIS', status: row.coverage.statuses.stis },
-  { label: 'STIR', status: row.coverage.statuses.stir },
-  { label: 'Place', status: row.coverage.statuses.placementContext },
-  { label: 'Terms', status: row.coverage.statuses.searchTerms },
-  { label: 'BE', status: row.coverage.statuses.breakEvenInputs },
-] as const;
-
-const getCoverageSummary = (row: AdsOptimizerTargetProfileSnapshotView) => {
-  const counts = { ready: 0, missing: 0, partial: 0 };
-
-  for (const item of getCoverageItems(row)) {
-    counts[item.status] += 1;
-  }
-
-  return counts;
-};
-
-const coverageSummaryTextClass = (status: 'ready' | 'partial' | 'missing', count: number) => {
-  if (count <= 0) return 'text-muted';
-  if (status === 'ready') return 'text-emerald-700';
-  if (status === 'partial') return 'text-amber-700';
-  return 'text-rose-700';
-};
-
-const statePillClass = (kind: 'efficiency' | 'confidence' | 'importance', value: string | null) => {
+const statePillClass = (
+  kind: 'efficiency' | 'confidence' | 'importance',
+  value: string | null
+) => {
   if (kind === 'efficiency') {
     if (value === 'profitable') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
     if (value === 'break_even') return 'border-amber-200 bg-amber-50 text-amber-800';
@@ -124,21 +85,6 @@ const statePillClass = (kind: 'efficiency' | 'confidence' | 'importance', value:
   return 'border-border bg-surface-2 text-muted';
 };
 
-const StatePill = (props: {
-  kind: 'efficiency' | 'confidence' | 'importance';
-  value: string | null;
-  label: string;
-}) => (
-  <span
-    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap ${statePillClass(
-      props.kind,
-      props.value
-    )}`}
-  >
-    {props.label}
-  </span>
-);
-
 const rolePillClass = (value: AdsOptimizerTargetRole | null) => {
   if (value === 'Scale') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
   if (value === 'Harvest') return 'border-sky-200 bg-sky-50 text-sky-800';
@@ -148,16 +94,6 @@ const rolePillClass = (value: AdsOptimizerTargetRole | null) => {
   if (value === 'Discover') return 'border-cyan-200 bg-cyan-50 text-cyan-800';
   return 'border-border bg-surface-2 text-muted';
 };
-
-const RolePill = (props: { value: AdsOptimizerTargetRole | null; label: string }) => (
-  <span
-    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap ${rolePillClass(
-      props.value
-    )}`}
-  >
-    {props.label}
-  </span>
-);
 
 const ProductStateBadge = (props: { state: AdsOptimizerProductRunState | null }) => {
   if (!props.state) {
@@ -187,82 +123,211 @@ const ProductStateBadge = (props: { state: AdsOptimizerProductRunState | null })
   );
 };
 
-const CoverageDetailsToggle = (props: {
-  items: ReadonlyArray<{ label: string; status: 'ready' | 'partial' | 'missing' }>;
-  notes: string[];
-  daysObserved: number;
-  targetSnapshotId: string;
-}) => (
-  <details className="inline text-xs text-muted">
-    <summary className="inline cursor-pointer font-semibold text-primary">View coverage</summary>
-    <div className="mt-2 rounded-lg border border-border bg-surface-2 p-3">
-      <div>Observed {formatNumber(props.daysObserved)} day(s)</div>
-      <div className="mt-2 flex max-w-[280px] flex-wrap gap-1.5">
-        {props.items.map((item) => (
-          <CoverageBadge
-            key={`${props.targetSnapshotId}:${item.label}`}
-            label={item.label}
-            status={item.status}
-          />
-        ))}
-      </div>
-      {props.notes.length > 0 ? (
-        <div className="mt-2 space-y-1">
-          {props.notes.map((note) => (
-            <div key={`${props.targetSnapshotId}:${note}`}>{note}</div>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  </details>
-);
-
-const ReasonCodes = (props: { codes: string[] }) => {
-  if (props.codes.length === 0) {
-    return <div className="text-muted">No explicit reason codes were captured.</div>;
-  }
-
-  return (
-    <ul className="space-y-1.5">
-      {props.codes.map((code) => (
-        <li
-          key={code}
-          className="rounded-md border border-border bg-surface-2 px-2.5 py-2 font-mono text-[11px] leading-4 text-foreground"
-        >
-          {code}
-        </li>
-      ))}
-    </ul>
-  );
-};
-
-const DetailSection = (props: { label: string; children: ReactNode; subtle?: boolean }) => (
-  <div
-    className={
-      props.subtle
-        ? 'rounded-lg border border-border/70 bg-surface px-3 py-3'
-        : 'space-y-2'
-    }
-  >
-    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">{props.label}</div>
-    <div className="text-sm text-foreground">{props.children}</div>
+const SummaryCard = (props: { label: string; value: string; detail?: string }) => (
+  <div className="rounded-xl border border-border bg-surface px-4 py-3">
+    <div className="text-xs uppercase tracking-wide text-muted">{props.label}</div>
+    <div className="mt-2 text-lg font-semibold text-foreground">{props.value}</div>
+    {props.detail ? <div className="mt-1 text-sm text-muted">{props.detail}</div> : null}
   </div>
 );
 
+const StatePill = (props: {
+  kind: 'efficiency' | 'confidence' | 'importance';
+  value: string | null;
+  label: string;
+}) => (
+  <span
+    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap ${statePillClass(
+      props.kind,
+      props.value
+    )}`}
+  >
+    {props.label}
+  </span>
+);
+
+const RolePill = (props: { value: AdsOptimizerTargetRole | null; label: string }) => (
+  <span
+    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap ${rolePillClass(
+      props.value
+    )}`}
+  >
+    {props.label}
+  </span>
+);
+
+const CoverageBadge = (props: { label: string; status: 'ready' | 'partial' | 'missing' }) => (
+  <span
+    className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${coverageBadgeClass(
+      props.status
+    )}`}
+  >
+    {props.label} {props.status}
+  </span>
+);
+
+const ReasonCodeBadge = (props: { code: string }) => (
+  <span className="rounded-full border border-border bg-surface-2 px-2 py-1 font-mono text-[11px] text-foreground">
+    {props.code}
+  </span>
+);
+
+const DetailSection = (props: { label: string; children: ReactNode }) => (
+  <section className="rounded-xl border border-border bg-surface px-4 py-4">
+    <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-muted">
+      {props.label}
+    </div>
+    <div className="mt-3 text-sm text-foreground">{props.children}</div>
+  </section>
+);
+
+const DetailGrid = (props: { items: Array<{ label: string; value: string }> }) => (
+  <dl className="grid gap-3 sm:grid-cols-2">
+    {props.items.map((item) => (
+      <div key={item.label} className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+        <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          {item.label}
+        </dt>
+        <dd className="mt-1 text-sm text-foreground">{item.value}</dd>
+      </div>
+    ))}
+  </dl>
+);
+
+const JsonBlock = (props: { value: Record<string, unknown> | null }) => {
+  if (!props.value) {
+    return <div className="text-sm text-muted">Not captured in this snapshot.</div>;
+  }
+
+  return (
+    <pre className="overflow-x-auto rounded-lg border border-border/70 bg-surface-2 p-3 text-[11px] leading-5 text-foreground">
+      {JSON.stringify(props.value, null, 2)}
+    </pre>
+  );
+};
+
+const getCoverageItems = (row: AdsOptimizerTargetReviewRow) => [
+  { label: 'TOS', status: row.coverage.statuses.tosIs },
+  { label: 'STIS', status: row.coverage.statuses.stis },
+  { label: 'STIR', status: row.coverage.statuses.stir },
+  { label: 'Place', status: row.coverage.statuses.placementContext },
+  { label: 'Terms', status: row.coverage.statuses.searchTerms },
+  { label: 'BE', status: row.coverage.statuses.breakEvenInputs },
+] as const;
+
+const getCoverageSummary = (row: AdsOptimizerTargetReviewRow) => {
+  const counts = { ready: 0, partial: 0, missing: 0 };
+  getCoverageItems(row).forEach((item) => {
+    counts[item.status] += 1;
+  });
+  return counts;
+};
+
+const compareNullableNumber = (left: number | null, right: number | null) => {
+  if (left === null && right === null) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  return left - right;
+};
+
+const buildPriorityLabel = (priority: number | null, actionType: string | null) => {
+  if (priority === null) return 'Monitor only';
+  return `P${Math.max(1, Math.round(priority / 10))} · ${labelize(actionType)}`;
+};
+
+const buildTopList = (rows: AdsOptimizerTargetReviewRow[], kind: 'risk' | 'opportunity') =>
+  [...rows]
+    .filter((row) =>
+      kind === 'risk'
+        ? row.state.riskScore !== null && row.state.riskScore > 0
+        : row.state.opportunityScore !== null && row.state.opportunityScore > 0
+    )
+    .sort((left, right) => {
+      const leftScore = kind === 'risk' ? left.state.riskScore ?? -1 : left.state.opportunityScore ?? -1;
+      const rightScore =
+        kind === 'risk' ? right.state.riskScore ?? -1 : right.state.opportunityScore ?? -1;
+      return (
+        rightScore - leftScore ||
+        compareNullableNumber(left.queue.priority, right.queue.priority) ||
+        left.targetText.localeCompare(right.targetText)
+      );
+    })
+    .slice(0, 3);
+
+const coverageGapText = (row: AdsOptimizerTargetReviewRow) => {
+  const notes = [...row.coverage.notes];
+  if (!row.recommendation) {
+    notes.unshift('Recommendation snapshot missing for this target in the selected run.');
+  }
+  return notes;
+};
+
+const filterRows = (
+  rows: AdsOptimizerTargetReviewRow[],
+  filters: {
+    role: FilterValue;
+    state: FilterValue;
+    tier: FilterValue;
+    confidence: FilterValue;
+    sortBy: QueueSort;
+  }
+) =>
+  [...rows]
+    .filter((row) => (filters.role === 'all' ? true : row.role.currentRole.value === filters.role))
+    .filter((row) => (filters.state === 'all' ? true : row.state.efficiency.value === filters.state))
+    .filter((row) => (filters.tier === 'all' ? true : row.state.importance.value === filters.tier))
+    .filter((row) =>
+      filters.confidence === 'all' ? true : row.state.confidence.value === filters.confidence
+    )
+    .sort((left, right) => {
+      if (filters.sortBy === 'risk') {
+        return (
+          (right.state.riskScore ?? -1) - (left.state.riskScore ?? -1) ||
+          compareNullableNumber(left.queue.priority, right.queue.priority) ||
+          left.targetText.localeCompare(right.targetText)
+        );
+      }
+      if (filters.sortBy === 'opportunity') {
+        return (
+          (right.state.opportunityScore ?? -1) - (left.state.opportunityScore ?? -1) ||
+          compareNullableNumber(left.queue.priority, right.queue.priority) ||
+          left.targetText.localeCompare(right.targetText)
+        );
+      }
+      if (filters.sortBy === 'target') {
+        return left.targetText.localeCompare(right.targetText);
+      }
+
+      return (
+        compareNullableNumber(left.queue.priority, right.queue.priority) ||
+        (right.queue.recommendationCount ?? 0) - (left.queue.recommendationCount ?? 0) ||
+        (right.state.riskScore ?? -1) - (left.state.riskScore ?? -1) ||
+        (right.state.opportunityScore ?? -1) - (left.state.opportunityScore ?? -1) ||
+        left.targetText.localeCompare(right.targetText)
+      );
+    });
+
 export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps) {
-  const [expandedTargetSnapshotId, setExpandedTargetSnapshotId] = useState<string | null>(null);
+  const [selectedTargetSnapshotId, setSelectedTargetSnapshotId] = useState<string | null>(
+    props.rows[0]?.targetSnapshotId ?? null
+  );
+  const [roleFilter, setRoleFilter] = useState<FilterValue>('all');
+  const [stateFilter, setStateFilter] = useState<FilterValue>('all');
+  const [tierFilter, setTierFilter] = useState<FilterValue>('all');
+  const [confidenceFilter, setConfidenceFilter] = useState<FilterValue>('all');
+  const [sortBy, setSortBy] = useState<QueueSort>('priority');
 
   if (props.asin === 'all') {
     return (
       <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="text-xs uppercase tracking-[0.3em] text-muted">Targets scope</div>
         <div className="mt-2 text-lg font-semibold text-foreground">
-          Select one ASIN to review target states.
+          Select one ASIN to open the optimizer command center.
         </div>
         <div className="mt-2 max-w-3xl text-sm text-muted">
-          Phase 8 target review is captured and audited per selected ASIN only. Pick one ASIN,
-          then run the optimizer from History to persist reviewable target state, role, guardrail,
-          and read-only recommendation rows.
+          Phase 9 review stays scoped to one selected ASIN and one exact date range. Pick an ASIN,
+          then use History to capture a read-only run that fills the command center, target queue,
+          and target detail drawer from persisted optimizer snapshots.
         </div>
       </section>
     );
@@ -273,12 +338,13 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
       <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="text-xs uppercase tracking-[0.3em] text-muted">Targets run state</div>
         <div className="mt-2 text-lg font-semibold text-foreground">
-          No captured target roles exist for this ASIN/date range yet.
+          No persisted optimizer review run exists for this ASIN/date range yet.
         </div>
         <div className="mt-2 max-w-3xl text-sm text-muted">
-          Phase 8 reads the latest completed optimizer run that exactly matches the current ASIN
-          and date range. Create a manual run first so the persisted target profile, state, role,
-          guardrail, and read-only recommendation rows can be reviewed from optimizer snapshots.
+          Phase 9 only reviews persisted snapshots from the exact ASIN and exact date window shown
+          above. Create a manual run first so the target queue and detail drawer can load target
+          profiles, states, roles, guardrails, and read-only recommendations from optimizer-owned
+          tables.
         </div>
         {props.latestCompletedRun ? (
           <div className="mt-4 rounded-xl border border-border bg-surface-2 px-4 py-4 text-sm text-muted">
@@ -301,22 +367,47 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
     );
   }
 
-  const coverageWarnings = props.rows.reduce((count, row) => count + row.coverage.notes.length, 0);
+  const filteredRows = filterRows(props.rows, {
+    role: roleFilter,
+    state: stateFilter,
+    tier: tierFilter,
+    confidence: confidenceFilter,
+    sortBy,
+  });
+  const activeTargetSnapshotId = filteredRows.some(
+    (row) => row.targetSnapshotId === selectedTargetSnapshotId
+  )
+    ? selectedTargetSnapshotId
+    : (filteredRows[0]?.targetSnapshotId ?? null);
+  const activeRow =
+    filteredRows.find((row) => row.targetSnapshotId === activeTargetSnapshotId) ?? null;
+  const persistedRecommendationRows = props.rows.filter((row) => row.recommendation).length;
+  const actionCount = props.rows.reduce(
+    (sum, row) => sum + (row.recommendation?.actionCount ?? 0),
+    0
+  );
+  const coverageWarnings = props.rows.reduce(
+    (count, row) => count + coverageGapText(row).length,
+    0
+  );
+  const topRiskRows = buildTopList(props.rows, 'risk');
+  const topOpportunityRows = buildTopList(props.rows, 'opportunity');
 
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-muted">State engine</div>
+            <div className="text-xs uppercase tracking-[0.3em] text-muted">
+              Optimizer command center
+            </div>
             <div className="mt-2 text-lg font-semibold text-foreground">
-              Target profiles plus deterministic role + guardrail outputs
+              Review persisted target outputs without leaving `/ads/optimizer`
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
-              Phase 8 reads the exact run’s target profiles and persists deterministic efficiency,
-              confidence, tier, opportunity, risk, desired role, current role, resolved
-              guardrail envelopes, and read-only recommendation sets. Execution handoff is still
-              inactive in this view.
+              This Phase 9 surface reads the exact run&apos;s persisted product state, target
+              state, role, guardrail, and recommendation snapshots. The optimizer remains strictly
+              read-only here, and execution handoff into Ads Workspace is still not active.
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -324,572 +415,969 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
             <div className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted">
               SP only V1
             </div>
+            <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
+              Read-only review only
+            </div>
           </div>
         </div>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-6">
         <SummaryCard
-          label="Captured run"
-          value={formatUiDateRange(props.run.date_start, props.run.date_end)}
-        />
-        <SummaryCard
-          label="Run created"
-          value={formatDateTime(props.run.created_at)}
-          detail={`Rule pack ${props.run.rule_pack_version_label}`}
+          label="Product objective"
+          value={props.productState?.objective ?? 'Not captured'}
+          detail={props.productState?.objectiveReason ?? 'This run did not persist a product objective.'}
         />
         <SummaryCard
           label="Product state"
           value={props.productState?.label ?? 'Not captured'}
-          detail={
-            props.productState
-              ? `Objective ${props.productState.objective}`
-              : 'Older runs may predate persisted product state capture.'
-          }
+          detail={props.productState?.reason ?? 'This run did not persist a product state.'}
         />
         <SummaryCard
-          label="Target role rows"
+          label="Run status"
+          value={labelize(props.run.status)}
+          detail={`Created ${formatDateTime(props.run.created_at)}`}
+        />
+        <SummaryCard
+          label="Rule pack"
+          value={props.run.rule_pack_version_label}
+          detail="Active version recorded on the run snapshot."
+        />
+        <SummaryCard
+          label="Persisted targets"
           value={formatNumber(props.rows.length)}
-          detail="Read-only rows persisted from the matching manual run."
+          detail={`Exact run window ${formatUiDateRange(props.run.date_start, props.run.date_end)}`}
         />
         <SummaryCard
-          label="Role transitions"
-          value={formatNumber(props.run.role_transition_count)}
-          detail="Append-only transition logs saved for this run."
-        />
-        <SummaryCard
-          label="Coverage notes"
-          value={formatNumber(coverageWarnings)}
-          detail="Coverage gaps stay explicit instead of being guessed."
+          label="Persisted recommendations"
+          value={formatNumber(persistedRecommendationRows)}
+          detail={`${formatNumber(actionCount)} read-only actions across persisted rows.`}
         />
       </section>
 
-      {props.productState ? (
-        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-          <div className="text-xs uppercase tracking-[0.3em] text-muted">Product state snapshot</div>
-          <div className="mt-3 grid gap-4 lg:grid-cols-2">
-            <div className="rounded-xl border border-border bg-surface px-4 py-4">
-              <div className="text-xs uppercase tracking-wide text-muted">Product state reason</div>
-              <div className="mt-2 text-sm text-foreground">{props.productState.reason}</div>
-            </div>
-            <div className="rounded-xl border border-border bg-surface px-4 py-4">
-              <div className="text-xs uppercase tracking-wide text-muted">Objective reason</div>
-              <div className="mt-2 text-sm text-foreground">
-                {props.productState.objectiveReason}
+      <section className="grid gap-4 xl:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm xl:col-span-2">
+          <div className="text-xs uppercase tracking-[0.3em] text-muted">Review boundary</div>
+          <div className="mt-2 text-sm text-foreground">
+            Recommendations are reviewable here only. Nothing in this panel stages into Ads
+            Workspace, writes execution tables, or bypasses the existing execution boundary.
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-border bg-surface px-4 py-3">
+              <div className="text-xs uppercase tracking-wide text-muted">Execution boundary</div>
+              <div className="mt-2 text-sm font-semibold text-foreground">
+                read_only_recommendation_only
               </div>
             </div>
-          </div>
-        </section>
-      ) : null}
-
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-muted">Target rows</div>
-            <div className="mt-2 text-sm text-muted">
-              Showing persisted Phase 7 profiles, states, roles, and guardrails for {props.asin}{' '}
-              from the exact run window {formatUiDateRange(props.start, props.end)}.
+            <div className="rounded-xl border border-border bg-surface px-4 py-3">
+              <div className="text-xs uppercase tracking-wide text-muted">Workspace handoff</div>
+              <div className="mt-2 text-sm font-semibold text-foreground">not_started</div>
+            </div>
+            <div className="rounded-xl border border-border bg-surface px-4 py-3">
+              <div className="text-xs uppercase tracking-wide text-muted">Execution writes</div>
+              <div className="mt-2 text-sm font-semibold text-foreground">false</div>
             </div>
           </div>
-          <Link href={props.historyHref} className="text-sm font-semibold text-primary">
-            Go to History
-          </Link>
         </div>
 
-        {props.rows.length === 0 ? (
-          <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
-            The selected run exists, but no target role rows were returned from snapshot storage.
+        <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+          <div className="text-xs uppercase tracking-[0.3em] text-muted">Coverage notes</div>
+          <div className="mt-2 text-2xl font-semibold text-foreground">{formatNumber(coverageWarnings)}</div>
+          <div className="mt-2 text-sm text-muted">
+            Coverage gaps and null states are shown explicitly in the queue and target detail
+            drawer instead of being hidden or guessed.
           </div>
-        ) : (
-          <div className="mt-4 overflow-y-auto">
-            <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
-              <table className="min-w-[2520px] table-auto border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-                    <th className="px-3 py-2">Target</th>
-                    <th className="px-3 py-2">Campaign</th>
-                    <th className="px-3 py-2">Ad group</th>
-                    <th className="px-3 py-2">Efficiency</th>
-                    <th className="px-3 py-2">Confidence</th>
-                    <th className="px-3 py-2">Tier</th>
-                    <th className="px-3 py-2">Desired role</th>
-                    <th className="px-3 py-2">Current role</th>
-                    <th className="px-3 py-2">Opportunity</th>
-                    <th className="px-3 py-2">Risk</th>
-                    <th className="px-3 py-2">Impr</th>
-                    <th className="px-3 py-2">Clicks</th>
-                    <th className="px-3 py-2">Spend</th>
-                    <th className="px-3 py-2">Orders</th>
-                    <th className="px-3 py-2">Sales</th>
-                    <th className="px-3 py-2">CPC</th>
-                    <th className="px-3 py-2">CTR</th>
-                    <th className="px-3 py-2">CVR</th>
-                    <th className="px-3 py-2">ACoS</th>
-                    <th className="px-3 py-2">ROAS</th>
-                    <th className="px-3 py-2">TOS IS</th>
-                    <th className="px-3 py-2">STIS</th>
-                    <th className="px-3 py-2">STIR</th>
-                    <th className="px-3 py-2">Contrib after ads</th>
-                    <th className="px-3 py-2">Break-even gap</th>
-                    <th className="px-3 py-2">Max CPC gap</th>
-                    <th className="px-3 py-2">Loss $</th>
-                    <th className="px-3 py-2">Profit $</th>
-                    <th className="px-3 py-2">Click vel.</th>
-                    <th className="px-3 py-2">Impr vel.</th>
-                    <th className="px-3 py-2">Organic leverage</th>
-                    <th className="px-3 py-2">Coverage</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {props.rows.map((row) => {
-                    const coverageSummary = getCoverageSummary(row);
-                    const isExpanded = expandedTargetSnapshotId === row.targetSnapshotId;
+        </div>
+      </section>
 
-                    return (
-                      <Fragment key={row.targetSnapshotId}>
-                        <tr className="border-b border-border/60 align-top">
-                          <td className="px-3 py-3">
-                            <div className="font-semibold text-foreground">{row.targetText}</div>
-                            <div className="mt-1 text-xs text-muted">
-                              {row.typeLabel ?? 'Target'} · {row.matchType ?? '—'} · {row.targetId}
-                            </div>
-                            <button
-                              type="button"
-                              className="mt-2 text-xs font-semibold text-foreground underline decoration-border underline-offset-4 transition hover:text-primary"
-                              aria-expanded={isExpanded}
-                              aria-controls={`target-detail-panel-${row.targetSnapshotId}`}
-                              onClick={() =>
-                                setExpandedTargetSnapshotId((current) =>
-                                  current === row.targetSnapshotId ? null : row.targetSnapshotId
-                                )
-                              }
-                            >
-                              {isExpanded ? 'Hide details' : 'Details'}
-                            </button>
-                          </td>
-                        <td className="px-3 py-3 text-foreground">
-                          <div>{row.campaignName ?? row.campaignId}</div>
-                          <div className="mt-1 text-xs text-muted">{row.campaignId}</div>
-                        </td>
-                        <td className="px-3 py-3 text-foreground">
-                          <div>{row.adGroupName ?? row.adGroupId}</div>
-                          <div className="mt-1 text-xs text-muted">{row.adGroupId}</div>
-                        </td>
-                        <td className="px-3 py-3">
-                          <StatePill
-                            kind="efficiency"
-                            value={row.state.efficiency.value}
-                            label={row.state.efficiency.label}
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <StatePill
-                            kind="confidence"
-                            value={row.state.confidence.value}
-                            label={row.state.confidence.label}
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <StatePill
-                            kind="importance"
-                            value={row.state.importance.value}
-                            label={row.state.importance.label}
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <RolePill
-                            value={row.role.desiredRole.value}
-                            label={row.role.desiredRole.label}
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <RolePill
-                            value={row.role.currentRole.value}
-                            label={row.role.currentRole.label}
-                          />
-                        </td>
-                        <td className="px-3 py-3 text-foreground">
-                          {formatNumber(row.state.opportunityScore)}
-                        </td>
-                        <td className="px-3 py-3 text-foreground">{formatNumber(row.state.riskScore)}</td>
-                        <td className="px-3 py-3 text-foreground">{formatNumber(row.raw.impressions)}</td>
-                        <td className="px-3 py-3 text-foreground">{formatNumber(row.raw.clicks)}</td>
-                        <td className="px-3 py-3 text-foreground">{formatCurrency(row.raw.spend)}</td>
-                        <td className="px-3 py-3 text-foreground">{formatNumber(row.raw.orders)}</td>
-                        <td className="px-3 py-3 text-foreground">{formatCurrency(row.raw.sales)}</td>
-                        <td className="px-3 py-3 text-foreground">{formatCurrency(row.raw.cpc)}</td>
-                        <td className="px-3 py-3 text-foreground">{formatPercent(row.raw.ctr)}</td>
-                        <td className="px-3 py-3 text-foreground">{formatPercent(row.raw.cvr)}</td>
-                        <td className="px-3 py-3 text-foreground">{formatPercent(row.raw.acos)}</td>
-                        <td className="px-3 py-3 text-foreground">
-                          {row.raw.roas === null ? '—' : row.raw.roas.toFixed(2)}
-                        </td>
-                        <td className="px-3 py-3 text-foreground">{formatPercent(row.raw.tosIs)}</td>
-                        <td className="px-3 py-3 text-foreground">{formatPercent(row.raw.stis)}</td>
-                        <td className="px-3 py-3 text-foreground">{formatNumber(row.raw.stir)}</td>
-                        <td className="px-3 py-3 text-foreground">
-                          {formatCurrency(row.derived.contributionAfterAds)}
-                        </td>
-                        <td className="px-3 py-3 text-foreground">
-                          {formatPercent(row.derived.breakEvenGap)}
-                        </td>
-                        <td className="px-3 py-3 text-foreground">
-                          {formatCurrency(row.derived.maxCpcSupportGap)}
-                        </td>
-                        <td className="px-3 py-3 text-foreground">
-                          {formatCurrency(row.derived.lossDollars)}
-                        </td>
-                        <td className="px-3 py-3 text-foreground">
-                          {formatCurrency(row.derived.profitDollars)}
-                        </td>
-                        <td className="px-3 py-3 text-foreground">
-                          {row.derived.clickVelocity === null ? '—' : row.derived.clickVelocity.toFixed(1)}
-                        </td>
-                        <td className="px-3 py-3 text-foreground">
-                          {row.derived.impressionVelocity === null
-                            ? '—'
-                            : row.derived.impressionVelocity.toFixed(1)}
-                        </td>
-                        <td className="px-3 py-3 text-foreground">
-                          {row.derived.organicLeverageProxy === null
-                            ? '—'
-                            : row.derived.organicLeverageProxy.toFixed(3)}
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="text-xs text-muted">
-                            <span
-                              className={`font-medium ${coverageSummaryTextClass(
-                                'ready',
-                                coverageSummary.ready
-                              )}`}
-                            >
-                              Ready {coverageSummary.ready}
-                            </span>{' '}
-                            ·{' '}
-                            <span
-                              className={`font-medium ${coverageSummaryTextClass(
-                                'missing',
-                                coverageSummary.missing
-                              )}`}
-                            >
-                              Missing {coverageSummary.missing}
-                            </span>{' '}
-                            ·{' '}
-                            <span
-                              className={`font-medium ${coverageSummaryTextClass(
-                                'partial',
-                                coverageSummary.partial
-                              )}`}
-                            >
-                              Partial {coverageSummary.partial}
-                            </span>{' '}
-                            ·{' '}
-                            <CoverageDetailsToggle
-                              items={getCoverageItems(row)}
-                              notes={row.coverage.notes}
-                              daysObserved={row.coverage.daysObserved}
-                              targetSnapshotId={row.targetSnapshotId}
-                            />
-                          </div>
-                        </td>
-                        </tr>
-                        {isExpanded ? (
-                          <tr className="border-b border-border/60 bg-surface-2/30">
-                            <td
-                              id={`target-detail-panel-${row.targetSnapshotId}`}
-                              colSpan={TARGET_TABLE_COL_COUNT}
-                              className="px-4 py-4"
-                            >
-                              <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                                <div className="flex flex-col gap-3 border-b border-border pb-4 lg:flex-row lg:items-start lg:justify-between">
-                                  <div>
-                                    <div className="text-xs uppercase tracking-[0.3em] text-muted">
-                                      Target details
-                                    </div>
-                                    <div className="mt-2 text-base font-semibold text-foreground">
-                                      {row.targetText}
-                                    </div>
-                                    <div className="mt-1 text-sm text-muted">
-                                      {row.typeLabel ?? 'Target'} · {row.matchType ?? '—'} ·{' '}
-                                      {row.targetId}
-                                    </div>
-                                  </div>
-                                  <div className="flex flex-wrap gap-2">
-                                    <RolePill
-                                      value={row.role.currentRole.value}
-                                      label={`Current ${row.role.currentRole.label}`}
-                                    />
-                                    <RolePill
-                                      value={row.role.desiredRole.value}
-                                      label={`Desired ${row.role.desiredRole.label}`}
-                                    />
-                                    <StatePill
-                                      kind="efficiency"
-                                      value={row.state.efficiency.value}
-                                      label={row.state.efficiency.label}
-                                    />
-                                    <StatePill
-                                      kind="confidence"
-                                      value={row.state.confidence.value}
-                                      label={row.state.confidence.label}
-                                    />
-                                    <StatePill
-                                      kind="importance"
-                                      value={row.state.importance.value}
-                                      label={row.state.importance.label}
-                                    />
-                                  </div>
-                                </div>
+      <section className="grid gap-4 xl:grid-cols-2">
+        <DetailSection label="Top risks">
+          {topRiskRows.length === 0 ? (
+            <div className="text-sm text-muted">No persisted risk scores were captured for this run.</div>
+          ) : (
+            <div className="space-y-3">
+              {topRiskRows.map((row) => (
+                <button
+                  key={`risk-${row.targetSnapshotId}`}
+                  type="button"
+                  className="flex w-full items-start justify-between rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-left transition hover:border-primary/40"
+                  onClick={() => setSelectedTargetSnapshotId(row.targetSnapshotId)}
+                >
+                  <div>
+                    <div className="font-semibold text-foreground">{row.targetText}</div>
+                    <div className="mt-1 text-xs text-muted">
+                      {row.role.currentRole.label} · {row.state.efficiency.label}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-semibold text-foreground">
+                      Risk {formatNumber(row.state.riskScore)}
+                    </div>
+                    <div className="mt-1 text-xs text-muted">
+                      {buildPriorityLabel(row.queue.priority, row.queue.primaryActionType)}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </DetailSection>
 
-                                <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.85fr)]">
-                                  <div className="space-y-4">
-                                    <div className="rounded-xl border border-border bg-surface-2 p-4">
-                                      <div className="text-xs uppercase tracking-wide text-muted">
-                                        State breakdown
-                                      </div>
-                                      <div className="mt-4 grid gap-3 lg:grid-cols-3">
-                                        <DetailSection label="Efficiency" subtle>
-                                          {row.state.efficiency.detail}
-                                        </DetailSection>
-                                        <DetailSection label="Confidence" subtle>
-                                          {row.state.confidence.detail}
-                                        </DetailSection>
-                                        <DetailSection label="Importance" subtle>
-                                          {row.state.importance.detail}
-                                        </DetailSection>
-                                      </div>
-                                      <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                                        <DetailSection
-                                          label={`Opportunity ${formatNumber(row.state.opportunityScore)}`}
-                                          subtle
-                                        >
-                                          <ReasonCodes codes={row.state.opportunityReasonCodes} />
-                                        </DetailSection>
-                                        <DetailSection
-                                          label={`Risk ${formatNumber(row.state.riskScore)}`}
-                                          subtle
-                                        >
-                                          <ReasonCodes codes={row.state.riskReasonCodes} />
-                                        </DetailSection>
-                                      </div>
-                                      <div className="mt-4 border-t border-border pt-4">
-                                        <DetailSection label="Summary reason codes">
-                                          <ReasonCodes codes={row.state.summaryReasonCodes} />
-                                        </DetailSection>
-                                      </div>
-                                    </div>
+        <DetailSection label="Top opportunities">
+          {topOpportunityRows.length === 0 ? (
+            <div className="text-sm text-muted">
+              No persisted opportunity scores were captured for this run.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {topOpportunityRows.map((row) => (
+                <button
+                  key={`opportunity-${row.targetSnapshotId}`}
+                  type="button"
+                  className="flex w-full items-start justify-between rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-left transition hover:border-primary/40"
+                  onClick={() => setSelectedTargetSnapshotId(row.targetSnapshotId)}
+                >
+                  <div>
+                    <div className="font-semibold text-foreground">{row.targetText}</div>
+                    <div className="mt-1 text-xs text-muted">
+                      {row.role.currentRole.label} · {row.state.importance.label}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-semibold text-foreground">
+                      Opportunity {formatNumber(row.state.opportunityScore)}
+                    </div>
+                    <div className="mt-1 text-xs text-muted">
+                      {buildPriorityLabel(row.queue.priority, row.queue.primaryActionType)}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </DetailSection>
+      </section>
 
-                                    <div className="rounded-xl border border-border bg-surface-2 p-4">
-                                      <div className="text-xs uppercase tracking-wide text-muted">
-                                        Role resolution
-                                      </div>
-                                      <div className="mt-4 grid gap-3 lg:grid-cols-3">
-                                        <DetailSection label="Desired role" subtle>
-                                          <div className="space-y-3">
-                                            <RolePill
-                                              value={row.role.desiredRole.value}
-                                              label={row.role.desiredRole.label}
-                                            />
-                                            <div>{row.role.desiredRole.detail}</div>
-                                            <ReasonCodes codes={row.role.desiredRole.reasonCodes} />
-                                          </div>
-                                        </DetailSection>
-                                        <DetailSection label="Current role" subtle>
-                                          <div className="space-y-3">
-                                            <RolePill
-                                              value={row.role.currentRole.value}
-                                              label={row.role.currentRole.label}
-                                            />
-                                            <div>{row.role.currentRole.detail}</div>
-                                            <ReasonCodes codes={row.role.currentRole.reasonCodes} />
-                                          </div>
-                                        </DetailSection>
-                                        <DetailSection label="Transition" subtle>
-                                          <div className="space-y-3">
-                                            <div>
-                                              Previous role: {row.role.previousRole ?? 'None captured'}
-                                            </div>
-                                            <div>Transition rule: {labelize(row.role.transitionRule)}</div>
-                                            <ReasonCodes codes={row.role.transitionReasonCodes} />
-                                          </div>
-                                        </DetailSection>
-                                      </div>
-                                      <div className="mt-4 border-t border-border pt-4">
-                                        <DetailSection label="Role summary reason codes">
-                                          <ReasonCodes codes={row.role.summaryReasonCodes} />
-                                        </DetailSection>
-                                      </div>
-                                    </div>
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)]">
+        <div className="space-y-4">
+          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.3em] text-muted">Target queue</div>
+                <div className="mt-2 text-sm text-muted">
+                  Priority sorting uses the persisted recommendation action priority from the exact
+                  run. Filters stay within the current ASIN and date window only.
+                </div>
+              </div>
+              <Link href={props.historyHref} className="text-sm font-semibold text-primary">
+                Go to History
+              </Link>
+            </div>
 
-                                    <div className="grid gap-4 xl:grid-cols-2">
-                                      <DetailSection label="Demand proxies" subtle>
-                                        Demand proxies: {formatNumber(row.demandProxies.searchTermCount)}{' '}
-                                        search terms,{' '}
-                                        {formatNumber(row.demandProxies.sameTextSearchTermCount)} same-text,{' '}
-                                        {formatNumber(row.demandProxies.totalSearchTermImpressions)}{' '}
-                                        search-term impressions,{' '}
-                                        {formatNumber(row.demandProxies.totalSearchTermClicks)} search-term
-                                        clicks.
-                                      </DetailSection>
-                                      <DetailSection label="Placement context" subtle>
-                                        Placement context: {formatCurrency(row.placementContext.spend)} spend,{' '}
-                                        {formatNumber(row.placementContext.clicks)} clicks, modifier{' '}
-                                        {formatPercent(
-                                          row.placementContext.topOfSearchModifierPct !== null
-                                            ? row.placementContext.topOfSearchModifierPct / 100
-                                            : null
-                                        )}
-                                        .
-                                      </DetailSection>
-                                    </div>
-                                  </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                Role
+                <select
+                  value={roleFilter}
+                  onChange={(event) => setRoleFilter(event.target.value)}
+                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="all">All roles</option>
+                  <option value="Discover">Discover</option>
+                  <option value="Harvest">Harvest</option>
+                  <option value="Scale">Scale</option>
+                  <option value="Rank Push">Rank Push</option>
+                  <option value="Rank Defend">Rank Defend</option>
+                  <option value="Suppress">Suppress</option>
+                </select>
+              </label>
 
-                                  <div className="space-y-4">
-                                    <div className="rounded-xl border border-border bg-surface-2 p-4">
-                                      <div className="text-xs uppercase tracking-wide text-muted">
-                                        Guardrail-ready envelope
-                                      </div>
-                                      <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                                        <DetailSection label="Control flags" subtle>
-                                          <div className="space-y-2">
-                                            <div>
-                                              Manual approval:{' '}
-                                              {row.role.guardrails.flags.requiresManualApproval
-                                                ? 'Required'
-                                                : 'Not required'}
-                                            </div>
-                                            <div>
-                                              Auto-pause eligible:{' '}
-                                              {row.role.guardrails.flags.autoPauseEligible
-                                                ? 'Yes'
-                                                : 'No'}
-                                            </div>
-                                            <div>
-                                              Bid changes allowed:{' '}
-                                              {row.role.guardrails.flags.bidChangesAllowed ? 'Yes' : 'No'}
-                                            </div>
-                                            <div>
-                                              Placement changes allowed:{' '}
-                                              {row.role.guardrails.flags.placementChangesAllowed
-                                                ? 'Yes'
-                                                : 'No'}
-                                            </div>
-                                            <div>
-                                              Transition locked:{' '}
-                                              {row.role.guardrails.flags.transitionLocked ? 'Yes' : 'No'}
-                                            </div>
-                                          </div>
-                                        </DetailSection>
-                                        <DetailSection label="Guardrail categories" subtle>
-                                          <div className="grid gap-2 sm:grid-cols-2">
-                                            <div>
-                                              No-sale spend cap:{' '}
-                                              {formatCurrency(row.role.guardrails.categories.noSaleSpendCap)}
-                                            </div>
-                                            <div>
-                                              No-sale click cap:{' '}
-                                              {formatNumber(row.role.guardrails.categories.noSaleClickCap)}
-                                            </div>
-                                            <div>
-                                              Max loss / cycle:{' '}
-                                              {formatCurrency(row.role.guardrails.categories.maxLossPerCycle)}
-                                            </div>
-                                            <div>
-                                              Max bid increase / cycle:{' '}
-                                              {row.role.guardrails.categories.maxBidIncreasePerCyclePct === null
-                                                ? '—'
-                                                : `${row.role.guardrails.categories.maxBidIncreasePerCyclePct}%`}
-                                            </div>
-                                            <div>
-                                              Max bid decrease / cycle:{' '}
-                                              {row.role.guardrails.categories.maxBidDecreasePerCyclePct === null
-                                                ? '—'
-                                                : `${row.role.guardrails.categories.maxBidDecreasePerCyclePct}%`}
-                                            </div>
-                                            <div>
-                                              Max placement bias increase / cycle:{' '}
-                                              {row.role.guardrails.categories
-                                                .maxPlacementBiasIncreasePerCyclePct === null
-                                                ? '—'
-                                                : `${row.role.guardrails.categories.maxPlacementBiasIncreasePerCyclePct}%`}
-                                            </div>
-                                            <div>
-                                              Rank-push time limit:{' '}
-                                              {formatNumber(row.role.guardrails.categories.rankPushTimeLimitDays)} day(s)
-                                            </div>
-                                            <div>
-                                              Manual approval threshold:{' '}
-                                              {labelize(row.role.guardrails.categories.manualApprovalThreshold)}
-                                            </div>
-                                            <div>
-                                              Auto-pause threshold:{' '}
-                                              {formatNumber(row.role.guardrails.categories.autoPauseThreshold)}
-                                            </div>
-                                            <div>
-                                              Min bid floor:{' '}
-                                              {formatCurrency(row.role.guardrails.categories.minBidFloor)}
-                                            </div>
-                                            <div>
-                                              Max bid ceiling:{' '}
-                                              {formatCurrency(row.role.guardrails.categories.maxBidCeiling)}
-                                            </div>
-                                          </div>
-                                        </DetailSection>
-                                      </div>
-                                      <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                                        <DetailSection label="Guardrail reason codes" subtle>
-                                          <ReasonCodes codes={row.role.guardrails.reasonCodes} />
-                                        </DetailSection>
-                                        <DetailSection label="Guardrail notes" subtle>
-                                          {row.role.guardrails.notes.length > 0 ? (
-                                            <div className="space-y-2 text-sm text-foreground">
-                                              {row.role.guardrails.notes.map((note) => (
-                                                <div key={`${row.targetSnapshotId}:${note}`}>{note}</div>
-                                              ))}
-                                            </div>
-                                          ) : (
-                                            'No additional guardrail notes were captured.'
-                                          )}
-                                        </DetailSection>
-                                      </div>
-                                    </div>
+              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                State
+                <select
+                  value={stateFilter}
+                  onChange={(event) => setStateFilter(event.target.value)}
+                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="all">All states</option>
+                  <option value="profitable">Profitable</option>
+                  <option value="break_even">Break Even</option>
+                  <option value="converting_but_loss_making">Loss Making</option>
+                  <option value="learning_no_sale">Learning No Sale</option>
+                  <option value="no_data">No Data</option>
+                </select>
+              </label>
 
-                                    <DetailSection label="Representative search term" subtle>
-                                      Representative search term:{' '}
-                                      {row.searchTermDiagnostics.representativeSearchTerm ?? '—'}
-                                      {row.searchTermDiagnostics.representativeSameText
-                                        ? ' (same text)'
-                                        : ''}
-                                      .
-                                    </DetailSection>
-                                    <DetailSection label="Top search-term diagnostics" subtle>
-                                      <div className="space-y-2">
-                                        {row.searchTermDiagnostics.topTerms.map((term) => (
-                                          <div key={`${row.targetSnapshotId}:${term.searchTerm}`}>
-                                            {term.searchTerm} ·{' '}
-                                            {term.sameText ? 'same text' : 'adjacent'} ·{' '}
-                                            {formatNumber(term.clicks)} clicks ·{' '}
-                                            {formatCurrency(term.spend)} spend · STIS{' '}
-                                            {formatPercent(term.stis)} · STIR{' '}
-                                            {formatNumber(term.stir)}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </DetailSection>
-                                  </div>
-                                </div>
+              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                Tier
+                <select
+                  value={tierFilter}
+                  onChange={(event) => setTierFilter(event.target.value)}
+                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="all">All tiers</option>
+                  <option value="tier_1_dominant">Tier 1 dominant</option>
+                  <option value="tier_2_core">Tier 2 core</option>
+                  <option value="tier_3_test_long_tail">Tier 3 test / long-tail</option>
+                </select>
+              </label>
+
+              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                Confidence
+                <select
+                  value={confidenceFilter}
+                  onChange={(event) => setConfidenceFilter(event.target.value)}
+                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="all">All confidence</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="directional">Directional</option>
+                  <option value="insufficient">Insufficient</option>
+                </select>
+              </label>
+
+              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                Queue order
+                <select
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value as QueueSort)}
+                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="priority">Priority</option>
+                  <option value="risk">Risk</option>
+                  <option value="opportunity">Opportunity</option>
+                  <option value="target">Target</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm text-muted">
+              Showing {formatNumber(filteredRows.length)} of {formatNumber(props.rows.length)} persisted
+              target rows for {props.asin}. {formatNumber(persistedRecommendationRows)} recommendation
+              snapshots were loaded from the exact run, and no actions can be staged from this queue.
+            </div>
+
+            {filteredRows.length === 0 ? (
+              <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
+                No target rows match the current Phase 9 queue filters.
+              </div>
+            ) : (
+              <div className="mt-4 overflow-y-auto">
+                <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
+                  <table className="min-w-[1560px] table-auto border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
+                        <th className="px-3 py-2">Target</th>
+                        <th className="px-3 py-2">Priority</th>
+                        <th className="px-3 py-2">Recommendations</th>
+                        <th className="px-3 py-2">Current role</th>
+                        <th className="px-3 py-2">Efficiency</th>
+                        <th className="px-3 py-2">Confidence</th>
+                        <th className="px-3 py-2">Tier</th>
+                        <th className="px-3 py-2">Spend direction</th>
+                        <th className="px-3 py-2">Reason-code badges</th>
+                        <th className="px-3 py-2">Coverage</th>
+                        <th className="px-3 py-2">Detail</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredRows.map((row) => {
+                        const coverageSummary = getCoverageSummary(row);
+                        const coverageNotes = coverageGapText(row);
+                        const isActive = row.targetSnapshotId === activeTargetSnapshotId;
+
+                        return (
+                          <tr
+                            key={row.targetSnapshotId}
+                            className={`border-b border-border/60 align-top ${
+                              isActive ? 'bg-primary/5' : ''
+                            }`}
+                          >
+                            <td className="px-3 py-3">
+                              <div className="font-semibold text-foreground">{row.targetText}</div>
+                              <div className="mt-1 text-xs text-muted">
+                                {row.typeLabel ?? 'Target'} · {row.matchType ?? '—'} · {row.targetId}
+                              </div>
+                              <div className="mt-1 text-xs text-muted">
+                                {row.campaignName ?? row.campaignId} / {row.adGroupName ?? row.adGroupId}
                               </div>
                             </td>
+                            <td className="px-3 py-3 text-foreground">
+                              {buildPriorityLabel(row.queue.priority, row.queue.primaryActionType)}
+                            </td>
+                            <td className="px-3 py-3 text-foreground">
+                              <div>{formatNumber(row.queue.recommendationCount)}</div>
+                              <div className="mt-1 text-xs text-muted">
+                                {labelize(row.queue.primaryActionType)}
+                              </div>
+                            </td>
+                            <td className="px-3 py-3">
+                              <RolePill
+                                value={row.role.currentRole.value}
+                                label={row.role.currentRole.label}
+                              />
+                            </td>
+                            <td className="px-3 py-3">
+                              <StatePill
+                                kind="efficiency"
+                                value={row.state.efficiency.value}
+                                label={row.state.efficiency.label}
+                              />
+                            </td>
+                            <td className="px-3 py-3">
+                              <StatePill
+                                kind="confidence"
+                                value={row.state.confidence.value}
+                                label={row.state.confidence.label}
+                              />
+                            </td>
+                            <td className="px-3 py-3">
+                              <StatePill
+                                kind="importance"
+                                value={row.state.importance.value}
+                                label={row.state.importance.label}
+                              />
+                            </td>
+                            <td className="px-3 py-3 text-foreground">
+                              {labelize(row.queue.spendDirection)}
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex max-w-[320px] flex-wrap gap-1.5">
+                                {row.queue.reasonCodeBadges.length > 0 ? (
+                                  row.queue.reasonCodeBadges.map((code) => (
+                                    <ReasonCodeBadge key={`${row.targetSnapshotId}:${code}`} code={code} />
+                                  ))
+                                ) : (
+                                  <span className="text-xs text-muted">No badges captured</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="text-xs text-muted">
+                                Ready {coverageSummary.ready} · Partial {coverageSummary.partial} ·
+                                Missing {coverageSummary.missing}
+                              </div>
+                              <div className="mt-2 flex max-w-[260px] flex-wrap gap-1.5">
+                                {getCoverageItems(row).map((item) => (
+                                  <CoverageBadge
+                                    key={`${row.targetSnapshotId}:${item.label}`}
+                                    label={item.label}
+                                    status={item.status}
+                                  />
+                                ))}
+                              </div>
+                              {coverageNotes.length > 0 ? (
+                                <div className="mt-2 text-xs text-amber-700">
+                                  {coverageNotes.length} explicit coverage note(s)
+                                </div>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-3">
+                              <button
+                                type="button"
+                                className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground transition hover:border-primary/40 hover:text-primary"
+                                aria-expanded={isActive}
+                                aria-controls={
+                                  activeRow ? `target-detail-drawer-${activeRow.targetSnapshotId}` : undefined
+                                }
+                                onClick={() => setSelectedTargetSnapshotId(row.targetSnapshotId)}
+                              >
+                                {isActive ? 'Viewing' : 'Open'}
+                              </button>
+                            </td>
                           </tr>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+
+        <aside
+          id={activeRow ? `target-detail-drawer-${activeRow.targetSnapshotId}` : undefined}
+          className="xl:sticky xl:top-4 xl:self-start"
+        >
+          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+            <div className="text-xs uppercase tracking-[0.3em] text-muted">
+              Target detail drawer
             </div>
-          </div>
-        )}
+            {activeRow ? (
+              <div className="mt-3 space-y-4">
+                <div className="border-b border-border pb-4">
+                  <div className="text-lg font-semibold text-foreground">{activeRow.targetText}</div>
+                  <div className="mt-1 text-sm text-muted">
+                    {activeRow.typeLabel ?? 'Target'} · {activeRow.matchType ?? '—'} ·{' '}
+                    {activeRow.targetId}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <RolePill
+                      value={activeRow.role.currentRole.value}
+                      label={`Current ${activeRow.role.currentRole.label}`}
+                    />
+                    <RolePill
+                      value={activeRow.role.desiredRole.value}
+                      label={`Desired ${activeRow.role.desiredRole.label}`}
+                    />
+                    <StatePill
+                      kind="efficiency"
+                      value={activeRow.state.efficiency.value}
+                      label={activeRow.state.efficiency.label}
+                    />
+                  </div>
+                </div>
+
+                {coverageGapText(activeRow).length > 0 ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <div className="font-semibold">Coverage notes and null states</div>
+                    <ul className="mt-2 space-y-1">
+                      {coverageGapText(activeRow).map((note) => (
+                        <li key={`${activeRow.targetSnapshotId}:${note}`}>{note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                <DetailSection label="Recommendation details">
+                  {activeRow.recommendation ? (
+                    <div className="space-y-3">
+                      <DetailGrid
+                        items={[
+                          {
+                            label: 'Status',
+                            value: labelize(activeRow.recommendation.status),
+                          },
+                          {
+                            label: 'Spend direction',
+                            value: labelize(activeRow.recommendation.spendDirection),
+                          },
+                          {
+                            label: 'Primary action',
+                            value: labelize(activeRow.recommendation.primaryActionType),
+                          },
+                          {
+                            label: 'Action count',
+                            value: formatNumber(activeRow.recommendation.actionCount),
+                          },
+                          {
+                            label: 'Execution boundary',
+                            value: activeRow.recommendation.executionBoundary ?? 'Not captured',
+                          },
+                          {
+                            label: 'Workspace handoff',
+                            value: activeRow.recommendation.workspaceHandoff ?? 'Not captured',
+                          },
+                          {
+                            label: 'Writes execution tables',
+                            value:
+                              activeRow.recommendation.writesExecutionTables === null
+                                ? 'Not captured'
+                                : String(activeRow.recommendation.writesExecutionTables),
+                          },
+                          {
+                            label: 'Manual review required',
+                            value:
+                              activeRow.recommendation.manualReviewRequired === null
+                                ? 'Not captured'
+                                : String(activeRow.recommendation.manualReviewRequired),
+                          },
+                        ]}
+                      />
+
+                      <div className="space-y-2">
+                        <div className="text-xs uppercase tracking-wide text-muted">
+                          Coverage flags
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {activeRow.recommendation.coverageFlags.length > 0 ? (
+                            activeRow.recommendation.coverageFlags.map((flag) => (
+                              <ReasonCodeBadge key={`${activeRow.targetSnapshotId}:${flag}`} code={flag} />
+                            ))
+                          ) : (
+                            <div className="text-sm text-muted">No coverage flags were persisted.</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs uppercase tracking-wide text-muted">
+                          Confidence notes
+                        </div>
+                        {activeRow.recommendation.confidenceNotes.length > 0 ? (
+                          <ul className="space-y-1 text-sm text-foreground">
+                            {activeRow.recommendation.confidenceNotes.map((note) => (
+                              <li key={`${activeRow.targetSnapshotId}:${note}`}>{note}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="text-sm text-muted">No confidence notes were persisted.</div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs uppercase tracking-wide text-muted">
+                          Unsupported action blocks
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {activeRow.recommendation.unsupportedActionBlocks.length > 0 ? (
+                            activeRow.recommendation.unsupportedActionBlocks.map((code) => (
+                              <ReasonCodeBadge key={`${activeRow.targetSnapshotId}:${code}`} code={code} />
+                            ))
+                          ) : (
+                            <div className="text-sm text-muted">
+                              No unsupported action blocks were persisted for this target.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="text-xs uppercase tracking-wide text-muted">
+                          Recommended read-only actions
+                        </div>
+                        {activeRow.recommendation.actions.length > 0 ? (
+                          activeRow.recommendation.actions.map((action, index) => (
+                            <div
+                              key={`${activeRow.targetSnapshotId}:${action.actionType}:${index}`}
+                              className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="font-semibold text-foreground">
+                                  {labelize(action.actionType)}
+                                </div>
+                                <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+                                  Priority {action.priority ?? '—'}
+                                </div>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {action.reasonCodes.map((code) => (
+                                  <ReasonCodeBadge
+                                    key={`${activeRow.targetSnapshotId}:${action.actionType}:${code}`}
+                                    code={code}
+                                  />
+                                ))}
+                              </div>
+                              <div className="mt-3 grid gap-3">
+                                <div>
+                                  <div className="mb-1 text-xs uppercase tracking-wide text-muted">
+                                    Proposed change
+                                  </div>
+                                  <JsonBlock value={action.proposedChange} />
+                                </div>
+                                <div>
+                                  <div className="mb-1 text-xs uppercase tracking-wide text-muted">
+                                    Entity context
+                                  </div>
+                                  <JsonBlock value={action.entityContext} />
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-sm text-muted">
+                            No concrete actions were persisted for this target. The review cadence
+                            or coverage notes may still explain the monitor posture.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted">
+                      No recommendation snapshot was found for this target in the selected run.
+                    </div>
+                  )}
+                </DetailSection>
+
+                <DetailSection label="Raw metrics">
+                  <DetailGrid
+                    items={[
+                      { label: 'Impressions', value: formatNumber(activeRow.raw.impressions) },
+                      { label: 'Clicks', value: formatNumber(activeRow.raw.clicks) },
+                      { label: 'Spend', value: formatCurrency(activeRow.raw.spend) },
+                      { label: 'Orders', value: formatNumber(activeRow.raw.orders) },
+                      { label: 'Sales', value: formatCurrency(activeRow.raw.sales) },
+                      { label: 'CPC', value: formatCurrency(activeRow.raw.cpc) },
+                      { label: 'CTR', value: formatPercent(activeRow.raw.ctr) },
+                      { label: 'CVR', value: formatPercent(activeRow.raw.cvr) },
+                      { label: 'ACoS', value: formatPercent(activeRow.raw.acos) },
+                      {
+                        label: 'ROAS',
+                        value: activeRow.raw.roas === null ? '—' : activeRow.raw.roas.toFixed(2),
+                      },
+                      { label: 'TOS IS', value: formatPercent(activeRow.raw.tosIs) },
+                      { label: 'STIS', value: formatPercent(activeRow.raw.stis) },
+                      { label: 'STIR', value: formatNumber(activeRow.raw.stir) },
+                    ]}
+                  />
+                </DetailSection>
+
+                <DetailSection label="Derived metrics">
+                  <DetailGrid
+                    items={[
+                      {
+                        label: 'Contribution after ads',
+                        value: formatCurrency(activeRow.derived.contributionAfterAds),
+                      },
+                      {
+                        label: 'Break-even gap',
+                        value: formatPercent(activeRow.derived.breakEvenGap),
+                      },
+                      {
+                        label: 'Max CPC support gap',
+                        value: formatCurrency(activeRow.derived.maxCpcSupportGap),
+                      },
+                      { label: 'Loss dollars', value: formatCurrency(activeRow.derived.lossDollars) },
+                      {
+                        label: 'Profit dollars',
+                        value: formatCurrency(activeRow.derived.profitDollars),
+                      },
+                      {
+                        label: 'Click velocity',
+                        value:
+                          activeRow.derived.clickVelocity === null
+                            ? '—'
+                            : activeRow.derived.clickVelocity.toFixed(1),
+                      },
+                      {
+                        label: 'Impression velocity',
+                        value:
+                          activeRow.derived.impressionVelocity === null
+                            ? '—'
+                            : activeRow.derived.impressionVelocity.toFixed(1),
+                      },
+                      {
+                        label: 'Organic leverage',
+                        value:
+                          activeRow.derived.organicLeverageProxy === null
+                            ? '—'
+                            : activeRow.derived.organicLeverageProxy.toFixed(3),
+                      },
+                    ]}
+                  />
+                </DetailSection>
+
+                <DetailSection label="Target state">
+                  <div className="space-y-3">
+                    <DetailGrid
+                      items={[
+                        { label: 'Efficiency', value: activeRow.state.efficiency.label },
+                        { label: 'Confidence', value: activeRow.state.confidence.label },
+                        { label: 'Importance', value: activeRow.state.importance.label },
+                        {
+                          label: 'Opportunity score',
+                          value: formatNumber(activeRow.state.opportunityScore),
+                        },
+                        { label: 'Risk score', value: formatNumber(activeRow.state.riskScore) },
+                      ]}
+                    />
+                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+                      <div className="text-xs uppercase tracking-wide text-muted">State breakdown</div>
+                      <div className="mt-2 space-y-2 text-sm text-foreground">
+                        <div>
+                          <span className="font-semibold">Efficiency:</span>{' '}
+                          {activeRow.state.efficiency.detail}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Confidence:</span>{' '}
+                          {activeRow.state.confidence.detail}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Tier:</span>{' '}
+                          {activeRow.state.importance.detail}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        ...activeRow.state.summaryReasonCodes,
+                        ...activeRow.state.opportunityReasonCodes,
+                        ...activeRow.state.riskReasonCodes,
+                      ].length > 0 ? (
+                        [
+                          ...activeRow.state.summaryReasonCodes,
+                          ...activeRow.state.opportunityReasonCodes,
+                          ...activeRow.state.riskReasonCodes,
+                        ].map((code, index) => (
+                          <ReasonCodeBadge
+                            key={`${activeRow.targetSnapshotId}:state:${code}:${index}`}
+                            code={code}
+                          />
+                        ))
+                      ) : (
+                        <div className="text-sm text-muted">No state reason codes were captured.</div>
+                      )}
+                    </div>
+                  </div>
+                </DetailSection>
+
+                <DetailSection label="Role history">
+                  <div className="space-y-3">
+                    <DetailGrid
+                      items={[
+                        { label: 'Desired role', value: activeRow.role.desiredRole.label },
+                        { label: 'Current role', value: activeRow.role.currentRole.label },
+                        {
+                          label: 'Previous role',
+                          value: activeRow.role.previousRole ?? 'Not captured',
+                        },
+                        { label: 'Transition rule', value: activeRow.role.transitionRule },
+                      ]}
+                    />
+                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+                      <div className="text-xs uppercase tracking-wide text-muted">
+                        Recent role transitions
+                      </div>
+                      {activeRow.roleHistory.length > 0 ? (
+                        <div className="mt-3 space-y-3">
+                          {activeRow.roleHistory.slice(0, 6).map((entry) => (
+                            <div
+                              key={entry.roleTransitionLogId}
+                              className="rounded-lg border border-border bg-surface px-3 py-3"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="font-semibold text-foreground">
+                                  {entry.fromRole ?? 'None'} → {entry.toRole ?? 'None'}
+                                </div>
+                                <div className="text-xs text-muted">
+                                  {formatDateTime(entry.createdAt)}
+                                </div>
+                              </div>
+                              <div className="mt-1 text-xs text-muted">
+                                Run {entry.runId} · rule {entry.transitionRule ?? 'Not captured'} ·
+                                desired {entry.desiredRole ?? 'Not captured'}
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {[
+                                  ...entry.transitionReasonCodes,
+                                  ...entry.roleReasonCodes,
+                                  ...entry.guardrailReasonCodes,
+                                ].map((code, index) => (
+                                  <ReasonCodeBadge
+                                    key={`${entry.roleTransitionLogId}:${code}:${index}`}
+                                    code={code}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-sm text-muted">
+                          No role transition log rows were recorded yet for this target.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </DetailSection>
+
+                <DetailSection label="Guardrails">
+                  <div className="space-y-3">
+                    <DetailGrid
+                      items={[
+                        {
+                          label: 'No-sale spend cap',
+                          value: formatCurrency(activeRow.role.guardrails.categories.noSaleSpendCap),
+                        },
+                        {
+                          label: 'No-sale click cap',
+                          value: formatNumber(activeRow.role.guardrails.categories.noSaleClickCap),
+                        },
+                        {
+                          label: 'Max loss per cycle',
+                          value: formatCurrency(activeRow.role.guardrails.categories.maxLossPerCycle),
+                        },
+                        {
+                          label: 'Max bid increase %',
+                          value: activeRow.role.guardrails.categories.maxBidIncreasePerCyclePct === null
+                            ? '—'
+                            : `${activeRow.role.guardrails.categories.maxBidIncreasePerCyclePct}%`,
+                        },
+                        {
+                          label: 'Max bid decrease %',
+                          value: activeRow.role.guardrails.categories.maxBidDecreasePerCyclePct === null
+                            ? '—'
+                            : `${activeRow.role.guardrails.categories.maxBidDecreasePerCyclePct}%`,
+                        },
+                        {
+                          label: 'Placement bias increase %',
+                          value:
+                            activeRow.role.guardrails.categories.maxPlacementBiasIncreasePerCyclePct === null
+                              ? '—'
+                              : `${activeRow.role.guardrails.categories.maxPlacementBiasIncreasePerCyclePct}%`,
+                        },
+                        {
+                          label: 'Rank push time limit',
+                          value: activeRow.role.guardrails.categories.rankPushTimeLimitDays === null
+                            ? '—'
+                            : `${activeRow.role.guardrails.categories.rankPushTimeLimitDays} days`,
+                        },
+                        {
+                          label: 'Manual approval threshold',
+                          value: labelize(activeRow.role.guardrails.categories.manualApprovalThreshold),
+                        },
+                        {
+                          label: 'Auto-pause threshold',
+                          value: formatCurrency(activeRow.role.guardrails.categories.autoPauseThreshold),
+                        },
+                        {
+                          label: 'Min bid floor',
+                          value: formatCurrency(activeRow.role.guardrails.categories.minBidFloor),
+                        },
+                        {
+                          label: 'Max bid ceiling',
+                          value: formatCurrency(activeRow.role.guardrails.categories.maxBidCeiling),
+                        },
+                      ]}
+                    />
+                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+                      <div className="text-xs uppercase tracking-wide text-muted">Guardrail flags</div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <ReasonCodeBadge
+                          code={`requires_manual_approval=${String(activeRow.role.guardrails.flags.requiresManualApproval)}`}
+                        />
+                        <ReasonCodeBadge
+                          code={`auto_pause_eligible=${String(activeRow.role.guardrails.flags.autoPauseEligible)}`}
+                        />
+                        <ReasonCodeBadge
+                          code={`bid_changes_allowed=${String(activeRow.role.guardrails.flags.bidChangesAllowed)}`}
+                        />
+                        <ReasonCodeBadge
+                          code={`placement_changes_allowed=${String(activeRow.role.guardrails.flags.placementChangesAllowed)}`}
+                        />
+                        <ReasonCodeBadge
+                          code={`transition_locked=${String(activeRow.role.guardrails.flags.transitionLocked)}`}
+                        />
+                      </div>
+                      {activeRow.role.guardrails.notes.length > 0 ? (
+                        <ul className="mt-3 space-y-1 text-sm text-foreground">
+                          {activeRow.role.guardrails.notes.map((note) => (
+                            <li key={`${activeRow.targetSnapshotId}:guardrail-note:${note}`}>{note}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="mt-3 text-sm text-muted">
+                          No additional guardrail notes were persisted.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </DetailSection>
+
+                <DetailSection label="Query diagnostics">
+                  <div className="space-y-3">
+                    <DetailGrid
+                      items={[
+                        {
+                          label: 'Representative query',
+                          value:
+                            activeRow.searchTermDiagnostics.representativeSearchTerm ?? 'Not captured',
+                        },
+                        {
+                          label: 'Representative same-text',
+                          value:
+                            activeRow.searchTermDiagnostics.representativeSameText === null
+                              ? 'Not captured'
+                              : String(activeRow.searchTermDiagnostics.representativeSameText),
+                        },
+                        {
+                          label: 'Search term count',
+                          value: formatNumber(activeRow.demandProxies.searchTermCount),
+                        },
+                        {
+                          label: 'Same-text query count',
+                          value: formatNumber(activeRow.demandProxies.sameTextSearchTermCount),
+                        },
+                        {
+                          label: 'Search term impressions',
+                          value: formatNumber(activeRow.demandProxies.totalSearchTermImpressions),
+                        },
+                        {
+                          label: 'Search term clicks',
+                          value: formatNumber(activeRow.demandProxies.totalSearchTermClicks),
+                        },
+                      ]}
+                    />
+                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+                      <div className="text-xs uppercase tracking-wide text-muted">Top query rows</div>
+                      {activeRow.searchTermDiagnostics.note ? (
+                        <div className="mt-2 text-sm text-muted">
+                          {activeRow.searchTermDiagnostics.note}
+                        </div>
+                      ) : null}
+                      {activeRow.searchTermDiagnostics.topTerms.length > 0 ? (
+                        <div className="mt-3 space-y-2">
+                          {activeRow.searchTermDiagnostics.topTerms.map((term, index) => (
+                            <div
+                              key={`${activeRow.targetSnapshotId}:term:${term.searchTerm}:${index}`}
+                              className="rounded-lg border border-border bg-surface px-3 py-3"
+                            >
+                              <div className="font-semibold text-foreground">{term.searchTerm}</div>
+                              <div className="mt-1 text-xs text-muted">
+                                same_text={String(term.sameText)} · clicks {formatNumber(term.clicks)} ·
+                                orders {formatNumber(term.orders)} · spend {formatCurrency(term.spend)} ·
+                                sales {formatCurrency(term.sales)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-sm text-muted">
+                          No search-term diagnostics were captured for this target in the selected run.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </DetailSection>
+
+                <DetailSection label="Placement diagnostics">
+                  <div className="space-y-3">
+                    <DetailGrid
+                      items={[
+                        {
+                          label: 'Top of search modifier',
+                          value:
+                            activeRow.placementContext.topOfSearchModifierPct === null
+                              ? '—'
+                              : `${activeRow.placementContext.topOfSearchModifierPct}%`,
+                        },
+                        {
+                          label: 'Placement impressions',
+                          value: formatNumber(activeRow.placementContext.impressions),
+                        },
+                        {
+                          label: 'Placement clicks',
+                          value: formatNumber(activeRow.placementContext.clicks),
+                        },
+                        {
+                          label: 'Placement orders',
+                          value: formatNumber(activeRow.placementContext.orders),
+                        },
+                        {
+                          label: 'Placement spend',
+                          value: formatCurrency(activeRow.placementContext.spend),
+                        },
+                        {
+                          label: 'Placement sales',
+                          value: formatCurrency(activeRow.placementContext.sales),
+                        },
+                      ]}
+                    />
+                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
+                      {activeRow.placementContext.note ??
+                        'Placement diagnostics were not captured for this target in the selected run.'}
+                    </div>
+                  </div>
+                </DetailSection>
+              </div>
+            ) : (
+              <div className="mt-3 text-sm text-muted">
+                Select one queue row to open the target detail drawer.
+              </div>
+            )}
+          </section>
+        </aside>
       </section>
     </div>
   );

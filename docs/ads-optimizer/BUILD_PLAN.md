@@ -402,36 +402,36 @@ Turn profile + role + guardrails into a concrete recommendation set.
 Make the optimizer reviewable and usable.
 
 ### Tasks
-- [ ] Build ASIN command center view:
-  - [ ] product objective
-  - [ ] product state
-  - [ ] top risks
-  - [ ] top opportunities
-  - [ ] optimizer run status
-  - [ ] active rule pack version
-- [ ] Build target queue/table view:
-  - [ ] filters by role, state, tier, confidence
-  - [ ] recommendation count
-  - [ ] reason-code badges
-  - [ ] priority sorting
-- [ ] Build target detail drawer/page:
-  - [ ] raw metrics
-  - [ ] derived metrics
-  - [ ] state breakdown
-  - [ ] role history
-  - [ ] guardrails
-  - [ ] recommendation details
-  - [ ] query diagnostics
-  - [ ] placement diagnostics
-- [ ] Show explicit coverage notes and null states.
+- [x] Build ASIN command center view:
+  - [x] product objective
+  - [x] product state
+  - [x] top risks
+  - [x] top opportunities
+  - [x] optimizer run status
+  - [x] active rule pack version
+- [x] Build target queue/table view:
+  - [x] filters by role, state, tier, confidence
+  - [x] recommendation count
+  - [x] reason-code badges
+  - [x] priority sorting
+- [x] Build target detail drawer/page:
+  - [x] raw metrics
+  - [x] derived metrics
+  - [x] state breakdown
+  - [x] role history
+  - [x] guardrails
+  - [x] recommendation details
+  - [x] query diagnostics
+  - [x] placement diagnostics
+- [x] Show explicit coverage notes and null states.
 
 ### Phase 9 acceptance
-- [ ] Operator can review optimizer output without reading DB rows.
-- [ ] Priority queue makes obvious what to look at first.
-- [ ] UI uses semantic tokens and shared horizontal-scroll pattern.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] Operator can review optimizer output without reading DB rows.
+- [x] Priority queue makes obvious what to look at first.
+- [x] UI uses semantic tokens and shared horizontal-scroll pattern.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 

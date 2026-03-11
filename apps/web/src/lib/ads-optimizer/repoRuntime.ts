@@ -494,6 +494,26 @@ export const listAdsOptimizerTargetSnapshotsByRun = async (
   );
 };
 
+export const listAdsOptimizerRecommendationSnapshotsByRun = async (
+  runId: string
+): Promise<AdsOptimizerRecommendationSnapshot[]> => {
+  const { data, error } = await supabaseAdmin
+    .from('ads_optimizer_recommendation_snapshot')
+    .select(RECOMMENDATION_SNAPSHOT_SELECT)
+    .eq('account_id', env.accountId)
+    .eq('marketplace', env.marketplace)
+    .eq('run_id', runId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to list optimizer recommendation snapshots: ${error.message}`);
+  }
+
+  return ((data ?? []) as unknown as AdsOptimizerRecommendationSnapshotRow[]).map(
+    mapAdsOptimizerRecommendationSnapshotRow
+  );
+};
+
 export const listAdsOptimizerProductSnapshotsByRun = async (
   runId: string
 ): Promise<AdsOptimizerProductSnapshot[]> => {
@@ -511,6 +531,28 @@ export const listAdsOptimizerProductSnapshotsByRun = async (
 
   return ((data ?? []) as unknown as AdsOptimizerProductSnapshotRow[]).map(
     mapAdsOptimizerProductSnapshotRow
+  );
+};
+
+export const listAdsOptimizerRoleTransitionLogsByAsin = async (args: {
+  asin: string;
+  limit?: number;
+}): Promise<AdsOptimizerRoleTransitionLog[]> => {
+  const { data, error } = await supabaseAdmin
+    .from('ads_optimizer_role_transition_log')
+    .select(ROLE_TRANSITION_LOG_SELECT)
+    .eq('account_id', env.accountId)
+    .eq('marketplace', env.marketplace)
+    .eq('asin', args.asin)
+    .order('created_at', { ascending: false })
+    .limit(args.limit ?? 250);
+
+  if (error) {
+    throw new Error(`Failed to list optimizer role transition logs: ${error.message}`);
+  }
+
+  return ((data ?? []) as unknown as AdsOptimizerRoleTransitionLogRow[]).map(
+    mapAdsOptimizerRoleTransitionLogRow
   );
 };
 
