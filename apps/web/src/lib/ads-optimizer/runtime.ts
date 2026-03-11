@@ -1,8 +1,16 @@
 import 'server-only';
 
 import { env } from '@/lib/env';
+import { listChangeSetItems } from '@/lib/ads-workspace/repoChangeSetItems';
+import { listChangeSets } from '@/lib/ads-workspace/repoChangeSets';
 
-import { getProductOptimizerSettingsByProductId } from './repoConfig';
+import { getProductOptimizerSettingsByProductId, getRulePackVersion } from './repoConfig';
+import {
+  buildAdsOptimizerRunComparison,
+  type AdsOptimizerComparisonRow,
+  type AdsOptimizerComparisonRunRef,
+  type AdsOptimizerRunComparisonView,
+} from './comparison';
 import { getAdsOptimizerOverviewData, type AdsOptimizerOverviewData } from './overview';
 import {
   buildAdsOptimizerRoleTransitionReason,
@@ -96,6 +104,7 @@ export type AdsOptimizerTargetsViewData = {
   run: AdsOptimizerRun | null;
   latestCompletedRun: AdsOptimizerRun | null;
   productState: AdsOptimizerProductRunState | null;
+  comparison: AdsOptimizerRunComparisonView | null;
   rows: AdsOptimizerTargetReviewRow[];
 };
 
@@ -148,6 +157,13 @@ type ExecuteManualRunDeps = {
   insertTargetSnapshots: typeof insertAdsOptimizerTargetSnapshots;
   insertRoleTransitionLogs: typeof insertAdsOptimizerRoleTransitionLogs;
   insertRecommendationSnapshots: typeof insertAdsOptimizerRecommendationSnapshots;
+};
+
+type OptimizerWorkspaceHandoffAudit = {
+  changeSetCount: number;
+  itemCount: number;
+  latestChangeSetName: string | null;
+  entityKeys: string[];
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -304,6 +320,154 @@ const assertPersistedRecommendationRows = (args: {
       );
     }
   });
+};
+
+const buildTargetReviewRows = (args: {
+  snapshots: Awaited<ReturnType<typeof listAdsOptimizerTargetSnapshotsByRun>>;
+  recommendationSnapshots: Awaited<ReturnType<typeof listAdsOptimizerRecommendationSnapshotsByRun>>;
+  roleHistoryByTargetId: Map<string, AdsOptimizerTargetRoleHistoryEntry[]>;
+}): AdsOptimizerTargetReviewRow[] => {
+  const recommendationsByTargetSnapshotId = new Map(
+    args.recommendationSnapshots.map((snapshot) => [
+      snapshot.target_snapshot_id,
+      readAdsOptimizerRecommendationSnapshotView(snapshot),
+    ])
+  );
+
+  return args.snapshots.map((snapshot) => {
+    const baseRow = mapTargetSnapshotToProfileView(snapshot);
+    const recommendation = recommendationsByTargetSnapshotId.get(snapshot.target_snapshot_id) ?? null;
+
+    return {
+      ...baseRow,
+      persistedTargetKey: snapshot.target_id,
+      recommendation,
+      roleHistory: args.roleHistoryByTargetId.get(snapshot.target_id) ?? [],
+      queue: {
+        priority: recommendation?.actions[0]?.priority ?? null,
+        recommendationCount: recommendation?.actionCount ?? 0,
+        primaryActionType: recommendation?.primaryActionType ?? recommendation?.actionType ?? null,
+        spendDirection: recommendation?.spendDirection ?? null,
+        reasonCodeBadges:
+          recommendation && recommendation.reasonCodes.length > 0
+            ? recommendation.reasonCodes.slice(0, 3)
+            : baseRow.state.summaryReasonCodes.slice(0, 3),
+        readOnlyBoundary: recommendation?.executionBoundary ?? null,
+        hasCoverageGaps:
+          !recommendation ||
+          baseRow.coverage.notes.length > 0 ||
+          recommendation.coverageFlags.some(
+            (flag) => flag.includes('_MISSING') || flag.includes('_PARTIAL')
+          ),
+      },
+    };
+  });
+};
+
+const toComparisonRow = (row: AdsOptimizerTargetReviewRow): AdsOptimizerComparisonRow => ({
+  targetId: row.targetId,
+  persistedTargetKey: row.persistedTargetKey,
+  targetText: row.targetText,
+  state: {
+    efficiency: row.state.efficiency,
+    confidence: row.state.confidence,
+    importance: row.state.importance,
+  },
+  role: {
+    currentRole: row.role.currentRole,
+    desiredRole: row.role.desiredRole,
+  },
+  recommendation: row.recommendation
+    ? {
+        spendDirection: row.recommendation.spendDirection,
+        primaryActionType: row.recommendation.primaryActionType,
+        actionCount: row.recommendation.actionCount,
+        actions: row.recommendation.actions.map((action) => ({
+          actionType: action.actionType,
+        })),
+        exceptionSignals: row.recommendation.exceptionSignals.map((signal) => ({
+          type: signal.type,
+          severity: signal.severity,
+        })),
+        portfolioControls: row.recommendation.portfolioControls
+          ? {
+              discoverCapBlocked: row.recommendation.portfolioControls.discoverCapBlocked,
+              learningBudgetExceeded: row.recommendation.portfolioControls.learningBudgetExceeded,
+              stopLossCapExceeded: row.recommendation.portfolioControls.stopLossCapExceeded,
+              budgetShareExceeded: row.recommendation.portfolioControls.budgetShareExceeded,
+              discoverRank: row.recommendation.portfolioControls.discoverRank,
+              targetSpendShare: row.recommendation.portfolioControls.targetSpendShare,
+            }
+          : null,
+      }
+    : null,
+});
+
+const loadOptimizerWorkspaceHandoffAudit = async (
+  runIds: string[]
+): Promise<Map<string, OptimizerWorkspaceHandoffAudit>> => {
+  const normalizedRunIds = [...new Set(runIds.filter(Boolean))];
+  const summaryByRunId = new Map<string, OptimizerWorkspaceHandoffAudit>();
+
+  normalizedRunIds.forEach((runId) => {
+    summaryByRunId.set(runId, {
+      changeSetCount: 0,
+      itemCount: 0,
+      latestChangeSetName: null,
+      entityKeys: [],
+    });
+  });
+
+  if (normalizedRunIds.length === 0) {
+    return summaryByRunId;
+  }
+
+  const changeSets = await listChangeSets({ limit: 100 });
+  const relevantChangeSets = changeSets.filter((changeSet) => {
+    const filters = asJsonObject(changeSet.filters_json);
+    return (
+      readString(filters, 'source') === 'ads_optimizer_phase10_handoff' &&
+      normalizedRunIds.includes(readString(filters, 'optimizer_run_id') ?? '')
+    );
+  });
+
+  const changeSetItems = await Promise.all(
+    relevantChangeSets.map(async (changeSet) => ({
+      changeSet,
+      items: await listChangeSetItems(changeSet.id),
+    }))
+  );
+
+  changeSetItems.forEach(({ changeSet, items }) => {
+    const filters = asJsonObject(changeSet.filters_json);
+    const runId = readString(filters, 'optimizer_run_id');
+    if (!runId) return;
+
+    const bucket = summaryByRunId.get(runId);
+    if (!bucket) return;
+
+    bucket.changeSetCount += 1;
+    bucket.itemCount += items.length;
+    if (!bucket.latestChangeSetName) {
+      bucket.latestChangeSetName = changeSet.name;
+    }
+    items.forEach((item) => {
+      const targetKey = item.target_key ?? item.target_id ?? item.entity_key;
+      if (targetKey) {
+        bucket.entityKeys.push(targetKey);
+      }
+    });
+  });
+
+  return new Map(
+    [...summaryByRunId.entries()].map(([runId, value]) => [
+      runId,
+      {
+        ...value,
+        entityKeys: [...new Set(value.entityKeys)],
+      },
+    ])
+  );
 };
 
 const loadPreviousRoleMap = async (args: {
@@ -577,11 +741,28 @@ export const getAdsOptimizerTargetsViewData = async (args: {
       run: null,
       latestCompletedRun,
       productState: null,
+      comparison: null,
       rows: [],
     };
   }
 
-  const [productSnapshots, snapshots, recommendationSnapshots, roleTransitionLogs] = await Promise.all([
+  const comparableRuns = completedRuns.filter(
+    (run) =>
+      run.selected_asin === args.asin && run.date_start === args.start && run.date_end === args.end
+  );
+  const previousComparableRun = comparableRuns[1] ?? null;
+
+  const [
+    productSnapshots,
+    snapshots,
+    recommendationSnapshots,
+    roleTransitionLogs,
+    previousSnapshots,
+    previousRecommendationSnapshots,
+    currentVersion,
+    previousVersion,
+    handoffAuditByRunId,
+  ] = await Promise.all([
     listAdsOptimizerProductSnapshotsByRun(exactRun.run_id),
     listAdsOptimizerTargetSnapshotsByRun(exactRun.run_id),
     listAdsOptimizerRecommendationSnapshotsByRun(exactRun.run_id),
@@ -589,13 +770,18 @@ export const getAdsOptimizerTargetsViewData = async (args: {
       asin: args.asin,
       limit: 250,
     }),
+    previousComparableRun
+      ? listAdsOptimizerTargetSnapshotsByRun(previousComparableRun.run_id)
+      : Promise.resolve([]),
+    previousComparableRun
+      ? listAdsOptimizerRecommendationSnapshotsByRun(previousComparableRun.run_id)
+      : Promise.resolve([]),
+    getRulePackVersion(exactRun.rule_pack_version_id),
+    previousComparableRun ? getRulePackVersion(previousComparableRun.rule_pack_version_id) : Promise.resolve(null),
+    loadOptimizerWorkspaceHandoffAudit(
+      previousComparableRun ? [exactRun.run_id, previousComparableRun.run_id] : [exactRun.run_id]
+    ),
   ]);
-  const recommendationsByTargetSnapshotId = new Map(
-    recommendationSnapshots.map((snapshot) => [
-      snapshot.target_snapshot_id,
-      readAdsOptimizerRecommendationSnapshotView(snapshot),
-    ])
-  );
   const roleHistoryByTargetId = new Map<string, AdsOptimizerTargetRoleHistoryEntry[]>();
   roleTransitionLogs.forEach((log) => {
     if (!log.target_id) return;
@@ -618,6 +804,55 @@ export const getAdsOptimizerTargetsViewData = async (args: {
     bucket.push(historyEntry);
     roleHistoryByTargetId.set(log.target_id, bucket);
   });
+  const rows = buildTargetReviewRows({
+    snapshots,
+    recommendationSnapshots,
+    roleHistoryByTargetId,
+  });
+  const previousRows = previousComparableRun
+    ? buildTargetReviewRows({
+        snapshots: previousSnapshots,
+        recommendationSnapshots: previousRecommendationSnapshots,
+        roleHistoryByTargetId: new Map(),
+      })
+    : [];
+  const comparison = previousComparableRun
+    ? buildAdsOptimizerRunComparison({
+        currentRun: exactRun,
+        previousRun: previousComparableRun,
+        currentRows: rows.map(toComparisonRow),
+        previousRows: previousRows.map(toComparisonRow),
+        currentVersion: {
+          versionLabel: exactRun.rule_pack_version_label,
+          changeSummary: currentVersion?.change_summary ?? null,
+        },
+        previousVersion: previousComparableRun
+          ? {
+              versionLabel: previousComparableRun.rule_pack_version_label,
+              changeSummary: previousVersion?.change_summary ?? null,
+            }
+          : null,
+        recentComparableRuns: comparableRuns.slice(0, 5).map(
+          (run): AdsOptimizerComparisonRunRef => ({
+            runId: run.run_id,
+            createdAt: run.created_at,
+            rulePackVersionLabel: run.rule_pack_version_label,
+          })
+        ),
+        currentHandoff: handoffAuditByRunId.get(exactRun.run_id) ?? {
+          changeSetCount: 0,
+          itemCount: 0,
+          latestChangeSetName: null,
+          entityKeys: [],
+        },
+        previousHandoff: handoffAuditByRunId.get(previousComparableRun.run_id) ?? {
+          changeSetCount: 0,
+          itemCount: 0,
+          latestChangeSetName: null,
+          entityKeys: [],
+        },
+      })
+    : null;
 
   return {
     run: exactRun,
@@ -625,33 +860,7 @@ export const getAdsOptimizerTargetsViewData = async (args: {
     productState: productSnapshots[0]
       ? readAdsOptimizerProductRunState(productSnapshots[0].snapshot_payload_json)
       : null,
-    rows: snapshots.map((snapshot) => {
-      const baseRow = mapTargetSnapshotToProfileView(snapshot);
-      const recommendation = recommendationsByTargetSnapshotId.get(snapshot.target_snapshot_id) ?? null;
-
-      return {
-        ...baseRow,
-        persistedTargetKey: snapshot.target_id,
-        recommendation,
-        roleHistory: roleHistoryByTargetId.get(snapshot.target_id) ?? [],
-        queue: {
-          priority: recommendation?.actions[0]?.priority ?? null,
-          recommendationCount: recommendation?.actionCount ?? 0,
-          primaryActionType: recommendation?.primaryActionType ?? recommendation?.actionType ?? null,
-          spendDirection: recommendation?.spendDirection ?? null,
-          reasonCodeBadges:
-            recommendation && recommendation.reasonCodes.length > 0
-              ? recommendation.reasonCodes.slice(0, 3)
-              : baseRow.state.summaryReasonCodes.slice(0, 3),
-          readOnlyBoundary: recommendation?.executionBoundary ?? null,
-          hasCoverageGaps:
-            !recommendation ||
-            baseRow.coverage.notes.length > 0 ||
-            recommendation.coverageFlags.some(
-              (flag) => flag.includes('_MISSING') || flag.includes('_PARTIAL')
-            ),
-        },
-      };
-    }),
+    comparison,
+    rows,
   };
 };

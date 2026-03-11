@@ -62,4 +62,14 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     expect(recommendationSource).toContain('exception_signals');
     expect(recommendationSource).toContain('read_only_recommendation_only');
   });
+
+  it('loads prior comparable runs and handoff audit into the targets trust layer', () => {
+    const runtimeSource = fs.readFileSync(runtimePath, 'utf-8');
+
+    expect(runtimeSource).toContain('previousComparableRun');
+    expect(runtimeSource).toContain('buildAdsOptimizerRunComparison');
+    expect(runtimeSource).toContain('getRulePackVersion');
+    expect(runtimeSource).toContain('loadOptimizerWorkspaceHandoffAudit');
+    expect(runtimeSource).toContain('comparison');
+  });
 });

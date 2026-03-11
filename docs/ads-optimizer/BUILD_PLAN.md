@@ -495,28 +495,40 @@ Add the higher-order controls that stop local decisions from hurting the whole A
 
 ---
 
-## Phase 12 — Outcome tracking, tuning, rollback, and release discipline
+## Phase 12 — rollback / versioned comparison / operator trust layer
 
 ### Objectives
-Make the optimizer safe to tune after live use begins.
+Add a trust/review layer that helps an operator understand what changed between optimizer runs,
+what changed after handoff/staging, and what rollback or reversal actions should be reviewed,
+while keeping Ads Workspace as the only execution boundary.
 
 ### Tasks
-- [ ] Add rule pack version comparison UI.
-- [ ] Add product assignment history.
-- [ ] Add pre/post outcome comparison for recommendation batches.
-- [ ] Add rollback action to switch a product back to a prior rule pack version.
-- [ ] Add release notes field for each new version.
-- [ ] Add “why this version exists” summary field.
-- [ ] Add archive/deactivate rules for stale versions.
-- [ ] Add run-to-run diff view for the same ASIN.
+- [x] Add run-to-run comparison for the same ASIN and exact window where applicable.
+- [x] Surface what changed between optimizer versions / rule pack outputs:
+  - [x] target state/role changes
+  - [x] recommendation changes
+  - [x] exception changes
+  - [x] portfolio-control changes
+- [x] Add rollback / reversal guidance layer:
+  - [x] show what prior decision or staged action may need reversal
+  - [x] show suggested rollback candidates or caution flags
+  - [x] keep this advisory only
+- [x] Improve operator trust surfaces:
+  - [x] explicit change summaries
+  - [x] version/run comparison cues
+  - [x] clear “what changed and why” framing
+- [x] Preserve exact-run scope and auditability.
 
 ### Phase 12 acceptance
-- [ ] A newer rule pack version can be rolled back cleanly.
-- [ ] Historical optimizer decisions remain reproducible.
-- [ ] Version metadata is good enough to understand what changed and why.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] An operator can compare runs without querying the database.
+- [x] Material changes between runs are visible and understandable.
+- [x] Rollback/reversal guidance is visible where appropriate.
+- [x] Ads Workspace remains the only staging/execution boundary.
+- [x] `/ads/performance` remains unchanged.
+- [x] `/products/[asin]` remains usable and unchanged.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 

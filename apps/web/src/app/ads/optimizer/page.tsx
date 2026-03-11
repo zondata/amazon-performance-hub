@@ -70,7 +70,7 @@ const EMPTY_STATE_COPY: Record<
     eyebrow: 'Targets scope',
     title: 'Select one ASIN and capture a run to review the target queue.',
     body:
-      'Phase 10 reads persisted target profile, state, role, guardrail, and recommendation snapshots into an ASIN command center, target queue, and detail drawer. Supported actions can be handed off into Ads Workspace draft staging, but execution still stays there.',
+      'Phase 12 reads persisted target profile, state, role, diagnostics, comparison cues, and recommendation snapshots into an ASIN command center, target queue, and trust layer. Supported actions can be handed off into Ads Workspace draft staging, but execution still stays there.',
   },
   config: {
     eyebrow: 'Config placeholder',
@@ -160,10 +160,10 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
       : view === 'overview'
         ? 'Read-only optimizer active'
         : view === 'targets'
-          ? 'Review + handoff queue'
-        : view === 'history'
-          ? 'Recommendation engine'
-          : 'Recommendation shell only';
+          ? 'Review + comparison queue'
+          : view === 'history'
+            ? 'Recommendation engine'
+            : 'Recommendation shell only';
 
   return (
     <div className="space-y-8">
@@ -315,6 +315,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
               run={targetsData?.run ?? null}
               latestCompletedRun={targetsData?.latestCompletedRun ?? null}
               productState={targetsData?.productState ?? null}
+              comparison={targetsData?.comparison ?? null}
               rows={targetsData?.rows ?? []}
               handoffAction={handoffAdsOptimizerToWorkspaceAction}
             />

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import Link from 'next/link';
 
+import type { AdsOptimizerRunComparisonView } from '@/lib/ads-optimizer/comparison';
 import type { AdsOptimizerTargetRole } from '@/lib/ads-optimizer/role';
 import type { AdsOptimizerTargetReviewRow } from '@/lib/ads-optimizer/runtime';
 import type { AdsOptimizerRun } from '@/lib/ads-optimizer/runtimeTypes';
@@ -23,6 +24,7 @@ type OptimizerTargetsPanelProps = {
   run: AdsOptimizerRun | null;
   latestCompletedRun: AdsOptimizerRun | null;
   productState: AdsOptimizerProductRunState | null;
+  comparison: AdsOptimizerRunComparisonView | null;
   rows: AdsOptimizerTargetReviewRow[];
   handoffAction: (formData: FormData) => Promise<void>;
 };
@@ -428,10 +430,10 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           Select one ASIN to open the optimizer command center.
         </div>
         <div className="mt-2 max-w-3xl text-sm text-muted">
-          Phase 11 review and handoff stays scoped to one selected ASIN and one exact date range.
+          Phase 12 review and handoff stays scoped to one selected ASIN and one exact date range.
           Pick an ASIN, then use History to capture a run that fills the command center, target
-          queue, diagnostics, and exception queue from persisted optimizer snapshots before handing
-          any supported actions into Ads Workspace.
+          queue, diagnostics, comparison layer, and rollback guidance from persisted optimizer
+          snapshots before handing any supported actions into Ads Workspace.
         </div>
       </section>
     );
@@ -445,9 +447,9 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           No persisted optimizer review run exists for this ASIN/date range yet.
         </div>
         <div className="mt-2 max-w-3xl text-sm text-muted">
-          Phase 11 only hands off persisted snapshots from the exact ASIN and exact date window
+          Phase 12 only hands off persisted snapshots from the exact ASIN and exact date window
           shown above. Create a manual run first so the target queue can load target profiles,
-          states, roles, guardrails, diagnostics, and recommendation snapshots before any
+          states, roles, diagnostics, comparison cues, and recommendation snapshots before any
           supported actions are staged into Ads Workspace.
         </div>
         {props.latestCompletedRun ? (
@@ -533,6 +535,12 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
         compareNullableNumber(left.row.queue.priority, right.row.queue.priority) ||
         left.row.targetText.localeCompare(right.row.targetText)
     );
+  const targetComparisonChanges = activeRow
+    ? props.comparison?.materialChanges.filter((change) => change.targetId === activeRow.targetId) ?? []
+    : [];
+  const targetRollbackGuidance = activeRow
+    ? props.comparison?.rollbackGuidance.filter((entry) => entry.targetId === activeRow.targetId) ?? []
+    : [];
 
   const toggleSelectedRow = (targetSnapshotId: string, checked: boolean) => {
     setSelectedForHandoff((current) => {
@@ -569,8 +577,8 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
               Review persisted target outputs without leaving `/ads/optimizer`
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
-              This Phase 11 surface reads the exact run&apos;s persisted product state, target
-              state, role, portfolio caps, diagnostics, exception signals, and recommendation
+              This Phase 12 surface reads the exact run&apos;s persisted product state, target
+              state, role, diagnostics, comparison cues, rollback guidance, and recommendation
               snapshots. The optimizer still proposes, while Ads Workspace remains the only place
               where staged and executable actions live.
             </div>
@@ -581,7 +589,7 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
               SP only V1
             </div>
             <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
-              Review + diagnostics + handoff
+              Review + comparison + handoff
             </div>
           </div>
         </div>
@@ -729,6 +737,128 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           ) : (
             <div className="text-sm text-muted">
               No exception signals were persisted for the current queue filters.
+            </div>
+          )}
+        </DetailSection>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <DetailSection label="Run comparison">
+          {props.comparison ? (
+            <div className="space-y-3">
+              <DetailGrid
+                items={[
+                  {
+                    label: 'Baseline run',
+                    value:
+                      props.comparison.baselineRun
+                        ? `${formatDateTime(props.comparison.baselineRun.createdAt)} · ${props.comparison.baselineRun.rulePackVersionLabel}`
+                        : 'No prior comparable run',
+                  },
+                  {
+                    label: 'Version changed',
+                    value: String(props.comparison.versionComparison.changed),
+                  },
+                  {
+                    label: 'Current version',
+                    value: props.comparison.versionComparison.currentVersionLabel,
+                  },
+                  {
+                    label: 'Previous version',
+                    value:
+                      props.comparison.versionComparison.previousVersionLabel ?? 'Not captured',
+                  },
+                  {
+                    label: 'State changes',
+                    value: formatNumber(props.comparison.summary.stateChanges),
+                  },
+                  {
+                    label: 'Role changes',
+                    value: formatNumber(props.comparison.summary.roleChanges),
+                  },
+                  {
+                    label: 'Recommendation changes',
+                    value: formatNumber(props.comparison.summary.recommendationChanges),
+                  },
+                  {
+                    label: 'Exception changes',
+                    value: formatNumber(props.comparison.summary.exceptionChanges),
+                  },
+                  {
+                    label: 'Portfolio control changes',
+                    value: formatNumber(props.comparison.summary.portfolioControlChanges),
+                  },
+                ]}
+              />
+              <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
+                <div className="font-semibold">Portfolio control changes vs prior comparable run</div>
+                <div className="mt-2 text-muted">
+                  {props.comparison.summary.portfolioControlChanges > 0
+                    ? `${formatNumber(props.comparison.summary.portfolioControlChanges)} target-level portfolio cap change(s) were detected between the current run and the prior comparable run for this same ASIN/date scope.`
+                    : 'No target-level portfolio cap changes were detected between the current run and the prior comparable run for this same ASIN/date scope.'}
+                </div>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
+                <div className="font-semibold">What changed and why</div>
+                <div className="mt-2 text-muted">
+                  Current version: {props.comparison.versionComparison.currentChangeSummary ?? 'No version summary captured.'}
+                </div>
+                <div className="mt-1 text-muted">
+                  Previous version: {props.comparison.versionComparison.previousChangeSummary ?? 'No prior version summary captured.'}
+                </div>
+              </div>
+              <div className="text-sm text-muted">
+                Handoff audit: current run {formatNumber(props.comparison.handoffAudit.currentRunChangeSetCount)} draft set(s) /
+                {` ${formatNumber(props.comparison.handoffAudit.currentRunItemCount)} item(s)`}; prior comparable run{' '}
+                {formatNumber(props.comparison.handoffAudit.previousRunChangeSetCount)} draft set(s) /
+                {` ${formatNumber(props.comparison.handoffAudit.previousRunItemCount)} item(s)`}.
+              </div>
+              <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+                <div className="text-xs uppercase tracking-wide text-muted">Recent comparable runs</div>
+                <div className="mt-2 space-y-2 text-sm text-foreground">
+                  {props.comparison.recentComparableRuns.map((run) => (
+                    <div key={run.runId}>
+                      {formatDateTime(run.createdAt)} · {run.rulePackVersionLabel}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-muted">
+              No prior completed run exists yet for this same ASIN and exact date window, so
+              comparison cues are not available.
+            </div>
+          )}
+        </DetailSection>
+
+        <DetailSection label="Rollback / reversal guidance">
+          {props.comparison && props.comparison.rollbackGuidance.length > 0 ? (
+            <div className="space-y-3">
+              {props.comparison.rollbackGuidance.slice(0, 8).map((entry, index) => (
+                <button
+                  key={`${entry.targetId}:${entry.title}:${index}`}
+                  type="button"
+                  className="w-full rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-left transition hover:border-primary/40"
+                  onClick={() => {
+                    const match = props.rows.find((row) => row.targetId === entry.targetId);
+                    if (match) setSelectedTargetSnapshotId(match.targetSnapshotId);
+                  }}
+                >
+                  <div className="font-semibold text-foreground">{entry.title}</div>
+                  <div className="mt-1 text-xs text-muted">{entry.targetText}</div>
+                  <div className="mt-2 text-sm text-foreground">{entry.detail}</div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {entry.cautionFlags.map((flag) => (
+                      <ReasonCodeBadge key={`${entry.targetId}:${flag}`} code={flag} />
+                    ))}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-muted">
+              No rollback or reversal cues were generated for the current comparable runs.
             </div>
           )}
         </DetailSection>
@@ -1497,6 +1627,87 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                   ) : (
                     <div className="text-sm text-muted">
                       Portfolio controls were not captured for this target in the selected run.
+                    </div>
+                  )}
+                </DetailSection>
+
+                <DetailSection label="Run comparison cues">
+                  {props.comparison ? (
+                    targetComparisonChanges.length > 0 ? (
+                      <div className="space-y-3">
+                        <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-muted">
+                          These target cues include state, role, recommendation, exception, and
+                          portfolio-control changes versus the prior comparable run for this exact
+                          ASIN/date scope.
+                        </div>
+                        {targetComparisonChanges.map((change, index) => (
+                          <div
+                            key={`${activeRow.targetSnapshotId}:comparison:${change.kind}:${index}`}
+                            className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="font-semibold text-foreground">{change.summary}</div>
+                              <ExceptionSeverityBadge severity={change.severity} />
+                            </div>
+                            <div className="mt-2 text-sm text-foreground">{change.why}</div>
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                              <div className="rounded-lg border border-border bg-surface px-3 py-3">
+                                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                                  Previous
+                                </div>
+                                <div className="mt-1 text-sm text-foreground">
+                                  {change.previousValue ?? '—'}
+                                </div>
+                              </div>
+                              <div className="rounded-lg border border-border bg-surface px-3 py-3">
+                                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                                  Current
+                                </div>
+                                <div className="mt-1 text-sm text-foreground">
+                                  {change.currentValue ?? '—'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted">
+                        This target did not have any material comparison changes versus the prior
+                        comparable run.
+                      </div>
+                    )
+                  ) : (
+                    <div className="text-sm text-muted">
+                      No prior comparable run exists for this exact ASIN/date scope.
+                    </div>
+                  )}
+                </DetailSection>
+
+                <DetailSection label="Rollback guidance">
+                  {targetRollbackGuidance.length > 0 ? (
+                    <div className="space-y-3">
+                      {targetRollbackGuidance.map((entry, index) => (
+                        <div
+                          key={`${activeRow.targetSnapshotId}:rollback:${entry.title}:${index}`}
+                          className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
+                        >
+                          <div className="font-semibold text-foreground">{entry.title}</div>
+                          <div className="mt-2 text-sm text-foreground">{entry.detail}</div>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {entry.cautionFlags.map((flag) => (
+                              <ReasonCodeBadge
+                                key={`${activeRow.targetSnapshotId}:rollback-flag:${flag}`}
+                                code={flag}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted">
+                      No target-specific rollback guidance was generated for this row.
                     </div>
                   )}
                 </DetailSection>

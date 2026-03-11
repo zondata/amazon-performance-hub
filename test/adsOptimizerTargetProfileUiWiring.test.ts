@@ -20,11 +20,11 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain("view === 'targets' && asin !== 'all'");
     expect(source).toContain('getAdsOptimizerTargetsViewData');
     expect(source).toContain('<OptimizerTargetsPanel');
-    expect(source).toContain('Review + handoff queue');
+    expect(source).toContain('Review + comparison queue');
     expect(source).toContain('handoffAdsOptimizerToWorkspaceAction');
   });
 
-  it('keeps the targets panel honest about phase 11 review + diagnostics + handoff behavior', () => {
+  it('keeps the targets panel honest about phase 12 review + trust + handoff behavior', () => {
     const source = fs.readFileSync(panelPath, 'utf-8');
 
     expect(source).toContain("'use client';");
@@ -35,7 +35,7 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('Review persisted target outputs without leaving');
     expect(source).toContain('read_only_recommendation_only');
     expect(source).toContain('Workspace handoff');
-    expect(source).toContain('Review + diagnostics + handoff');
+    expect(source).toContain('Review + comparison + handoff');
     expect(source).toContain('Handoff selected to Ads Workspace');
     expect(source).toContain('Handoff this target');
     expect(source).toContain('Open in Ads Workspace');
@@ -48,6 +48,13 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('Priority sorting uses the persisted recommendation action priority');
     expect(source).toContain('Portfolio controls');
     expect(source).toContain('Exception queue');
+    expect(source).toContain('Run comparison');
+    expect(source).toContain('Portfolio control changes');
+    expect(source).toContain('Portfolio control changes vs prior comparable run');
+    expect(source).toContain('Rollback / reversal guidance');
+    expect(source).toContain('Run comparison cues');
+    expect(source).toContain('portfolio-control changes versus the prior comparable run');
+    expect(source).toContain('Rollback guidance');
     expect(source).toContain('Recent role transitions');
     expect(source).toContain('Recommended read-only actions');
     expect(source).toContain('Same-text query pinning');

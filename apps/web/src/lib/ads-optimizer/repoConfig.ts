@@ -133,7 +133,7 @@ const assertRulePackVersionInScope = async (rulePackVersionId: string) => {
   return version;
 };
 
-const getRulePackVersion = async (
+export const getRulePackVersion = async (
   rulePackVersionId: string
 ): Promise<AdsOptimizerRulePackVersion | null> => {
   const { data, error } = await supabaseAdmin
