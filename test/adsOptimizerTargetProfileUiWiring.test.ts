@@ -17,11 +17,12 @@ describe('ads optimizer phase 9 target review wiring', () => {
   it('loads targets view data only for the targets view and renders the targets panel', () => {
     const source = fs.readFileSync(pagePath, 'utf-8');
 
-    expect(source).toContain("view === 'targets' && asin !== 'all'");
+    expect(source).toContain("view === 'targets' && (asin !== 'all' || requestedRunId !== null)");
     expect(source).toContain('getAdsOptimizerTargetsViewData');
     expect(source).toContain('<OptimizerTargetsPanel');
     expect(source).toContain('Review + comparison queue');
     expect(source).toContain('handoffAdsOptimizerToWorkspaceAction');
+    expect(source).toContain('runId: requestedRunId');
   });
 
   it('keeps the targets panel honest about phase 12 review + trust + handoff behavior', () => {
@@ -33,6 +34,8 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('Target queue');
     expect(source).toContain('Target detail drawer');
     expect(source).toContain('Review persisted target outputs without leaving');
+    expect(source).toContain('Persisted run review');
+    expect(source).toContain('This Targets view is pinned to run');
     expect(source).toContain('read_only_recommendation_only');
     expect(source).toContain('Workspace handoff');
     expect(source).toContain('Review + comparison + handoff');
@@ -80,6 +83,10 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('buildPriorityLabel');
     expect(source).toContain('buildTopList');
     expect(source).toContain('filterRows');
+    expect(source).toContain('runLookupError');
+    expect(source).toContain('requestedRunId');
+    expect(source).toContain('resolvedContextSource');
+    expect(source).toContain('Requested persisted optimizer run could not be loaded.');
     expect(source).toContain('aria-controls={');
     expect(source).toContain('target-detail-drawer-');
     expect(source).toContain('xl:overflow-auto xl:overscroll-contain');
@@ -94,8 +101,9 @@ describe('ads optimizer phase 9 target review wiring', () => {
     const source = fs.readFileSync(runtimePath, 'utf-8');
 
     expect(source).toContain('export const getAdsOptimizerTargetsViewData');
-    expect(source).toContain("run.status === 'completed'");
-    expect(source).toContain('run.date_start === args.start && run.date_end === args.end');
+    expect(source).toContain("runById.status !== 'completed'");
+    expect(source).toContain('run.date_start === args.start');
+    expect(source).toContain('run.date_end === args.end');
     expect(source).toContain('listAdsOptimizerProductSnapshotsByRun');
     expect(source).toContain('readAdsOptimizerProductRunState');
     expect(source).toContain('listAdsOptimizerTargetSnapshotsByRun');
@@ -105,5 +113,7 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('mapTargetSnapshotToProfileView');
     expect(source).toContain('recommendationsByTargetSnapshotId');
     expect(source).toContain('roleHistoryByTargetId');
+    expect(source).toContain('requestedRunId');
+    expect(source).toContain("resolvedContextSource = 'run_id'");
   });
 });

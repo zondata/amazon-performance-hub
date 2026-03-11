@@ -357,6 +357,23 @@ export const updateAdsOptimizerRun = async (
   return mapAdsOptimizerRunRow(data as unknown as AdsOptimizerRunRow);
 };
 
+export const getAdsOptimizerRunById = async (runId: string): Promise<AdsOptimizerRun | null> => {
+  const { data, error } = await supabaseAdmin
+    .from('ads_optimizer_runs')
+    .select(RUN_SELECT)
+    .eq('run_id', runId)
+    .eq('account_id', env.accountId)
+    .eq('marketplace', env.marketplace)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to read optimizer run ${runId}: ${error.message}`);
+  }
+  if (!data) return null;
+
+  return mapAdsOptimizerRunRow(data as unknown as AdsOptimizerRunRow);
+};
+
 export const insertAdsOptimizerProductSnapshots = async (
   rows: CreateAdsOptimizerProductSnapshotPayload[]
 ): Promise<AdsOptimizerProductSnapshot[]> => {

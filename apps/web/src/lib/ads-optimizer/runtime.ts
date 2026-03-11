@@ -22,6 +22,7 @@ import { buildAdsOptimizerRecommendationSnapshots } from './recommendation';
 import {
   createAdsOptimizerRun,
   findOptimizerProductByAsin,
+  getAdsOptimizerRunById,
   getAdsOptimizerRuntimeContext,
   insertAdsOptimizerProductSnapshots,
   insertAdsOptimizerRecommendationSnapshots,
@@ -106,6 +107,9 @@ export type AdsOptimizerTargetsViewData = {
   productState: AdsOptimizerProductRunState | null;
   comparison: AdsOptimizerRunComparisonView | null;
   rows: AdsOptimizerTargetReviewRow[];
+  requestedRunId: string | null;
+  resolvedContextSource: 'run_id' | 'window' | null;
+  runLookupError: string | null;
 };
 
 export type AdsOptimizerTargetRoleHistoryEntry = {
@@ -725,17 +729,57 @@ export const getAdsOptimizerTargetsViewData = async (args: {
   asin: string;
   start: string;
   end: string;
+  runId?: string | null;
 }): Promise<AdsOptimizerTargetsViewData> => {
+  const requestedRunId = args.runId?.trim() ? args.runId.trim() : null;
   const runs = await listAdsOptimizerRuns({
-    asin: args.asin,
+    asin: args.asin === 'all' ? undefined : args.asin,
     limit: 30,
   });
   const completedRuns = runs.filter((run) => run.status === 'completed');
-  const exactRun =
-    completedRuns.find(
-      (run) => run.selected_asin === args.asin && run.date_start === args.start && run.date_end === args.end
-    ) ?? null;
   const latestCompletedRun = completedRuns[0] ?? null;
+  let exactRun: AdsOptimizerRun | null = null;
+  let resolvedContextSource: 'run_id' | 'window' | null = null;
+  const runLookupError: string | null = null;
+
+  if (requestedRunId) {
+    const runById = await getAdsOptimizerRunById(requestedRunId);
+    if (!runById) {
+      return {
+        run: null,
+        latestCompletedRun,
+        productState: null,
+        comparison: null,
+        rows: [],
+        requestedRunId,
+        resolvedContextSource: null,
+        runLookupError: `Persisted run ${requestedRunId} was not found for this account/marketplace.`,
+      };
+    }
+    if (runById.status !== 'completed') {
+      return {
+        run: null,
+        latestCompletedRun,
+        productState: null,
+        comparison: null,
+        rows: [],
+        requestedRunId,
+        resolvedContextSource: null,
+        runLookupError: `Persisted run ${requestedRunId} is ${runById.status} and is not reviewable in Targets yet.`,
+      };
+    }
+    exactRun = runById;
+    resolvedContextSource = 'run_id';
+  } else {
+    exactRun =
+      completedRuns.find(
+        (run) =>
+          run.selected_asin === args.asin &&
+          run.date_start === args.start &&
+          run.date_end === args.end
+      ) ?? null;
+    resolvedContextSource = exactRun ? 'window' : null;
+  }
 
   if (!exactRun) {
     return {
@@ -744,14 +788,27 @@ export const getAdsOptimizerTargetsViewData = async (args: {
       productState: null,
       comparison: null,
       rows: [],
+      requestedRunId,
+      resolvedContextSource,
+      runLookupError,
     };
   }
 
-  const comparableRuns = completedRuns.filter(
+  const comparableRuns = (
+    exactRun.selected_asin === args.asin && requestedRunId === null
+      ? completedRuns
+      : await listAdsOptimizerRuns({
+          asin: exactRun.selected_asin,
+          limit: 30,
+        }).then((items) => items.filter((run) => run.status === 'completed'))
+  ).filter(
     (run) =>
-      run.selected_asin === args.asin && run.date_start === args.start && run.date_end === args.end
+      run.selected_asin === exactRun.selected_asin &&
+      run.date_start === exactRun.date_start &&
+      run.date_end === exactRun.date_end
   );
-  const previousComparableRun = comparableRuns[1] ?? null;
+  const previousComparableRun =
+    comparableRuns.find((run) => run.run_id !== exactRun.run_id) ?? null;
 
   const [
     productSnapshots,
@@ -768,7 +825,7 @@ export const getAdsOptimizerTargetsViewData = async (args: {
     listAdsOptimizerTargetSnapshotsByRun(exactRun.run_id),
     listAdsOptimizerRecommendationSnapshotsByRun(exactRun.run_id),
     listAdsOptimizerRoleTransitionLogsByAsin({
-      asin: args.asin,
+      asin: exactRun.selected_asin,
       limit: 250,
     }),
     previousComparableRun
@@ -863,5 +920,8 @@ export const getAdsOptimizerTargetsViewData = async (args: {
       : null,
     comparison,
     rows,
+    requestedRunId,
+    resolvedContextSource,
+    runLookupError,
   };
 };

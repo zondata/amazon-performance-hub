@@ -25,6 +25,8 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     expect(source).toContain("view === 'history' ? await getAdsOptimizerHistoryViewData(asin) : null");
     expect(source).toContain('<OptimizerHistoryPanel');
     expect(source).toContain('runAdsOptimizerNowAction');
+    expect(source).toContain("const requestedRunId = paramValue('runId')?.trim() || null");
+    expect(source).toContain('buildAdsOptimizerHref');
   });
 
   it('wires a manual run server action through the runtime service', () => {
@@ -50,6 +52,8 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     expect(source).toContain('optimizer-owned tables here');
     expect(source).toContain('Run optimizer now');
     expect(source).toContain('Phase 4 manual runs support one ASIN at a time.');
+    expect(source).toContain('Open in Targets');
+    expect(source).toContain('runId: run.run_id');
   });
 
   it('stores recommendation snapshots as read-only Phase 11 recommendation sets', () => {
@@ -71,5 +75,8 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     expect(runtimeSource).toContain('getRulePackVersion');
     expect(runtimeSource).toContain('loadOptimizerWorkspaceHandoffAudit');
     expect(runtimeSource).toContain('comparison');
+    expect(runtimeSource).toContain('getAdsOptimizerRunById');
+    expect(runtimeSource).toContain('resolvedContextSource');
+    expect(runtimeSource).toContain('runLookupError');
   });
 });

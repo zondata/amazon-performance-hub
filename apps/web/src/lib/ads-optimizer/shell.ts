@@ -13,3 +13,22 @@ export const normalizeAdsOptimizerView = (value?: string): AdsOptimizerView => {
     ? (normalized as AdsOptimizerView)
     : 'overview';
 };
+
+export const buildAdsOptimizerHref = (params: {
+  start: string;
+  end: string;
+  asin: string;
+  view: AdsOptimizerView;
+  runId?: string | null;
+}) => {
+  const usp = new URLSearchParams({
+    start: params.start,
+    end: params.end,
+    asin: params.asin,
+    view: params.view,
+  });
+  if (params.runId && params.runId.trim().length > 0) {
+    usp.set('runId', params.runId.trim());
+  }
+  return `/ads/optimizer?${usp.toString()}`;
+};

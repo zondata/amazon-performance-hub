@@ -20,6 +20,7 @@ import {
 } from '@/lib/ads-optimizer/runtime';
 import {
   ADS_OPTIMIZER_VIEWS,
+  buildAdsOptimizerHref,
   normalizeAdsOptimizerView,
   type AdsOptimizerView,
 } from '@/lib/ads-optimizer/shell';
@@ -35,21 +36,6 @@ const normalizeDate = (value?: string): string | undefined => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return undefined;
   return value;
-};
-
-const buildOptimizerHref = (params: {
-  start: string;
-  end: string;
-  asin: string;
-  view: AdsOptimizerView;
-}) => {
-  const usp = new URLSearchParams({
-    start: params.start,
-    end: params.end,
-    asin: params.asin,
-    view: params.view,
-  });
-  return `/ads/optimizer?${usp.toString()}`;
 };
 
 const EMPTY_STATE_COPY: Record<
@@ -122,18 +108,10 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
   }
 
   const asin = paramValue('asin') ?? 'all';
+  const requestedRunId = paramValue('runId')?.trim() || null;
   const view = normalizeAdsOptimizerView(paramValue('view'));
   const notice = pickSearchParam(params?.notice);
   const error = pickSearchParam(params?.error);
-  const asinOptions = await fetchAsinOptions(env.accountId, env.marketplace);
-  const selectedAsin = asinOptions.find((option) => option.asin === asin) ?? null;
-  const viewTabs = ADS_OPTIMIZER_VIEWS.map((item) => ({
-    label: item.label,
-    value: item.value,
-    href: buildOptimizerHref({ start, end, asin, view: item.value }),
-  }));
-  const emptyState = EMPTY_STATE_COPY[view];
-  const returnTo = buildOptimizerHref({ start, end, asin, view });
   const overviewData =
     view === 'overview' && asin !== 'all'
       ? await getAdsOptimizerOverviewData({
@@ -147,13 +125,40 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
   const configData = view === 'config' ? await getAdsOptimizerConfigViewData() : null;
   const historyData = view === 'history' ? await getAdsOptimizerHistoryViewData(asin) : null;
   const targetsData =
-    view === 'targets' && asin !== 'all'
+    view === 'targets' && (asin !== 'all' || requestedRunId !== null)
       ? await getAdsOptimizerTargetsViewData({
           asin,
           start,
           end,
+          runId: requestedRunId,
         })
       : null;
+  const effectiveAsin = view === 'targets' ? targetsData?.run?.selected_asin ?? asin : asin;
+  const effectiveStart = view === 'targets' ? targetsData?.run?.date_start ?? start : start;
+  const effectiveEnd = view === 'targets' ? targetsData?.run?.date_end ?? end : end;
+  const effectiveRunId = view === 'targets' ? targetsData?.run?.run_id ?? null : null;
+  const asinOptions = await fetchAsinOptions(env.accountId, env.marketplace);
+  const selectedAsin =
+    asinOptions.find((option) => option.asin === effectiveAsin) ?? null;
+  const viewTabs = ADS_OPTIMIZER_VIEWS.map((item) => ({
+    label: item.label,
+    value: item.value,
+    href: buildAdsOptimizerHref({
+      start: effectiveStart,
+      end: effectiveEnd,
+      asin: effectiveAsin,
+      view: item.value,
+      runId: item.value === 'targets' ? effectiveRunId : null,
+    }),
+  }));
+  const emptyState = EMPTY_STATE_COPY[view];
+  const returnTo = buildAdsOptimizerHref({
+    start: effectiveStart,
+    end: effectiveEnd,
+    asin: effectiveAsin,
+    view,
+    runId: view === 'targets' ? effectiveRunId : null,
+  });
   const phaseBadge =
     view === 'config'
       ? 'Config foundation only'
@@ -174,7 +179,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
               Ads optimizer
             </div>
             <div className="mt-2 text-lg font-semibold text-foreground">
-              {formatUiDateRange(start, end)}
+              {formatUiDateRange(effectiveStart, effectiveEnd)}
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
               Feature-flagged SP optimizer route. Recommendations are reviewed here first, and any
@@ -192,7 +197,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
               <input
                 type="date"
                 name="start"
-                defaultValue={start}
+                defaultValue={effectiveStart}
                 className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
               />
             </label>
@@ -201,7 +206,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
               <input
                 type="date"
                 name="end"
-                defaultValue={end}
+                defaultValue={effectiveEnd}
                 className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
               />
             </label>
@@ -209,7 +214,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
               Product
               <select
                 name="asin"
-                defaultValue={asin}
+                defaultValue={effectiveAsin}
                 className="mt-1 w-full min-w-0 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
               >
                 <option value="all">All advertised ASINs</option>
@@ -247,7 +252,9 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">ASIN scope</div>
             <div className="mt-2 text-sm font-medium text-foreground">
-              {asin === 'all' ? 'All advertised ASINs' : selectedAsin?.label ?? asin}
+              {effectiveAsin === 'all'
+                ? 'All advertised ASINs'
+                : selectedAsin?.label ?? effectiveAsin}
             </div>
           </div>
         </div>
@@ -298,19 +305,33 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
         />
       ) : view === 'targets' ? (
             <OptimizerTargetsPanel
-              asin={asin}
-              start={start}
-              end={end}
-              historyHref={buildOptimizerHref({ start, end, asin, view: 'history' })}
-              returnTo={buildOptimizerHref({ start, end, asin, view: 'targets' })}
+              asin={effectiveAsin}
+              start={effectiveStart}
+              end={effectiveEnd}
+              requestedRunId={targetsData?.requestedRunId ?? requestedRunId}
+              resolvedContextSource={targetsData?.resolvedContextSource ?? null}
+              runLookupError={targetsData?.runLookupError ?? null}
+              historyHref={buildAdsOptimizerHref({
+                start: effectiveStart,
+                end: effectiveEnd,
+                asin: effectiveAsin,
+                view: 'history',
+              })}
+              returnTo={buildAdsOptimizerHref({
+                start: effectiveStart,
+                end: effectiveEnd,
+                asin: effectiveAsin,
+                view: 'targets',
+                runId: effectiveRunId,
+              })}
               workspaceQueueHref={`/ads/performance?${new URLSearchParams({
                 panel: 'queue',
                 channel: 'sp',
                 level: 'targets',
                 view: 'table',
-                asin,
-                start,
-                end,
+                asin: effectiveAsin,
+                start: effectiveStart,
+                end: effectiveEnd,
               }).toString()}`}
               run={targetsData?.run ?? null}
               latestCompletedRun={targetsData?.latestCompletedRun ?? null}

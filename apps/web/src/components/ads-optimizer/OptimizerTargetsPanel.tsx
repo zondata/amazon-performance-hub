@@ -27,6 +27,9 @@ type OptimizerTargetsPanelProps = {
   productState: AdsOptimizerProductRunState | null;
   comparison: AdsOptimizerRunComparisonView | null;
   rows: AdsOptimizerTargetReviewRow[];
+  requestedRunId: string | null;
+  resolvedContextSource: 'run_id' | 'window' | null;
+  runLookupError: string | null;
   handoffAction: (formData: FormData) => Promise<void>;
 };
 
@@ -471,13 +474,14 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
       <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="text-xs uppercase tracking-[0.3em] text-muted">Targets run state</div>
         <div className="mt-2 text-lg font-semibold text-foreground">
-          No persisted optimizer review run exists for this ASIN/date range yet.
+          {props.runLookupError
+            ? 'Requested persisted optimizer run could not be loaded.'
+            : 'No persisted optimizer review run exists for this ASIN/date range yet.'}
         </div>
         <div className="mt-2 max-w-3xl text-sm text-muted">
-          Phase 12 only hands off persisted snapshots from the exact ASIN and exact date window
-          shown above. Create a manual run first so the target queue can load target profiles,
-          states, roles, diagnostics, comparison cues, and recommendation snapshots before any
-          supported actions are staged into Ads Workspace.
+          {props.runLookupError
+            ? `${props.runLookupError} Use History to pick a valid completed run, or clear the runId and review by ASIN/date window instead.`
+            : 'Phase 12 only hands off persisted snapshots from the exact ASIN and exact date window shown above. Create a manual run first so the target queue can load target profiles, states, roles, diagnostics, comparison cues, and recommendation snapshots before any supported actions are staged into Ads Workspace.'}
         </div>
         {props.latestCompletedRun ? (
           <div className="mt-4 rounded-xl border border-border bg-surface-2 px-4 py-4 text-sm text-muted">
@@ -641,6 +645,30 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           </div>
         </div>
       </section>
+
+      {props.resolvedContextSource === 'run_id' ? (
+        <section className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-[0.3em] text-sky-700">
+                Persisted run review
+              </div>
+              <div className="mt-1 font-semibold">
+                Viewing persisted run: {formatDateTime(props.run.created_at)} ·{' '}
+                {props.run.rule_pack_version_label} ·{' '}
+                {formatUiDateRange(props.run.date_start, props.run.date_end)}
+              </div>
+              <div className="mt-1 text-sky-800">
+                This Targets view is pinned to run {props.run.run_id}. It is reviewing saved
+                historical optimizer output, not triggering a fresh recompute.
+              </div>
+            </div>
+            <Link href={props.historyHref} className="text-sm font-semibold text-sky-900 underline">
+              Back to History
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       <details className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
         <summary className="cursor-pointer list-none text-sm font-semibold text-foreground">

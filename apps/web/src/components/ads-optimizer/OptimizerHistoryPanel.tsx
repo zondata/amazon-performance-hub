@@ -1,4 +1,7 @@
+import Link from 'next/link';
+
 import type { AdsOptimizerRun } from '@/lib/ads-optimizer/runtimeTypes';
+import { buildAdsOptimizerHref } from '@/lib/ads-optimizer/shell';
 import {
   formatUiDateRange,
   formatUiDateTime as formatDateTime,
@@ -173,6 +176,18 @@ export default function OptimizerHistoryPanel(props: OptimizerHistoryPanelProps)
                     <div className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm text-muted">
                       <div>Started {formatDateTime(run.started_at)}</div>
                       <div className="mt-1">Completed {formatDateTime(run.completed_at)}</div>
+                      <Link
+                        href={buildAdsOptimizerHref({
+                          asin: run.selected_asin,
+                          start: run.date_start,
+                          end: run.date_end,
+                          view: 'targets',
+                          runId: run.run_id,
+                        })}
+                        className="mt-3 inline-flex rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground transition hover:border-primary/40 hover:text-primary"
+                      >
+                        Open in Targets
+                      </Link>
                     </div>
                   </div>
                   <details className="mt-4 rounded-xl border border-border bg-surface-2 px-4 py-3">
