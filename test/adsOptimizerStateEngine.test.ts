@@ -95,6 +95,7 @@ describe('ads optimizer phase 6 state engine', () => {
         clickVelocity: 5.6,
         impressionVelocity: 16,
         organicLeverageProxy: 0.041,
+        organicContextSignal: 'search_term_visibility_context',
       },
       coverage: {
         daysObserved: 5,
@@ -157,6 +158,83 @@ describe('ads optimizer phase 6 state engine', () => {
     expect(first.confidence.value).toBe('confirmed');
     expect(first.importance.value).toBe('tier_1_dominant');
     expect(first.opportunityScore).toBeGreaterThan(first.riskScore);
+  });
+
+  it('does not let the old organic-leverage proxy change default V1 opportunity math', () => {
+    const baseInput = {
+      raw: {
+        impressions: 80,
+        clicks: 28,
+        spend: 46,
+        orders: 3,
+        sales: 220,
+        cpc: 1.64,
+        ctr: 0.35,
+        cvr: 0.11,
+        acos: 0.21,
+        roas: 4.8,
+        tosIs: 0.31,
+        stis: 0.22,
+        stir: 7,
+      },
+      derived: {
+        contributionAfterAds: 28,
+        breakEvenGap: 0.09,
+        maxCpcSupportGap: 0.45,
+        lossDollars: null,
+        profitDollars: 28,
+        clickVelocity: 5.6,
+        impressionVelocity: 16,
+        organicLeverageProxy: 0.01,
+        organicContextSignal: 'same_text_visibility_context',
+      },
+      coverage: {
+        daysObserved: 5,
+        statuses: {
+          tosIs: 'ready' as const,
+          stis: 'ready' as const,
+          stir: 'ready' as const,
+          placementContext: 'ready' as const,
+          searchTerms: 'ready' as const,
+          breakEvenInputs: 'ready' as const,
+        },
+        notes: [],
+      },
+      demandProxies: {
+        searchTermCount: 4,
+        sameTextSearchTermCount: 2,
+        totalSearchTermImpressions: 140,
+        totalSearchTermClicks: 24,
+        representativeClickShare: 0.61,
+      },
+      asinScopeMembership: {
+        productAdSpend: 90,
+        productAdSales: 360,
+        productOrders: 10,
+        productUnits: 10,
+      },
+      productContext: {
+        breakEvenAcos: 0.3,
+        averagePrice: 56.25,
+        productState: 'profitable',
+        productObjective: 'Scale Profit',
+      },
+    };
+
+    const lowProxy = classifyAdsOptimizerTargetState(baseInput, null);
+    const highProxy = classifyAdsOptimizerTargetState(
+      {
+        ...baseInput,
+        derived: {
+          ...baseInput.derived,
+          organicLeverageProxy: 99,
+        },
+      },
+      null
+    );
+
+    expect(highProxy.opportunityScore).toBe(lowProxy.opportunityScore);
+    expect(highProxy.summaryReasonCodes).toContain('OPPORTUNITY_ORGANIC_CONTEXT_ONLY');
   });
 
   it('supports configurable tier thresholds through the rule-pack state-engine payload', () => {

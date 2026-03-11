@@ -746,6 +746,9 @@ const buildConfidenceNotes = (payload: RuntimeJsonObject): string[] => {
   const coverageNotes = Array.isArray(coverage?.notes)
     ? coverage.notes.filter((entry): entry is string => typeof entry === 'string')
     : [];
+  const criticalWarnings = Array.isArray(coverage?.critical_warnings)
+    ? coverage.critical_warnings.filter((entry): entry is string => typeof entry === 'string')
+    : [];
   const state = readAdsOptimizerTargetRunState(payload);
 
   if (state?.confidence.value === 'confirmed') {
@@ -763,7 +766,8 @@ const buildConfidenceNotes = (payload: RuntimeJsonObject): string[] => {
     notes.push('Target coverage is missing for required inputs; only minimal read-only guidance was emitted.');
   }
 
-  coverageNotes.slice(0, 3).forEach((note) => notes.push(note));
+  coverageNotes.slice(0, 2).forEach((note) => notes.push(note));
+  criticalWarnings.slice(0, 2).forEach((note) => notes.push(note));
   return withUnique(notes);
 };
 

@@ -356,6 +356,7 @@ const buildTargetReviewRows = (args: {
         hasCoverageGaps:
           !recommendation ||
           baseRow.coverage.notes.length > 0 ||
+          baseRow.coverage.criticalWarnings.length > 0 ||
           recommendation.coverageFlags.some(
             (flag) => flag.includes('_MISSING') || flag.includes('_PARTIAL')
           ),

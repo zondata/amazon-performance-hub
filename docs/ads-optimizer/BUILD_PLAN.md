@@ -55,9 +55,9 @@ Create the optimizer-specific instructions and define the repo boundary so Codex
 ### Phase 0 acceptance
 - [ ] Optimizer docs exist and are scoped.
 - [ ] Repo has a written contract that protects current Ads Workspace behavior.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 
@@ -531,6 +531,155 @@ while keeping Ads Workspace as the only execution boundary.
 - [x] `npm run web:build` passes.
 
 ---
+
+
+---
+
+## Phase 12B — Non-additive diagnostics contract + target-page review UX polish
+
+### Objectives
+Lock down the semantics for non-additive Amazon diagnostics and make the Targets page faster to review without changing the existing execution boundary.
+
+> This patch phase assumes Phases 0–12 are already complete. Do not reopen earlier phases unless a task below explicitly requires it.
+
+### New locked decisions for this phase
+- [x] STIS, STIR, and TOS IS are **non-additive diagnostics**. Never sum, average, or synthesize a window-level value for them.
+- [x] Ranking metrics follow the same rule: never average rank. Use **latest observed value + explicit trend metadata** only.
+- [x] If a cross-day summary is needed, it must be labeled as a **trend descriptor** (`latest`, `previous`, `delta`, `direction`, `observed_days`, `latest_observed_date`) and never presented as the raw metric itself.
+- [x] Non-additive diagnostics may inform UI context and reason codes, but they must not silently become hard optimization math in the default V1 path.
+- [x] Expected absence of STIS/STIR/search-term diagnostics on zero-click targets is **normal availability behavior**, not a broken-data error.
+
+### Tasks
+
+#### A. Data semantics + engine contract
+- [x] Update optimizer docs/AGENTS with an explicit non-additive metrics contract:
+  - [x] `docs/ads-optimizer/AGENTS.md`
+  - [x] `apps/web/src/app/ads/optimizer/AGENTS.md`
+  - [x] `apps/web/src/lib/ads-optimizer/AGENTS.md`
+- [x] Audit all optimizer code paths that touch STIS / STIR / TOS IS / ranking and confirm each usage is one of:
+  - [x] raw daily value
+  - [x] latest observed value
+  - [x] explicit trend descriptor
+  - [x] UI-only contextual note
+- [x] Keep raw source-day diagnostics unchanged in storage and snapshots.
+- [x] Rename persisted optimizer payload fields so they read as **point-in-time observations**, not as rollups:
+  - [x] `latest_observed_tos_is`
+  - [x] `latest_observed_stis`
+  - [x] `latest_observed_stir`
+  - [x] matching `*_observed_date`
+- [x] Add optional trend payloads for non-additive diagnostics where useful:
+  - [x] `previous_value`
+  - [x] `delta`
+  - [x] `direction`
+  - [x] `observed_days`
+  - [x] `latest_observed_date`
+- [x] Ensure no code path creates a synthetic window-level STIS / STIR / TOS IS value.
+- [x] Remove or feature-flag off any default scoring logic that mixes non-additive diagnostics with additive totals.
+- [x] Replace the current organic-leverage numeric proxy with one of:
+  - [x] UI/context-only signal, or
+  - [x] qualitative reason code that does not alter default V1 score/action math.
+- [x] Ensure ranking logic uses only:
+  - [x] latest observed rank
+  - [x] prior comparable observed rank or first observed rank in scope
+  - [x] delta / direction
+  - [x] observation count / latest observed date
+- [x] Never average, median, or otherwise smooth rank into a synthetic raw value.
+
+#### B. Coverage semantics
+- [x] Introduce an internal distinction between:
+  - [x] `ready`
+  - [x] `partial`
+  - [x] `expected_unavailable`
+  - [x] `true_missing`
+- [x] Map common zero-click cases so STIS / STIR / search-term coverage becomes `expected_unavailable`, not `true_missing`.
+- [x] Keep the queue cell compact by displaying only three user-facing buckets:
+  - [x] Ready
+  - [x] Partial
+  - [x] Missing
+- [x] Within the compact display, color Missing differently when it is:
+  - [x] expected-unavailable / normal
+  - [x] true missing / suspicious
+- [x] Do not count expected-unavailable cases as critical coverage warnings.
+- [x] Add a compact tooltip / popover / expandable detail that lists which checks are in each bucket.
+- [x] Update queue-level warning cards so they count only actionable row-specific warnings, not generic methodology notes.
+
+#### C. Target queue UI polish
+- [x] Replace the current six coverage badges in the queue table with a compact summary format such as:
+  - [x] `Ready 6`
+  - [x] `Partial 0`
+  - [x] `Missing 0`
+- [x] Keep the row height stable even when coverage notes exist.
+- [x] On desktop (`xl+`), convert the target review area into a split workbench with contained scroll regions.
+- [x] Keep the main page scroll for the overall route shell only.
+- [x] Add an internal vertical scroll container for **Target queue** on desktop.
+- [x] Make the queue controls sticky inside the queue pane:
+  - [x] section header
+  - [x] row-count summary
+  - [x] role/state/tier/confidence/order filters
+  - [x] selection + handoff toolbar
+  - [x] table header row
+- [x] Ensure wheel / trackpad scroll inside the queue pane does not push away the queue controls.
+- [x] Add overscroll containment so queue scrolling does not fight the page scroll.
+
+#### D. Target detail drawer UI polish
+- [x] Add an internal vertical scroll container for **Target detail drawer** on desktop.
+- [x] Make the drawer header sticky inside the drawer pane:
+  - [x] target name / identity
+  - [x] current + desired role pills
+  - [x] open-in-workspace action
+  - [x] handoff action
+- [x] Ensure wheel / trackpad scroll inside the drawer pane does not move the queue pane or the main page until drawer bounds are reached.
+- [x] Keep mobile/tablet on a simpler single-scroll layout to avoid nested-scroll traps on touch devices.
+
+#### E. Notes, help, and readability
+- [x] Split notes into three categories:
+  - [x] global methodology notes
+  - [x] row-specific exceptions
+  - [x] critical warnings
+- [x] Move repeated methodology notes out of every row/drawer and into a collapsed page-level help panel.
+- [x] Add a collapsed **How to read the Targets page** explainer near the top of the view.
+- [x] Use a plain-language format for explainers:
+  - [x] What this is
+  - [x] Why it matters
+  - [x] How to read it
+  - [x] What to do next
+- [x] Add small expandable help blocks or info affordances for dense sections such as:
+  - [x] Coverage
+  - [x] Reason-code badges
+  - [x] Exception signals
+  - [x] Portfolio controls
+  - [x] Rollback guidance
+- [x] Keep only row-specific exceptions expanded by default.
+- [x] Make the inline copy easy to understand for non-technical operators.
+
+#### F. Tests + manual QA
+- [x] Add regression coverage for non-additive metrics handling:
+  - [x] latest-observed selection by `date` + `exported_at`
+  - [x] no sum/average window rollup for STIS / STIR / TOS IS
+  - [x] zero-click expected-unavailable mapping
+  - [x] ranking trend without rank averaging
+- [x] Add UI/component coverage for the compact coverage summary state mapping.
+- [x] Add manual QA steps for desktop scroll containment:
+  - [x] queue scroll isolation
+  - [x] drawer scroll isolation
+  - [x] sticky filters/header behavior
+  - [x] mobile/tablet single-scroll fallback
+
+### Phase 12B acceptance
+- [x] STIS, STIR, and TOS IS are never summed, averaged, or presented as synthetic window-level values anywhere in the optimizer.
+- [x] Default V1 scoring/actions no longer depend on a derived numeric proxy built from STIS / STIR / TOS IS.
+- [x] Ranking is surfaced as latest observed value plus explicit trend only.
+- [x] A zero-click target no longer looks like broken coverage just because STIS / STIR / search terms are absent.
+- [x] Queue rows remain compact; coverage no longer makes rows tall.
+- [x] Queue filters/header stay visible while the queue body scrolls.
+- [x] Target detail drawer scrolls independently from the queue.
+- [x] Repeated methodology notes no longer dominate the page.
+- [ ] `npm test` passes.
+- [ ] `npm run web:lint` passes.
+- [ ] `npm run web:build` passes.
+- [ ] `/ads/performance` remains unchanged.
+- [ ] Existing Ads Workspace handoff still works.
+
 
 ## Post-V1 / future phases
 

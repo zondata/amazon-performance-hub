@@ -5,6 +5,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 
 import type { AdsOptimizerRunComparisonView } from '@/lib/ads-optimizer/comparison';
+import { buildAdsOptimizerCoverageSummary } from '@/lib/ads-optimizer/coverage';
 import type { AdsOptimizerTargetRole } from '@/lib/ads-optimizer/role';
 import type { AdsOptimizerTargetReviewRow } from '@/lib/ads-optimizer/runtime';
 import type { AdsOptimizerRun } from '@/lib/ads-optimizer/runtimeTypes';
@@ -36,6 +37,13 @@ type WorkspaceSupportedActionType =
   | 'update_target_state'
   | 'update_placement_modifier';
 
+const GLOBAL_METHODOLOGY_NOTES = [
+  'STIS, STIR, and TOS IS are non-additive diagnostics. The Targets page only shows latest observed values or explicit trend metadata, never a synthetic window average.',
+  'Ranking follows the same rule. If rank context is shown, treat it as latest observed value plus direction or delta, not an averaged raw rank.',
+  'Zero-click targets can legitimately show expected-unavailable search-term diagnostics. That is normal availability behavior unless other inputs also look incomplete.',
+  'Ads Optimizer remains recommendation-first. Ads Workspace is still the only staging and execution boundary.',
+];
+
 const formatNumber = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return '—';
   return value.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -63,10 +71,11 @@ const labelize = (value: string | null) =>
         .join(' ')
     : 'Not captured';
 
-const coverageBadgeClass = (status: 'ready' | 'partial' | 'missing') => {
-  if (status === 'ready') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
-  if (status === 'partial') return 'border-amber-200 bg-amber-50 text-amber-800';
-  return 'border-rose-200 bg-rose-50 text-rose-800';
+const coverageSummaryClass = (kind: 'ready' | 'partial' | 'missing', tone?: 'normal' | 'alert') => {
+  if (kind === 'ready') return 'text-emerald-700';
+  if (kind === 'partial') return 'text-muted';
+  if (tone === 'normal') return 'text-amber-700';
+  return 'text-rose-700';
 };
 
 const statePillClass = (
@@ -165,16 +174,6 @@ const RolePill = (props: { value: AdsOptimizerTargetRole | null; label: string }
   </span>
 );
 
-const CoverageBadge = (props: { label: string; status: 'ready' | 'partial' | 'missing' }) => (
-  <span
-    className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${coverageBadgeClass(
-      props.status
-    )}`}
-  >
-    {props.label} {props.status}
-  </span>
-);
-
 const ReasonCodeBadge = (props: { code: string }) => (
   <span className="rounded-full border border-border bg-surface-2 px-2 py-1 font-mono text-[11px] text-foreground">
     {props.code}
@@ -204,6 +203,34 @@ const DetailSection = (props: { label: string; children: ReactNode }) => (
     </div>
     <div className="mt-3 text-sm text-foreground">{props.children}</div>
   </section>
+);
+
+const CollapsibleSummaryPanel = (props: {
+  label: string;
+  summary: ReactNode;
+  children: ReactNode;
+}) => (
+  <details className="rounded-xl border border-border bg-surface shadow-sm">
+    <summary className="flex cursor-pointer list-none flex-col gap-3 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-muted">
+        {props.label}
+      </div>
+      <div className="min-w-0 flex-1 text-sm text-foreground">{props.summary}</div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+        Expand details
+      </div>
+    </summary>
+    <div className="border-t border-border px-4 py-4 text-sm text-foreground">{props.children}</div>
+  </details>
+);
+
+const InlineHelp = (props: { title: string; children: ReactNode }) => (
+  <details className="rounded-lg border border-border/70 bg-surface-2 px-3 py-2 text-sm text-muted">
+    <summary className="cursor-pointer list-none font-semibold text-foreground">
+      {props.title}
+    </summary>
+    <div className="mt-2 text-sm text-muted">{props.children}</div>
+  </details>
 );
 
 const DetailGrid = (props: { items: Array<{ label: string; value: string }> }) => (
@@ -276,13 +303,21 @@ const getCoverageItems = (row: AdsOptimizerTargetReviewRow) => [
   { label: 'BE', status: row.coverage.statuses.breakEvenInputs },
 ] as const;
 
-const getCoverageSummary = (row: AdsOptimizerTargetReviewRow) => {
-  const counts = { ready: 0, partial: 0, missing: 0 };
-  getCoverageItems(row).forEach((item) => {
-    counts[item.status] += 1;
-  });
-  return counts;
+const getCoverageSummary = (row: AdsOptimizerTargetReviewRow) =>
+  buildAdsOptimizerCoverageSummary(getCoverageItems(row));
+
+const getRowSpecificExceptions = (row: AdsOptimizerTargetReviewRow) => [...row.coverage.notes];
+
+const getCriticalWarnings = (row: AdsOptimizerTargetReviewRow) => {
+  const warnings = [...row.coverage.criticalWarnings];
+  if (!row.recommendation) {
+    warnings.unshift('Recommendation snapshot missing for this target in the selected run.');
+  }
+  return warnings;
 };
+
+const getActionableWarningCount = (row: AdsOptimizerTargetReviewRow) =>
+  getRowSpecificExceptions(row).length + getCriticalWarnings(row).length;
 
 const compareNullableNumber = (left: number | null, right: number | null) => {
   if (left === null && right === null) return 0;
@@ -357,14 +392,6 @@ const buildTopList = (rows: AdsOptimizerTargetReviewRow[], kind: 'risk' | 'oppor
       );
     })
     .slice(0, 3);
-
-const coverageGapText = (row: AdsOptimizerTargetReviewRow) => {
-  const notes = [...row.coverage.notes];
-  if (!row.recommendation) {
-    notes.unshift('Recommendation snapshot missing for this target in the selected run.');
-  }
-  return notes;
-};
 
 const filterRows = (
   rows: AdsOptimizerTargetReviewRow[],
@@ -493,7 +520,7 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
     0
   );
   const coverageWarnings = props.rows.reduce(
-    (count, row) => count + coverageGapText(row).length,
+    (count, row) => count + getActionableWarningCount(row),
     0
   );
   const topRiskRows = buildTopList(props.rows, 'risk');
@@ -541,6 +568,26 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
   const targetRollbackGuidance = activeRow
     ? props.comparison?.rollbackGuidance.filter((entry) => entry.targetId === activeRow.targetId) ?? []
     : [];
+  const activeRowSpecificExceptions = activeRow ? getRowSpecificExceptions(activeRow) : [];
+  const activeCriticalWarnings = activeRow ? getCriticalWarnings(activeRow) : [];
+  const highSeverityExceptionCount = exceptionEntries.filter(
+    (entry) => entry.signal.severity === 'high'
+  ).length;
+  const rollbackGuidanceCount = props.comparison?.rollbackGuidance.length ?? 0;
+  const rollbackCautionFlagCount =
+    props.comparison?.rollbackGuidance.reduce(
+      (sum, entry) => sum + entry.cautionFlags.length,
+      0
+    ) ?? 0;
+  const comparisonIsStable = Boolean(
+    props.comparison &&
+      !props.comparison.versionComparison.changed &&
+      props.comparison.summary.stateChanges === 0 &&
+      props.comparison.summary.roleChanges === 0 &&
+      props.comparison.summary.recommendationChanges === 0 &&
+      props.comparison.summary.exceptionChanges === 0 &&
+      props.comparison.summary.portfolioControlChanges === 0
+  );
 
   const toggleSelectedRow = (targetSnapshotId: string, checked: boolean) => {
     setSelectedForHandoff((current) => {
@@ -594,6 +641,53 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           </div>
         </div>
       </section>
+
+      <details className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+        <summary className="cursor-pointer list-none text-sm font-semibold text-foreground">
+          How to read the Targets page
+        </summary>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          <div className="rounded-xl border border-border bg-surface px-4 py-3">
+            <div className="text-xs uppercase tracking-wide text-muted">What this is</div>
+            <div className="mt-2 text-sm text-foreground">
+              A read-first optimizer workbench for one ASIN and one exact date window. It shows
+              persisted target diagnostics, recommended actions, comparison cues, and handoff
+              readiness without bypassing Ads Workspace.
+            </div>
+          </div>
+          <div className="rounded-xl border border-border bg-surface px-4 py-3">
+            <div className="text-xs uppercase tracking-wide text-muted">Why it matters</div>
+            <div className="mt-2 text-sm text-foreground">
+              This view helps operators see what changed, what looks incomplete, and what is safe
+              to hand off before any staged draft is created in Ads Workspace.
+            </div>
+          </div>
+          <div className="rounded-xl border border-border bg-surface px-4 py-3">
+            <div className="text-xs uppercase tracking-wide text-muted">How to read it</div>
+            <div className="mt-2 space-y-2 text-sm text-foreground">
+              <div>Use the queue to sort and filter targets by priority, role, state, and confidence.</div>
+              <div>Coverage rolls up into Ready, Partial, and Missing. Missing can be normal for zero-click search-term diagnostics or suspicious when source data should exist.</div>
+              <div>Non-additive diagnostics such as STIS, STIR, TOS IS, and rank are shown only as latest observed values or explicit trend descriptors.</div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-border bg-surface px-4 py-3">
+            <div className="text-xs uppercase tracking-wide text-muted">What to do next</div>
+            <div className="mt-2 space-y-2 text-sm text-foreground">
+              <div>Review row-specific exceptions and critical warnings first.</div>
+              <div>Use the drawer to inspect recommendation details, portfolio context, comparison cues, and rollback guidance.</div>
+              <div>Handoff only the supported actions you want staged into Ads Workspace.</div>
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 rounded-xl border border-border bg-surface px-4 py-4">
+          <div className="text-xs uppercase tracking-wide text-muted">Global methodology notes</div>
+          <ul className="mt-2 space-y-2 text-sm text-muted">
+            {GLOBAL_METHODOLOGY_NOTES.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        </div>
+      </details>
 
       <section className="grid gap-4 xl:grid-cols-6">
         <SummaryCard
@@ -657,93 +751,221 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
         </div>
 
         <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
-          <div className="text-xs uppercase tracking-[0.3em] text-muted">Coverage notes</div>
+          <div className="text-xs uppercase tracking-[0.3em] text-muted">Actionable warnings</div>
           <div className="mt-2 text-2xl font-semibold text-foreground">{formatNumber(coverageWarnings)}</div>
           <div className="mt-2 text-sm text-muted">
-            Coverage gaps and null states are shown explicitly in the queue and target detail
-            drawer instead of being hidden or guessed.
+            This count includes row-specific exceptions and critical warnings only. Global
+            methodology notes live in the help panel instead of inflating every row.
           </div>
         </div>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <DetailSection label="Portfolio controls">
-          {portfolioReference ? (
-            <div className="space-y-3">
-              <DetailGrid
-                items={[
-                  {
-                    label: 'Active Discover targets',
-                    value: `${formatNumber(portfolioReference.activeDiscoverTargets)} / ${formatNumber(
-                      portfolioReference.maxActiveDiscoverTargets
-                    )}`,
-                  },
-                  {
-                    label: 'Learning budget cap',
-                    value: `${formatCurrency(portfolioReference.learningBudgetUsed)} / ${formatCurrency(
-                      portfolioReference.learningBudgetCap
-                    )}`,
-                  },
-                  {
-                    label: 'Total stop-loss cap',
-                    value: `${formatCurrency(portfolioReference.totalStopLossSpend)} / ${formatCurrency(
-                      portfolioReference.totalStopLossCap
-                    )}`,
-                  },
-                  {
-                    label: 'Budget share breaches',
-                    value: formatNumber(budgetShareExceptions),
-                  },
-                ]}
-              />
-              <div className="text-sm text-muted">
-                These caps are computed at the ASIN run level and can push individual targets from
-                increase to hold or reduce when the broader portfolio envelope is already full.
+        <CollapsibleSummaryPanel
+          label="Portfolio controls"
+          summary={
+            portfolioReference ? (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs xl:justify-end">
+                <span>
+                  <span className="font-semibold text-foreground">Active Discover</span>{' '}
+                  <span className="text-muted">
+                    {formatNumber(portfolioReference.activeDiscoverTargets)} /{' '}
+                    {formatNumber(portfolioReference.maxActiveDiscoverTargets)}
+                  </span>
+                </span>
+                <span>
+                  <span className="font-semibold text-foreground">Learning Budget Cap</span>{' '}
+                  <span className="text-muted">
+                    {formatCurrency(portfolioReference.learningBudgetUsed)} /{' '}
+                    {formatCurrency(portfolioReference.learningBudgetCap)}
+                  </span>
+                </span>
+                <span>
+                  <span className="font-semibold text-foreground">Stop-loss Cap</span>{' '}
+                  <span className="text-muted">
+                    {formatCurrency(portfolioReference.totalStopLossSpend)} /{' '}
+                    {formatCurrency(portfolioReference.totalStopLossCap)}
+                  </span>
+                </span>
+                <span>
+                  <span className="font-semibold text-foreground">Budget Share Breaches</span>{' '}
+                  <span className="text-muted">{formatNumber(budgetShareExceptions)}</span>
+                </span>
               </div>
-            </div>
-          ) : (
-            <div className="text-sm text-muted">
-              Portfolio-control diagnostics were not captured for this run.
-            </div>
-          )}
-        </DetailSection>
+            ) : (
+              <div className="text-sm text-muted">
+                Portfolio-control diagnostics were not captured for this run.
+              </div>
+            )
+          }
+        >
+          <div className="space-y-3">
+            <InlineHelp title="Portfolio controls">
+              These caps apply at the ASIN level. They can hold back an individual target even when
+              that target looks strong on its own, because the wider portfolio is already at its
+              Discover, learning-budget, stop-loss, or budget-share limit.
+            </InlineHelp>
+            {portfolioReference ? (
+              <>
+                <DetailGrid
+                  items={[
+                    {
+                      label: 'Active Discover targets',
+                      value: `${formatNumber(portfolioReference.activeDiscoverTargets)} / ${formatNumber(
+                        portfolioReference.maxActiveDiscoverTargets
+                      )}`,
+                    },
+                    {
+                      label: 'Learning budget cap',
+                      value: `${formatCurrency(portfolioReference.learningBudgetUsed)} / ${formatCurrency(
+                        portfolioReference.learningBudgetCap
+                      )}`,
+                    },
+                    {
+                      label: 'Total stop-loss cap',
+                      value: `${formatCurrency(portfolioReference.totalStopLossSpend)} / ${formatCurrency(
+                        portfolioReference.totalStopLossCap
+                      )}`,
+                    },
+                    {
+                      label: 'Budget share breaches',
+                      value: formatNumber(budgetShareExceptions),
+                    },
+                  ]}
+                />
+                <div className="text-sm text-muted">
+                  These caps are computed at the ASIN run level and can push individual targets
+                  from increase to hold or reduce when the broader portfolio envelope is already
+                  full.
+                </div>
+              </>
+            ) : null}
+          </div>
+        </CollapsibleSummaryPanel>
 
-        <DetailSection label="Exception queue">
-          {exceptionEntries.length > 0 ? (
-            <div className="space-y-3">
-              {exceptionEntries.slice(0, 10).map(({ key, row, signal }) => (
-                <button
-                  key={key}
-                  type="button"
-                  className="w-full rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-left transition hover:border-primary/40"
-                  onClick={() => setSelectedTargetSnapshotId(row.targetSnapshotId)}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-semibold text-foreground">{signal.title}</div>
-                      <div className="mt-1 text-xs text-muted">
-                        {row.targetText} · {labelize(signal.type)} · {buildPriorityLabel(
-                          row.queue.priority,
-                          row.queue.primaryActionType
-                        )}
+        <CollapsibleSummaryPanel
+          label="Exception queue"
+          summary={
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs xl:justify-end">
+              <span>
+                <span className="font-semibold text-foreground">Total exceptions</span>{' '}
+                <span className="text-muted">{formatNumber(exceptionEntries.length)}</span>
+              </span>
+              <span>
+                <span className="font-semibold text-foreground">High severity</span>{' '}
+                <span className="text-muted">{formatNumber(highSeverityExceptionCount)}</span>
+              </span>
+            </div>
+          }
+        >
+          <div className="space-y-3">
+            <InlineHelp title="Exception signals">
+              Exceptions highlight rows that need extra operator review, such as guardrail
+              breaches, major role changes, main-driver degradation, or high-spend low-confidence
+              cases.
+            </InlineHelp>
+            {exceptionEntries.length > 0 ? (
+              <div className="space-y-2 xl:max-h-72 xl:overflow-y-auto xl:overscroll-contain xl:pr-1">
+                {exceptionEntries.map(({ key, row, signal }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className="w-full rounded-lg border border-border/70 bg-surface-2 px-3 py-2 text-left transition hover:border-primary/40"
+                    onClick={() => setSelectedTargetSnapshotId(row.targetSnapshotId)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground">{signal.title}</div>
+                        <div className="mt-0.5 line-clamp-1 text-xs text-muted">
+                          {row.targetText} · {labelize(signal.type)} ·{' '}
+                          {buildPriorityLabel(row.queue.priority, row.queue.primaryActionType)}
+                        </div>
                       </div>
+                      <ExceptionSeverityBadge severity={signal.severity} />
                     </div>
-                    <ExceptionSeverityBadge severity={signal.severity} />
-                  </div>
-                  <div className="mt-2 text-sm text-foreground">{signal.detail}</div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="text-sm text-muted">
-              No exception signals were persisted for the current queue filters.
-            </div>
-          )}
-        </DetailSection>
+                    <div className="mt-1 line-clamp-2 text-xs text-foreground">
+                      {signal.detail}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-muted">
+                No exception signals were persisted for the current queue filters.
+              </div>
+            )}
+          </div>
+        </CollapsibleSummaryPanel>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <DetailSection label="Run comparison">
+        <CollapsibleSummaryPanel
+          label="Run comparison"
+          summary={
+            props.comparison ? (
+              comparisonIsStable ? (
+                <div className="text-sm text-muted">
+                  Nothing material changed versus the prior comparable run.
+                </div>
+              ) : (
+                <div className="grid gap-x-4 gap-y-1 text-xs xl:grid-cols-4">
+                  <span>
+                    <span className="font-semibold text-foreground">Baseline run</span>{' '}
+                    <span className="text-muted">
+                      {props.comparison.baselineRun
+                        ? props.comparison.baselineRun.rulePackVersionLabel
+                        : 'No prior comparable run'}
+                    </span>
+                  </span>
+                  <span>
+                    <span className="font-semibold text-foreground">Version changed</span>{' '}
+                    <span className="text-muted">
+                      {String(props.comparison.versionComparison.changed)}
+                    </span>
+                  </span>
+                  <span>
+                    <span className="font-semibold text-foreground">State changes</span>{' '}
+                    <span className="text-muted">
+                      {formatNumber(props.comparison.summary.stateChanges)}
+                    </span>
+                  </span>
+                  <span>
+                    <span className="font-semibold text-foreground">Role changes</span>{' '}
+                    <span className="text-muted">
+                      {formatNumber(props.comparison.summary.roleChanges)}
+                    </span>
+                  </span>
+                  <span>
+                    <span className="font-semibold text-foreground">
+                      Recommendation changes
+                    </span>{' '}
+                    <span className="text-muted">
+                      {formatNumber(props.comparison.summary.recommendationChanges)}
+                    </span>
+                  </span>
+                  <span>
+                    <span className="font-semibold text-foreground">Exception changes</span>{' '}
+                    <span className="text-muted">
+                      {formatNumber(props.comparison.summary.exceptionChanges)}
+                    </span>
+                  </span>
+                  <span>
+                    <span className="font-semibold text-foreground">
+                      Portfolio control changes
+                    </span>{' '}
+                    <span className="text-muted">
+                      {formatNumber(props.comparison.summary.portfolioControlChanges)}
+                    </span>
+                  </span>
+                </div>
+              )
+            ) : (
+              <div className="text-sm text-muted">
+                No prior completed run exists yet for this same ASIN and exact date window.
+              </div>
+            )
+          }
+        >
           {props.comparison ? (
             <div className="space-y-3">
               <DetailGrid
@@ -801,17 +1023,23 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
               <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
                 <div className="font-semibold">What changed and why</div>
                 <div className="mt-2 text-muted">
-                  Current version: {props.comparison.versionComparison.currentChangeSummary ?? 'No version summary captured.'}
+                  Current version:{' '}
+                  {props.comparison.versionComparison.currentChangeSummary ??
+                    'No version summary captured.'}
                 </div>
                 <div className="mt-1 text-muted">
-                  Previous version: {props.comparison.versionComparison.previousChangeSummary ?? 'No prior version summary captured.'}
+                  Previous version:{' '}
+                  {props.comparison.versionComparison.previousChangeSummary ??
+                    'No prior version summary captured.'}
                 </div>
               </div>
               <div className="text-sm text-muted">
-                Handoff audit: current run {formatNumber(props.comparison.handoffAudit.currentRunChangeSetCount)} draft set(s) /
-                {` ${formatNumber(props.comparison.handoffAudit.currentRunItemCount)} item(s)`}; prior comparable run{' '}
-                {formatNumber(props.comparison.handoffAudit.previousRunChangeSetCount)} draft set(s) /
-                {` ${formatNumber(props.comparison.handoffAudit.previousRunItemCount)} item(s)`}.
+                Handoff audit: current run{' '}
+                {formatNumber(props.comparison.handoffAudit.currentRunChangeSetCount)} draft set(s)
+                / {formatNumber(props.comparison.handoffAudit.currentRunItemCount)} item(s); prior
+                comparable run{' '}
+                {formatNumber(props.comparison.handoffAudit.previousRunChangeSetCount)} draft
+                set(s) / {formatNumber(props.comparison.handoffAudit.previousRunItemCount)} item(s).
               </div>
               <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
                 <div className="text-xs uppercase tracking-wide text-muted">Recent comparable runs</div>
@@ -824,44 +1052,65 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="text-sm text-muted">
-              No prior completed run exists yet for this same ASIN and exact date window, so
-              comparison cues are not available.
-            </div>
-          )}
-        </DetailSection>
+          ) : null}
+        </CollapsibleSummaryPanel>
 
-        <DetailSection label="Rollback / reversal guidance">
-          {props.comparison && props.comparison.rollbackGuidance.length > 0 ? (
-            <div className="space-y-3">
-              {props.comparison.rollbackGuidance.slice(0, 8).map((entry, index) => (
-                <button
-                  key={`${entry.targetId}:${entry.title}:${index}`}
-                  type="button"
-                  className="w-full rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-left transition hover:border-primary/40"
-                  onClick={() => {
-                    const match = props.rows.find((row) => row.targetId === entry.targetId);
-                    if (match) setSelectedTargetSnapshotId(match.targetSnapshotId);
-                  }}
-                >
-                  <div className="font-semibold text-foreground">{entry.title}</div>
-                  <div className="mt-1 text-xs text-muted">{entry.targetText}</div>
-                  <div className="mt-2 text-sm text-foreground">{entry.detail}</div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {entry.cautionFlags.map((flag) => (
-                      <ReasonCodeBadge key={`${entry.targetId}:${flag}`} code={flag} />
-                    ))}
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="text-sm text-muted">
-              No rollback or reversal cues were generated for the current comparable runs.
-            </div>
-          )}
-        </DetailSection>
+        <CollapsibleSummaryPanel
+          label="Rollback / reversal guidance"
+          summary={
+            rollbackGuidanceCount > 0 ? (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs xl:justify-end">
+                <span>
+                  <span className="font-semibold text-foreground">Rollback cues</span>{' '}
+                  <span className="text-muted">{formatNumber(rollbackGuidanceCount)}</span>
+                </span>
+                <span>
+                  <span className="font-semibold text-foreground">Caution flags</span>{' '}
+                  <span className="text-muted">{formatNumber(rollbackCautionFlagCount)}</span>
+                </span>
+              </div>
+            ) : (
+              <div className="text-sm text-muted">
+                No rollback or reversal cues were generated for the current comparable runs.
+              </div>
+            )
+          }
+        >
+          <div className="space-y-3">
+            <InlineHelp title="Rollback guidance">
+              These cues are advisory only. They call out prior staged decisions or changed
+              optimizer outputs that may deserve reversal review in Ads Workspace.
+            </InlineHelp>
+            {props.comparison && props.comparison.rollbackGuidance.length > 0 ? (
+              <div className="space-y-2 xl:max-h-72 xl:overflow-y-auto xl:overscroll-contain xl:pr-1">
+                {props.comparison.rollbackGuidance.map((entry, index) => (
+                  <button
+                    key={`${entry.targetId}:${entry.title}:${index}`}
+                    type="button"
+                    className="w-full rounded-lg border border-border/70 bg-surface-2 px-3 py-2 text-left transition hover:border-primary/40"
+                    onClick={() => {
+                      const match = props.rows.find((row) => row.targetId === entry.targetId);
+                      if (match) setSelectedTargetSnapshotId(match.targetSnapshotId);
+                    }}
+                  >
+                    <div className="line-clamp-1 text-sm font-semibold text-foreground">
+                      {entry.title}
+                    </div>
+                    <div className="mt-0.5 line-clamp-1 text-xs text-muted">
+                      {entry.targetText}
+                    </div>
+                    <div className="mt-1 line-clamp-2 text-xs text-foreground">{entry.detail}</div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {entry.cautionFlags.map((flag) => (
+                        <ReasonCodeBadge key={`${entry.targetId}:${flag}`} code={flag} />
+                      ))}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </CollapsibleSummaryPanel>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
@@ -932,9 +1181,9 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
         </DetailSection>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)]">
-        <div className="space-y-4">
-          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="grid gap-6 xl:h-[calc(100vh-3rem)] xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)] xl:items-start">
+        <div className="space-y-4 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm xl:flex xl:h-full xl:min-h-0 xl:flex-col xl:overflow-hidden">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <div className="text-xs uppercase tracking-[0.3em] text-muted">Target queue</div>
@@ -943,154 +1192,178 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                   run. Filters stay within the current ASIN and date window only, while exception
                   signals and contextual diagnostics remain visible without bypassing Ads Workspace.
                 </div>
+                <div className="mt-3">
+                  <InlineHelp title="Coverage">
+                    Ready means the needed target inputs were captured. Partial means some context
+                    exists but a needed supporting input was incomplete. Missing can be normal for
+                    zero-click search-term diagnostics or suspicious when a source-day diagnostic
+                    should have been present.
+                  </InlineHelp>
+                </div>
+                <div className="mt-3">
+                  <InlineHelp title="Reason-code badges">
+                    Badges summarize the main persisted reason codes for a row. Use them as a quick
+                    triage aid, then open the drawer for the full recommendation, state, and
+                    comparison details behind those badges.
+                  </InlineHelp>
+                </div>
               </div>
               <Link href={props.historyHref} className="text-sm font-semibold text-primary">
                 Go to History
               </Link>
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-                Role
-                <select
-                  value={roleFilter}
-                  onChange={(event) => setRoleFilter(event.target.value)}
-                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                >
-                  <option value="all">All roles</option>
-                  <option value="Discover">Discover</option>
-                  <option value="Harvest">Harvest</option>
-                  <option value="Scale">Scale</option>
-                  <option value="Rank Push">Rank Push</option>
-                  <option value="Rank Defend">Rank Defend</option>
-                  <option value="Suppress">Suppress</option>
-                </select>
-              </label>
+            <div className="mt-4 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col">
+              <div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                  <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                    Role
+                    <select
+                      value={roleFilter}
+                      onChange={(event) => setRoleFilter(event.target.value)}
+                      className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                    >
+                      <option value="all">All roles</option>
+                      <option value="Discover">Discover</option>
+                      <option value="Harvest">Harvest</option>
+                      <option value="Scale">Scale</option>
+                      <option value="Rank Push">Rank Push</option>
+                      <option value="Rank Defend">Rank Defend</option>
+                      <option value="Suppress">Suppress</option>
+                    </select>
+                  </label>
 
-              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-                State
-                <select
-                  value={stateFilter}
-                  onChange={(event) => setStateFilter(event.target.value)}
-                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                >
-                  <option value="all">All states</option>
-                  <option value="profitable">Profitable</option>
-                  <option value="break_even">Break Even</option>
-                  <option value="converting_but_loss_making">Loss Making</option>
-                  <option value="learning_no_sale">Learning No Sale</option>
-                  <option value="no_data">No Data</option>
-                </select>
-              </label>
+                  <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                    State
+                    <select
+                      value={stateFilter}
+                      onChange={(event) => setStateFilter(event.target.value)}
+                      className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                    >
+                      <option value="all">All states</option>
+                      <option value="profitable">Profitable</option>
+                      <option value="break_even">Break Even</option>
+                      <option value="converting_but_loss_making">Loss Making</option>
+                      <option value="learning_no_sale">Learning No Sale</option>
+                      <option value="no_data">No Data</option>
+                    </select>
+                  </label>
 
-              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-                Tier
-                <select
-                  value={tierFilter}
-                  onChange={(event) => setTierFilter(event.target.value)}
-                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                >
-                  <option value="all">All tiers</option>
-                  <option value="tier_1_dominant">Tier 1 dominant</option>
-                  <option value="tier_2_core">Tier 2 core</option>
-                  <option value="tier_3_test_long_tail">Tier 3 test / long-tail</option>
-                </select>
-              </label>
+                  <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                    Tier
+                    <select
+                      value={tierFilter}
+                      onChange={(event) => setTierFilter(event.target.value)}
+                      className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                    >
+                      <option value="all">All tiers</option>
+                      <option value="tier_1_dominant">Tier 1 dominant</option>
+                      <option value="tier_2_core">Tier 2 core</option>
+                      <option value="tier_3_test_long_tail">Tier 3 test / long-tail</option>
+                    </select>
+                  </label>
 
-              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-                Confidence
-                <select
-                  value={confidenceFilter}
-                  onChange={(event) => setConfidenceFilter(event.target.value)}
-                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                >
-                  <option value="all">All confidence</option>
-                  <option value="confirmed">Confirmed</option>
-                  <option value="directional">Directional</option>
-                  <option value="insufficient">Insufficient</option>
-                </select>
-              </label>
+                  <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                    Confidence
+                    <select
+                      value={confidenceFilter}
+                      onChange={(event) => setConfidenceFilter(event.target.value)}
+                      className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                    >
+                      <option value="all">All confidence</option>
+                      <option value="confirmed">Confirmed</option>
+                      <option value="directional">Directional</option>
+                      <option value="insufficient">Insufficient</option>
+                    </select>
+                  </label>
 
-              <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-                Queue order
-                <select
-                  value={sortBy}
-                  onChange={(event) => setSortBy(event.target.value as QueueSort)}
-                  className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-                >
-                  <option value="priority">Priority</option>
-                  <option value="risk">Risk</option>
-                  <option value="opportunity">Opportunity</option>
-                  <option value="target">Target</option>
-                </select>
-              </label>
-            </div>
+                  <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                    Queue order
+                    <select
+                      value={sortBy}
+                      onChange={(event) => setSortBy(event.target.value as QueueSort)}
+                      className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                    >
+                      <option value="priority">Priority</option>
+                      <option value="risk">Risk</option>
+                      <option value="opportunity">Opportunity</option>
+                      <option value="target">Target</option>
+                    </select>
+                  </label>
+                </div>
 
-            <div className="mt-4 rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm text-muted">
-              Showing {formatNumber(filteredRows.length)} of {formatNumber(props.rows.length)} persisted
-              target rows for {props.asin}. {formatNumber(persistedRecommendationRows)} recommendation
-              snapshots were loaded from the exact run, and {formatNumber(stageableRows.length)} row(s)
-              currently contain Ads Workspace-supported actions.
-            </div>
+                <div className="mt-3 rounded-xl border border-border bg-surface-2 px-4 py-2.5 text-sm text-muted">
+                  Showing {formatNumber(filteredRows.length)} of {formatNumber(props.rows.length)}{' '}
+                  persisted target rows for {props.asin}.{' '}
+                  {formatNumber(persistedRecommendationRows)} recommendation snapshots were loaded
+                  from the exact run, and {formatNumber(stageableRows.length)} row(s) currently
+                  contain Ads Workspace-supported actions.
+                </div>
 
-            <div className="mt-4 flex flex-col gap-3 rounded-xl border border-border bg-surface px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="text-sm text-muted">
-                Select one or more stageable rows, then hand off the supported actions into Ads
-                Workspace. Unsupported recommendation types stay review-only in the optimizer.
+                <div className="mt-3 rounded-xl border border-border bg-surface px-4 py-3">
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                    <button
+                      type="button"
+                      disabled={visibleStageableRows.length === 0}
+                      className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={() => toggleAllVisibleStageable(!allVisibleStageableSelected)}
+                    >
+                      {allVisibleStageableSelected
+                        ? 'Clear visible selection'
+                        : 'Select visible stageable'}
+                    </button>
+                    <div className="text-sm text-muted xl:text-center">
+                      {formatNumber(selectedForHandoff.length)} selected row(s) ·{' '}
+                      {formatNumber(selectedStageableActionCount)} supported staged action(s)
+                    </div>
+                    <div className="flex flex-wrap gap-2 xl:justify-end">
+                      <form action={props.handoffAction}>
+                        <input type="hidden" name="return_to" value={props.returnTo} />
+                        <input
+                          type="hidden"
+                          name="workspace_return_to"
+                          value={props.workspaceQueueHref}
+                        />
+                        <input type="hidden" name="asin" value={props.asin} />
+                        <input type="hidden" name="start" value={props.start} />
+                        <input type="hidden" name="end" value={props.end} />
+                        {selectedForHandoff.map((targetSnapshotId) => (
+                          <input
+                            key={`selected-${targetSnapshotId}`}
+                            type="hidden"
+                            name="target_snapshot_id"
+                            value={targetSnapshotId}
+                          />
+                        ))}
+                        <button
+                          type="submit"
+                          disabled={selectedForHandoff.length === 0}
+                          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Handoff selected to Ads Workspace
+                        </button>
+                      </form>
+                      <Link
+                        href={props.workspaceQueueHref}
+                        className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground"
+                      >
+                        Open Queue Review
+                      </Link>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  disabled={visibleStageableRows.length === 0}
-                  className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={() => toggleAllVisibleStageable(!allVisibleStageableSelected)}
-                >
-                  {allVisibleStageableSelected ? 'Clear visible selection' : 'Select visible stageable'}
-                </button>
-                <form action={props.handoffAction}>
-                  <input type="hidden" name="return_to" value={props.returnTo} />
-                  <input type="hidden" name="workspace_return_to" value={props.workspaceQueueHref} />
-                  <input type="hidden" name="asin" value={props.asin} />
-                  <input type="hidden" name="start" value={props.start} />
-                  <input type="hidden" name="end" value={props.end} />
-                  {selectedForHandoff.map((targetSnapshotId) => (
-                    <input
-                      key={`selected-${targetSnapshotId}`}
-                      type="hidden"
-                      name="target_snapshot_id"
-                      value={targetSnapshotId}
-                    />
-                  ))}
-                  <button
-                    type="submit"
-                    disabled={selectedForHandoff.length === 0}
-                    className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Handoff selected to Ads Workspace
-                  </button>
-                </form>
-                <Link href={props.workspaceQueueHref} className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground">
-                  Open Queue Review
-                </Link>
-              </div>
-            </div>
 
-            <div className="mt-3 text-sm text-muted">
-              {formatNumber(selectedForHandoff.length)} selected row(s) ·{' '}
-              {formatNumber(selectedStageableActionCount)} supported staged action(s)
-            </div>
-
-            {filteredRows.length === 0 ? (
-              <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
-                No target rows match the current optimizer queue filters.
-              </div>
-            ) : (
-              <div className="mt-4 overflow-y-auto">
-                <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
+              {filteredRows.length === 0 ? (
+                <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
+                  No target rows match the current optimizer queue filters.
+                </div>
+              ) : (
+                <div className="mt-3 xl:min-h-0 xl:flex-1 xl:overflow-auto xl:overscroll-contain">
                   <table className="min-w-[1800px] table-auto border-collapse text-left text-sm">
                     <thead>
                       <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-                        <th className="px-3 py-2">
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
                           <input
                             type="checkbox"
                             aria-label="Select all visible stageable optimizer rows"
@@ -1099,25 +1372,26 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                             onChange={(event) => toggleAllVisibleStageable(event.target.checked)}
                           />
                         </th>
-                        <th className="px-3 py-2">Target</th>
-                        <th className="px-3 py-2">Priority</th>
-                        <th className="px-3 py-2">Recommendations</th>
-                        <th className="px-3 py-2">Workspace actions</th>
-                        <th className="px-3 py-2">Current role</th>
-                        <th className="px-3 py-2">Efficiency</th>
-                        <th className="px-3 py-2">Confidence</th>
-                        <th className="px-3 py-2">Tier</th>
-                        <th className="px-3 py-2">Spend direction</th>
-                        <th className="px-3 py-2">Exceptions</th>
-                        <th className="px-3 py-2">Reason-code badges</th>
-                        <th className="px-3 py-2">Coverage</th>
-                        <th className="px-3 py-2">Detail</th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Target</th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Priority</th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Recommendations</th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Workspace actions</th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Current role</th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Efficiency</th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Confidence</th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Tier</th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Spend direction</th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Exceptions</th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Reason-code badges</th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Coverage</th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Detail</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredRows.map((row) => {
                         const coverageSummary = getCoverageSummary(row);
-                        const coverageNotes = coverageGapText(row);
+                        const rowSpecificExceptions = getRowSpecificExceptions(row);
+                        const criticalWarnings = getCriticalWarnings(row);
                         const isActive = row.targetSnapshotId === activeTargetSnapshotId;
                         const workspaceSupportedActions = getWorkspaceSupportedActions(row);
                         const unsupportedReviewOnlyActions = getUnsupportedReviewOnlyActions(row);
@@ -1132,7 +1406,7 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                               isActive ? 'bg-primary/5' : ''
                             }`}
                           >
-                            <td className="px-3 py-3">
+                            <td className="px-3 py-2.5">
                               <input
                                 type="checkbox"
                                 aria-label={`Select ${row.targetText} for Ads Workspace handoff`}
@@ -1143,25 +1417,25 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                                 }
                               />
                             </td>
-                            <td className="px-3 py-3">
+                            <td className="px-3 py-2.5">
                               <div className="font-semibold text-foreground">{row.targetText}</div>
-                              <div className="mt-1 text-xs text-muted">
+                              <div className="mt-0.5 line-clamp-1 text-xs text-muted">
                                 {row.typeLabel ?? 'Target'} · {row.matchType ?? '—'} · {row.targetId}
                               </div>
-                              <div className="mt-1 text-xs text-muted">
+                              <div className="mt-0.5 line-clamp-1 text-xs text-muted">
                                 {row.campaignName ?? row.campaignId} / {row.adGroupName ?? row.adGroupId}
                               </div>
                             </td>
-                            <td className="px-3 py-3 text-foreground">
+                            <td className="px-3 py-2.5 text-foreground">
                               {buildPriorityLabel(row.queue.priority, row.queue.primaryActionType)}
                             </td>
-                            <td className="px-3 py-3 text-foreground">
+                            <td className="px-3 py-2.5 text-foreground">
                               <div>{formatNumber(row.queue.recommendationCount)}</div>
                               <div className="mt-1 text-xs text-muted">
                                 {labelize(row.queue.primaryActionType)}
                               </div>
                             </td>
-                            <td className="px-3 py-3">
+                            <td className="px-3 py-2.5">
                               <div className="text-foreground">
                                 {formatNumber(workspaceSupportedActions.length)}
                               </div>
@@ -1171,37 +1445,37 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                                   : 'Ready for handoff'}
                               </div>
                             </td>
-                            <td className="px-3 py-3">
+                            <td className="px-3 py-2.5">
                               <RolePill
                                 value={row.role.currentRole.value}
                                 label={row.role.currentRole.label}
                               />
                             </td>
-                            <td className="px-3 py-3">
+                            <td className="px-3 py-2.5">
                               <StatePill
                                 kind="efficiency"
                                 value={row.state.efficiency.value}
                                 label={row.state.efficiency.label}
                               />
                             </td>
-                            <td className="px-3 py-3">
+                            <td className="px-3 py-2.5">
                               <StatePill
                                 kind="confidence"
                                 value={row.state.confidence.value}
                                 label={row.state.confidence.label}
                               />
                             </td>
-                            <td className="px-3 py-3">
+                            <td className="px-3 py-2.5">
                               <StatePill
                                 kind="importance"
                                 value={row.state.importance.value}
                                 label={row.state.importance.label}
                               />
                             </td>
-                            <td className="px-3 py-3 text-foreground">
+                            <td className="px-3 py-2.5 text-foreground">
                               {labelize(row.queue.spendDirection)}
                             </td>
-                            <td className="px-3 py-3">
+                            <td className="px-3 py-2.5">
                               {exceptionSignals.length > 0 ? (
                                 <div className="space-y-2">
                                   <div className="text-foreground">
@@ -1220,7 +1494,7 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                                 <div className="text-xs text-muted">No exceptions</div>
                               )}
                             </td>
-                            <td className="px-3 py-3">
+                            <td className="px-3 py-2.5">
                               <div className="flex max-w-[320px] flex-wrap gap-1.5">
                                 {row.queue.reasonCodeBadges.length > 0 ? (
                                   row.queue.reasonCodeBadges.map((code) => (
@@ -1231,27 +1505,67 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                                 )}
                               </div>
                             </td>
-                            <td className="px-3 py-3">
-                              <div className="text-xs text-muted">
-                                Ready {coverageSummary.ready} · Partial {coverageSummary.partial} ·
-                                Missing {coverageSummary.missing}
+                            <td className="px-3 py-2.5">
+                              <div className="max-w-[260px] text-[11px] leading-tight">
+                                <span className={`font-semibold ${coverageSummaryClass('ready')}`}>
+                                  Ready {coverageSummary.ready}
+                                </span>
+                                <span className="px-1 text-muted">·</span>
+                                <span className={`font-semibold ${coverageSummaryClass('partial')}`}>
+                                  Partial {coverageSummary.partial}
+                                </span>
+                                <span className="px-1 text-muted">·</span>
+                                <span
+                                  className={`font-semibold ${coverageSummaryClass(
+                                    'missing',
+                                    coverageSummary.missingSuspicious > 0 ? 'alert' : 'normal'
+                                  )}`}
+                                >
+                                  Missing {coverageSummary.missing}
+                                </span>
                               </div>
-                              <div className="mt-2 flex max-w-[260px] flex-wrap gap-1.5">
-                                {getCoverageItems(row).map((item) => (
-                                  <CoverageBadge
-                                    key={`${row.targetSnapshotId}:${item.label}`}
-                                    label={item.label}
-                                    status={item.status}
-                                  />
-                                ))}
-                              </div>
-                              {coverageNotes.length > 0 ? (
-                                <div className="mt-2 text-xs text-amber-700">
-                                  {coverageNotes.length} explicit coverage note(s)
+                              <details className="relative mt-1">
+                                <summary className="cursor-pointer list-none text-[11px] font-semibold leading-tight text-primary">
+                                  Review coverage buckets
+                                </summary>
+                                <div className="absolute left-0 z-20 mt-2 w-[280px] rounded-xl border border-border bg-surface p-3 text-xs text-foreground shadow-lg">
+                                  <div className="font-semibold">Coverage detail</div>
+                                  <div className="mt-2 space-y-2 text-muted">
+                                    <div>
+                                      <span className="font-semibold text-foreground">Ready:</span>{' '}
+                                      {coverageSummary.buckets.ready.join(', ') || 'None'}
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-foreground">Partial:</span>{' '}
+                                      {coverageSummary.buckets.partial.join(', ') || 'None'}
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-foreground">
+                                        Missing (normal):
+                                      </span>{' '}
+                                      {coverageSummary.buckets.expectedUnavailable.join(', ') ||
+                                        'None'}
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-foreground">
+                                        Missing (suspicious):
+                                      </span>{' '}
+                                      {coverageSummary.buckets.trueMissing.join(', ') || 'None'}
+                                    </div>
+                                  </div>
+                                </div>
+                              </details>
+                              {criticalWarnings.length > 0 ? (
+                                <div className="mt-1 text-[11px] leading-tight text-rose-700">
+                                  {criticalWarnings.length} critical warning(s)
+                                </div>
+                              ) : rowSpecificExceptions.length > 0 ? (
+                                <div className="mt-1 text-[11px] leading-tight text-amber-700">
+                                  {rowSpecificExceptions.length} row-specific exception(s)
                                 </div>
                               ) : null}
                             </td>
-                            <td className="px-3 py-3">
+                            <td className="px-3 py-2.5">
                               <button
                                 type="button"
                                 className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground transition hover:border-primary/40 hover:text-primary"
@@ -1270,22 +1584,22 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                     </tbody>
                   </table>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </section>
         </div>
 
         <aside
           id={activeRow ? `target-detail-drawer-${activeRow.targetSnapshotId}` : undefined}
-          className="xl:sticky xl:top-4 xl:self-start"
+          className="xl:sticky xl:top-4 xl:self-start xl:h-[calc(100vh-3rem)]"
         >
-          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm xl:flex xl:h-full xl:flex-col xl:overflow-hidden">
             <div className="text-xs uppercase tracking-[0.3em] text-muted">
               Target detail drawer
             </div>
             {activeRow ? (
-              <div className="mt-3 space-y-4">
-                <div className="border-b border-border pb-4">
+              <div className="mt-3 space-y-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain">
+                <div className="border-b border-border pb-4 xl:sticky xl:top-0 xl:z-10 xl:bg-surface/95 xl:pt-1">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <div className="text-lg font-semibold text-foreground">{activeRow.targetText}</div>
@@ -1344,12 +1658,23 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                   </div>
                 </div>
 
-                {coverageGapText(activeRow).length > 0 ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    <div className="font-semibold">Coverage notes and null states</div>
+                {activeCriticalWarnings.length > 0 ? (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                    <div className="font-semibold">Critical warnings</div>
                     <ul className="mt-2 space-y-1">
-                      {coverageGapText(activeRow).map((note) => (
-                        <li key={`${activeRow.targetSnapshotId}:${note}`}>{note}</li>
+                      {activeCriticalWarnings.map((note) => (
+                        <li key={`${activeRow.targetSnapshotId}:critical:${note}`}>{note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {activeRowSpecificExceptions.length > 0 ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <div className="font-semibold">Row-specific exceptions</div>
+                    <ul className="mt-2 space-y-1">
+                      {activeRowSpecificExceptions.map((note) => (
+                        <li key={`${activeRow.targetSnapshotId}:exception:${note}`}>{note}</li>
                       ))}
                     </ul>
                   </div>
@@ -1713,26 +2038,41 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                 </DetailSection>
 
                 <DetailSection label="Raw metrics">
-                  <DetailGrid
-                    items={[
-                      { label: 'Impressions', value: formatNumber(activeRow.raw.impressions) },
-                      { label: 'Clicks', value: formatNumber(activeRow.raw.clicks) },
-                      { label: 'Spend', value: formatCurrency(activeRow.raw.spend) },
-                      { label: 'Orders', value: formatNumber(activeRow.raw.orders) },
-                      { label: 'Sales', value: formatCurrency(activeRow.raw.sales) },
-                      { label: 'CPC', value: formatCurrency(activeRow.raw.cpc) },
-                      { label: 'CTR', value: formatPercent(activeRow.raw.ctr) },
-                      { label: 'CVR', value: formatPercent(activeRow.raw.cvr) },
-                      { label: 'ACoS', value: formatPercent(activeRow.raw.acos) },
-                      {
-                        label: 'ROAS',
-                        value: activeRow.raw.roas === null ? '—' : activeRow.raw.roas.toFixed(2),
-                      },
-                      { label: 'TOS IS', value: formatPercent(activeRow.raw.tosIs) },
-                      { label: 'STIS', value: formatPercent(activeRow.raw.stis) },
-                      { label: 'STIR', value: formatNumber(activeRow.raw.stir) },
-                    ]}
-                  />
+                  <div className="space-y-3">
+                    <DetailGrid
+                      items={[
+                        { label: 'Impressions', value: formatNumber(activeRow.raw.impressions) },
+                        { label: 'Clicks', value: formatNumber(activeRow.raw.clicks) },
+                        { label: 'Spend', value: formatCurrency(activeRow.raw.spend) },
+                        { label: 'Orders', value: formatNumber(activeRow.raw.orders) },
+                        { label: 'Sales', value: formatCurrency(activeRow.raw.sales) },
+                        { label: 'CPC', value: formatCurrency(activeRow.raw.cpc) },
+                        { label: 'CTR', value: formatPercent(activeRow.raw.ctr) },
+                        { label: 'CVR', value: formatPercent(activeRow.raw.cvr) },
+                        { label: 'ACoS', value: formatPercent(activeRow.raw.acos) },
+                        {
+                          label: 'ROAS',
+                          value: activeRow.raw.roas === null ? '—' : activeRow.raw.roas.toFixed(2),
+                        },
+                        {
+                          label: 'Latest observed TOS IS',
+                          value: formatPercent(activeRow.raw.tosIs),
+                        },
+                        {
+                          label: 'Latest observed STIS',
+                          value: formatPercent(activeRow.raw.stis),
+                        },
+                        {
+                          label: 'Latest observed STIR',
+                          value: formatNumber(activeRow.raw.stir),
+                        },
+                      ]}
+                    />
+                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-muted">
+                      {activeRow.nonAdditiveDiagnostics.note ??
+                        'Non-additive diagnostics stay point-in-time only. Use the latest observed value and explicit trend cues instead of treating them like additive totals.'}
+                    </div>
+                  </div>
                 </DetailSection>
 
                 <DetailSection label="Derived metrics">
@@ -1770,11 +2110,11 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                             : activeRow.derived.impressionVelocity.toFixed(1),
                       },
                       {
-                        label: 'Organic leverage',
+                        label: 'Organic context signal',
                         value:
-                          activeRow.derived.organicLeverageProxy === null
+                          activeRow.derived.organicContextSignal === null
                             ? '—'
-                            : activeRow.derived.organicLeverageProxy.toFixed(3),
+                            : labelize(activeRow.derived.organicContextSignal),
                       },
                     ]}
                   />

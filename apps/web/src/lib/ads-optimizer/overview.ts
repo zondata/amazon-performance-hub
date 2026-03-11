@@ -139,7 +139,7 @@ const stateLabel = (value: AdsOptimizerProductState) => {
   return value.charAt(0).toUpperCase() + value.slice(1);
 };
 
-const buildHeroQueryTrend = (rows: ProductRankingRow[]): HeroQueryTrend => {
+export const buildHeroQueryTrend = (rows: ProductRankingRow[]): HeroQueryTrend => {
   if (rows.length === 0) {
     return {
       status: 'missing',

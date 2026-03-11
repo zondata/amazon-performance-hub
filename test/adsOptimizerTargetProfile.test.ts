@@ -318,9 +318,239 @@ describe('ads optimizer phase 5 target profile engine', () => {
     expect(result.rows[0]?.snapshotPayload.derived_metrics.max_cpc_support_gap).toBeCloseTo(1.325);
     expect(result.rows[0]?.snapshotPayload.derived_metrics.click_velocity).toBe(8);
     expect(result.rows[0]?.snapshotPayload.derived_metrics.impression_velocity).toBe(80);
+    expect(result.rows[0]?.snapshotPayload.non_additive_diagnostics).toMatchObject({
+      latest_observed_tos_is: 0.34,
+      latest_observed_tos_is_observed_date: '2026-03-03',
+      latest_observed_stis: 0.22,
+      latest_observed_stis_observed_date: '2026-03-03',
+      latest_observed_stir: 7,
+      latest_observed_stir_observed_date: '2026-03-03',
+      representative_search_term: 'blue widget',
+    });
+    expect(result.rows[0]?.snapshotPayload.non_additive_diagnostics).not.toHaveProperty(
+      'top_of_search_impression_share_latest'
+    );
+    expect(result.rows[0]?.snapshotPayload.derived_metrics.organic_leverage_proxy).toBeNull();
+    expect(result.rows[0]?.snapshotPayload.derived_metrics.organic_context_signal).toBe(
+      'same_text_visibility_context'
+    );
     expect(result.rows[0]?.snapshotPayload.execution_context.snapshot_date).toBe('2026-03-10');
     expect(result.rows[0]?.snapshotPayload.execution_context.target.current_bid).toBe(1.4);
     expect(result.rows[0]?.snapshotPayload.execution_context.placement.current_percentage).toBe(18);
+  });
+
+  it('marks zero-click search-term diagnostics as expected-unavailable instead of true missing', async () => {
+    state.advertisedRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        advertised_asin_norm: 'B001TEST',
+        impressions: 40,
+        clicks: 0,
+        spend: 0,
+        sales: 0,
+        orders: 0,
+        units: 0,
+      },
+    ];
+    state.targetingRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        exported_at: '2026-03-10T00:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        target_id: 'target-1',
+        portfolio_name_raw: 'Portfolio',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: 'Ad Group 1',
+        targeting_raw: 'blue widget',
+        targeting_norm: 'blue widget',
+        match_type_norm: 'exact',
+        impressions: 40,
+        clicks: 0,
+        spend: 0,
+        sales: 0,
+        orders: 0,
+        units: 0,
+        top_of_search_impression_share: null,
+      },
+    ];
+    state.stisRows = [];
+    state.placementRows = [];
+
+    const result = await loadAdsOptimizerTargetProfiles({
+      asin: 'B001TEST',
+      start: '2026-03-01',
+      end: '2026-03-10',
+    });
+
+    expect(result.rows).toHaveLength(1);
+    const payload = result.rows[0]?.snapshotPayload;
+    expect(payload?.coverage.statuses.search_terms).toBe('expected_unavailable');
+    expect(payload?.coverage.statuses.stis).toBe('expected_unavailable');
+    expect(payload?.coverage.statuses.stir).toBe('expected_unavailable');
+    expect(payload?.coverage.notes).toContain(
+      'Zero-click target: missing search-term diagnostics are expected availability behavior for this window.'
+    );
+    expect(payload?.coverage.critical_warnings).not.toContain(
+      'No search-term diagnostics were found for this target in the selected window.'
+    );
+  });
+
+  it('selects latest observed non-additive diagnostics by date and exported_at without averaging the window', async () => {
+    state.advertisedRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        advertised_asin_norm: 'B001TEST',
+        impressions: 100,
+        clicks: 10,
+        spend: 25,
+        sales: 120,
+        orders: 3,
+        units: 3,
+      },
+    ];
+    state.targetingRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-02',
+        exported_at: '2026-03-10T00:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        target_id: 'target-1',
+        portfolio_name_raw: 'Portfolio',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: 'Ad Group 1',
+        targeting_raw: 'blue widget',
+        targeting_norm: 'blue widget',
+        match_type_norm: 'exact',
+        impressions: 20,
+        clicks: 2,
+        spend: 4,
+        sales: 12,
+        orders: 0,
+        units: 0,
+        top_of_search_impression_share: 0.18,
+      },
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        exported_at: '2026-03-09T00:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        target_id: 'target-1',
+        portfolio_name_raw: 'Portfolio',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: 'Ad Group 1',
+        targeting_raw: 'blue widget',
+        targeting_norm: 'blue widget',
+        match_type_norm: 'exact',
+        impressions: 30,
+        clicks: 3,
+        spend: 6,
+        sales: 18,
+        orders: 1,
+        units: 1,
+        top_of_search_impression_share: 0.24,
+      },
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        exported_at: '2026-03-10T12:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        target_id: 'target-1',
+        portfolio_name_raw: 'Portfolio',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: 'Ad Group 1',
+        targeting_raw: 'blue widget',
+        targeting_norm: 'blue widget',
+        match_type_norm: 'exact',
+        impressions: 30,
+        clicks: 3,
+        spend: 6,
+        sales: 18,
+        orders: 1,
+        units: 1,
+        top_of_search_impression_share: 0.27,
+      },
+    ];
+    state.stisRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        exported_at: '2026-03-09T00:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        target_id: 'target-1',
+        target_key: 'target-1',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: 'Ad Group 1',
+        targeting_raw: 'blue widget',
+        targeting_norm: 'blue widget',
+        match_type_norm: 'exact',
+        customer_search_term_raw: 'blue widget',
+        customer_search_term_norm: 'blue widget',
+        search_term_impression_share: 0.19,
+        search_term_impression_rank: 8,
+        impressions: 12,
+        clicks: 2,
+        spend: 4,
+        sales: 10,
+        orders: 0,
+        units: 0,
+      },
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        exported_at: '2026-03-10T12:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        target_id: 'target-1',
+        target_key: 'target-1',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: 'Ad Group 1',
+        targeting_raw: 'blue widget',
+        targeting_norm: 'blue widget',
+        match_type_norm: 'exact',
+        customer_search_term_raw: 'blue widget',
+        customer_search_term_norm: 'blue widget',
+        search_term_impression_share: 0.23,
+        search_term_impression_rank: 6,
+        impressions: 20,
+        clicks: 3,
+        spend: 6,
+        sales: 12,
+        orders: 1,
+        units: 1,
+      },
+    ];
+    state.placementRows = [];
+
+    const result = await loadAdsOptimizerTargetProfiles({
+      asin: 'B001TEST',
+      start: '2026-03-01',
+      end: '2026-03-10',
+    });
+
+    const diagnostics = result.rows[0]?.snapshotPayload.non_additive_diagnostics as Record<
+      string,
+      unknown
+    >;
+    expect(diagnostics.latest_observed_tos_is).toBe(0.27);
+    expect(diagnostics.latest_observed_tos_is_observed_date).toBe('2026-03-03');
+    expect((diagnostics.tos_is_trend as Record<string, unknown>).previous_value).toBe(0.24);
+    expect(diagnostics.latest_observed_stis).toBe(0.23);
+    expect(diagnostics.latest_observed_stir).toBe(6);
+    expect((diagnostics.stis_trend as Record<string, unknown>).delta).toBeCloseTo(0.04);
+    expect((diagnostics.stir_trend as Record<string, unknown>).direction).toBe('down');
+    expect(diagnostics.latest_observed_stis).not.toBeCloseTo((0.19 + 0.23) / 2);
   });
 
   it('maps persisted phase 5 target snapshots into review rows', () => {
@@ -355,9 +585,34 @@ describe('ads optimizer phase 5 target profile engine', () => {
           roas: 4.5,
         },
         non_additive_diagnostics: {
-          top_of_search_impression_share_latest: 0.34,
-          representative_stis_latest: 0.22,
-          representative_stir_latest: 7,
+          latest_observed_tos_is: 0.34,
+          latest_observed_tos_is_observed_date: '2026-03-03',
+          tos_is_trend: {
+            previous_value: 0.3,
+            delta: 0.04,
+            direction: 'up',
+            observed_days: 2,
+            latest_observed_date: '2026-03-03',
+          },
+          latest_observed_stis: 0.22,
+          latest_observed_stis_observed_date: '2026-03-03',
+          stis_trend: {
+            previous_value: 0.18,
+            delta: 0.04,
+            direction: 'up',
+            observed_days: 2,
+            latest_observed_date: '2026-03-03',
+          },
+          latest_observed_stir: 7,
+          latest_observed_stir_observed_date: '2026-03-03',
+          stir_trend: {
+            previous_value: 9,
+            delta: -2,
+            direction: 'down',
+            observed_days: 2,
+            latest_observed_date: '2026-03-03',
+          },
+          representative_search_term: 'blue widget',
         },
         demand_proxies: {
           search_term_count: 1,
@@ -403,7 +658,8 @@ describe('ads optimizer phase 5 target profile engine', () => {
           profit_dollars: 10.6,
           click_velocity: 8,
           impression_velocity: 80,
-          organic_leverage_proxy: 0.031,
+          organic_leverage_proxy: null,
+          organic_context_signal: 'same_text_visibility_context',
         },
         coverage: {
           observed_start: '2026-03-03',
@@ -418,6 +674,7 @@ describe('ads optimizer phase 5 target profile engine', () => {
             break_even_inputs: 'ready',
           },
           notes: ['Coverage explicit'],
+          critical_warnings: [],
         },
         state_engine: {
           engine_version: 'phase6_v1',
@@ -506,7 +763,11 @@ describe('ads optimizer phase 5 target profile engine', () => {
     expect(row.targetText).toBe('blue widget');
     expect(row.raw.stis).toBe(0.22);
     expect(row.derived.profitDollars).toBe(10.6);
+    expect(row.nonAdditiveDiagnostics.tosIs.latestObservedDate).toBe('2026-03-03');
+    expect(row.nonAdditiveDiagnostics.stis.previousValue).toBe(0.18);
+    expect(row.nonAdditiveDiagnostics.stir.direction).toBe('down');
     expect(row.coverage.statuses.breakEvenInputs).toBe('ready');
+    expect(row.derived.organicContextSignal).toBe('same_text_visibility_context');
     expect(row.searchTermDiagnostics.topTerms).toHaveLength(1);
     expect(row.state.efficiency.value).toBe('profitable');
     expect(row.state.confidence.value).toBe('confirmed');

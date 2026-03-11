@@ -62,6 +62,35 @@ const makeRow = (overrides: Partial<AdsOptimizerTargetReviewRow> = {}) =>
       clickVelocity: 10,
       impressionVelocity: 100,
       organicLeverageProxy: 0.25,
+      organicContextSignal: 'same_text_visibility_context',
+    },
+    nonAdditiveDiagnostics: {
+      note: 'Non-additive diagnostics stay point-in-time only.',
+      representativeSearchTerm: 'blue widget',
+      tosIs: {
+        latestValue: 0.3,
+        previousValue: 0.27,
+        delta: 0.03,
+        direction: 'up',
+        observedDays: 2,
+        latestObservedDate: '2026-03-10',
+      },
+      stis: {
+        latestValue: 0.2,
+        previousValue: 0.18,
+        delta: 0.02,
+        direction: 'up',
+        observedDays: 2,
+        latestObservedDate: '2026-03-10',
+      },
+      stir: {
+        latestValue: 9,
+        previousValue: 11,
+        delta: -2,
+        direction: 'down',
+        observedDays: 2,
+        latestObservedDate: '2026-03-10',
+      },
     },
     demandProxies: {
       searchTermCount: 2,
@@ -100,6 +129,7 @@ const makeRow = (overrides: Partial<AdsOptimizerTargetReviewRow> = {}) =>
         breakEvenInputs: 'ready',
       },
       notes: ['Coverage note.'],
+      criticalWarnings: [],
     },
     state: {
       efficiency: {

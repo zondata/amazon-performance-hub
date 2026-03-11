@@ -29,6 +29,7 @@ vi.mock('../apps/web/src/lib/sqp/getProductSqpWeekly', () => ({
 }));
 
 import {
+  buildHeroQueryTrend,
   classifyAdsOptimizerProductState,
   recommendAdsOptimizerObjective,
 } from '../apps/web/src/lib/ads-optimizer/overview';
@@ -98,5 +99,36 @@ describe('ads optimizer phase 3 overview logic', () => {
     });
 
     expect(result.value).toBe('Rank Defense');
+  });
+
+  it('builds ranking trend from first and latest observed ranks without averaging the window', () => {
+    const trend = buildHeroQueryTrend([
+      {
+        observed_date: '2026-03-01',
+        keyword_norm: 'blue widgets',
+        keyword_raw: 'blue widgets',
+        search_volume: 4200,
+        organic_rank_value: 21,
+      },
+      {
+        observed_date: '2026-03-02',
+        keyword_norm: 'blue widgets',
+        keyword_raw: 'blue widgets',
+        search_volume: 4200,
+        organic_rank_value: 12,
+      },
+      {
+        observed_date: '2026-03-10',
+        keyword_norm: 'blue widgets',
+        keyword_raw: 'blue widgets',
+        search_volume: 4200,
+        organic_rank_value: 7,
+      },
+    ] as any);
+
+    expect(trend.baselineOrganicRank).toBe(21);
+    expect(trend.latestOrganicRank).toBe(7);
+    expect(trend.rankDelta).toBe(14);
+    expect(trend.detail).toContain('from rank 21 to 7');
   });
 });

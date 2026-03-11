@@ -58,6 +58,10 @@ This optimizer is a **new recommendation system**, not a replacement for the cur
    - Placement metrics remain campaign-level context.
    - Do not flatten campaign placement facts into target-level facts.
    - STIS / STIR / TOS IS remain non-additive diagnostics and must not be silently averaged.
+   - Ranking follows the same rule: never average, smooth, or synthesize rank into a raw window metric.
+   - If cross-day summary context is needed for STIS / STIR / TOS IS / ranking, expose it only as explicit trend metadata (`latest`, `previous`, `delta`, `direction`, `observed_days`, `latest_observed_date`).
+   - Non-additive diagnostics may inform UI context and reason codes, but they must not silently change default V1 score math.
+   - Zero-click targets can legitimately lack STIS / STIR / search-term diagnostics; treat that as expected availability behavior unless other evidence makes it suspicious.
 
 9. **Use the current repo patterns**
    - Reuse semantic theme tokens.

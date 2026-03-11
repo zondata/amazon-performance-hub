@@ -19,6 +19,11 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getAdsOptimizerOverviewData, type AdsOptimizerOverviewData } from './overview';
 import type { JsonObject } from './runtimeTypes';
 import {
+  normalizeAdsOptimizerCoverageStatus,
+  type AdsOptimizerTargetCoverageStatus,
+  type AdsOptimizerTargetCoverageStoredStatus,
+} from './coverage';
+import {
   readAdsOptimizerTargetRunRole,
   type AdsOptimizerTargetRole,
   type AdsOptimizerTargetRoleRunState,
@@ -32,8 +37,6 @@ import {
 } from './state';
 
 const TARGET_SOURCE_SCOPE = 'asin_via_sp_advertised_product_membership';
-const TARGET_COVERAGE_NOTE =
-  'Target snapshots are scoped to the selected ASIN through SP advertised-product campaign/ad group membership. SP targeting facts are not ASIN-attributed, so non-additive diagnostics are stored as representative latest values only.';
 const PLACEMENT_CONTEXT_NOTE =
   'Placement context remains campaign-level context only. It is not flattened into target-owned facts.';
 const SEARCH_TERM_DIAGNOSTICS_NOTE =
@@ -58,7 +61,20 @@ type TargetCoverageWindow = {
   latestExportedAt: string | null;
 };
 
-type AdsOptimizerTargetCoverageStatus = 'ready' | 'partial' | 'missing';
+type NonAdditiveObservation = {
+  value: number;
+  observedDate: string | null;
+  exportedAt: string | null;
+};
+
+type NonAdditiveTrend = {
+  latestValue: number | null;
+  previousValue: number | null;
+  delta: number | null;
+  direction: 'up' | 'down' | 'flat' | null;
+  observedDays: number;
+  latestObservedDate: string | null;
+};
 type CurrentSnapshotData = Awaited<ReturnType<typeof fetchCurrentSpData>>;
 
 export type AdsOptimizerTargetProfileRow = {
@@ -113,6 +129,14 @@ export type AdsOptimizerTargetProfileSnapshotView = {
     clickVelocity: number | null;
     impressionVelocity: number | null;
     organicLeverageProxy: number | null;
+    organicContextSignal: string | null;
+  };
+  nonAdditiveDiagnostics: {
+    note: string | null;
+    representativeSearchTerm: string | null;
+    tosIs: NonAdditiveTrend;
+    stis: NonAdditiveTrend;
+    stir: NonAdditiveTrend;
   };
   demandProxies: {
     searchTermCount: number;
@@ -161,6 +185,7 @@ export type AdsOptimizerTargetProfileSnapshotView = {
       breakEvenInputs: AdsOptimizerTargetCoverageStatus;
     };
     notes: string[];
+    criticalWarnings: string[];
   };
   state: {
     efficiency: {
@@ -385,12 +410,99 @@ const compareRepresentativeSearchTerm = (
   return left.search_term.localeCompare(right.search_term);
 };
 
-const pickCoverageStatus = (
-  hasValue: boolean,
-  fallbackPartial = false
-): AdsOptimizerTargetCoverageStatus => {
-  if (hasValue) return 'ready';
-  return fallbackPartial ? 'partial' : 'missing';
+const pickCoverageStatus = (args: {
+  hasValue: boolean;
+  fallbackPartial?: boolean;
+  expectedUnavailable?: boolean;
+}): AdsOptimizerTargetCoverageStatus => {
+  if (args.hasValue) return 'ready';
+  if (args.expectedUnavailable) return 'expected_unavailable';
+  return args.fallbackPartial ? 'partial' : 'true_missing';
+};
+
+const compareObservation = (left: NonAdditiveObservation, right: NonAdditiveObservation) => {
+  const dateDiff = String(right.observedDate ?? '').localeCompare(String(left.observedDate ?? ''));
+  if (dateDiff !== 0) return dateDiff;
+  return String(right.exportedAt ?? '').localeCompare(String(left.exportedAt ?? ''));
+};
+
+const buildNonAdditiveTrend = (
+  observations: NonAdditiveObservation[],
+  fallbackLatestValue: number | null
+): NonAdditiveTrend => {
+  const sorted = [...observations].sort(compareObservation);
+  const latest = sorted[0] ?? null;
+  const previous = sorted[1] ?? null;
+  const latestValue = latest?.value ?? fallbackLatestValue ?? null;
+  const previousValue = previous?.value ?? null;
+  const delta =
+    latestValue !== null && previousValue !== null ? latestValue - previousValue : null;
+
+  return {
+    latestValue,
+    previousValue,
+    delta,
+    direction: delta === null ? null : delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat',
+    observedDays: new Set(
+      observations
+        .map((entry) => entry.observedDate)
+        .filter((entry): entry is string => Boolean(entry))
+    ).size,
+    latestObservedDate: latest?.observedDate ?? null,
+  };
+};
+
+const buildTargetTosTrendById = (rows: SpTargetFactRow[]) => {
+  const byTarget = new Map<string, NonAdditiveObservation[]>();
+
+  rows.forEach((row) => {
+    const targetId = trimString(row.target_id);
+    const value = Number(row.top_of_search_impression_share);
+    if (!targetId || !Number.isFinite(value)) return;
+    const observations = byTarget.get(targetId) ?? [];
+    observations.push({
+      value,
+      observedDate: trimString(row.date),
+      exportedAt: trimString(row.exported_at),
+    });
+    byTarget.set(targetId, observations);
+  });
+
+  return byTarget;
+};
+
+const buildSearchTermDiagnosticTrendsByTarget = (rows: SpSearchTermFactRow[]) => {
+  const byTarget = new Map<
+    string,
+    Map<string, { stis: NonAdditiveObservation[]; stir: NonAdditiveObservation[] }>
+  >();
+
+  rows.forEach((row) => {
+    const targetId = trimString(row.target_id);
+    const searchTermNorm = normalizeIdentityToken(
+      row.customer_search_term_norm ?? row.customer_search_term_raw
+    );
+    if (!targetId || !searchTermNorm) return;
+
+    const targetMap =
+      byTarget.get(targetId) ??
+      new Map<string, { stis: NonAdditiveObservation[]; stir: NonAdditiveObservation[] }>();
+    const bucket = targetMap.get(searchTermNorm) ?? { stis: [], stir: [] };
+    const observedDate = trimString(row.date);
+    const exportedAt = trimString(row.exported_at);
+    const stis = Number(row.search_term_impression_share);
+    if (Number.isFinite(stis)) {
+      bucket.stis.push({ value: stis, observedDate, exportedAt });
+    }
+    const stir = Number(row.search_term_impression_rank);
+    if (Number.isFinite(stir)) {
+      bucket.stir.push({ value: stir, observedDate, exportedAt });
+    }
+    targetMap.set(searchTermNorm, bucket);
+    byTarget.set(targetId, targetMap);
+  });
+
+  return byTarget;
 };
 
 const buildTargetCoverageById = (rows: SpTargetFactRow[]) => {
@@ -684,6 +796,11 @@ const buildTargetProfileViewRow = (args: {
     productOrders: number;
     productUnits: number;
   } | null;
+  tosTrend: NonAdditiveTrend;
+  representativeSearchTermTrends: {
+    stis: NonAdditiveTrend;
+    stir: NonAdditiveTrend;
+  } | null;
   overview: AdsOptimizerOverviewData;
   currentSnapshotDate: string | null;
   currentSnapshotWarning: string | null;
@@ -710,42 +827,47 @@ const buildTargetProfileViewRow = (args: {
     breakEvenAcos !== null && args.target.acos !== null ? breakEvenAcos - args.target.acos : null;
   const maxCpcSupportGap =
     supportedMaxCpc !== null && args.target.cpc !== null ? supportedMaxCpc - args.target.cpc : null;
-  const organicLeverageProxy =
-    representativeSearchTerm?.stis !== null && representativeSearchTerm?.stis !== undefined
-      ? representativeSearchTerm.stir !== null && representativeSearchTerm.stir > 0
-        ? representativeSearchTerm.stis / representativeSearchTerm.stir
-        : representativeClickShare !== null
-          ? representativeSearchTerm.stis * representativeClickShare
-          : null
-      : args.target.tos_is !== null && representativeClickShare !== null
-        ? args.target.tos_is * representativeClickShare
-        : null;
+  const organicContextSignal =
+    sameTextSearchTerms.length > 0
+      ? 'same_text_visibility_context'
+      : representativeSearchTerm
+        ? 'search_term_visibility_context'
+        : args.tosTrend.latestValue !== null
+          ? 'top_of_search_visibility_context'
+          : null;
+  const zeroClickExpectedUnavailable = args.target.clicks === 0 && searchTermCount === 0;
 
   const coverageNotes = new Set<string>();
-  coverageNotes.add(TARGET_COVERAGE_NOTE);
-  coverageNotes.add(PLACEMENT_CONTEXT_NOTE);
-  coverageNotes.add(SEARCH_TERM_DIAGNOSTICS_NOTE);
+  const criticalWarnings = new Set<string>();
   if (args.target.coverage_note) coverageNotes.add(args.target.coverage_note);
-  if (args.target.tos_is === null) {
-    coverageNotes.add('TOS IS is unavailable for this target in the selected window.');
-  }
-  if (representativeSearchTerm?.stis === null || representativeSearchTerm?.stis === undefined) {
-    coverageNotes.add('STIS is unavailable for the representative search-term diagnostic.');
-  }
-  if (representativeSearchTerm?.stir === null || representativeSearchTerm?.stir === undefined) {
-    coverageNotes.add('STIR is unavailable for the representative search-term diagnostic.');
+  if (args.tosTrend.latestValue === null) {
+    criticalWarnings.add('Latest observed TOS IS is unavailable for this target in the selected window.');
   }
   if (!args.target.placement_context) {
-    coverageNotes.add('Top-of-search placement context is unavailable for this target campaign.');
+    criticalWarnings.add('Top-of-search placement context is unavailable for this target campaign.');
   }
-  if (searchTermCount === 0) {
-    coverageNotes.add('No search-term diagnostics were found for this target in the selected window.');
+  if (zeroClickExpectedUnavailable) {
+    coverageNotes.add(
+      'Zero-click target: missing search-term diagnostics are expected availability behavior for this window.'
+    );
+  } else if (searchTermCount === 0) {
+    criticalWarnings.add(
+      'No search-term diagnostics were found for this target in the selected window.'
+    );
+  }
+  if (args.representativeSearchTermTrends?.stis.latestValue === null && searchTermCount > 0) {
+    criticalWarnings.add('Latest observed STIS is unavailable for the representative search-term diagnostic.');
+  }
+  if (args.representativeSearchTermTrends?.stir.latestValue === null && searchTermCount > 0) {
+    criticalWarnings.add('Latest observed STIR is unavailable for the representative search-term diagnostic.');
   }
   if (breakEvenAcos === null) {
-    coverageNotes.add('Break-even-derived target metrics are unavailable because product economics are missing break-even ACoS.');
+    criticalWarnings.add(
+      'Break-even-derived target metrics are unavailable because product economics are missing break-even ACoS.'
+    );
   }
   if (args.currentSnapshotWarning) {
-    coverageNotes.add(args.currentSnapshotWarning);
+    criticalWarnings.add(args.currentSnapshotWarning);
   }
 
   return {
@@ -754,7 +876,7 @@ const buildTargetProfileViewRow = (args: {
     adGroupId: args.target.ad_group_id ?? '',
     targetId: args.target.target_id,
     sourceScope: TARGET_SOURCE_SCOPE,
-    coverageNote: [...coverageNotes].join(' '),
+    coverageNote: [...coverageNotes, ...criticalWarnings].join(' '),
     snapshotPayload: {
       phase: 5,
       target_profile_version: TARGET_PROFILE_VERSION,
@@ -801,12 +923,44 @@ const buildTargetProfileViewRow = (args: {
         roas: args.target.roas,
       },
       non_additive_diagnostics: {
-        top_of_search_impression_share_latest: args.target.tos_is,
-        representative_stis_latest: representativeSearchTerm?.stis ?? null,
-        representative_stir_latest: representativeSearchTerm?.stir ?? null,
+        latest_observed_tos_is: args.tosTrend.latestValue,
+        latest_observed_tos_is_observed_date: args.tosTrend.latestObservedDate,
+        tos_is_trend: {
+          previous_value: args.tosTrend.previousValue,
+          delta: args.tosTrend.delta,
+          direction: args.tosTrend.direction,
+          observed_days: args.tosTrend.observedDays,
+          latest_observed_date: args.tosTrend.latestObservedDate,
+        },
+        latest_observed_stis: args.representativeSearchTermTrends?.stis.latestValue ?? null,
+        latest_observed_stis_observed_date:
+          args.representativeSearchTermTrends?.stis.latestObservedDate ?? null,
+        stis_trend: args.representativeSearchTermTrends
+          ? {
+              previous_value: args.representativeSearchTermTrends.stis.previousValue,
+              delta: args.representativeSearchTermTrends.stis.delta,
+              direction: args.representativeSearchTermTrends.stis.direction,
+              observed_days: args.representativeSearchTermTrends.stis.observedDays,
+              latest_observed_date:
+                args.representativeSearchTermTrends.stis.latestObservedDate,
+            }
+          : null,
+        latest_observed_stir: args.representativeSearchTermTrends?.stir.latestValue ?? null,
+        latest_observed_stir_observed_date:
+          args.representativeSearchTermTrends?.stir.latestObservedDate ?? null,
+        stir_trend: args.representativeSearchTermTrends
+          ? {
+              previous_value: args.representativeSearchTermTrends.stir.previousValue,
+              delta: args.representativeSearchTermTrends.stir.delta,
+              direction: args.representativeSearchTermTrends.stir.direction,
+              observed_days: args.representativeSearchTermTrends.stir.observedDays,
+              latest_observed_date:
+                args.representativeSearchTermTrends.stir.latestObservedDate,
+            }
+          : null,
         representative_search_term: representativeSearchTerm?.search_term ?? null,
         note:
-          'TOS IS, STIS, and STIR are stored as representative diagnostics only and are not averaged across rows.',
+          'TOS IS, STIS, and STIR are stored only as latest observed diagnostics plus explicit trend metadata. They are never averaged or synthesized into window-level raw values.',
       },
       demand_proxies: {
         search_term_count: searchTermCount,
@@ -872,14 +1026,15 @@ const buildTargetProfileViewRow = (args: {
           args.coverageWindow && args.coverageWindow.daysObserved > 0
             ? args.target.impressions / args.coverageWindow.daysObserved
             : null,
-        organic_leverage_proxy: organicLeverageProxy,
+        organic_leverage_proxy: null,
+        organic_context_signal: organicContextSignal,
         formula_notes: {
           contribution_after_ads:
             'Approximated as (target sales * product break-even ACoS) - target spend.',
           max_cpc_support_gap:
             'Approximated as ((target sales * product break-even ACoS) / target clicks) - actual CPC.',
-          organic_leverage_proxy:
-            'Diagnostic proxy based on representative STIS/STIR coverage and click share only.',
+          organic_context_signal:
+            'Qualitative context only. Non-additive diagnostics can inform review notes and reason codes, but not default V1 score math.',
         },
       },
       asin_scope_membership: args.membership
@@ -940,20 +1095,32 @@ const buildTargetProfileViewRow = (args: {
         days_observed: args.coverageWindow?.daysObserved ?? 0,
         exported_at_latest: args.coverageWindow?.latestExportedAt ?? null,
         statuses: {
-          tos_is: pickCoverageStatus(args.target.tos_is !== null),
-          stis: pickCoverageStatus(
-            representativeSearchTerm?.stis !== null && representativeSearchTerm?.stis !== undefined,
-            searchTermCount > 0
-          ),
-          stir: pickCoverageStatus(
-            representativeSearchTerm?.stir !== null && representativeSearchTerm?.stir !== undefined,
-            searchTermCount > 0
-          ),
-          placement_context: pickCoverageStatus(Boolean(args.target.placement_context)),
-          search_terms: pickCoverageStatus(searchTermCount > 0),
-          break_even_inputs: pickCoverageStatus(breakEvenAcos !== null),
+          tos_is: pickCoverageStatus({
+            hasValue: args.tosTrend.latestValue !== null,
+          }),
+          stis: pickCoverageStatus({
+            hasValue: (args.representativeSearchTermTrends?.stis.latestValue ?? null) !== null,
+            fallbackPartial: searchTermCount > 0,
+            expectedUnavailable: zeroClickExpectedUnavailable,
+          }),
+          stir: pickCoverageStatus({
+            hasValue: (args.representativeSearchTermTrends?.stir.latestValue ?? null) !== null,
+            fallbackPartial: searchTermCount > 0,
+            expectedUnavailable: zeroClickExpectedUnavailable,
+          }),
+          placement_context: pickCoverageStatus({
+            hasValue: Boolean(args.target.placement_context),
+          }),
+          search_terms: pickCoverageStatus({
+            hasValue: searchTermCount > 0,
+            expectedUnavailable: zeroClickExpectedUnavailable,
+          }),
+          break_even_inputs: pickCoverageStatus({
+            hasValue: breakEvenAcos !== null,
+          }),
         },
         notes: [...coverageNotes],
+        critical_warnings: [...criticalWarnings],
       },
     },
   };
@@ -989,6 +1156,7 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
   const payload = snapshot.snapshot_payload_json;
   const identity = asJsonObject(payload.identity);
   const totals = asJsonObject(payload.totals);
+  const nonAdditive = asJsonObject(payload.non_additive_diagnostics);
   const derivedMetrics = asJsonObject(payload.derived_metrics);
   const demandProxies = asJsonObject(payload.demand_proxies);
   const placementContext = asJsonObject(payload.placement_context);
@@ -999,8 +1167,32 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
     ? searchTermDiagnostics?.top_terms
     : [];
   const coverageNotesRaw = Array.isArray(coverage?.notes) ? coverage?.notes : [];
+  const criticalWarningsRaw = Array.isArray(coverage?.critical_warnings)
+    ? coverage?.critical_warnings
+    : [];
+  const readNonAdditiveTrend = (key: string, latestKey: string, legacyKey?: string): NonAdditiveTrend => {
+    const trend = asJsonObject(nonAdditive?.[key]);
+    const latestValue =
+      readNestedNumber(nonAdditive, latestKey) ??
+      (legacyKey ? readNestedNumber(nonAdditive, legacyKey) : null);
+    return {
+      latestValue,
+      previousValue: readNestedNumber(trend, 'previous_value'),
+      delta: readNestedNumber(trend, 'delta'),
+      direction:
+        (readNestedString(trend, 'direction') as NonAdditiveTrend['direction'] | null) ?? null,
+      observedDays: numberValue(trend?.observed_days as number | null | undefined),
+      latestObservedDate:
+        readNestedString(trend, 'latest_observed_date') ??
+        readNestedString(nonAdditive, `${latestKey}_observed_date`) ??
+        null,
+    };
+  };
 
   const coverageNotes = coverageNotesRaw.filter((entry): entry is string => typeof entry === 'string');
+  const criticalWarnings = criticalWarningsRaw.filter(
+    (entry): entry is string => typeof entry === 'string'
+  );
   if (coverageNotes.length === 0 && snapshot.coverage_note) {
     coverageNotes.push(snapshot.coverage_note);
   }
@@ -1062,10 +1254,15 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
       acos: readNestedNumber(totals, 'acos'),
       roas: readNestedNumber(totals, 'roas'),
       tosIs:
-        readNestedNumber(asJsonObject(payload.non_additive_diagnostics), 'top_of_search_impression_share_latest') ??
+        readNestedNumber(nonAdditive, 'latest_observed_tos_is') ??
+        readNestedNumber(nonAdditive, 'top_of_search_impression_share_latest') ??
         readNestedNumber(totals, 'tos_is'),
-      stis: readNestedNumber(asJsonObject(payload.non_additive_diagnostics), 'representative_stis_latest'),
-      stir: readNestedNumber(asJsonObject(payload.non_additive_diagnostics), 'representative_stir_latest'),
+      stis:
+        readNestedNumber(nonAdditive, 'latest_observed_stis') ??
+        readNestedNumber(nonAdditive, 'representative_stis_latest'),
+      stir:
+        readNestedNumber(nonAdditive, 'latest_observed_stir') ??
+        readNestedNumber(nonAdditive, 'representative_stir_latest'),
     },
     derived: {
       contributionAfterAds: readNestedNumber(derivedMetrics, 'contribution_after_ads'),
@@ -1076,6 +1273,26 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
       clickVelocity: readNestedNumber(derivedMetrics, 'click_velocity'),
       impressionVelocity: readNestedNumber(derivedMetrics, 'impression_velocity'),
       organicLeverageProxy: readNestedNumber(derivedMetrics, 'organic_leverage_proxy'),
+      organicContextSignal: readNestedString(derivedMetrics, 'organic_context_signal'),
+    },
+    nonAdditiveDiagnostics: {
+      note: readNestedString(nonAdditive, 'note'),
+      representativeSearchTerm: readNestedString(nonAdditive, 'representative_search_term'),
+      tosIs: readNonAdditiveTrend(
+        'tos_is_trend',
+        'latest_observed_tos_is',
+        'top_of_search_impression_share_latest'
+      ),
+      stis: readNonAdditiveTrend(
+        'stis_trend',
+        'latest_observed_stis',
+        'representative_stis_latest'
+      ),
+      stir: readNonAdditiveTrend(
+        'stir_trend',
+        'latest_observed_stir',
+        'representative_stir_latest'
+      ),
     },
     demandProxies: {
       searchTermCount: numberValue(demandProxies?.search_term_count as number | null | undefined),
@@ -1131,30 +1348,33 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
       observedEnd: readNestedString(coverage, 'observed_end'),
       daysObserved: numberValue(coverage?.days_observed as number | null | undefined),
       statuses: {
-        tosIs:
-          (readNestedString(statuses, 'tos_is') as AdsOptimizerTargetCoverageStatus | null) ??
-          'missing',
-        stis:
-          (readNestedString(statuses, 'stis') as AdsOptimizerTargetCoverageStatus | null) ??
-          'missing',
-        stir:
-          (readNestedString(statuses, 'stir') as AdsOptimizerTargetCoverageStatus | null) ??
-          'missing',
-        placementContext:
-          (readNestedString(
+        tosIs: normalizeAdsOptimizerCoverageStatus(
+          readNestedString(statuses, 'tos_is') as AdsOptimizerTargetCoverageStoredStatus | null
+        ),
+        stis: normalizeAdsOptimizerCoverageStatus(
+          readNestedString(statuses, 'stis') as AdsOptimizerTargetCoverageStoredStatus | null
+        ),
+        stir: normalizeAdsOptimizerCoverageStatus(
+          readNestedString(statuses, 'stir') as AdsOptimizerTargetCoverageStoredStatus | null
+        ),
+        placementContext: normalizeAdsOptimizerCoverageStatus(
+          readNestedString(
             statuses,
             'placement_context'
-          ) as AdsOptimizerTargetCoverageStatus | null) ?? 'missing',
-        searchTerms:
-          (readNestedString(statuses, 'search_terms') as AdsOptimizerTargetCoverageStatus | null) ??
-          'missing',
-        breakEvenInputs:
-          (readNestedString(
+          ) as AdsOptimizerTargetCoverageStoredStatus | null
+        ),
+        searchTerms: normalizeAdsOptimizerCoverageStatus(
+          readNestedString(statuses, 'search_terms') as AdsOptimizerTargetCoverageStoredStatus | null
+        ),
+        breakEvenInputs: normalizeAdsOptimizerCoverageStatus(
+          readNestedString(
             statuses,
             'break_even_inputs'
-          ) as AdsOptimizerTargetCoverageStatus | null) ?? 'missing',
+          ) as AdsOptimizerTargetCoverageStoredStatus | null
+        ),
       },
       notes: coverageNotes,
+      criticalWarnings,
     },
     state: {
       efficiency: {
@@ -1403,6 +1623,10 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
 
   const normalizedSearchTermRows = normalizeSearchTermRowsForProfiles(searchTermRows);
   const coverageByTarget = buildTargetCoverageById(normalizedTargetingRows);
+  const tosTrendByTarget = buildTargetTosTrendById(normalizedTargetingRows);
+  const searchTermDiagnosticTrendsByTarget = buildSearchTermDiagnosticTrendsByTarget(
+    normalizedSearchTermRows
+  );
   const rawIdentityByProfileKey = new Map<
     string,
     {
@@ -1471,6 +1695,30 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
             ? membershipByAdGroup.get(rawIdentityByProfileKey.get(target.target_id)?.rawAdGroupId ?? '') ??
               null
             : null,
+        tosTrend: buildNonAdditiveTrend(
+          tosTrendByTarget.get(target.target_id) ?? [],
+          target.tos_is
+        ),
+        representativeSearchTermTrends: getRepresentativeSearchTerm(target.search_terms)?.search_term_norm
+          ? (() => {
+              const representative = getRepresentativeSearchTerm(target.search_terms);
+              if (!representative?.search_term_norm) return null;
+              const representativeBucket = searchTermDiagnosticTrendsByTarget
+                .get(target.target_id)
+                ?.get(representative.search_term_norm);
+              if (!representativeBucket) return null;
+              return {
+                stis: buildNonAdditiveTrend(
+                  representativeBucket.stis,
+                  representative.stis
+                ),
+                stir: buildNonAdditiveTrend(
+                  representativeBucket.stir,
+                  representative.stir
+                ),
+              };
+            })()
+          : null,
         overview: overviewData,
         currentSnapshotDate: currentSnapshotResult.data?.snapshotDate ?? null,
         currentSnapshotWarning: currentSnapshotResult.warning,

@@ -1,6 +1,11 @@
 import type { AdsOptimizerObjective, AdsOptimizerOverviewData, AdsOptimizerProductState } from './overview';
 import type { JsonObject as RuntimeJsonObject } from './runtimeTypes';
 import type { AdsOptimizerRulePackPayload, JsonObject } from './types';
+import {
+  normalizeAdsOptimizerCoverageStatus,
+  rollupAdsOptimizerCoverageStatus,
+  type AdsOptimizerTargetCoverageStoredStatus,
+} from './coverage';
 
 export type AdsOptimizerStateCoverageStatus = 'ready' | 'partial' | 'missing';
 export type AdsOptimizerTargetEfficiencyState =
@@ -48,7 +53,7 @@ export type AdsOptimizerTargetRunState = {
   summaryReasonCodes: string[];
 };
 
-type TargetSnapshotPayloadCoverageStatus = 'ready' | 'partial' | 'missing';
+type TargetSnapshotPayloadCoverageStatus = AdsOptimizerTargetCoverageStoredStatus;
 
 type TargetStateInput = {
   raw: {
@@ -75,6 +80,7 @@ type TargetStateInput = {
     clickVelocity: number | null;
     impressionVelocity: number | null;
     organicLeverageProxy: number | null;
+    organicContextSignal: string | null;
   };
   coverage: {
     daysObserved: number;
@@ -176,10 +182,7 @@ const labelize = (value: string | null) =>
 const withUnique = (values: string[]) => [...new Set(values)];
 
 const toCoverageStatus = (statuses: TargetStateInput['coverage']['statuses']): AdsOptimizerStateCoverageStatus => {
-  const entries = Object.values(statuses);
-  if (entries.some((value) => value === 'missing')) return 'missing';
-  if (entries.some((value) => value === 'partial')) return 'partial';
-  return 'ready';
+  return rollupAdsOptimizerCoverageStatus(Object.values(statuses));
 };
 
 const readConfigNumber = (payload: JsonObject | null, key: string, fallback: number) => {
@@ -320,7 +323,9 @@ const classifyEfficiency = (
       detail:
         'The target has traffic in the captured window, but no attributed orders yet, so it remains in a learning posture.',
       coverageStatus:
-        input.coverage.statuses.searchTerms === 'missing' ? 'partial' : 'ready',
+        normalizeAdsOptimizerCoverageStatus(input.coverage.statuses.searchTerms) === 'ready'
+          ? 'ready'
+          : 'partial',
       reasonCodes: withUnique([
         'EFFICIENCY_NO_ATTRIBUTED_ORDERS',
         input.raw.clicks >= config.minClicksDirectional
@@ -337,7 +342,10 @@ const classifyEfficiency = (
       detail:
         'Orders were present, but break-even product inputs were incomplete, so profitability state stayed explicit instead of being guessed.',
       coverageStatus:
-        input.coverage.statuses.breakEvenInputs === 'missing' ? 'missing' : 'partial',
+        normalizeAdsOptimizerCoverageStatus(input.coverage.statuses.breakEvenInputs) ===
+        'true_missing'
+          ? 'missing'
+          : 'partial',
       reasonCodes: ['EFFICIENCY_BREAK_EVEN_INPUTS_MISSING', 'EFFICIENCY_NO_SAFE_PROFIT_CLASSIFICATION'],
     };
   }
@@ -567,9 +575,8 @@ const buildOpportunityScore = (args: {
     reasonCodes.push('OPPORTUNITY_CPC_SUPPORT_HEADROOM');
   }
 
-  if ((args.input.derived.organicLeverageProxy ?? 0) > 0) {
-    score += Math.min(9, (args.input.derived.organicLeverageProxy ?? 0) * 40);
-    reasonCodes.push('OPPORTUNITY_ORGANIC_LEVERAGE_PRESENT');
+  if (args.input.derived.organicContextSignal) {
+    reasonCodes.push('OPPORTUNITY_ORGANIC_CONTEXT_ONLY');
   }
 
   return {
@@ -586,8 +593,10 @@ const buildRiskScore = (args: {
 }) => {
   let score = 0;
   const reasonCodes: string[] = [];
-  const statuses = Object.values(args.input.coverage.statuses);
-  const missingCount = statuses.filter((status) => status === 'missing').length;
+  const statuses = Object.values(args.input.coverage.statuses).map((status) =>
+    normalizeAdsOptimizerCoverageStatus(status)
+  );
+  const missingCount = statuses.filter((status) => status === 'true_missing').length;
   const partialCount = statuses.filter((status) => status === 'partial').length;
 
   if (args.efficiency.value === 'converting_but_loss_making') {
@@ -715,34 +724,35 @@ const readTargetStateInput = (payload: RuntimeJsonObject): TargetStateInput => {
       clickVelocity: readNumber(derivedMetrics, 'click_velocity'),
       impressionVelocity: readNumber(derivedMetrics, 'impression_velocity'),
       organicLeverageProxy: readNumber(derivedMetrics, 'organic_leverage_proxy'),
+      organicContextSignal: readString(derivedMetrics, 'organic_context_signal'),
     },
     coverage: {
       daysObserved: numberValue(coverage?.days_observed),
       statuses: {
         tosIs:
           (readString(coverageStatuses, 'tos_is') as TargetSnapshotPayloadCoverageStatus | null) ??
-          'missing',
+          'true_missing',
         stis:
           (readString(coverageStatuses, 'stis') as TargetSnapshotPayloadCoverageStatus | null) ??
-          'missing',
+          'true_missing',
         stir:
           (readString(coverageStatuses, 'stir') as TargetSnapshotPayloadCoverageStatus | null) ??
-          'missing',
+          'true_missing',
         placementContext:
           (readString(
             coverageStatuses,
             'placement_context'
-          ) as TargetSnapshotPayloadCoverageStatus | null) ?? 'missing',
+          ) as TargetSnapshotPayloadCoverageStatus | null) ?? 'true_missing',
         searchTerms:
           (readString(
             coverageStatuses,
             'search_terms'
-          ) as TargetSnapshotPayloadCoverageStatus | null) ?? 'missing',
+          ) as TargetSnapshotPayloadCoverageStatus | null) ?? 'true_missing',
         breakEvenInputs:
           (readString(
             coverageStatuses,
             'break_even_inputs'
-          ) as TargetSnapshotPayloadCoverageStatus | null) ?? 'missing',
+          ) as TargetSnapshotPayloadCoverageStatus | null) ?? 'true_missing',
       },
       notes: Array.isArray(coverage?.notes)
         ? coverage.notes.filter((value): value is string => typeof value === 'string')

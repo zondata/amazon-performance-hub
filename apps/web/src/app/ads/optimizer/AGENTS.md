@@ -13,3 +13,5 @@ Follow:
 - Reuse semantic theme tokens and shared horizontal-scroll patterns.
 - Prefer linking into the current Ads Workspace draft flow instead of inventing a new execution path.
 - Product-level and target-level coverage notes must be explicit.
+- STIS / STIR / TOS IS and ranking are non-additive diagnostics; only show latest observed values or explicit trend metadata, never synthetic window rollups.
+- Zero-click targets can legitimately show expected-unavailable search-term diagnostics; do not frame that as broken coverage by default.

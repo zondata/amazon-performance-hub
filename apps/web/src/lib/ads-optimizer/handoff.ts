@@ -336,7 +336,7 @@ const buildUiContextJson = (args: {
         )
       : null,
   placement_modifier_pct: args.row.placementContext.topOfSearchModifierPct,
-  coverage_note: args.row.coverage.notes[0] ?? null,
+  coverage_note: args.row.coverage.criticalWarnings[0] ?? args.row.coverage.notes[0] ?? null,
   optimizer_handoff: {
     phase: 10,
     source: 'ads_optimizer',
