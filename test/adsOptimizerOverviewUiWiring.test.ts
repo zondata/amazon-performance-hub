@@ -31,12 +31,14 @@ describe('ads optimizer phase 3 overview wiring', () => {
     expect(source).toContain("value: 'Rank Growth'");
   });
 
-  it('shows the Phase 3 product-inputs boundary in the overview panel', () => {
+  it('shows the current read-only optimizer boundary in the overview panel', () => {
     const source = fs.readFileSync(managerPath, 'utf-8');
 
     expect(source).toContain('Select one ASIN to load the Phase 3 product command-center.');
-    expect(source).toContain('Phase 3 loads product-level inputs only.');
-    expect(source).toContain('No target profiles, scoring, roles,');
-    expect(source).toContain('recommendations, or execution handoff are active yet.');
+    expect(source).toContain('The optimizer overview computes product inputs, product state, and objective');
+    expect(source).toContain('Target profiling, scoring, roles, and read-only');
+    expect(source).toContain('recommendations are active in the optimizer run flow');
+    expect(source).toContain('Execution handoff or staging into Ads Workspace is');
+    expect(source).toContain('still not active in this phase.');
   });
 });

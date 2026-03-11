@@ -260,8 +260,9 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           Select one ASIN to review target states.
         </div>
         <div className="mt-2 max-w-3xl text-sm text-muted">
-          Phase 7 role review is captured and audited per selected ASIN only. Pick one ASIN, then
-          run the optimizer from History to persist reviewable target role rows.
+          Phase 8 target review is captured and audited per selected ASIN only. Pick one ASIN,
+          then run the optimizer from History to persist reviewable target state, role, guardrail,
+          and read-only recommendation rows.
         </div>
       </section>
     );
@@ -275,9 +276,9 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           No captured target roles exist for this ASIN/date range yet.
         </div>
         <div className="mt-2 max-w-3xl text-sm text-muted">
-          Phase 7 reads the latest completed optimizer run that exactly matches the current ASIN
+          Phase 8 reads the latest completed optimizer run that exactly matches the current ASIN
           and date range. Create a manual run first so the persisted target profile, state, role,
-          and guardrail rows can be reviewed here.
+          guardrail, and read-only recommendation rows can be reviewed from optimizer snapshots.
         </div>
         {props.latestCompletedRun ? (
           <div className="mt-4 rounded-xl border border-border bg-surface-2 px-4 py-4 text-sm text-muted">
@@ -312,10 +313,10 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
               Target profiles plus deterministic role + guardrail outputs
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
-              Phase 7 reads the exact run’s target profiles and persists deterministic efficiency,
-              confidence, tier, opportunity, risk, desired role, current role, and resolved
-              guardrail envelopes. No recommendation logic or execution handoff is active in this
-              view.
+              Phase 8 reads the exact run’s target profiles and persists deterministic efficiency,
+              confidence, tier, opportunity, risk, desired role, current role, resolved
+              guardrail envelopes, and read-only recommendation sets. Execution handoff is still
+              inactive in this view.
             </div>
           </div>
           <div className="flex flex-wrap gap-2">

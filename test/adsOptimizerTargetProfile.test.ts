@@ -85,6 +85,63 @@ vi.mock('../apps/web/src/lib/supabaseAdmin', () => ({
   },
 }));
 
+vi.mock('../apps/web/src/lib/bulksheets/fetchCurrent', () => ({
+  fetchCurrentSpData: async () => ({
+    snapshotDate: '2026-03-10',
+    campaignsById: new Map([
+      [
+        'campaign-1',
+        {
+          campaign_id: 'campaign-1',
+          campaign_name_raw: 'Campaign 1',
+          state: 'enabled',
+          daily_budget: 50,
+          bidding_strategy: 'dynamic down only',
+          portfolio_id: null,
+        },
+      ],
+    ]),
+    adGroupsById: new Map([
+      [
+        'ad-group-1',
+        {
+          ad_group_id: 'ad-group-1',
+          campaign_id: 'campaign-1',
+          ad_group_name_raw: 'Ad Group 1',
+          state: 'enabled',
+          default_bid: 1.5,
+        },
+      ],
+    ]),
+    targetsById: new Map([
+      [
+        'target-1',
+        {
+          target_id: 'target-1',
+          ad_group_id: 'ad-group-1',
+          campaign_id: 'campaign-1',
+          expression_raw: 'blue widget',
+          match_type: 'exact',
+          is_negative: false,
+          state: 'enabled',
+          bid: 1.4,
+        },
+      ],
+    ]),
+    placementsByKey: new Map([
+      [
+        'campaign-1::placement_top',
+        {
+          campaign_id: 'campaign-1',
+          placement_raw: 'Top of search',
+          placement_code: 'PLACEMENT_TOP',
+          percentage: 18,
+        },
+      ],
+    ]),
+  }),
+}));
+
 vi.mock('../apps/web/src/lib/ads-optimizer/overview', () => ({
   getAdsOptimizerOverviewData: async () => ({
     product: {
@@ -261,6 +318,9 @@ describe('ads optimizer phase 5 target profile engine', () => {
     expect(result.rows[0]?.snapshotPayload.derived_metrics.max_cpc_support_gap).toBeCloseTo(1.325);
     expect(result.rows[0]?.snapshotPayload.derived_metrics.click_velocity).toBe(8);
     expect(result.rows[0]?.snapshotPayload.derived_metrics.impression_velocity).toBe(80);
+    expect(result.rows[0]?.snapshotPayload.execution_context.snapshot_date).toBe('2026-03-10');
+    expect(result.rows[0]?.snapshotPayload.execution_context.target.current_bid).toBe(1.4);
+    expect(result.rows[0]?.snapshotPayload.execution_context.placement.current_percentage).toBe(18);
   });
 
   it('maps persisted phase 5 target snapshots into review rows', () => {

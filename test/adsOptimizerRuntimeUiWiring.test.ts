@@ -13,6 +13,10 @@ const runtimePath = path.join(
   process.cwd(),
   'apps/web/src/lib/ads-optimizer/runtime.ts'
 );
+const recommendationPath = path.join(
+  process.cwd(),
+  'apps/web/src/lib/ads-optimizer/recommendation.ts'
+);
 
 describe('ads optimizer phase 4 runtime wiring', () => {
   it('loads history data only for the history view and renders the history panel', () => {
@@ -37,18 +41,18 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     const source = fs.readFileSync(panelPath, 'utf-8');
 
     expect(source).toContain('Manual runs capture auditable snapshots only');
-    expect(source).toContain('Phase 7 role + guardrail capture');
-    expect(source).toContain('no recommendation engine or Ads Workspace');
-    expect(source).toContain('execution handoff is running yet');
+    expect(source).toContain('Phase 8 now persists deterministic read-only recommendation sets');
+    expect(source).toContain('optimizer-owned snapshot tables only');
     expect(source).toContain('Run optimizer now');
     expect(source).toContain('Phase 4 manual runs support one ASIN at a time.');
   });
 
-  it('stores recommendation snapshots as explicit Phase 4 placeholders', () => {
-    const source = fs.readFileSync(runtimePath, 'utf-8');
+  it('stores recommendation snapshots as read-only Phase 8 recommendation sets', () => {
+    const runtimeSource = fs.readFileSync(runtimePath, 'utf-8');
+    const recommendationSource = fs.readFileSync(recommendationPath, 'utf-8');
 
-    expect(source).toContain("status: 'pending_phase5'");
-    expect(source).toContain('NO_RECOMMENDATION_ENGINE_ACTIVE');
-    expect(source).toContain('Recommendation snapshots remain placeholders only.');
+    expect(runtimeSource).toContain('buildAdsOptimizerRecommendationSnapshot');
+    expect(recommendationSource).toContain("phase: 8");
+    expect(recommendationSource).toContain('read_only_recommendation_only');
   });
 });

@@ -72,6 +72,14 @@ export const buildDefaultAdsOptimizerRulePackPayload = (): AdsOptimizerRulePackP
       state_changes: 'manual',
       structural_changes: 'manual',
     },
-    notes: 'Execution remains outside the optimizer in Phase 2.',
+    recommendation_thresholds: {
+      isolate_query_clicks_min: 4,
+      negative_query_clicks_min: 6,
+      negative_query_spend_min: 12,
+      increase_opportunity_gap: 10,
+      reduce_risk_gap: 8,
+    },
+    notes:
+      'Execution remains outside the optimizer. Phase 8 recommendations stay read-only and deterministic.',
   },
 });

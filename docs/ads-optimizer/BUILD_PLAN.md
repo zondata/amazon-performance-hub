@@ -368,31 +368,31 @@ Resolve desired/current role and the allowed action envelope.
 Turn profile + role + guardrails into a concrete recommendation set.
 
 ### Tasks
-- [ ] Implement spend direction engine:
-  - [ ] increase
-  - [ ] hold
-  - [ ] reduce
-  - [ ] collapse
-  - [ ] stop
-- [ ] Implement action recommendation types:
-  - [ ] update target bid
-  - [ ] update target state
-  - [ ] update placement modifier
-  - [ ] isolate query candidate
-  - [ ] negative candidate
-  - [ ] change review cadence
-- [ ] Add recommendation reason codes.
-- [ ] Add coverage flags / confidence notes.
-- [ ] Prevent unsupported action generation for current entity context.
-- [ ] Keep recommendations read-only in this phase.
+- [x] Implement spend direction engine:
+  - [x] increase
+  - [x] hold
+  - [x] reduce
+  - [x] collapse
+  - [x] stop
+- [x] Implement action recommendation types:
+  - [x] update target bid
+  - [x] update target state
+  - [x] update placement modifier
+  - [x] isolate query candidate
+  - [x] negative candidate
+  - [x] change review cadence
+- [x] Add recommendation reason codes.
+- [x] Add coverage flags / confidence notes.
+- [x] Prevent unsupported action generation for current entity context.
+- [x] Keep recommendations read-only in this phase.
 
 ### Phase 8 acceptance
-- [ ] Every recommended action is supported by the current data model.
-- [ ] The same input run reproduces the same recommendation output.
-- [ ] No recommendations are silently written into execution tables.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] Every recommended action is supported by the current data model.
+- [x] The same input run reproduces the same recommendation output.
+- [x] No recommendations are silently written into execution tables.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 

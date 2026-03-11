@@ -28,8 +28,8 @@ describe('ads optimizer phase 7 target role wiring', () => {
     expect(source).toContain("'use client';");
     expect(source).toContain('useState');
     expect(source).toContain('Target profiles plus deterministic role + guardrail outputs');
-    expect(source).toContain('desired role, current role, and resolved');
-    expect(source).toContain('guardrail envelopes. No recommendation logic or execution handoff');
+    expect(source).toContain('desired role, current role, resolved');
+    expect(source).toContain('guardrail envelopes, and read-only recommendation sets.');
     expect(source).toContain('No captured target roles exist for this ASIN/date range yet.');
     expect(source).toContain('Coverage gaps stay explicit instead of being guessed.');
     expect(source).toContain('View coverage');

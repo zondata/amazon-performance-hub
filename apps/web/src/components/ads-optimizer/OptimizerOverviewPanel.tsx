@@ -92,8 +92,10 @@ export default function OptimizerOverviewPanel(props: OptimizerOverviewPanelProp
           Select one ASIN to load the Phase 3 product command-center.
         </div>
         <div className="mt-2 max-w-3xl text-sm text-muted">
-          Current Build Plan Phase 3 is product-scoped. The optimizer overview computes product
-          inputs, product state, and objective for one selected ASIN only.
+          The optimizer overview computes product inputs, product state, and objective for one
+          selected ASIN at a time. Target profiling, scoring, roles, and read-only
+          recommendations are active in the optimizer run flow, but execution handoff is still
+          inactive.
         </div>
         <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
           Scope is currently set to all advertised ASINs. Choose a single ASIN above, then apply
@@ -147,8 +149,9 @@ export default function OptimizerOverviewPanel(props: OptimizerOverviewPanelProp
           </div>
         </div>
         <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-4 text-sm text-sky-800">
-          Phase 3 loads product-level inputs only. No target profiles, scoring, roles,
-          recommendations, or execution handoff are active yet.
+          Product inputs are active here, and optimizer runs now persist target profiles, scoring,
+          roles, and read-only recommendations. Execution handoff or staging into Ads Workspace is
+          still not active in this phase.
         </div>
       </section>
 

@@ -106,6 +106,11 @@ const ROLE_TRANSITION_LOG_SELECT = [
   'created_at',
 ].join(',');
 
+const PHASE4_PLACEHOLDER_REASON_CODES = new Set([
+  'PHASE4_BACKBONE_ONLY',
+  'NO_RECOMMENDATION_ENGINE_ACTIVE',
+]);
+
 export type AdsOptimizerRuntimeContext = {
   activeVersion: AdsOptimizerRulePackVersion;
 };
@@ -156,6 +161,70 @@ export type CreateAdsOptimizerRecommendationSnapshotPayload = {
   actionType: string | null;
   reasonCodes: string[] | null;
   snapshotPayload: JsonObject;
+};
+
+const asJsonObject = (value: unknown, fieldName: string): JsonObject => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${fieldName} must be an object.`);
+  }
+  return value as JsonObject;
+};
+
+const assertPhase8RecommendationSnapshotContract = (args: {
+  row:
+    | CreateAdsOptimizerRecommendationSnapshotPayload
+    | AdsOptimizerRecommendationSnapshot;
+  index: number;
+  fieldPrefix: string;
+}) => {
+  const reasonCodes =
+    'reasonCodes' in args.row
+      ? args.row.reasonCodes
+      : args.row.reason_codes_json;
+  const snapshotPayload =
+    'snapshotPayload' in args.row
+      ? args.row.snapshotPayload
+      : args.row.snapshot_payload_json;
+  const status = args.row.status;
+  const actionType = 'actionType' in args.row ? args.row.actionType : args.row.action_type;
+  const payload = asJsonObject(
+    snapshotPayload,
+    `${args.fieldPrefix}[${args.index}].snapshot_payload_json`
+  );
+
+  if (status === 'pending_phase5') {
+    throw new Error(
+      `${args.fieldPrefix}[${args.index}] attempted to persist legacy pending_phase5 recommendation rows during Phase 8.`
+    );
+  }
+  if ((reasonCodes ?? []).some((code) => PHASE4_PLACEHOLDER_REASON_CODES.has(code))) {
+    throw new Error(
+      `${args.fieldPrefix}[${args.index}] still contains Phase 4 placeholder reason codes.`
+    );
+  }
+  if (payload.execution_boundary !== 'read_only_recommendation_only') {
+    throw new Error(
+      `${args.fieldPrefix}[${args.index}] must persist execution_boundary=read_only_recommendation_only.`
+    );
+  }
+  if (payload.workspace_handoff !== 'not_started') {
+    throw new Error(
+      `${args.fieldPrefix}[${args.index}] must persist workspace_handoff=not_started.`
+    );
+  }
+  if (payload.writes_execution_tables !== false) {
+    throw new Error(
+      `${args.fieldPrefix}[${args.index}] must persist writes_execution_tables=false.`
+    );
+  }
+  if (payload.phase !== 8) {
+    throw new Error(`${args.fieldPrefix}[${args.index}] must persist phase=8 recommendation rows.`);
+  }
+  if (status === 'generated' && (!actionType || actionType.trim().length === 0)) {
+    throw new Error(
+      `${args.fieldPrefix}[${args.index}] must persist action_type for generated recommendation rows.`
+    );
+  }
 };
 
 export const getAdsOptimizerRuntimeContext = async (): Promise<AdsOptimizerRuntimeContext> => {
@@ -308,6 +377,13 @@ export const insertAdsOptimizerRecommendationSnapshots = async (
   rows: CreateAdsOptimizerRecommendationSnapshotPayload[]
 ): Promise<AdsOptimizerRecommendationSnapshot[]> => {
   if (rows.length === 0) return [];
+  rows.forEach((row, index) =>
+    assertPhase8RecommendationSnapshotContract({
+      row,
+      index,
+      fieldPrefix: 'ads_optimizer_recommendation_snapshot.insert',
+    })
+  );
 
   const { data, error } = await supabaseAdmin
     .from('ads_optimizer_recommendation_snapshot')
@@ -330,9 +406,17 @@ export const insertAdsOptimizerRecommendationSnapshots = async (
     throw new Error(`Failed to insert optimizer recommendation snapshots: ${error.message}`);
   }
 
-  return ((data ?? []) as unknown as AdsOptimizerRecommendationSnapshotRow[]).map(
+  const mapped = ((data ?? []) as unknown as AdsOptimizerRecommendationSnapshotRow[]).map(
     mapAdsOptimizerRecommendationSnapshotRow
   );
+  mapped.forEach((row, index) =>
+    assertPhase8RecommendationSnapshotContract({
+      row,
+      index,
+      fieldPrefix: 'ads_optimizer_recommendation_snapshot.persisted',
+    })
+  );
+  return mapped;
 };
 
 export const insertAdsOptimizerRoleTransitionLogs = async (

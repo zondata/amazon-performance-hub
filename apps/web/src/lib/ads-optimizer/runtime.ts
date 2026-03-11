@@ -10,6 +10,7 @@ import {
   readAdsOptimizerTargetRunRole,
   type AdsOptimizerTargetRole,
 } from './role';
+import { buildAdsOptimizerRecommendationSnapshot } from './recommendation';
 import {
   createAdsOptimizerRun,
   findOptimizerProductByAsin,
@@ -214,6 +215,49 @@ const buildFailureDiagnostics = (stage: string, error: unknown): JsonObject => (
   recorded_at: new Date().toISOString(),
 });
 
+const assertPersistedRecommendationRows = (args: {
+  targetSnapshotCount: number;
+  recommendationRows: Awaited<ReturnType<typeof insertAdsOptimizerRecommendationSnapshots>>;
+}) => {
+  if (args.recommendationRows.length !== args.targetSnapshotCount) {
+    throw new Error(
+      `Persisted recommendation row count mismatch: expected ${args.targetSnapshotCount}, received ${args.recommendationRows.length}.`
+    );
+  }
+
+  args.recommendationRows.forEach((row, index) => {
+    const payload = row.snapshot_payload_json;
+    if (row.status === 'pending_phase5') {
+      throw new Error(
+        `Persisted recommendation row ${index + 1} for run ${row.run_id} is still pending_phase5.`
+      );
+    }
+    if (
+      row.reason_codes_json?.includes('PHASE4_BACKBONE_ONLY') ||
+      row.reason_codes_json?.includes('NO_RECOMMENDATION_ENGINE_ACTIVE')
+    ) {
+      throw new Error(
+        `Persisted recommendation row ${index + 1} for run ${row.run_id} still contains placeholder reason codes.`
+      );
+    }
+    if (payload.execution_boundary !== 'read_only_recommendation_only') {
+      throw new Error(
+        `Persisted recommendation row ${index + 1} for run ${row.run_id} is missing the Phase 8 read-only boundary.`
+      );
+    }
+    if (payload.workspace_handoff !== 'not_started') {
+      throw new Error(
+        `Persisted recommendation row ${index + 1} for run ${row.run_id} is missing workspace_handoff=not_started.`
+      );
+    }
+    if (payload.writes_execution_tables !== false) {
+      throw new Error(
+        `Persisted recommendation row ${index + 1} for run ${row.run_id} must persist writes_execution_tables=false.`
+      );
+    }
+  });
+};
+
 const loadPreviousRoleMap = async (args: {
   asin: string;
   currentRunId: string;
@@ -272,7 +316,7 @@ export const executeAdsOptimizerManualRun = async (
     rulePackVersionId: runtimeContext.activeVersion.rule_pack_version_id,
     rulePackVersionLabel: runtimeContext.activeVersion.version_label,
     inputSummary: {
-      phase: 7,
+      phase: 8,
       requested_scope: {
         asin: args.asin,
         start: args.start,
@@ -291,7 +335,7 @@ export const executeAdsOptimizerManualRun = async (
         state_engine: 'phase6_state_engine',
         role_engine: 'phase7_role_guardrail_engine',
         recommendation_snapshot_behavior:
-          'Recommendation snapshots remain placeholders only. No recommendation engine is active yet.',
+          'Phase 8 persists deterministic read-only recommendation sets inside optimizer-owned snapshot storage only. No Ads Workspace handoff or execution writes occur here.',
         execution_boundary: 'Existing Ads Workspace remains the execution path.',
       },
     },
@@ -388,24 +432,29 @@ export const executeAdsOptimizerManualRun = async (
     );
 
     const insertedRecommendationSnapshots = await deps.insertRecommendationSnapshots(
-      insertedTargetSnapshots.map((snapshot) => ({
-        runId: run.run_id,
-        targetSnapshotId: snapshot.target_snapshot_id,
-        asin: snapshot.asin,
-        status: 'pending_phase5',
-        actionType: null,
-        reasonCodes: ['PHASE4_BACKBONE_ONLY', 'NO_RECOMMENDATION_ENGINE_ACTIVE'],
-        snapshotPayload: {
-          phase: 4,
-          capture_type: 'recommendation_snapshot',
-          output_state: 'pending_phase5',
-          execution_boundary: 'snapshot_only',
-          target_snapshot_id: snapshot.target_snapshot_id,
-          target_id: snapshot.target_id,
-          note: 'Recommendation snapshots remain placeholders only. No target decision engine is active yet.',
-        },
-      }))
+      insertedTargetSnapshots.map((snapshot, index) => {
+        const recommendation = buildAdsOptimizerRecommendationSnapshot({
+          targetSnapshotId: snapshot.target_snapshot_id,
+          targetId: snapshot.target_id,
+          payload: targetSnapshotRows[index]?.snapshotPayload ?? {},
+          rulePackPayload: runtimeContext.activeVersion.change_payload_json,
+        });
+
+        return {
+          runId: run.run_id,
+          targetSnapshotId: snapshot.target_snapshot_id,
+          asin: snapshot.asin,
+          status: recommendation.status,
+          actionType: recommendation.actionType,
+          reasonCodes: recommendation.reasonCodes,
+          snapshotPayload: recommendation.snapshotPayload,
+        };
+      })
     );
+    assertPersistedRecommendationRows({
+      targetSnapshotCount: insertedTargetSnapshots.length,
+      recommendationRows: insertedRecommendationSnapshots,
+    });
 
     await deps.updateRun(run.run_id, {
       status: 'completed',

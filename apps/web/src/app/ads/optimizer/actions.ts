@@ -133,12 +133,12 @@ export async function runAdsOptimizerNowAction(formData: FormData) {
 
     if (result.diagnostics && result.targetSnapshotCount === 0) {
       redirectWithFlash(returnTo, {
-        notice: `Optimizer run ${result.runId} completed with 0 target snapshot(s). Diagnostics were saved to history.`,
+        notice: `Optimizer run ${result.runId} completed with 0 target snapshot(s) and 0 recommendation snapshot(s). Diagnostics were saved to history.`,
       });
     }
 
     redirectWithFlash(returnTo, {
-      notice: `Optimizer run ${result.runId} completed with ${result.targetSnapshotCount} target snapshot(s).`,
+      notice: `Optimizer run ${result.runId} completed with ${result.targetSnapshotCount} target snapshot(s) and ${result.recommendationSnapshotCount} recommendation snapshot(s).`,
     });
   } catch (error) {
     rethrowRedirectError(error);

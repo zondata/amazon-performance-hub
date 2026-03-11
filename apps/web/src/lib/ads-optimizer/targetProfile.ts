@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { fetchCurrentSpData } from '@/lib/bulksheets/fetchCurrent';
 import {
   buildSpTargetsWorkspaceModel,
   resolveSpProductScopeSummary,
@@ -58,6 +59,7 @@ type TargetCoverageWindow = {
 };
 
 type AdsOptimizerTargetCoverageStatus = 'ready' | 'partial' | 'missing';
+type CurrentSnapshotData = Awaited<ReturnType<typeof fetchCurrentSpData>>;
 
 export type AdsOptimizerTargetProfileRow = {
   asin: string;
@@ -332,6 +334,38 @@ const chunk = <T,>(items: T[], size: number) => {
     buckets.push(items.slice(index, index + size));
   }
   return buckets;
+};
+
+const loadCurrentSnapshot = async (args: {
+  rawTargetIds: string[];
+  campaignIds: string[];
+}): Promise<{ data: CurrentSnapshotData | null; warning: string | null }> => {
+  if (args.rawTargetIds.length === 0 && args.campaignIds.length === 0) {
+    return { data: null, warning: null };
+  }
+
+  try {
+    const actions = [
+      ...args.rawTargetIds.map((targetId) => ({
+        type: 'update_target_state',
+        target_id: targetId,
+      })),
+      ...args.campaignIds.map((campaignId) => ({
+        type: 'update_placement_modifier',
+        campaign_id: campaignId,
+      })),
+    ];
+    const data = await fetchCurrentSpData(actions);
+    return { data, warning: null };
+  } catch (error) {
+    return {
+      data: null,
+      warning:
+        error instanceof Error
+          ? `Current bulk snapshot context is unavailable for optimizer recommendations: ${error.message}`
+          : 'Current bulk snapshot context is unavailable for optimizer recommendations.',
+    };
+  }
 };
 
 const compareRepresentativeSearchTerm = (
@@ -651,6 +685,8 @@ const buildTargetProfileViewRow = (args: {
     productUnits: number;
   } | null;
   overview: AdsOptimizerOverviewData;
+  currentSnapshotDate: string | null;
+  currentSnapshotWarning: string | null;
 }): AdsOptimizerTargetProfileRow => {
   const representativeSearchTerm = getRepresentativeSearchTerm(args.target.search_terms);
   const searchTermCount = args.target.search_terms.length;
@@ -707,6 +743,9 @@ const buildTargetProfileViewRow = (args: {
   }
   if (breakEvenAcos === null) {
     coverageNotes.add('Break-even-derived target metrics are unavailable because product economics are missing break-even ACoS.');
+  }
+  if (args.currentSnapshotWarning) {
+    coverageNotes.add(args.currentSnapshotWarning);
   }
 
   return {
@@ -860,6 +899,40 @@ const buildTargetProfileViewRow = (args: {
         average_price: args.overview.economics.averagePrice,
         product_state: args.overview.state.value,
         product_objective: args.overview.objective.value,
+      },
+      execution_context: {
+        snapshot_date: args.currentSnapshotDate,
+        target: {
+          id: args.target.composer_context.target.id,
+          text: args.target.composer_context.target.text,
+          match_type: args.target.composer_context.target.match_type,
+          is_negative: args.target.composer_context.target.is_negative,
+          current_state: args.target.composer_context.target.current_state,
+          current_bid: args.target.composer_context.target.current_bid,
+        },
+        ad_group: args.target.composer_context.ad_group
+          ? {
+              id: args.target.composer_context.ad_group.id,
+              name: args.target.composer_context.ad_group.name,
+              current_state: args.target.composer_context.ad_group.current_state,
+              current_default_bid: args.target.composer_context.ad_group.current_default_bid,
+            }
+          : null,
+        campaign: {
+          id: args.target.composer_context.campaign.id,
+          name: args.target.composer_context.campaign.name,
+          current_state: args.target.composer_context.campaign.current_state,
+          current_budget: args.target.composer_context.campaign.current_budget,
+          current_bidding_strategy: args.target.composer_context.campaign.current_bidding_strategy,
+        },
+        placement: args.target.composer_context.placement
+          ? {
+              placement_code: args.target.composer_context.placement.placement_code,
+              label: args.target.composer_context.placement.label,
+              current_percentage: args.target.composer_context.placement.current_percentage,
+            }
+          : null,
+        coverage_note: args.target.composer_context.coverage_note,
       },
       coverage: {
         observed_start: args.coverageWindow?.observedStart ?? null,
@@ -1349,10 +1422,37 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
       targetingNorm: trimString(row.targeting_norm),
     });
   });
+  const currentSnapshotResult = await loadCurrentSnapshot({
+    rawTargetIds: Array.from(
+      new Set(
+        Array.from(rawIdentityByProfileKey.values())
+          .map((value) => value.rawTargetId)
+          .filter((value): value is string => Boolean(value))
+      )
+    ),
+    campaignIds: scopedCampaignIds,
+  });
+  const currentTargetsByProfileKey = new Map<
+    string,
+    CurrentSnapshotData['targetsById'] extends Map<string, infer TValue> ? TValue : never
+  >();
+  rawIdentityByProfileKey.forEach((value, profileKey) => {
+    if (!value.rawTargetId) return;
+    const currentTarget = currentSnapshotResult.data?.targetsById.get(value.rawTargetId);
+    if (currentTarget) {
+      currentTargetsByProfileKey.set(profileKey, currentTarget);
+    }
+  });
   const workspaceModel = buildSpTargetsWorkspaceModel({
     targetRows: normalizedTargetingRows,
     searchTermRows: normalizedSearchTermRows,
     placementRows,
+    currentTargetsById: currentTargetsByProfileKey,
+    currentAdGroupsById: currentSnapshotResult.data?.adGroupsById,
+    currentCampaignsById: currentSnapshotResult.data?.campaignsById,
+    currentPlacementModifiers: currentSnapshotResult.data
+      ? Array.from(currentSnapshotResult.data.placementsByKey.values())
+      : [],
     ambiguousCampaignIds: scopeSummary.ambiguousCampaignIds,
   });
 
@@ -1372,6 +1472,8 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
               null
             : null,
         overview: overviewData,
+        currentSnapshotDate: currentSnapshotResult.data?.snapshotDate ?? null,
+        currentSnapshotWarning: currentSnapshotResult.warning,
       })
     );
 

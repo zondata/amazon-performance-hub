@@ -69,7 +69,7 @@ const EMPTY_STATE_COPY: Record<
     eyebrow: 'Targets scope',
     title: 'Select one ASIN and capture a run to review target roles.',
     body:
-      'Phase 7 renders persisted target profile, state, role, and guardrail-ready rows from the matching manual run. Recommendation logic remains out of scope here.',
+      'Phase 8 persists target profile, state, role, guardrail, and read-only recommendation snapshots from the matching manual run. Review surfaces remain intentionally limited here.',
   },
   config: {
     eyebrow: 'Config placeholder',
@@ -157,11 +157,11 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
     view === 'config'
       ? 'Config foundation only'
       : view === 'overview'
-        ? 'Product inputs only'
+        ? 'Read-only optimizer active'
         : view === 'targets'
-          ? 'Role + guardrails'
+          ? 'Recommendations read-only'
         : view === 'history'
-          ? 'Run + snapshot backbone'
+          ? 'Recommendation engine'
           : 'Recommendation shell only';
 
   return (
