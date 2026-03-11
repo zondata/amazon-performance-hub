@@ -8,6 +8,7 @@ import {
   activateRulePackVersion,
   createRulePackVersionDraft,
 } from '@/lib/ads-optimizer/repoConfig';
+import { executeAdsOptimizerWorkspaceHandoff } from '@/lib/ads-optimizer/handoff';
 import { executeAdsOptimizerManualRun } from '@/lib/ads-optimizer/runtime';
 
 const trimToNull = (value: FormDataEntryValue | null): string | null => {
@@ -18,6 +19,16 @@ const trimToNull = (value: FormDataEntryValue | null): string | null => {
 
 const ensureReturnTo = (value: string | null, fallback = '/ads/optimizer?view=config') => {
   if (!value || !value.startsWith('/ads/optimizer')) {
+    return fallback;
+  }
+  return value;
+};
+
+const ensureWorkspaceReturnTo = (
+  value: string | null,
+  fallback = '/ads/performance?panel=queue'
+) => {
+  if (!value || !value.startsWith('/ads/performance')) {
     return fallback;
   }
   return value;
@@ -39,6 +50,25 @@ const redirectWithFlash = (
   }
   if (params.seeded) {
     url.searchParams.set('seeded', '1');
+  }
+  redirect(`${url.pathname}?${url.searchParams.toString()}`);
+};
+
+const redirectWorkspaceWithFlash = (
+  returnTo: string,
+  params: { notice?: string; error?: string; changeSetId?: string | null }
+) => {
+  const url = new URL(returnTo, 'http://localhost');
+  url.searchParams.delete('queue_notice');
+  url.searchParams.delete('queue_error');
+  if (params.changeSetId) {
+    url.searchParams.set('change_set', params.changeSetId);
+  }
+  if (params.notice) {
+    url.searchParams.set('queue_notice', params.notice);
+  }
+  if (params.error) {
+    url.searchParams.set('queue_error', params.error);
   }
   redirect(`${url.pathname}?${url.searchParams.toString()}`);
 };
@@ -144,6 +174,67 @@ export async function runAdsOptimizerNowAction(formData: FormData) {
     rethrowRedirectError(error);
     redirectWithFlash(returnTo, {
       error: error instanceof Error ? error.message : 'Failed to run the optimizer snapshot.',
+    });
+  }
+}
+
+export async function handoffAdsOptimizerToWorkspaceAction(formData: FormData) {
+  const returnTo = ensureReturnTo(
+    trimToNull(formData.get('return_to')),
+    '/ads/optimizer?view=targets'
+  );
+  const workspaceReturnTo = ensureWorkspaceReturnTo(
+    trimToNull(formData.get('workspace_return_to')),
+    '/ads/performance?panel=queue&channel=sp&level=targets&view=table'
+  );
+
+  try {
+    const asin = trimToNull(formData.get('asin'));
+    const start = trimToNull(formData.get('start'));
+    const end = trimToNull(formData.get('end'));
+    const targetSnapshotIds = formData
+      .getAll('target_snapshot_id')
+      .filter((value): value is string => typeof value === 'string')
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    if (!asin || !start || !end) {
+      throw new Error('asin, start, and end are required.');
+    }
+
+    const result = await executeAdsOptimizerWorkspaceHandoff({
+      asin,
+      start,
+      end,
+      targetSnapshotIds,
+    });
+
+    revalidatePath('/ads/optimizer');
+    revalidatePath('/ads/performance');
+
+    const skippedUnsupportedText =
+      result.skippedUnsupportedActionTypes.length > 0
+        ? ` Skipped review-only action types: ${result.skippedUnsupportedActionTypes.join(', ')}.`
+        : '';
+    const dedupedText =
+      result.dedupedActionCount > 0
+        ? ` Deduped ${result.dedupedActionCount} duplicate workspace action(s).`
+        : '';
+
+    redirectWorkspaceWithFlash(workspaceReturnTo, {
+      changeSetId: result.changeSetId,
+      notice:
+        `Optimizer handoff created draft ${result.changeSetName} with ${result.stagedActionCount} staged workspace action(s) from ${result.selectedRowCount} optimizer row(s).` +
+        skippedUnsupportedText +
+        dedupedText,
+    });
+  } catch (error) {
+    rethrowRedirectError(error);
+    redirectWithFlash(returnTo, {
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to hand off optimizer recommendations to Ads Workspace.',
     });
   }
 }

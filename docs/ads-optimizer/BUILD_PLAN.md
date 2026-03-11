@@ -441,22 +441,22 @@ Make the optimizer reviewable and usable.
 Reuse the current execution system instead of inventing a second one.
 
 ### Tasks
-- [ ] Add action(s) to send optimizer recommendation(s) into existing Ads Workspace draft queue.
-- [ ] Reuse existing `ads_change_sets` and `ads_change_set_items`.
-- [ ] Map supported recommendations into existing atomic draft item types.
-- [ ] Support single-item handoff.
-- [ ] Support selected-row batch handoff with guardrail checks.
-- [ ] Keep objective / hypothesis / notes payload.
-- [ ] Link back from draft item to optimizer run / target snapshot / recommendation snapshot.
-- [ ] Add “open in existing Change Composer” shortcut where useful.
+- [x] Add action(s) to send optimizer recommendation(s) into existing Ads Workspace draft queue.
+- [x] Reuse existing `ads_change_sets` and `ads_change_set_items`.
+- [x] Map supported recommendations into existing atomic draft item types.
+- [x] Support single-item handoff.
+- [x] Support selected-row batch handoff with guardrail checks.
+- [x] Keep objective / hypothesis / notes payload.
+- [x] Link back from draft item to optimizer run / target snapshot / recommendation snapshot.
+- [x] Add “open in existing Change Composer” shortcut where useful.
 
 ### Phase 10 acceptance
-- [ ] A recommendation can be staged into the existing draft queue.
-- [ ] Existing review / bulksheet / validation flow still works.
-- [ ] No optimizer code bypasses the current execution boundary.
-- [ ] `npm test` passes.
-- [ ] `npm run web:lint` passes.
-- [ ] `npm run web:build` passes.
+- [x] A recommendation can be staged into the existing draft queue.
+- [x] Existing review / bulksheet / validation flow still works.
+- [x] No optimizer code bypasses the current execution boundary.
+- [x] `npm test` passes.
+- [x] `npm run web:lint` passes.
+- [x] `npm run web:build` passes.
 
 ---
 

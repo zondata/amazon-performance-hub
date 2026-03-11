@@ -18,14 +18,21 @@ type OptimizerTargetsPanelProps = {
   start: string;
   end: string;
   historyHref: string;
+  returnTo: string;
+  workspaceQueueHref: string;
   run: AdsOptimizerRun | null;
   latestCompletedRun: AdsOptimizerRun | null;
   productState: AdsOptimizerProductRunState | null;
   rows: AdsOptimizerTargetReviewRow[];
+  handoffAction: (formData: FormData) => Promise<void>;
 };
 
 type QueueSort = 'priority' | 'risk' | 'opportunity' | 'target';
 type FilterValue = 'all' | string;
+type WorkspaceSupportedActionType =
+  | 'update_target_bid'
+  | 'update_target_state'
+  | 'update_placement_modifier';
 
 const formatNumber = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return '—';
@@ -235,6 +242,43 @@ const buildPriorityLabel = (priority: number | null, actionType: string | null) 
   return `P${Math.max(1, Math.round(priority / 10))} · ${labelize(actionType)}`;
 };
 
+const isWorkspaceSupportedActionType = (
+  value: string
+): value is WorkspaceSupportedActionType =>
+  value === 'update_target_bid' ||
+  value === 'update_target_state' ||
+  value === 'update_placement_modifier';
+
+const getWorkspaceSupportedActions = (row: AdsOptimizerTargetReviewRow) =>
+  (row.recommendation?.actions ?? []).filter((action) =>
+    isWorkspaceSupportedActionType(action.actionType)
+  );
+
+const getUnsupportedReviewOnlyActions = (row: AdsOptimizerTargetReviewRow) =>
+  (row.recommendation?.actions ?? []).filter(
+    (action) => !isWorkspaceSupportedActionType(action.actionType)
+  );
+
+const buildWorkspaceTargetHref = (args: {
+  asin: string;
+  start: string;
+  end: string;
+  targetId: string;
+}) => {
+  const usp = new URLSearchParams({
+    panel: 'workspace',
+    channel: 'sp',
+    level: 'targets',
+    view: 'table',
+    asin: args.asin,
+    start: args.start,
+    end: args.end,
+    compose_level: 'targets',
+    compose_row: args.targetId,
+  });
+  return `/ads/performance?${usp.toString()}`;
+};
+
 const buildTopList = (rows: AdsOptimizerTargetReviewRow[], kind: 'risk' | 'opportunity') =>
   [...rows]
     .filter((row) =>
@@ -311,6 +355,7 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
   const [selectedTargetSnapshotId, setSelectedTargetSnapshotId] = useState<string | null>(
     props.rows[0]?.targetSnapshotId ?? null
   );
+  const [selectedForHandoff, setSelectedForHandoff] = useState<string[]>([]);
   const [roleFilter, setRoleFilter] = useState<FilterValue>('all');
   const [stateFilter, setStateFilter] = useState<FilterValue>('all');
   const [tierFilter, setTierFilter] = useState<FilterValue>('all');
@@ -325,9 +370,10 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           Select one ASIN to open the optimizer command center.
         </div>
         <div className="mt-2 max-w-3xl text-sm text-muted">
-          Phase 9 review stays scoped to one selected ASIN and one exact date range. Pick an ASIN,
-          then use History to capture a read-only run that fills the command center, target queue,
-          and target detail drawer from persisted optimizer snapshots.
+          Phase 10 review and handoff stays scoped to one selected ASIN and one exact date range.
+          Pick an ASIN, then use History to capture a run that fills the command center, target
+          queue, and target detail drawer from persisted optimizer snapshots before handing any
+          supported actions into Ads Workspace.
         </div>
       </section>
     );
@@ -341,10 +387,10 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           No persisted optimizer review run exists for this ASIN/date range yet.
         </div>
         <div className="mt-2 max-w-3xl text-sm text-muted">
-          Phase 9 only reviews persisted snapshots from the exact ASIN and exact date window shown
-          above. Create a manual run first so the target queue and detail drawer can load target
-          profiles, states, roles, guardrails, and read-only recommendations from optimizer-owned
-          tables.
+          Phase 10 only hands off persisted snapshots from the exact ASIN and exact date window
+          shown above. Create a manual run first so the target queue can load target profiles,
+          states, roles, guardrails, and recommendation snapshots before any supported actions are
+          staged into Ads Workspace.
         </div>
         {props.latestCompletedRun ? (
           <div className="mt-4 rounded-xl border border-border bg-surface-2 px-4 py-4 text-sm text-muted">
@@ -392,6 +438,46 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
   );
   const topRiskRows = buildTopList(props.rows, 'risk');
   const topOpportunityRows = buildTopList(props.rows, 'opportunity');
+  const stageableRows = props.rows.filter((row) => getWorkspaceSupportedActions(row).length > 0);
+  const visibleStageableRows = filteredRows.filter(
+    (row) => getWorkspaceSupportedActions(row).length > 0
+  );
+  const selectedVisibleStageableIds = visibleStageableRows
+    .map((row) => row.targetSnapshotId)
+    .filter((id) => selectedForHandoff.includes(id));
+  const allVisibleStageableSelected =
+    visibleStageableRows.length > 0 &&
+    selectedVisibleStageableIds.length === visibleStageableRows.length;
+  const selectedStageableRows = props.rows.filter((row) =>
+    selectedForHandoff.includes(row.targetSnapshotId)
+  );
+  const selectedStageableActionCount = selectedStageableRows.reduce(
+    (sum, row) => sum + getWorkspaceSupportedActions(row).length,
+    0
+  );
+
+  const toggleSelectedRow = (targetSnapshotId: string, checked: boolean) => {
+    setSelectedForHandoff((current) => {
+      if (checked) {
+        return current.includes(targetSnapshotId) ? current : [...current, targetSnapshotId];
+      }
+      return current.filter((value) => value !== targetSnapshotId);
+    });
+  };
+
+  const toggleAllVisibleStageable = (checked: boolean) => {
+    setSelectedForHandoff((current) => {
+      const next = new Set(current);
+      visibleStageableRows.forEach((row) => {
+        if (checked) {
+          next.add(row.targetSnapshotId);
+        } else {
+          next.delete(row.targetSnapshotId);
+        }
+      });
+      return [...next];
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -405,9 +491,9 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
               Review persisted target outputs without leaving `/ads/optimizer`
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
-              This Phase 9 surface reads the exact run&apos;s persisted product state, target
-              state, role, guardrail, and recommendation snapshots. The optimizer remains strictly
-              read-only here, and execution handoff into Ads Workspace is still not active.
+              This Phase 10 surface reads the exact run&apos;s persisted product state, target
+              state, role, guardrail, and recommendation snapshots. The optimizer still proposes,
+              while Ads Workspace remains the only place where staged and executable actions live.
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -416,7 +502,7 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
               SP only V1
             </div>
             <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
-              Read-only review only
+              Review + handoff only
             </div>
           </div>
         </div>
@@ -459,8 +545,9 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
         <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm xl:col-span-2">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">Review boundary</div>
           <div className="mt-2 text-sm text-foreground">
-            Recommendations are reviewable here only. Nothing in this panel stages into Ads
-            Workspace, writes execution tables, or bypasses the existing execution boundary.
+            Handoff from this panel creates staged draft items inside Ads Workspace only. The
+            optimizer still does not execute changes, write bulksheets directly, or bypass the
+            existing Ads Workspace execution boundary.
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <div className="rounded-xl border border-border bg-surface px-4 py-3">
@@ -470,9 +557,11 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
               </div>
             </div>
             <div className="rounded-xl border border-border bg-surface px-4 py-3">
-              <div className="text-xs uppercase tracking-wide text-muted">Workspace handoff</div>
-              <div className="mt-2 text-sm font-semibold text-foreground">not_started</div>
-            </div>
+                <div className="text-xs uppercase tracking-wide text-muted">Workspace handoff</div>
+               <div className="mt-2 text-sm font-semibold text-foreground">
+                 staged only after operator handoff
+               </div>
+             </div>
             <div className="rounded-xl border border-border bg-surface px-4 py-3">
               <div className="text-xs uppercase tracking-wide text-muted">Execution writes</div>
               <div className="mt-2 text-sm font-semibold text-foreground">false</div>
@@ -564,9 +653,10 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <div className="text-xs uppercase tracking-[0.3em] text-muted">Target queue</div>
-                <div className="mt-2 text-sm text-muted">
+              <div className="mt-2 text-sm text-muted">
                   Priority sorting uses the persisted recommendation action priority from the exact
-                  run. Filters stay within the current ASIN and date window only.
+                  run. Filters stay within the current ASIN and date window only, and only
+                  workspace-supported actions can be handed off from this queue.
                 </div>
               </div>
               <Link href={props.historyHref} className="text-sm font-semibold text-primary">
@@ -654,22 +744,80 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
             <div className="mt-4 rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm text-muted">
               Showing {formatNumber(filteredRows.length)} of {formatNumber(props.rows.length)} persisted
               target rows for {props.asin}. {formatNumber(persistedRecommendationRows)} recommendation
-              snapshots were loaded from the exact run, and no actions can be staged from this queue.
+              snapshots were loaded from the exact run, and {formatNumber(stageableRows.length)} row(s)
+              currently contain Ads Workspace-supported actions.
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 rounded-xl border border-border bg-surface px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="text-sm text-muted">
+                Select one or more stageable rows, then hand off the supported actions into Ads
+                Workspace. Unsupported recommendation types stay review-only in the optimizer.
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  disabled={visibleStageableRows.length === 0}
+                  className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => toggleAllVisibleStageable(!allVisibleStageableSelected)}
+                >
+                  {allVisibleStageableSelected ? 'Clear visible selection' : 'Select visible stageable'}
+                </button>
+                <form action={props.handoffAction}>
+                  <input type="hidden" name="return_to" value={props.returnTo} />
+                  <input type="hidden" name="workspace_return_to" value={props.workspaceQueueHref} />
+                  <input type="hidden" name="asin" value={props.asin} />
+                  <input type="hidden" name="start" value={props.start} />
+                  <input type="hidden" name="end" value={props.end} />
+                  {selectedForHandoff.map((targetSnapshotId) => (
+                    <input
+                      key={`selected-${targetSnapshotId}`}
+                      type="hidden"
+                      name="target_snapshot_id"
+                      value={targetSnapshotId}
+                    />
+                  ))}
+                  <button
+                    type="submit"
+                    disabled={selectedForHandoff.length === 0}
+                    className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Handoff selected to Ads Workspace
+                  </button>
+                </form>
+                <Link href={props.workspaceQueueHref} className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground">
+                  Open Queue Review
+                </Link>
+              </div>
+            </div>
+
+            <div className="mt-3 text-sm text-muted">
+              {formatNumber(selectedForHandoff.length)} selected row(s) ·{' '}
+              {formatNumber(selectedStageableActionCount)} supported staged action(s)
             </div>
 
             {filteredRows.length === 0 ? (
               <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
-                No target rows match the current Phase 9 queue filters.
+                No target rows match the current optimizer queue filters.
               </div>
             ) : (
               <div className="mt-4 overflow-y-auto">
                 <div data-aph-hscroll data-aph-hscroll-axis="x" className="overflow-x-auto">
-                  <table className="min-w-[1560px] table-auto border-collapse text-left text-sm">
+                  <table className="min-w-[1680px] table-auto border-collapse text-left text-sm">
                     <thead>
                       <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
+                        <th className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            aria-label="Select all visible stageable optimizer rows"
+                            checked={allVisibleStageableSelected}
+                            disabled={visibleStageableRows.length === 0}
+                            onChange={(event) => toggleAllVisibleStageable(event.target.checked)}
+                          />
+                        </th>
                         <th className="px-3 py-2">Target</th>
                         <th className="px-3 py-2">Priority</th>
                         <th className="px-3 py-2">Recommendations</th>
+                        <th className="px-3 py-2">Workspace actions</th>
                         <th className="px-3 py-2">Current role</th>
                         <th className="px-3 py-2">Efficiency</th>
                         <th className="px-3 py-2">Confidence</th>
@@ -685,6 +833,10 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                         const coverageSummary = getCoverageSummary(row);
                         const coverageNotes = coverageGapText(row);
                         const isActive = row.targetSnapshotId === activeTargetSnapshotId;
+                        const workspaceSupportedActions = getWorkspaceSupportedActions(row);
+                        const unsupportedReviewOnlyActions = getUnsupportedReviewOnlyActions(row);
+                        const isSelected = selectedForHandoff.includes(row.targetSnapshotId);
+                        const isStageable = workspaceSupportedActions.length > 0;
 
                         return (
                           <tr
@@ -693,6 +845,17 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                               isActive ? 'bg-primary/5' : ''
                             }`}
                           >
+                            <td className="px-3 py-3">
+                              <input
+                                type="checkbox"
+                                aria-label={`Select ${row.targetText} for Ads Workspace handoff`}
+                                checked={isSelected}
+                                disabled={!isStageable}
+                                onChange={(event) =>
+                                  toggleSelectedRow(row.targetSnapshotId, event.target.checked)
+                                }
+                              />
+                            </td>
                             <td className="px-3 py-3">
                               <div className="font-semibold text-foreground">{row.targetText}</div>
                               <div className="mt-1 text-xs text-muted">
@@ -709,6 +872,16 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                               <div>{formatNumber(row.queue.recommendationCount)}</div>
                               <div className="mt-1 text-xs text-muted">
                                 {labelize(row.queue.primaryActionType)}
+                              </div>
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="text-foreground">
+                                {formatNumber(workspaceSupportedActions.length)}
+                              </div>
+                              <div className="mt-1 text-xs text-muted">
+                                {unsupportedReviewOnlyActions.length > 0
+                                  ? `${formatNumber(unsupportedReviewOnlyActions.length)} review-only`
+                                  : 'Ready for handoff'}
                               </div>
                             </td>
                             <td className="px-3 py-3">
@@ -807,10 +980,46 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
             {activeRow ? (
               <div className="mt-3 space-y-4">
                 <div className="border-b border-border pb-4">
-                  <div className="text-lg font-semibold text-foreground">{activeRow.targetText}</div>
-                  <div className="mt-1 text-sm text-muted">
-                    {activeRow.typeLabel ?? 'Target'} · {activeRow.matchType ?? '—'} ·{' '}
-                    {activeRow.targetId}
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="text-lg font-semibold text-foreground">{activeRow.targetText}</div>
+                      <div className="mt-1 text-sm text-muted">
+                        {activeRow.typeLabel ?? 'Target'} · {activeRow.matchType ?? '—'} ·{' '}
+                        {activeRow.targetId}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        href={buildWorkspaceTargetHref({
+                          asin: props.asin,
+                          start: props.start,
+                          end: props.end,
+                          targetId: activeRow.persistedTargetKey,
+                        })}
+                        className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground"
+                      >
+                        Open in Ads Workspace
+                      </Link>
+                      <form action={props.handoffAction}>
+                        <input type="hidden" name="return_to" value={props.returnTo} />
+                        <input type="hidden" name="workspace_return_to" value={props.workspaceQueueHref} />
+                        <input type="hidden" name="asin" value={props.asin} />
+                        <input type="hidden" name="start" value={props.start} />
+                        <input type="hidden" name="end" value={props.end} />
+                        <input
+                          type="hidden"
+                          name="target_snapshot_id"
+                          value={activeRow.targetSnapshotId}
+                        />
+                        <button
+                          type="submit"
+                          disabled={getWorkspaceSupportedActions(activeRow).length === 0}
+                          className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Handoff this target
+                        </button>
+                      </form>
+                    </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <RolePill
@@ -843,6 +1052,18 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                 <DetailSection label="Recommendation details">
                   {activeRow.recommendation ? (
                     <div className="space-y-3">
+                      <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+                        <div className="text-xs uppercase tracking-wide text-muted">
+                          Workspace handoff status
+                        </div>
+                        <div className="mt-2 text-sm text-foreground">
+                          {formatNumber(getWorkspaceSupportedActions(activeRow).length)} supported
+                          workspace action(s) can be staged from this target.{' '}
+                          {formatNumber(getUnsupportedReviewOnlyActions(activeRow).length)} action(s)
+                          remain review-only inside the optimizer.
+                        </div>
+                      </div>
+
                       <DetailGrid
                         items={[
                           {

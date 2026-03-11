@@ -31,9 +31,13 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     const source = fs.readFileSync(actionsPath, 'utf-8');
 
     expect(source).toContain('executeAdsOptimizerManualRun');
+    expect(source).toContain('executeAdsOptimizerWorkspaceHandoff');
     expect(source).toContain('export async function runAdsOptimizerNowAction');
+    expect(source).toContain('export async function handoffAdsOptimizerToWorkspaceAction');
     expect(source).toContain("revalidatePath('/ads/optimizer')");
+    expect(source).toContain("revalidatePath('/ads/performance')");
     expect(source).toContain('Optimizer run ${result.runId} completed');
+    expect(source).toContain('Optimizer handoff created draft ${result.changeSetName}');
     expect(source).toContain('Diagnostics were saved to history.');
   });
 
@@ -42,7 +46,8 @@ describe('ads optimizer phase 4 runtime wiring', () => {
 
     expect(source).toContain('Manual runs capture auditable snapshots only');
     expect(source).toContain('Phase 8 now persists deterministic read-only recommendation sets');
-    expect(source).toContain('optimizer-owned snapshot tables only');
+    expect(source).toContain('handoff still happens later from the Targets view');
+    expect(source).toContain('optimizer-owned tables here');
     expect(source).toContain('Run optimizer now');
     expect(source).toContain('Phase 4 manual runs support one ASIN at a time.');
   });

@@ -63,8 +63,8 @@ export default function OptimizerHistoryPanel(props: OptimizerHistoryPanelProps)
             <div className="mt-2 max-w-3xl text-sm text-muted">
               Runs persist auditable product snapshots plus Phase 5 target profile snapshots, while
               Phase 8 now persists deterministic read-only recommendation sets. Existing Ads
-              Workspace execution handoff is still inactive here, so optimizer outputs stay inside
-              optimizer-owned snapshot tables only.
+              Workspace handoff still happens later from the Targets view, so this History surface
+              remains snapshot-only and optimizer outputs stay inside optimizer-owned tables here.
             </div>
           </div>
           <div className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted">
@@ -103,8 +103,8 @@ export default function OptimizerHistoryPanel(props: OptimizerHistoryPanelProps)
             ) : (
               <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-4 text-sm text-sky-800">
                 This creates a manual run record and stores product + target profile snapshots for{' '}
-                {props.asin}. Recommendation snapshots remain read-only and do not enter Ads
-                Workspace draft or execution tables in this phase.
+                {props.asin}. This run step remains snapshot-only; any later Ads Workspace handoff
+                happens from the Targets review surface.
               </div>
             )}
             <button

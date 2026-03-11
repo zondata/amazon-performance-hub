@@ -8,6 +8,7 @@ import Tabs from '@/components/Tabs';
 import {
   activateAdsOptimizerRulePackVersionAction,
   createAdsOptimizerDraftVersionAction,
+  handoffAdsOptimizerToWorkspaceAction,
   runAdsOptimizerNowAction,
 } from '@/app/ads/optimizer/actions';
 import { isAdsOptimizerEnabled } from '@/lib/ads-optimizer/featureFlag';
@@ -69,7 +70,7 @@ const EMPTY_STATE_COPY: Record<
     eyebrow: 'Targets scope',
     title: 'Select one ASIN and capture a run to review the target queue.',
     body:
-      'Phase 9 reads persisted target profile, state, role, guardrail, and read-only recommendation snapshots into an ASIN command center, target queue, and detail drawer. Execution handoff into Ads Workspace is still inactive.',
+      'Phase 10 reads persisted target profile, state, role, guardrail, and recommendation snapshots into an ASIN command center, target queue, and detail drawer. Supported actions can be handed off into Ads Workspace draft staging, but execution still stays there.',
   },
   config: {
     eyebrow: 'Config placeholder',
@@ -159,7 +160,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
       : view === 'overview'
         ? 'Read-only optimizer active'
         : view === 'targets'
-          ? 'Read-only review queue'
+          ? 'Review + handoff queue'
         : view === 'history'
           ? 'Recommendation engine'
           : 'Recommendation shell only';
@@ -176,8 +177,9 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
               {formatUiDateRange(start, end)}
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
-              Feature-flagged SP recommendation shell. This route is isolated from the current Ads
-              Workspace and does not execute or stage optimizer actions yet.
+              Feature-flagged SP optimizer route. Recommendations are reviewed here first, and any
+              supported handoff still stages into the existing Ads Workspace rather than executing
+              directly from the optimizer.
             </div>
           </div>
           <form
@@ -300,10 +302,21 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
               start={start}
               end={end}
               historyHref={buildOptimizerHref({ start, end, asin, view: 'history' })}
+              returnTo={buildOptimizerHref({ start, end, asin, view: 'targets' })}
+              workspaceQueueHref={`/ads/performance?${new URLSearchParams({
+                panel: 'queue',
+                channel: 'sp',
+                level: 'targets',
+                view: 'table',
+                asin,
+                start,
+                end,
+              }).toString()}`}
               run={targetsData?.run ?? null}
               latestCompletedRun={targetsData?.latestCompletedRun ?? null}
               productState={targetsData?.productState ?? null}
               rows={targetsData?.rows ?? []}
+              handoffAction={handoffAdsOptimizerToWorkspaceAction}
             />
       ) : (
         <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
