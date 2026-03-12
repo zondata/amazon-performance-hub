@@ -1,7 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { Fragment, type ReactNode, useState } from 'react';
 import Link from 'next/link';
 
 import type { AdsOptimizerRunComparisonView } from '@/lib/ads-optimizer/comparison';
@@ -33,12 +32,63 @@ type OptimizerTargetsPanelProps = {
   handoffAction: (formData: FormData) => Promise<void>;
 };
 
-type QueueSort = 'priority' | 'risk' | 'opportunity' | 'target';
+type QueueSort =
+  | 'target'
+  | 'priority'
+  | 'recommendations'
+  | 'workspace_actions'
+  | 'current_role'
+  | 'efficiency'
+  | 'confidence'
+  | 'tier'
+  | 'spend_direction'
+  | 'exceptions';
+type QueueSortDirection = 'asc' | 'desc';
 type FilterValue = 'all' | string;
+type ExceptionFilterValue =
+  | 'all'
+  | 'has_exception'
+  | 'high_severity'
+  | 'manual_review_required';
 type WorkspaceSupportedActionType =
   | 'update_target_bid'
   | 'update_target_state'
   | 'update_placement_modifier';
+type DrawerInspectionEngineId =
+  | 'action-plan'
+  | 'guardrails'
+  | 'portfolio-caps'
+  | 'target-state'
+  | 'role-history'
+  | 'query-diagnostics'
+  | 'placement-diagnostics'
+  | 'run-comparison'
+  | 'rollback-guidance'
+  | 'raw-metrics'
+  | 'derived-metrics';
+type DrawerInspectionSelection = DrawerInspectionEngineId | 'all' | null;
+type ProposedChangeCard =
+  | {
+      key: string;
+      title: string;
+      category: 'execution' | 'cadence';
+      reviewOnly: false;
+      currentValue: string;
+      proposedValue: string;
+      detail?: string;
+    }
+  | {
+      key: string;
+      title: string;
+      category: 'review';
+      reviewOnly: true;
+      detail: string;
+    };
+type DrawerInspectionSection = {
+  id: DrawerInspectionEngineId;
+  label: string;
+  content: ReactNode;
+};
 
 const GLOBAL_METHODOLOGY_NOTES = [
   'STIS, STIR, and TOS IS are non-additive diagnostics. The Targets page only shows latest observed values or explicit trend metadata, never a synthetic window average.',
@@ -46,6 +96,7 @@ const GLOBAL_METHODOLOGY_NOTES = [
   'Zero-click targets can legitimately show expected-unavailable search-term diagnostics. That is normal availability behavior unless other inputs also look incomplete.',
   'Ads Optimizer remains recommendation-first. Ads Workspace is still the only staging and execution boundary.',
 ];
+const NOT_CAPTURED = 'Not captured';
 
 const formatNumber = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return '—';
@@ -64,6 +115,18 @@ const formatCurrency = (value: number | null) => {
 const formatPercent = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return '—';
   return `${(value * 100).toFixed(1)}%`;
+};
+
+const formatWholePercent = (value: number | null) => {
+  if (value === null || !Number.isFinite(value)) return NOT_CAPTURED;
+  const digits = Number.isInteger(value) ? 0 : 1;
+  return `${value.toFixed(digits)}%`;
+};
+
+const formatSignedPercentChange = (value: number | null) => {
+  if (value === null || !Number.isFinite(value)) return null;
+  const digits = Math.abs(value) >= 10 || Number.isInteger(value) ? 0 : 1;
+  return `${value > 0 ? '+' : ''}${value.toFixed(digits)}%`;
 };
 
 const labelize = (value: string | null) =>
@@ -149,6 +212,40 @@ const SummaryCard = (props: { label: string; value: string; detail?: string }) =
     <div className="text-xs uppercase tracking-wide text-muted">{props.label}</div>
     <div className="mt-2 text-lg font-semibold text-foreground">{props.value}</div>
     {props.detail ? <div className="mt-1 text-sm text-muted">{props.detail}</div> : null}
+  </div>
+);
+
+const ProposedChangeSummaryCard = (props: { card: ProposedChangeCard }) => (
+  <div className="rounded-xl border border-border bg-surface px-4 py-4">
+    <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-muted">
+      {props.card.reviewOnly
+        ? 'Review-only proposed action'
+        : props.card.category === 'cadence'
+          ? 'Cadence recommendation'
+          : 'Execution-changing action'}
+    </div>
+    <div className="mt-2 text-sm font-semibold text-foreground">{props.card.title}</div>
+    {props.card.reviewOnly ? (
+      <div className="mt-3 text-sm text-muted">{props.card.detail}</div>
+    ) : (
+      <>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+              Current
+            </div>
+            <div className="mt-1 text-sm text-foreground">{props.card.currentValue}</div>
+          </div>
+          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+              Proposed
+            </div>
+            <div className="mt-1 text-sm text-foreground">{props.card.proposedValue}</div>
+          </div>
+        </div>
+        {props.card.detail ? <div className="mt-3 text-sm text-muted">{props.card.detail}</div> : null}
+      </>
+    )}
   </div>
 );
 
@@ -329,6 +426,13 @@ const compareNullableNumber = (left: number | null, right: number | null) => {
   return left - right;
 };
 
+const compareNullableString = (left: string | null, right: string | null) => {
+  if (left === null && right === null) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  return left.localeCompare(right);
+};
+
 const buildPriorityLabel = (priority: number | null, actionType: string | null) => {
   if (priority === null) return 'Monitor only';
   return `P${Math.max(1, Math.round(priority / 10))} · ${labelize(actionType)}`;
@@ -356,6 +460,308 @@ const getUnsupportedReviewOnlyActions = (row: AdsOptimizerTargetReviewRow) =>
   (row.recommendation?.actions ?? []).filter(
     (action) => !isWorkspaceSupportedActionType(action.actionType)
   );
+
+const getHighestExceptionSeverityRank = (row: AdsOptimizerTargetReviewRow) =>
+  Math.max(0, ...(row.recommendation?.exceptionSignals ?? []).map((signal) => getSeverityRank(signal.severity)));
+
+const getExceptionCount = (row: AdsOptimizerTargetReviewRow) =>
+  row.recommendation?.exceptionSignals.length ?? 0;
+
+const hasManualReviewRequirement = (row: AdsOptimizerTargetReviewRow) =>
+  row.recommendation?.manualReviewRequired === true ||
+  row.role.guardrails.flags.requiresManualApproval ||
+  row.role.guardrails.flags.autoPauseEligible ||
+  row.role.guardrails.flags.transitionLocked;
+
+const getDefaultSortDirection = (sortBy: QueueSort): QueueSortDirection =>
+  sortBy === 'recommendations' ||
+  sortBy === 'workspace_actions' ||
+  sortBy === 'exceptions'
+    ? 'desc'
+    : 'asc';
+
+const compareRowsByDefault = (left: AdsOptimizerTargetReviewRow, right: AdsOptimizerTargetReviewRow) =>
+  compareNullableNumber(left.queue.priority, right.queue.priority) ||
+  (right.queue.recommendationCount ?? 0) - (left.queue.recommendationCount ?? 0) ||
+  (right.state.riskScore ?? -1) - (left.state.riskScore ?? -1) ||
+  (right.state.opportunityScore ?? -1) - (left.state.opportunityScore ?? -1) ||
+  left.targetText.localeCompare(right.targetText);
+
+const compareRowsBySort = (
+  left: AdsOptimizerTargetReviewRow,
+  right: AdsOptimizerTargetReviewRow,
+  sortBy: QueueSort,
+  direction: QueueSortDirection
+) => {
+  let comparison = 0;
+
+  switch (sortBy) {
+    case 'target':
+      comparison = left.targetText.localeCompare(right.targetText);
+      break;
+    case 'priority':
+      comparison = compareNullableNumber(left.queue.priority, right.queue.priority);
+      break;
+    case 'recommendations':
+      comparison = (left.queue.recommendationCount ?? 0) - (right.queue.recommendationCount ?? 0);
+      break;
+    case 'workspace_actions':
+      comparison =
+        getWorkspaceSupportedActions(left).length - getWorkspaceSupportedActions(right).length;
+      break;
+    case 'current_role':
+      comparison = left.role.currentRole.label.localeCompare(right.role.currentRole.label);
+      break;
+    case 'efficiency':
+      comparison = left.state.efficiency.label.localeCompare(right.state.efficiency.label);
+      break;
+    case 'confidence':
+      comparison = left.state.confidence.label.localeCompare(right.state.confidence.label);
+      break;
+    case 'tier':
+      comparison = left.state.importance.label.localeCompare(right.state.importance.label);
+      break;
+    case 'spend_direction':
+      comparison = compareNullableString(left.queue.spendDirection, right.queue.spendDirection);
+      break;
+    case 'exceptions':
+      comparison =
+        getHighestExceptionSeverityRank(left) - getHighestExceptionSeverityRank(right) ||
+        getExceptionCount(left) - getExceptionCount(right) ||
+        Number(hasManualReviewRequirement(left)) - Number(hasManualReviewRequirement(right));
+      break;
+  }
+
+  return (direction === 'asc' ? comparison : -comparison) || compareRowsByDefault(left, right);
+};
+
+const readJsonString = (value: Record<string, unknown> | null, key: string) =>
+  typeof value?.[key] === 'string' ? (value[key] as string) : null;
+
+const readJsonNumber = (value: Record<string, unknown> | null, key: string) => {
+  const raw = value?.[key];
+  if (raw === null || raw === undefined || raw === '') return null;
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const sentenceCase = (value: string | null) => {
+  if (!value) return NOT_CAPTURED;
+  return labelize(value).toLowerCase();
+};
+
+const buildProposedChangeCards = (row: AdsOptimizerTargetReviewRow): ProposedChangeCard[] => {
+  const cards: ProposedChangeCard[] = [];
+  const actions = row.recommendation?.actions ?? [];
+
+  for (const action of actions) {
+    if (action.actionType === 'update_target_state') {
+      cards.push({
+        key: `${row.targetSnapshotId}:state`,
+        title: 'Update target state',
+        category: 'execution',
+        reviewOnly: false,
+        currentValue: sentenceCase(readJsonString(action.entityContext, 'current_state')),
+        proposedValue: sentenceCase(readJsonString(action.proposedChange, 'next_state')),
+      });
+      continue;
+    }
+
+    if (action.actionType === 'update_target_bid') {
+      const currentBid = readJsonNumber(action.entityContext, 'current_bid');
+      const nextBid = readJsonNumber(action.proposedChange, 'next_bid');
+      const deltaPct = formatSignedPercentChange(readJsonNumber(action.proposedChange, 'delta_pct'));
+      cards.push({
+        key: `${row.targetSnapshotId}:bid`,
+        title: 'Update target bid',
+        category: 'execution',
+        reviewOnly: false,
+        currentValue: currentBid === null ? NOT_CAPTURED : formatCurrency(currentBid),
+        proposedValue:
+          nextBid === null
+            ? NOT_CAPTURED
+            : deltaPct
+              ? `${formatCurrency(nextBid)} (${deltaPct})`
+              : formatCurrency(nextBid),
+      });
+      continue;
+    }
+
+    if (action.actionType === 'update_placement_modifier') {
+      cards.push({
+        key: `${row.targetSnapshotId}:placement`,
+        title: 'Update placement modifier',
+        category: 'execution',
+        reviewOnly: false,
+        currentValue: formatWholePercent(readJsonNumber(action.entityContext, 'current_percentage')),
+        proposedValue: formatWholePercent(readJsonNumber(action.proposedChange, 'next_percentage')),
+      });
+      continue;
+    }
+
+    if (action.actionType === 'change_review_cadence') {
+      cards.push({
+        key: `${row.targetSnapshotId}:cadence`,
+        title: 'Change review cadence',
+        category: 'cadence',
+        reviewOnly: false,
+        currentValue: NOT_CAPTURED,
+        proposedValue: labelize(readJsonString(action.proposedChange, 'recommended_cadence')),
+        detail: 'Current cadence is not persisted in this snapshot.',
+      });
+      continue;
+    }
+
+    if (action.actionType === 'negative_candidate') {
+      const searchTerm = readJsonString(action.entityContext, 'search_term') ?? 'this query';
+      cards.push({
+        key: `${row.targetSnapshotId}:negative`,
+        title: 'Negative candidate review',
+        category: 'review',
+        reviewOnly: true,
+        detail: `Review-only proposed action: consider adding "${searchTerm}" as a negative if the operator agrees with the observed waste pattern.`,
+      });
+      continue;
+    }
+
+    if (action.actionType === 'isolate_query_candidate') {
+      const searchTerm = readJsonString(action.entityContext, 'search_term') ?? 'this query';
+      cards.push({
+        key: `${row.targetSnapshotId}:isolate`,
+        title: 'Isolation candidate review',
+        category: 'review',
+        reviewOnly: true,
+        detail: `Review-only proposed action: consider isolating "${searchTerm}" into its own target for cleaner control.`,
+      });
+    }
+  }
+
+  const promoteCandidate = row.recommendation?.queryDiagnostics?.promoteToExactCandidates[0] ?? null;
+  if (promoteCandidate) {
+    cards.push({
+      key: `${row.targetSnapshotId}:promote-exact`,
+      title: 'Promote-to-exact candidate review',
+      category: 'review',
+      reviewOnly: true,
+      detail: `Review-only proposed action: consider promoting "${promoteCandidate.searchTerm}" into an exact target based on the persisted query diagnostics.`,
+    });
+  }
+
+  const executionOrder = { execution: 0, review: 1, cadence: 2 } as const;
+  return cards.sort(
+    (left, right) =>
+      executionOrder[left.category] - executionOrder[right.category] ||
+      left.title.localeCompare(right.title)
+  );
+};
+
+const buildTargetActivityFact = (row: AdsOptimizerTargetReviewRow) => {
+  if (row.raw.clicks <= 0 && row.raw.spend <= 0) {
+    return 'It showed no paid activity in the selected window.';
+  }
+  if (row.raw.orders <= 0) {
+    return `It spent ${formatCurrency(row.raw.spend)} across ${formatNumber(row.raw.clicks)} clicks without an order.`;
+  }
+  return `It delivered ${formatNumber(row.raw.orders)} order(s) from ${formatNumber(row.raw.clicks)} clicks on ${formatCurrency(row.raw.spend)} spend.`;
+};
+
+const buildFlagLead = (args: {
+  row: AdsOptimizerTargetReviewRow;
+  productState: AdsOptimizerProductRunState | null;
+}) => {
+  const { row } = args;
+  const recommendation = row.recommendation;
+  const portfolio = recommendation?.portfolioControls;
+  const highSeveritySignal = recommendation?.exceptionSignals.find(
+    (signal) => signal.severity === 'high'
+  );
+
+  if (recommendation?.spendDirection === 'stop') {
+    if (row.role.guardrails.flags.autoPauseEligible) {
+      return 'This target is flagged for a hard stop because its guardrails mark it as auto-pause eligible.';
+    }
+    if (portfolio?.stopLossCapExceeded) {
+      return 'This target is flagged for a hard stop because the ASIN-level stop-loss cap is already exceeded.';
+    }
+    return 'This target is flagged for a hard stop because the persisted recommendation says spend should stop now.';
+  }
+
+  if (portfolio?.discoverCapBlocked) {
+    return 'This target is flagged because the Discover portfolio cap is already full, so growth on this row is constrained.';
+  }
+  if (portfolio?.learningBudgetExceeded) {
+    return 'This target is flagged because the ASIN learning-budget cap is already exceeded.';
+  }
+  if (portfolio?.budgetShareExceeded) {
+    return 'This target is flagged because it is already above the allowed budget share for one target.';
+  }
+  if (highSeveritySignal) {
+    return `${highSeveritySignal.title}.`;
+  }
+  if (row.state.efficiency.value === 'converting_but_loss_making') {
+    return 'This target is flagged because it is converting at a loss and the optimizer is protecting margin.';
+  }
+  if (row.state.efficiency.value === 'learning_no_sale') {
+    return 'This target is flagged because it is still spending in learning mode without a sale.';
+  }
+  if (row.state.confidence.value === 'insufficient') {
+    return 'This target is flagged because the optimizer has low confidence relative to the observed exposure.';
+  }
+
+  const desiredRole = row.role.desiredRole.label;
+  const currentRole = row.role.currentRole.label;
+  if (desiredRole !== currentRole) {
+    return `This target is flagged because its current role of ${currentRole.toLowerCase()} no longer matches the desired ${desiredRole.toLowerCase()} role.`;
+  }
+
+  return `This target is flagged because the persisted optimizer state points to a ${labelize(
+    recommendation?.spendDirection ?? row.queue.spendDirection
+  ).toLowerCase()} posture instead of hold.`;
+};
+
+const buildWhyFlaggedNarrative = (args: {
+  row: AdsOptimizerTargetReviewRow;
+  productState: AdsOptimizerProductRunState | null;
+}) => {
+  const { row, productState } = args;
+  const recommendation = row.recommendation;
+  const portfolio = recommendation?.portfolioControls;
+  const pieces = [
+    buildFlagLead(args),
+    buildTargetActivityFact(row),
+    `The persisted state is ${row.state.efficiency.label.toLowerCase()} with ${row.state.confidence.label.toLowerCase()} confidence and ${row.state.importance.label.toLowerCase()} importance.`,
+  ];
+
+  if (row.role.currentRole.label !== row.role.desiredRole.label) {
+    pieces.push(
+      `The optimizer wants this target to move from ${row.role.currentRole.label.toLowerCase()} to ${row.role.desiredRole.label.toLowerCase()}.`
+    );
+  }
+
+  if (portfolio) {
+    const capFacts = [
+      portfolio.discoverCapBlocked ? 'Discover cap blocked' : null,
+      portfolio.learningBudgetExceeded ? 'learning budget exceeded' : null,
+      portfolio.stopLossCapExceeded ? 'stop-loss cap exceeded' : null,
+      portfolio.budgetShareExceeded ? 'budget share exceeded' : null,
+    ].filter(Boolean);
+    if (capFacts.length > 0) {
+      pieces.push(`Portfolio caps in play: ${capFacts.join(', ')}.`);
+    }
+  }
+
+  if (productState?.objective) {
+    pieces.push(`This sits inside a product objective of ${productState.objective}.`);
+  }
+
+  if (recommendation?.spendDirection === 'stop') {
+    pieces.push(
+      'Because the spend direction is stop, pausing is safer than bid or placement tuning while the blocking condition remains unresolved.'
+    );
+  }
+
+  return pieces.join(' ');
+};
 
 const buildWorkspaceTargetHref = (args: {
   asin: string;
@@ -400,46 +806,36 @@ const filterRows = (
   rows: AdsOptimizerTargetReviewRow[],
   filters: {
     role: FilterValue;
-    state: FilterValue;
+    efficiency: FilterValue;
     tier: FilterValue;
     confidence: FilterValue;
+    spendDirection: FilterValue;
+    exceptions: ExceptionFilterValue;
     sortBy: QueueSort;
+    sortDirection: QueueSortDirection;
   }
 ) =>
   [...rows]
     .filter((row) => (filters.role === 'all' ? true : row.role.currentRole.value === filters.role))
-    .filter((row) => (filters.state === 'all' ? true : row.state.efficiency.value === filters.state))
+    .filter((row) =>
+      filters.efficiency === 'all' ? true : row.state.efficiency.value === filters.efficiency
+    )
     .filter((row) => (filters.tier === 'all' ? true : row.state.importance.value === filters.tier))
     .filter((row) =>
       filters.confidence === 'all' ? true : row.state.confidence.value === filters.confidence
     )
-    .sort((left, right) => {
-      if (filters.sortBy === 'risk') {
-        return (
-          (right.state.riskScore ?? -1) - (left.state.riskScore ?? -1) ||
-          compareNullableNumber(left.queue.priority, right.queue.priority) ||
-          left.targetText.localeCompare(right.targetText)
-        );
-      }
-      if (filters.sortBy === 'opportunity') {
-        return (
-          (right.state.opportunityScore ?? -1) - (left.state.opportunityScore ?? -1) ||
-          compareNullableNumber(left.queue.priority, right.queue.priority) ||
-          left.targetText.localeCompare(right.targetText)
-        );
-      }
-      if (filters.sortBy === 'target') {
-        return left.targetText.localeCompare(right.targetText);
-      }
-
-      return (
-        compareNullableNumber(left.queue.priority, right.queue.priority) ||
-        (right.queue.recommendationCount ?? 0) - (left.queue.recommendationCount ?? 0) ||
-        (right.state.riskScore ?? -1) - (left.state.riskScore ?? -1) ||
-        (right.state.opportunityScore ?? -1) - (left.state.opportunityScore ?? -1) ||
-        left.targetText.localeCompare(right.targetText)
-      );
-    });
+    .filter((row) =>
+      filters.spendDirection === 'all' ? true : row.queue.spendDirection === filters.spendDirection
+    )
+    .filter((row) => {
+      if (filters.exceptions === 'all') return true;
+      if (filters.exceptions === 'has_exception') return getExceptionCount(row) > 0;
+      if (filters.exceptions === 'high_severity') return getHighestExceptionSeverityRank(row) >= 3;
+      return hasManualReviewRequirement(row);
+    })
+    .sort((left, right) =>
+      compareRowsBySort(left, right, filters.sortBy, filters.sortDirection)
+    );
 
 export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps) {
   const [selectedTargetSnapshotId, setSelectedTargetSnapshotId] = useState<string | null>(
@@ -447,10 +843,41 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
   );
   const [selectedForHandoff, setSelectedForHandoff] = useState<string[]>([]);
   const [roleFilter, setRoleFilter] = useState<FilterValue>('all');
-  const [stateFilter, setStateFilter] = useState<FilterValue>('all');
+  const [efficiencyFilter, setEfficiencyFilter] = useState<FilterValue>('all');
   const [tierFilter, setTierFilter] = useState<FilterValue>('all');
   const [confidenceFilter, setConfidenceFilter] = useState<FilterValue>('all');
+  const [spendDirectionFilter, setSpendDirectionFilter] = useState<FilterValue>('all');
+  const [exceptionFilter, setExceptionFilter] = useState<ExceptionFilterValue>('all');
   const [sortBy, setSortBy] = useState<QueueSort>('priority');
+  const [sortDirection, setSortDirection] = useState<QueueSortDirection>('asc');
+  const [selectedInspectionEngineState, setSelectedInspectionEngineState] = useState<{
+    targetSnapshotId: string | null;
+    engine: DrawerInspectionSelection;
+  }>({
+    targetSnapshotId: null,
+    engine: null,
+  });
+  const filteredRows = filterRows(props.rows, {
+    role: roleFilter,
+    efficiency: efficiencyFilter,
+    tier: tierFilter,
+    confidence: confidenceFilter,
+    spendDirection: spendDirectionFilter,
+    exceptions: exceptionFilter,
+    sortBy,
+    sortDirection,
+  });
+  const activeTargetSnapshotId = filteredRows.some(
+    (row) => row.targetSnapshotId === selectedTargetSnapshotId
+  )
+    ? selectedTargetSnapshotId
+    : (filteredRows[0]?.targetSnapshotId ?? null);
+  const selectedInspectionEngine =
+    selectedInspectionEngineState.targetSnapshotId === activeTargetSnapshotId
+      ? selectedInspectionEngineState.engine
+      : null;
+  const activeRow =
+    filteredRows.find((row) => row.targetSnapshotId === activeTargetSnapshotId) ?? null;
 
   if (props.asin === 'all') {
     return (
@@ -504,20 +931,6 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
     );
   }
 
-  const filteredRows = filterRows(props.rows, {
-    role: roleFilter,
-    state: stateFilter,
-    tier: tierFilter,
-    confidence: confidenceFilter,
-    sortBy,
-  });
-  const activeTargetSnapshotId = filteredRows.some(
-    (row) => row.targetSnapshotId === selectedTargetSnapshotId
-  )
-    ? selectedTargetSnapshotId
-    : (filteredRows[0]?.targetSnapshotId ?? null);
-  const activeRow =
-    filteredRows.find((row) => row.targetSnapshotId === activeTargetSnapshotId) ?? null;
   const persistedRecommendationRows = props.rows.filter((row) => row.recommendation).length;
   const actionCount = props.rows.reduce(
     (sum, row) => sum + (row.recommendation?.actionCount ?? 0),
@@ -614,6 +1027,20 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
       });
       return [...next];
     });
+  };
+
+  const toggleQueueSort = (nextSort: QueueSort) => {
+    if (sortBy === nextSort) {
+      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortBy(nextSort);
+    setSortDirection(getDefaultSortDirection(nextSort));
+  };
+
+  const buildSortIndicator = (column: QueueSort) => {
+    if (sortBy !== column) return ' ';
+    return sortDirection === 'asc' ? '↑' : '↓';
   };
 
   return (
@@ -1209,16 +1636,16 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
         </DetailSection>
       </section>
 
-      <section className="grid gap-6 xl:h-[calc(100vh-3rem)] xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)] xl:items-start">
-        <div className="space-y-4 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)] xl:items-stretch">
+        <div className="space-y-4 xl:flex xl:h-[calc(100vh-1.5rem)] xl:min-h-0 xl:flex-col">
           <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm xl:flex xl:h-full xl:min-h-0 xl:flex-col xl:overflow-hidden">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <div className="text-xs uppercase tracking-[0.3em] text-muted">Target queue</div>
                 <div className="mt-2 text-sm text-muted">
-                  Priority sorting uses the persisted recommendation action priority from the exact
-                  run. Filters stay within the current ASIN and date window only, while exception
-                  signals and contextual diagnostics remain visible without bypassing Ads Workspace.
+                  Priority sorting still opens as the default queue order from the exact run. You
+                  can now sort directly from the sticky table headers while keeping filters scoped
+                  to this ASIN and date window.
                 </div>
                 <div className="mt-3">
                   <InlineHelp title="Coverage">
@@ -1243,7 +1670,7 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
 
             <div className="mt-4 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col">
               <div>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
                   <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
                     Role
                     <select
@@ -1262,13 +1689,13 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                   </label>
 
                   <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-                    State
+                    Efficiency
                     <select
-                      value={stateFilter}
-                      onChange={(event) => setStateFilter(event.target.value)}
+                      value={efficiencyFilter}
+                      onChange={(event) => setEfficiencyFilter(event.target.value)}
                       className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
                     >
-                      <option value="all">All states</option>
+                      <option value="all">All efficiency</option>
                       <option value="profitable">Profitable</option>
                       <option value="break_even">Break Even</option>
                       <option value="converting_but_loss_making">Loss Making</option>
@@ -1306,18 +1733,43 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                   </label>
 
                   <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-                    Queue order
+                    Spend direction
                     <select
-                      value={sortBy}
-                      onChange={(event) => setSortBy(event.target.value as QueueSort)}
+                      value={spendDirectionFilter}
+                      onChange={(event) => setSpendDirectionFilter(event.target.value)}
                       className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
                     >
-                      <option value="priority">Priority</option>
-                      <option value="risk">Risk</option>
-                      <option value="opportunity">Opportunity</option>
-                      <option value="target">Target</option>
+                      <option value="all">All spend directions</option>
+                      <option value="increase">Increase</option>
+                      <option value="hold">Hold</option>
+                      <option value="reduce">Reduce</option>
+                      <option value="collapse">Collapse</option>
+                      <option value="stop">Stop</option>
                     </select>
                   </label>
+
+                  <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                    Exceptions
+                    <select
+                      value={exceptionFilter}
+                      onChange={(event) =>
+                        setExceptionFilter(event.target.value as ExceptionFilterValue)
+                      }
+                      className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                    >
+                      <option value="all">All exception states</option>
+                      <option value="has_exception">Has exception</option>
+                      <option value="high_severity">High severity</option>
+                      <option value="manual_review_required">Manual review required</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="mt-3 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-muted">
+                  Active sort: <span className="font-semibold text-foreground">{labelize(sortBy)}</span>{' '}
+                  <span className="font-semibold text-foreground">
+                    {sortDirection === 'asc' ? '↑' : '↓'}
+                  </span>
                 </div>
 
                 <div className="mt-3 rounded-xl border border-border bg-surface-2 px-4 py-2.5 text-sm text-muted">
@@ -1401,20 +1853,123 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                           />
                         </th>
                         <th className="sticky top-0 left-0 z-30 border-b border-border bg-surface px-3 py-2 shadow-sm">
-                          Target
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
+                            onClick={() => toggleQueueSort('target')}
+                          >
+                            <span>Target</span>
+                            <span className="text-[11px] text-muted">{buildSortIndicator('target')}</span>
+                          </button>
                         </th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Priority</th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Recommendations</th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Workspace actions</th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Current role</th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Efficiency</th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Confidence</th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Tier</th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Spend direction</th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Exceptions</th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
+                            onClick={() => toggleQueueSort('priority')}
+                          >
+                            <span>Priority</span>
+                            <span className="text-[11px] text-muted">
+                              {buildSortIndicator('priority')}
+                            </span>
+                          </button>
+                        </th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
+                            onClick={() => toggleQueueSort('recommendations')}
+                          >
+                            <span>Recommendations</span>
+                            <span className="text-[11px] text-muted">
+                              {buildSortIndicator('recommendations')}
+                            </span>
+                          </button>
+                        </th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
+                            onClick={() => toggleQueueSort('workspace_actions')}
+                          >
+                            <span>Workspace actions</span>
+                            <span className="text-[11px] text-muted">
+                              {buildSortIndicator('workspace_actions')}
+                            </span>
+                          </button>
+                        </th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
+                            onClick={() => toggleQueueSort('current_role')}
+                          >
+                            <span>Current role</span>
+                            <span className="text-[11px] text-muted">
+                              {buildSortIndicator('current_role')}
+                            </span>
+                          </button>
+                        </th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
+                            onClick={() => toggleQueueSort('efficiency')}
+                          >
+                            <span>Efficiency</span>
+                            <span className="text-[11px] text-muted">
+                              {buildSortIndicator('efficiency')}
+                            </span>
+                          </button>
+                        </th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
+                            onClick={() => toggleQueueSort('confidence')}
+                          >
+                            <span>Confidence</span>
+                            <span className="text-[11px] text-muted">
+                              {buildSortIndicator('confidence')}
+                            </span>
+                          </button>
+                        </th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
+                            onClick={() => toggleQueueSort('tier')}
+                          >
+                            <span>Tier</span>
+                            <span className="text-[11px] text-muted">{buildSortIndicator('tier')}</span>
+                          </button>
+                        </th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
+                            onClick={() => toggleQueueSort('spend_direction')}
+                          >
+                            <span>Spend direction</span>
+                            <span className="text-[11px] text-muted">
+                              {buildSortIndicator('spend_direction')}
+                            </span>
+                          </button>
+                        </th>
+                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
+                            onClick={() => toggleQueueSort('exceptions')}
+                          >
+                            <span>Exceptions</span>
+                            <span className="text-[11px] text-muted">
+                              {buildSortIndicator('exceptions')}
+                            </span>
+                          </button>
+                        </th>
                         <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Reason-code badges</th>
                         <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Coverage</th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Detail</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1452,13 +2007,34 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                                 isActive ? 'bg-primary/5' : 'bg-surface'
                               }`}
                             >
-                              <div className="font-semibold text-foreground">{row.targetText}</div>
-                              <div className="mt-0.5 line-clamp-1 text-xs text-muted">
-                                {row.typeLabel ?? 'Target'} · {row.matchType ?? '—'} · {row.targetId}
-                              </div>
-                              <div className="mt-0.5 line-clamp-1 text-xs text-muted">
-                                {row.campaignName ?? row.campaignId} / {row.adGroupName ?? row.adGroupId}
-                              </div>
+                              <button
+                                type="button"
+                                className="w-full text-left"
+                                aria-expanded={isActive}
+                                aria-controls={
+                                  activeRow ? `target-detail-drawer-${activeRow.targetSnapshotId}` : undefined
+                                }
+                                onClick={() => setSelectedTargetSnapshotId(row.targetSnapshotId)}
+                              >
+                                <div className="font-semibold text-foreground">{row.targetText}</div>
+                                <div className="mt-0.5 line-clamp-1 text-xs text-muted">
+                                  {row.typeLabel ?? 'Target'} · {row.matchType ?? '—'} · {row.targetId}
+                                </div>
+                                <div className="mt-0.5 line-clamp-1 text-xs text-muted">
+                                  {row.campaignName ?? row.campaignId} / {row.adGroupName ?? row.adGroupId}
+                                </div>
+                              </button>
+                              <button
+                                type="button"
+                                className="mt-2 rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs font-semibold text-foreground transition hover:border-primary/40 hover:text-primary"
+                                aria-expanded={isActive}
+                                aria-controls={
+                                  activeRow ? `target-detail-drawer-${activeRow.targetSnapshotId}` : undefined
+                                }
+                                onClick={() => setSelectedTargetSnapshotId(row.targetSnapshotId)}
+                              >
+                                {isActive ? 'Viewing' : 'Open'}
+                              </button>
                             </td>
                             <td className="px-3 py-2.5 text-foreground">
                               {buildPriorityLabel(row.queue.priority, row.queue.primaryActionType)}
@@ -1599,19 +2175,6 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                                 </div>
                               ) : null}
                             </td>
-                            <td className="px-3 py-2.5">
-                              <button
-                                type="button"
-                                className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground transition hover:border-primary/40 hover:text-primary"
-                                aria-expanded={isActive}
-                                aria-controls={
-                                  activeRow ? `target-detail-drawer-${activeRow.targetSnapshotId}` : undefined
-                                }
-                                onClick={() => setSelectedTargetSnapshotId(row.targetSnapshotId)}
-                              >
-                                {isActive ? 'Viewing' : 'Open'}
-                              </button>
-                            </td>
                           </tr>
                         );
                       })}
@@ -1625,204 +2188,437 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
 
         <aside
           id={activeRow ? `target-detail-drawer-${activeRow.targetSnapshotId}` : undefined}
-          className="xl:sticky xl:top-4 xl:self-start xl:h-[calc(100vh-3rem)]"
+          className="xl:sticky xl:top-4 xl:self-stretch xl:h-[calc(100vh-1.5rem)] xl:min-h-0"
         >
           <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm xl:flex xl:h-full xl:flex-col xl:overflow-hidden">
             <div className="text-xs uppercase tracking-[0.3em] text-muted">
               Target detail drawer
             </div>
             {activeRow ? (
-              <div className="mt-3 space-y-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain">
-                <div className="border-b border-border pb-4 xl:sticky xl:top-0 xl:z-10 xl:bg-surface/95 xl:pt-1">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <div className="text-lg font-semibold text-foreground">{activeRow.targetText}</div>
-                      <div className="mt-1 text-sm text-muted">
-                        {activeRow.typeLabel ?? 'Target'} · {activeRow.matchType ?? '—'} ·{' '}
-                        {activeRow.targetId}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Link
-                        href={buildWorkspaceTargetHref({
-                          asin: props.asin,
-                          start: props.start,
-                          end: props.end,
-                          targetId: activeRow.persistedTargetKey,
-                        })}
-                        className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground"
-                      >
-                        Open in Ads Workspace
-                      </Link>
-                      <form action={props.handoffAction}>
-                        <input type="hidden" name="return_to" value={props.returnTo} />
-                        <input type="hidden" name="workspace_return_to" value={props.workspaceQueueHref} />
-                        <input type="hidden" name="asin" value={props.asin} />
-                        <input type="hidden" name="start" value={props.start} />
-                        <input type="hidden" name="end" value={props.end} />
-                        <input
-                          type="hidden"
-                          name="target_snapshot_id"
-                          value={activeRow.targetSnapshotId}
-                        />
-                        <button
-                          type="submit"
-                          disabled={getWorkspaceSupportedActions(activeRow).length === 0}
-                          className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          Handoff this target
-                        </button>
-                      </form>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <RolePill
-                      value={activeRow.role.currentRole.value}
-                      label={`Current ${activeRow.role.currentRole.label}`}
-                    />
-                    <RolePill
-                      value={activeRow.role.desiredRole.value}
-                      label={`Desired ${activeRow.role.desiredRole.label}`}
-                    />
-                    <StatePill
-                      kind="efficiency"
-                      value={activeRow.state.efficiency.value}
-                      label={activeRow.state.efficiency.label}
-                    />
-                  </div>
-                </div>
+              (() => {
+                const proposedChangeCards = buildProposedChangeCards(activeRow);
+                const whyFlaggedNarrative = buildWhyFlaggedNarrative({
+                  row: activeRow,
+                  productState: props.productState,
+                });
+                const portfolioControls = activeRow.recommendation?.portfolioControls ?? null;
+                const hasPortfolioConstraint = Boolean(
+                  portfolioControls &&
+                    (portfolioControls.reasonCodes.length > 0 ||
+                      portfolioControls.discoverCapBlocked ||
+                      portfolioControls.learningBudgetExceeded ||
+                      portfolioControls.stopLossCapExceeded ||
+                      portfolioControls.budgetShareExceeded)
+                );
+                const hasMaterialGuardrailDriver =
+                  activeRow.role.guardrails.flags.requiresManualApproval ||
+                  activeRow.role.guardrails.flags.autoPauseEligible ||
+                  activeRow.role.guardrails.flags.transitionLocked ||
+                  activeRow.role.guardrails.notes.length > 0 ||
+                  (activeRow.recommendation?.unsupportedActionBlocks.length ?? 0) > 0 ||
+                  activeRow.recommendation?.manualReviewRequired === true;
+                const hasMaterialQueryDriver =
+                  activeRow.searchTermDiagnostics.topTerms.length > 0 ||
+                  activeRow.demandProxies.searchTermCount > 0 ||
+                  (activeRow.recommendation?.queryDiagnostics?.sameTextQueryPinning.status ?? 'not_observed') !==
+                    'not_observed' ||
+                  (activeRow.recommendation?.queryDiagnostics?.promoteToExactCandidates.length ?? 0) > 0 ||
+                  (activeRow.recommendation?.queryDiagnostics?.isolateCandidates.length ?? 0) > 0 ||
+                  (activeRow.recommendation?.queryDiagnostics?.negativeCandidates.length ?? 0) > 0;
+                const hasMaterialPlacementDriver =
+                  activeRow.placementContext.topOfSearchModifierPct !== null ||
+                  activeRow.placementContext.impressions !== null ||
+                  activeRow.placementContext.spend !== null ||
+                  (activeRow.recommendation?.placementDiagnostics?.biasRecommendation ?? 'unknown') !==
+                    'unknown' ||
+                  (activeRow.recommendation?.placementDiagnostics?.reasonCodes.length ?? 0) > 0;
+                const hasDerivedMetrics =
+                  activeRow.derived.contributionAfterAds !== null ||
+                  activeRow.derived.breakEvenGap !== null ||
+                  activeRow.derived.maxCpcSupportGap !== null ||
+                  activeRow.derived.lossDollars !== null ||
+                  activeRow.derived.profitDollars !== null ||
+                  activeRow.derived.clickVelocity !== null ||
+                  activeRow.derived.impressionVelocity !== null ||
+                  activeRow.derived.organicContextSignal !== null;
 
-                {activeCriticalWarnings.length > 0 ? (
-                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                    <div className="font-semibold">Critical warnings</div>
-                    <ul className="mt-2 space-y-1">
-                      {activeCriticalWarnings.map((note) => (
-                        <li key={`${activeRow.targetSnapshotId}:critical:${note}`}>{note}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
+                const drawerSections: DrawerInspectionSection[] = [
+                  {
+                    id: 'action-plan',
+                    label: 'Action plan',
+                    content: (
+                      <DetailSection label="Action plan">
+                        {activeRow.recommendation ? (
+                          <div className="space-y-3">
+                            <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+                              <div className="text-xs uppercase tracking-wide text-muted">
+                                Workspace handoff status
+                              </div>
+                              <div className="mt-2 text-sm text-foreground">
+                                {formatNumber(getWorkspaceSupportedActions(activeRow).length)} supported
+                                workspace action(s) can be staged from this target.{' '}
+                                {formatNumber(getUnsupportedReviewOnlyActions(activeRow).length)} action(s)
+                                remain review-only inside the optimizer.
+                              </div>
+                            </div>
 
-                {activeRowSpecificExceptions.length > 0 ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    <div className="font-semibold">Row-specific exceptions</div>
-                    <ul className="mt-2 space-y-1">
-                      {activeRowSpecificExceptions.map((note) => (
-                        <li key={`${activeRow.targetSnapshotId}:exception:${note}`}>{note}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
+                            <DetailGrid
+                              items={[
+                                { label: 'Status', value: labelize(activeRow.recommendation.status) },
+                                {
+                                  label: 'Spend direction',
+                                  value: labelize(activeRow.recommendation.spendDirection),
+                                },
+                                {
+                                  label: 'Primary action',
+                                  value: labelize(activeRow.recommendation.primaryActionType),
+                                },
+                                {
+                                  label: 'Action count',
+                                  value: formatNumber(activeRow.recommendation.actionCount),
+                                },
+                                {
+                                  label: 'Execution boundary',
+                                  value: activeRow.recommendation.executionBoundary ?? NOT_CAPTURED,
+                                },
+                                {
+                                  label: 'Workspace handoff',
+                                  value: activeRow.recommendation.workspaceHandoff ?? NOT_CAPTURED,
+                                },
+                                {
+                                  label: 'Writes execution tables',
+                                  value:
+                                    activeRow.recommendation.writesExecutionTables === null
+                                      ? NOT_CAPTURED
+                                      : String(activeRow.recommendation.writesExecutionTables),
+                                },
+                                {
+                                  label: 'Manual review required',
+                                  value:
+                                    activeRow.recommendation.manualReviewRequired === null
+                                      ? NOT_CAPTURED
+                                      : String(activeRow.recommendation.manualReviewRequired),
+                                },
+                              ]}
+                            />
 
-                <DetailSection label="Recommendation details">
-                  {activeRow.recommendation ? (
-                    <div className="space-y-3">
-                      <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-                        <div className="text-xs uppercase tracking-wide text-muted">
-                          Workspace handoff status
-                        </div>
-                        <div className="mt-2 text-sm text-foreground">
-                          {formatNumber(getWorkspaceSupportedActions(activeRow).length)} supported
-                          workspace action(s) can be staged from this target.{' '}
-                          {formatNumber(getUnsupportedReviewOnlyActions(activeRow).length)} action(s)
-                          remain review-only inside the optimizer.
-                        </div>
-                      </div>
+                            <div className="space-y-2">
+                              <div className="text-xs uppercase tracking-wide text-muted">
+                                Coverage flags
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {activeRow.recommendation.coverageFlags.length > 0 ? (
+                                  activeRow.recommendation.coverageFlags.map((flag) => (
+                                    <ReasonCodeBadge
+                                      key={`${activeRow.targetSnapshotId}:${flag}`}
+                                      code={flag}
+                                    />
+                                  ))
+                                ) : (
+                                  <div className="text-sm text-muted">
+                                    No coverage flags were persisted.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
 
-                      <DetailGrid
-                        items={[
-                          {
-                            label: 'Status',
-                            value: labelize(activeRow.recommendation.status),
-                          },
-                          {
-                            label: 'Spend direction',
-                            value: labelize(activeRow.recommendation.spendDirection),
-                          },
-                          {
-                            label: 'Primary action',
-                            value: labelize(activeRow.recommendation.primaryActionType),
-                          },
-                          {
-                            label: 'Action count',
-                            value: formatNumber(activeRow.recommendation.actionCount),
-                          },
-                          {
-                            label: 'Execution boundary',
-                            value: activeRow.recommendation.executionBoundary ?? 'Not captured',
-                          },
-                          {
-                            label: 'Workspace handoff',
-                            value: activeRow.recommendation.workspaceHandoff ?? 'Not captured',
-                          },
-                          {
-                            label: 'Writes execution tables',
-                            value:
-                              activeRow.recommendation.writesExecutionTables === null
-                                ? 'Not captured'
-                                : String(activeRow.recommendation.writesExecutionTables),
-                          },
-                          {
-                            label: 'Manual review required',
-                            value:
-                              activeRow.recommendation.manualReviewRequired === null
-                                ? 'Not captured'
-                                : String(activeRow.recommendation.manualReviewRequired),
-                          },
-                        ]}
-                      />
+                            <div className="space-y-2">
+                              <div className="text-xs uppercase tracking-wide text-muted">
+                                Confidence notes
+                              </div>
+                              {activeRow.recommendation.confidenceNotes.length > 0 ? (
+                                <ul className="space-y-1 text-sm text-foreground">
+                                  {activeRow.recommendation.confidenceNotes.map((note) => (
+                                    <li key={`${activeRow.targetSnapshotId}:${note}`}>{note}</li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <div className="text-sm text-muted">
+                                  No confidence notes were persisted.
+                                </div>
+                              )}
+                            </div>
 
-                      <div className="space-y-2">
-                        <div className="text-xs uppercase tracking-wide text-muted">
-                          Coverage flags
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {activeRow.recommendation.coverageFlags.length > 0 ? (
-                            activeRow.recommendation.coverageFlags.map((flag) => (
-                              <ReasonCodeBadge key={`${activeRow.targetSnapshotId}:${flag}`} code={flag} />
-                            ))
-                          ) : (
-                            <div className="text-sm text-muted">No coverage flags were persisted.</div>
-                          )}
-                        </div>
-                      </div>
+                            <div className="space-y-2">
+                              <div className="text-xs uppercase tracking-wide text-muted">
+                                Exception signals
+                              </div>
+                              {activeRow.recommendation.exceptionSignals.length > 0 ? (
+                                <div className="space-y-2">
+                                  {activeRow.recommendation.exceptionSignals.map((signal, index) => (
+                                    <div
+                                      key={`${activeRow.targetSnapshotId}:exception-detail:${signal.type}:${index}`}
+                                      className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
+                                    >
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="font-semibold text-foreground">
+                                          {signal.title}
+                                        </div>
+                                        <ExceptionSeverityBadge severity={signal.severity} />
+                                      </div>
+                                      <div className="mt-2 text-sm text-foreground">
+                                        {signal.detail}
+                                      </div>
+                                      <div className="mt-2 flex flex-wrap gap-1.5">
+                                        {signal.reasonCodes.map((code) => (
+                                          <ReasonCodeBadge
+                                            key={`${activeRow.targetSnapshotId}:exception-reason:${signal.type}:${code}`}
+                                            code={code}
+                                          />
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-sm text-muted">
+                                  No exception signals were persisted for this target.
+                                </div>
+                              )}
+                            </div>
 
-                      <div className="space-y-2">
-                        <div className="text-xs uppercase tracking-wide text-muted">
-                          Confidence notes
-                        </div>
-                        {activeRow.recommendation.confidenceNotes.length > 0 ? (
-                          <ul className="space-y-1 text-sm text-foreground">
-                            {activeRow.recommendation.confidenceNotes.map((note) => (
-                              <li key={`${activeRow.targetSnapshotId}:${note}`}>{note}</li>
-                            ))}
-                          </ul>
+                            <div className="space-y-2">
+                              <div className="text-xs uppercase tracking-wide text-muted">
+                                Unsupported action blocks
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {activeRow.recommendation.unsupportedActionBlocks.length > 0 ? (
+                                  activeRow.recommendation.unsupportedActionBlocks.map((code) => (
+                                    <ReasonCodeBadge
+                                      key={`${activeRow.targetSnapshotId}:${code}`}
+                                      code={code}
+                                    />
+                                  ))
+                                ) : (
+                                  <div className="text-sm text-muted">
+                                    No unsupported action blocks were persisted for this target.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="space-y-3">
+                              <div className="text-xs uppercase tracking-wide text-muted">
+                                Recommended read-only actions
+                              </div>
+                              {activeRow.recommendation.actions.length > 0 ? (
+                                activeRow.recommendation.actions.map((action, index) => (
+                                  <div
+                                    key={`${activeRow.targetSnapshotId}:${action.actionType}:${index}`}
+                                    className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="font-semibold text-foreground">
+                                        {labelize(action.actionType)}
+                                      </div>
+                                      <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+                                        Priority {action.priority ?? '—'}
+                                      </div>
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                      {action.reasonCodes.map((code) => (
+                                        <ReasonCodeBadge
+                                          key={`${activeRow.targetSnapshotId}:${action.actionType}:${code}`}
+                                          code={code}
+                                        />
+                                      ))}
+                                    </div>
+                                    <div className="mt-3 grid gap-3">
+                                      <div>
+                                        <div className="mb-1 text-xs uppercase tracking-wide text-muted">
+                                          Proposed change
+                                        </div>
+                                        <JsonBlock value={action.proposedChange} />
+                                      </div>
+                                      <div>
+                                        <div className="mb-1 text-xs uppercase tracking-wide text-muted">
+                                          Entity context
+                                        </div>
+                                        <JsonBlock value={action.entityContext} />
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="text-sm text-muted">
+                                  No concrete actions were persisted for this target. The review cadence
+                                  or coverage notes may still explain the monitor posture.
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         ) : (
-                          <div className="text-sm text-muted">No confidence notes were persisted.</div>
+                          <div className="text-sm text-muted">
+                            No recommendation snapshot was found for this target in the selected run.
+                          </div>
                         )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="text-xs uppercase tracking-wide text-muted">
-                          Exception signals
-                        </div>
-                        {activeRow.recommendation.exceptionSignals.length > 0 ? (
-                          <div className="space-y-2">
-                            {activeRow.recommendation.exceptionSignals.map((signal, index) => (
+                      </DetailSection>
+                    ),
+                  },
+                  {
+                    id: 'portfolio-caps',
+                    label: 'Portfolio caps',
+                    content: (
+                      <DetailSection label="Portfolio caps">
+                        {activeRow.recommendation?.portfolioControls ? (
+                          <div className="space-y-3">
+                            <DetailGrid
+                              items={[
+                                {
+                                  label: 'Discover rank',
+                                  value:
+                                    activeRow.recommendation.portfolioControls.discoverRank === null
+                                      ? 'Not a Discover target'
+                                      : `${formatNumber(activeRow.recommendation.portfolioControls.discoverRank)} of ${formatNumber(
+                                          activeRow.recommendation.portfolioControls.activeDiscoverTargets
+                                        )}`,
+                                },
+                                {
+                                  label: 'Discover cap blocked',
+                                  value: String(
+                                    activeRow.recommendation.portfolioControls.discoverCapBlocked
+                                  ),
+                                },
+                                {
+                                  label: 'Learning budget',
+                                  value: `${formatCurrency(activeRow.recommendation.portfolioControls.learningBudgetUsed)} / ${formatCurrency(
+                                    activeRow.recommendation.portfolioControls.learningBudgetCap
+                                  )}`,
+                                },
+                                {
+                                  label: 'Learning budget exceeded',
+                                  value: String(
+                                    activeRow.recommendation.portfolioControls.learningBudgetExceeded
+                                  ),
+                                },
+                                {
+                                  label: 'Stop-loss spend',
+                                  value: `${formatCurrency(activeRow.recommendation.portfolioControls.totalStopLossSpend)} / ${formatCurrency(
+                                    activeRow.recommendation.portfolioControls.totalStopLossCap
+                                  )}`,
+                                },
+                                {
+                                  label: 'Stop-loss cap exceeded',
+                                  value: String(
+                                    activeRow.recommendation.portfolioControls.stopLossCapExceeded
+                                  ),
+                                },
+                                {
+                                  label: 'Target spend share',
+                                  value: formatPercent(
+                                    activeRow.recommendation.portfolioControls.targetSpendShare
+                                  ),
+                                },
+                                {
+                                  label: 'Budget share ceiling',
+                                  value: formatPercent(
+                                    activeRow.recommendation.portfolioControls.maxBudgetSharePerTarget
+                                  ),
+                                },
+                              ]}
+                            />
+                            <div className="flex flex-wrap gap-1.5">
+                              {activeRow.recommendation.portfolioControls.reasonCodes.length > 0 ? (
+                                activeRow.recommendation.portfolioControls.reasonCodes.map((code) => (
+                                  <ReasonCodeBadge
+                                    key={`${activeRow.targetSnapshotId}:portfolio:${code}`}
+                                    code={code}
+                                  />
+                                ))
+                              ) : (
+                                <div className="text-sm text-muted">
+                                  No ASIN-level portfolio caps were breached for this target.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-muted">
+                            Portfolio controls were not captured for this target in the selected run.
+                          </div>
+                        )}
+                      </DetailSection>
+                    ),
+                  },
+                  {
+                    id: 'run-comparison',
+                    label: 'Run comparison',
+                    content: (
+                      <DetailSection label="Run comparison">
+                        {props.comparison ? (
+                          targetComparisonChanges.length > 0 ? (
+                            <div className="space-y-3">
+                              <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-muted">
+                                These target cues include state, role, recommendation, exception, and
+                                portfolio-control changes versus the prior comparable run for this exact
+                                ASIN/date scope.
+                              </div>
+                              {targetComparisonChanges.map((change, index) => (
+                                <div
+                                  key={`${activeRow.targetSnapshotId}:comparison:${change.kind}:${index}`}
+                                  className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="font-semibold text-foreground">
+                                      {change.summary}
+                                    </div>
+                                    <ExceptionSeverityBadge severity={change.severity} />
+                                  </div>
+                                  <div className="mt-2 text-sm text-foreground">{change.why}</div>
+                                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                    <div className="rounded-lg border border-border bg-surface px-3 py-3">
+                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                                        Previous
+                                      </div>
+                                      <div className="mt-1 text-sm text-foreground">
+                                        {change.previousValue ?? '—'}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg border border-border bg-surface px-3 py-3">
+                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                                        Current
+                                      </div>
+                                      <div className="mt-1 text-sm text-foreground">
+                                        {change.currentValue ?? '—'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-sm text-muted">
+                              This target did not have any material comparison changes versus the prior
+                              comparable run.
+                            </div>
+                          )
+                        ) : (
+                          <div className="text-sm text-muted">
+                            No prior comparable run exists for this exact ASIN/date scope.
+                          </div>
+                        )}
+                      </DetailSection>
+                    ),
+                  },
+                  {
+                    id: 'rollback-guidance',
+                    label: 'Rollback guidance',
+                    content: (
+                      <DetailSection label="Rollback guidance">
+                        {targetRollbackGuidance.length > 0 ? (
+                          <div className="space-y-3">
+                            {targetRollbackGuidance.map((entry, index) => (
                               <div
-                                key={`${activeRow.targetSnapshotId}:exception-detail:${signal.type}:${index}`}
+                                key={`${activeRow.targetSnapshotId}:rollback:${entry.title}:${index}`}
                                 className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
                               >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="font-semibold text-foreground">{signal.title}</div>
-                                  <ExceptionSeverityBadge severity={signal.severity} />
-                                </div>
-                                <div className="mt-2 text-sm text-foreground">{signal.detail}</div>
+                                <div className="font-semibold text-foreground">{entry.title}</div>
+                                <div className="mt-2 text-sm text-foreground">{entry.detail}</div>
                                 <div className="mt-2 flex flex-wrap gap-1.5">
-                                  {signal.reasonCodes.map((code) => (
+                                  {entry.cautionFlags.map((flag) => (
                                     <ReasonCodeBadge
-                                      key={`${activeRow.targetSnapshotId}:exception-reason:${signal.type}:${code}`}
-                                      code={code}
+                                      key={`${activeRow.targetSnapshotId}:rollback-flag:${flag}`}
+                                      code={flag}
                                     />
                                   ))}
                                 </div>
@@ -1831,748 +2627,819 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                           </div>
                         ) : (
                           <div className="text-sm text-muted">
-                            No exception signals were persisted for this target.
+                            No target-specific rollback guidance was generated for this row.
                           </div>
                         )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="text-xs uppercase tracking-wide text-muted">
-                          Unsupported action blocks
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {activeRow.recommendation.unsupportedActionBlocks.length > 0 ? (
-                            activeRow.recommendation.unsupportedActionBlocks.map((code) => (
-                              <ReasonCodeBadge key={`${activeRow.targetSnapshotId}:${code}`} code={code} />
-                            ))
-                          ) : (
-                            <div className="text-sm text-muted">
-                              No unsupported action blocks were persisted for this target.
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="text-xs uppercase tracking-wide text-muted">
-                          Recommended read-only actions
-                        </div>
-                        {activeRow.recommendation.actions.length > 0 ? (
-                          activeRow.recommendation.actions.map((action, index) => (
-                            <div
-                              key={`${activeRow.targetSnapshotId}:${action.actionType}:${index}`}
-                              className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="font-semibold text-foreground">
-                                  {labelize(action.actionType)}
-                                </div>
-                                <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-                                  Priority {action.priority ?? '—'}
-                                </div>
-                              </div>
-                              <div className="mt-2 flex flex-wrap gap-1.5">
-                                {action.reasonCodes.map((code) => (
-                                  <ReasonCodeBadge
-                                    key={`${activeRow.targetSnapshotId}:${action.actionType}:${code}`}
-                                    code={code}
-                                  />
-                                ))}
-                              </div>
-                              <div className="mt-3 grid gap-3">
-                                <div>
-                                  <div className="mb-1 text-xs uppercase tracking-wide text-muted">
-                                    Proposed change
-                                  </div>
-                                  <JsonBlock value={action.proposedChange} />
-                                </div>
-                                <div>
-                                  <div className="mb-1 text-xs uppercase tracking-wide text-muted">
-                                    Entity context
-                                  </div>
-                                  <JsonBlock value={action.entityContext} />
-                                </div>
-                              </div>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-sm text-muted">
-                            No concrete actions were persisted for this target. The review cadence
-                            or coverage notes may still explain the monitor posture.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted">
-                      No recommendation snapshot was found for this target in the selected run.
-                    </div>
-                  )}
-                </DetailSection>
-
-                <DetailSection label="Portfolio controls">
-                  {activeRow.recommendation?.portfolioControls ? (
-                    <div className="space-y-3">
-                      <DetailGrid
-                        items={[
-                          {
-                            label: 'Discover rank',
-                            value:
-                              activeRow.recommendation.portfolioControls.discoverRank === null
-                                ? 'Not a Discover target'
-                                : `${formatNumber(activeRow.recommendation.portfolioControls.discoverRank)} of ${formatNumber(
-                                    activeRow.recommendation.portfolioControls.activeDiscoverTargets
-                                  )}`,
-                          },
-                          {
-                            label: 'Discover cap blocked',
-                            value: String(
-                              activeRow.recommendation.portfolioControls.discoverCapBlocked
-                            ),
-                          },
-                          {
-                            label: 'Learning budget',
-                            value: `${formatCurrency(activeRow.recommendation.portfolioControls.learningBudgetUsed)} / ${formatCurrency(
-                              activeRow.recommendation.portfolioControls.learningBudgetCap
-                            )}`,
-                          },
-                          {
-                            label: 'Learning budget exceeded',
-                            value: String(
-                              activeRow.recommendation.portfolioControls.learningBudgetExceeded
-                            ),
-                          },
-                          {
-                            label: 'Stop-loss spend',
-                            value: `${formatCurrency(activeRow.recommendation.portfolioControls.totalStopLossSpend)} / ${formatCurrency(
-                              activeRow.recommendation.portfolioControls.totalStopLossCap
-                            )}`,
-                          },
-                          {
-                            label: 'Stop-loss cap exceeded',
-                            value: String(
-                              activeRow.recommendation.portfolioControls.stopLossCapExceeded
-                            ),
-                          },
-                          {
-                            label: 'Target spend share',
-                            value: formatPercent(
-                              activeRow.recommendation.portfolioControls.targetSpendShare
-                            ),
-                          },
-                          {
-                            label: 'Budget share ceiling',
-                            value: formatPercent(
-                              activeRow.recommendation.portfolioControls.maxBudgetSharePerTarget
-                            ),
-                          },
-                        ]}
-                      />
-                      <div className="flex flex-wrap gap-1.5">
-                        {activeRow.recommendation.portfolioControls.reasonCodes.length > 0 ? (
-                          activeRow.recommendation.portfolioControls.reasonCodes.map((code) => (
-                            <ReasonCodeBadge
-                              key={`${activeRow.targetSnapshotId}:portfolio:${code}`}
-                              code={code}
-                            />
-                          ))
-                        ) : (
-                          <div className="text-sm text-muted">
-                            No ASIN-level portfolio caps were breached for this target.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted">
-                      Portfolio controls were not captured for this target in the selected run.
-                    </div>
-                  )}
-                </DetailSection>
-
-                <DetailSection label="Run comparison cues">
-                  {props.comparison ? (
-                    targetComparisonChanges.length > 0 ? (
-                      <div className="space-y-3">
-                        <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-muted">
-                          These target cues include state, role, recommendation, exception, and
-                          portfolio-control changes versus the prior comparable run for this exact
-                          ASIN/date scope.
-                        </div>
-                        {targetComparisonChanges.map((change, index) => (
-                          <div
-                            key={`${activeRow.targetSnapshotId}:comparison:${change.kind}:${index}`}
-                            className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="font-semibold text-foreground">{change.summary}</div>
-                              <ExceptionSeverityBadge severity={change.severity} />
-                            </div>
-                            <div className="mt-2 text-sm text-foreground">{change.why}</div>
-                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                              <div className="rounded-lg border border-border bg-surface px-3 py-3">
-                                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                                  Previous
-                                </div>
-                                <div className="mt-1 text-sm text-foreground">
-                                  {change.previousValue ?? '—'}
-                                </div>
-                              </div>
-                              <div className="rounded-lg border border-border bg-surface px-3 py-3">
-                                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                                  Current
-                                </div>
-                                <div className="mt-1 text-sm text-foreground">
-                                  {change.currentValue ?? '—'}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-sm text-muted">
-                        This target did not have any material comparison changes versus the prior
-                        comparable run.
-                      </div>
-                    )
-                  ) : (
-                    <div className="text-sm text-muted">
-                      No prior comparable run exists for this exact ASIN/date scope.
-                    </div>
-                  )}
-                </DetailSection>
-
-                <DetailSection label="Rollback guidance">
-                  {targetRollbackGuidance.length > 0 ? (
-                    <div className="space-y-3">
-                      {targetRollbackGuidance.map((entry, index) => (
-                        <div
-                          key={`${activeRow.targetSnapshotId}:rollback:${entry.title}:${index}`}
-                          className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
-                        >
-                          <div className="font-semibold text-foreground">{entry.title}</div>
-                          <div className="mt-2 text-sm text-foreground">{entry.detail}</div>
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {entry.cautionFlags.map((flag) => (
-                              <ReasonCodeBadge
-                                key={`${activeRow.targetSnapshotId}:rollback-flag:${flag}`}
-                                code={flag}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted">
-                      No target-specific rollback guidance was generated for this row.
-                    </div>
-                  )}
-                </DetailSection>
-
-                <DetailSection label="Raw metrics">
-                  <div className="space-y-3">
-                    <DetailGrid
-                      items={[
-                        { label: 'Impressions', value: formatNumber(activeRow.raw.impressions) },
-                        { label: 'Clicks', value: formatNumber(activeRow.raw.clicks) },
-                        { label: 'Spend', value: formatCurrency(activeRow.raw.spend) },
-                        { label: 'Orders', value: formatNumber(activeRow.raw.orders) },
-                        { label: 'Sales', value: formatCurrency(activeRow.raw.sales) },
-                        { label: 'CPC', value: formatCurrency(activeRow.raw.cpc) },
-                        { label: 'CTR', value: formatPercent(activeRow.raw.ctr) },
-                        { label: 'CVR', value: formatPercent(activeRow.raw.cvr) },
-                        { label: 'ACoS', value: formatPercent(activeRow.raw.acos) },
-                        {
-                          label: 'ROAS',
-                          value: activeRow.raw.roas === null ? '—' : activeRow.raw.roas.toFixed(2),
-                        },
-                        {
-                          label: 'Latest observed TOS IS',
-                          value: formatPercent(activeRow.raw.tosIs),
-                        },
-                        {
-                          label: 'Latest observed STIS',
-                          value: formatPercent(activeRow.raw.stis),
-                        },
-                        {
-                          label: 'Latest observed STIR',
-                          value: formatNumber(activeRow.raw.stir),
-                        },
-                      ]}
-                    />
-                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-muted">
-                      {activeRow.nonAdditiveDiagnostics.note ??
-                        'Non-additive diagnostics stay point-in-time only. Use the latest observed value and explicit trend cues instead of treating them like additive totals.'}
-                    </div>
-                  </div>
-                </DetailSection>
-
-                <DetailSection label="Derived metrics">
-                  <DetailGrid
-                    items={[
-                      {
-                        label: 'Contribution after ads',
-                        value: formatCurrency(activeRow.derived.contributionAfterAds),
-                      },
-                      {
-                        label: 'Break-even gap',
-                        value: formatPercent(activeRow.derived.breakEvenGap),
-                      },
-                      {
-                        label: 'Max CPC support gap',
-                        value: formatCurrency(activeRow.derived.maxCpcSupportGap),
-                      },
-                      { label: 'Loss dollars', value: formatCurrency(activeRow.derived.lossDollars) },
-                      {
-                        label: 'Profit dollars',
-                        value: formatCurrency(activeRow.derived.profitDollars),
-                      },
-                      {
-                        label: 'Click velocity',
-                        value:
-                          activeRow.derived.clickVelocity === null
-                            ? '—'
-                            : activeRow.derived.clickVelocity.toFixed(1),
-                      },
-                      {
-                        label: 'Impression velocity',
-                        value:
-                          activeRow.derived.impressionVelocity === null
-                            ? '—'
-                            : activeRow.derived.impressionVelocity.toFixed(1),
-                      },
-                      {
-                        label: 'Organic context signal',
-                        value:
-                          activeRow.derived.organicContextSignal === null
-                            ? '—'
-                            : labelize(activeRow.derived.organicContextSignal),
-                      },
-                    ]}
-                  />
-                </DetailSection>
-
-                <DetailSection label="Target state">
-                  <div className="space-y-3">
-                    <DetailGrid
-                      items={[
-                        { label: 'Efficiency', value: activeRow.state.efficiency.label },
-                        { label: 'Confidence', value: activeRow.state.confidence.label },
-                        { label: 'Importance', value: activeRow.state.importance.label },
-                        {
-                          label: 'Opportunity score',
-                          value: formatNumber(activeRow.state.opportunityScore),
-                        },
-                        { label: 'Risk score', value: formatNumber(activeRow.state.riskScore) },
-                      ]}
-                    />
-                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-                      <div className="text-xs uppercase tracking-wide text-muted">State breakdown</div>
-                      <div className="mt-2 space-y-2 text-sm text-foreground">
-                        <div>
-                          <span className="font-semibold">Efficiency:</span>{' '}
-                          {activeRow.state.efficiency.detail}
-                        </div>
-                        <div>
-                          <span className="font-semibold">Confidence:</span>{' '}
-                          {activeRow.state.confidence.detail}
-                        </div>
-                        <div>
-                          <span className="font-semibold">Tier:</span>{' '}
-                          {activeRow.state.importance.detail}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        ...activeRow.state.summaryReasonCodes,
-                        ...activeRow.state.opportunityReasonCodes,
-                        ...activeRow.state.riskReasonCodes,
-                      ].length > 0 ? (
-                        [
-                          ...activeRow.state.summaryReasonCodes,
-                          ...activeRow.state.opportunityReasonCodes,
-                          ...activeRow.state.riskReasonCodes,
-                        ].map((code, index) => (
-                          <ReasonCodeBadge
-                            key={`${activeRow.targetSnapshotId}:state:${code}:${index}`}
-                            code={code}
+                      </DetailSection>
+                    ),
+                  },
+                  {
+                    id: 'raw-metrics',
+                    label: 'Raw metrics',
+                    content: (
+                      <DetailSection label="Raw metrics">
+                        <div className="space-y-3">
+                          <DetailGrid
+                            items={[
+                              { label: 'Impressions', value: formatNumber(activeRow.raw.impressions) },
+                              { label: 'Clicks', value: formatNumber(activeRow.raw.clicks) },
+                              { label: 'Spend', value: formatCurrency(activeRow.raw.spend) },
+                              { label: 'Orders', value: formatNumber(activeRow.raw.orders) },
+                              { label: 'Sales', value: formatCurrency(activeRow.raw.sales) },
+                              { label: 'CPC', value: formatCurrency(activeRow.raw.cpc) },
+                              { label: 'CTR', value: formatPercent(activeRow.raw.ctr) },
+                              { label: 'CVR', value: formatPercent(activeRow.raw.cvr) },
+                              { label: 'ACoS', value: formatPercent(activeRow.raw.acos) },
+                              {
+                                label: 'ROAS',
+                                value:
+                                  activeRow.raw.roas === null ? '—' : activeRow.raw.roas.toFixed(2),
+                              },
+                              {
+                                label: 'Latest observed TOS IS',
+                                value: formatPercent(activeRow.raw.tosIs),
+                              },
+                              {
+                                label: 'Latest observed STIS',
+                                value: formatPercent(activeRow.raw.stis),
+                              },
+                              {
+                                label: 'Latest observed STIR',
+                                value: formatNumber(activeRow.raw.stir),
+                              },
+                            ]}
                           />
-                        ))
-                      ) : (
-                        <div className="text-sm text-muted">No state reason codes were captured.</div>
-                      )}
-                    </div>
-                  </div>
-                </DetailSection>
-
-                <DetailSection label="Role history">
-                  <div className="space-y-3">
-                    <DetailGrid
-                      items={[
-                        { label: 'Desired role', value: activeRow.role.desiredRole.label },
-                        { label: 'Current role', value: activeRow.role.currentRole.label },
-                        {
-                          label: 'Previous role',
-                          value: activeRow.role.previousRole ?? 'Not captured',
-                        },
-                        { label: 'Transition rule', value: activeRow.role.transitionRule },
-                      ]}
-                    />
-                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-                      <div className="text-xs uppercase tracking-wide text-muted">
-                        Recent role transitions
-                      </div>
-                      {activeRow.roleHistory.length > 0 ? (
-                        <div className="mt-3 space-y-3">
-                          {activeRow.roleHistory.slice(0, 6).map((entry) => (
-                            <div
-                              key={entry.roleTransitionLogId}
-                              className="rounded-lg border border-border bg-surface px-3 py-3"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="font-semibold text-foreground">
-                                  {entry.fromRole ?? 'None'} → {entry.toRole ?? 'None'}
-                                </div>
-                                <div className="text-xs text-muted">
-                                  {formatDateTime(entry.createdAt)}
-                                </div>
+                          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-muted">
+                            {activeRow.nonAdditiveDiagnostics.note ??
+                              'Non-additive diagnostics stay point-in-time only. Use the latest observed value and explicit trend cues instead of treating them like additive totals.'}
+                          </div>
+                        </div>
+                      </DetailSection>
+                    ),
+                  },
+                  {
+                    id: 'derived-metrics',
+                    label: 'Derived metrics',
+                    content: (
+                      <DetailSection label="Derived metrics">
+                        <DetailGrid
+                          items={[
+                            {
+                              label: 'Contribution after ads',
+                              value: formatCurrency(activeRow.derived.contributionAfterAds),
+                            },
+                            {
+                              label: 'Break-even gap',
+                              value: formatPercent(activeRow.derived.breakEvenGap),
+                            },
+                            {
+                              label: 'Max CPC support gap',
+                              value: formatCurrency(activeRow.derived.maxCpcSupportGap),
+                            },
+                            {
+                              label: 'Loss dollars',
+                              value: formatCurrency(activeRow.derived.lossDollars),
+                            },
+                            {
+                              label: 'Profit dollars',
+                              value: formatCurrency(activeRow.derived.profitDollars),
+                            },
+                            {
+                              label: 'Click velocity',
+                              value:
+                                activeRow.derived.clickVelocity === null
+                                  ? '—'
+                                  : activeRow.derived.clickVelocity.toFixed(1),
+                            },
+                            {
+                              label: 'Impression velocity',
+                              value:
+                                activeRow.derived.impressionVelocity === null
+                                  ? '—'
+                                  : activeRow.derived.impressionVelocity.toFixed(1),
+                            },
+                            {
+                              label: 'Organic context signal',
+                              value:
+                                activeRow.derived.organicContextSignal === null
+                                  ? '—'
+                                  : labelize(activeRow.derived.organicContextSignal),
+                            },
+                          ]}
+                        />
+                      </DetailSection>
+                    ),
+                  },
+                  {
+                    id: 'target-state',
+                    label: 'Target state',
+                    content: (
+                      <DetailSection label="Target state">
+                        <div className="space-y-3">
+                          <DetailGrid
+                            items={[
+                              { label: 'Efficiency', value: activeRow.state.efficiency.label },
+                              { label: 'Confidence', value: activeRow.state.confidence.label },
+                              { label: 'Importance', value: activeRow.state.importance.label },
+                              {
+                                label: 'Opportunity score',
+                                value: formatNumber(activeRow.state.opportunityScore),
+                              },
+                              { label: 'Risk score', value: formatNumber(activeRow.state.riskScore) },
+                            ]}
+                          />
+                          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+                            <div className="text-xs uppercase tracking-wide text-muted">
+                              State breakdown
+                            </div>
+                            <div className="mt-2 space-y-2 text-sm text-foreground">
+                              <div>
+                                <span className="font-semibold">Efficiency:</span>{' '}
+                                {activeRow.state.efficiency.detail}
                               </div>
-                              <div className="mt-1 text-xs text-muted">
-                                Run {entry.runId} · rule {entry.transitionRule ?? 'Not captured'} ·
-                                desired {entry.desiredRole ?? 'Not captured'}
+                              <div>
+                                <span className="font-semibold">Confidence:</span>{' '}
+                                {activeRow.state.confidence.detail}
                               </div>
-                              <div className="mt-2 flex flex-wrap gap-1.5">
-                                {[
-                                  ...entry.transitionReasonCodes,
-                                  ...entry.roleReasonCodes,
-                                  ...entry.guardrailReasonCodes,
-                                ].map((code, index) => (
-                                  <ReasonCodeBadge
-                                    key={`${entry.roleTransitionLogId}:${code}:${index}`}
-                                    code={code}
-                                  />
-                                ))}
+                              <div>
+                                <span className="font-semibold">Tier:</span>{' '}
+                                {activeRow.state.importance.detail}
                               </div>
                             </div>
-                          ))}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[
+                              ...activeRow.state.summaryReasonCodes,
+                              ...activeRow.state.opportunityReasonCodes,
+                              ...activeRow.state.riskReasonCodes,
+                            ].length > 0 ? (
+                              [
+                                ...activeRow.state.summaryReasonCodes,
+                                ...activeRow.state.opportunityReasonCodes,
+                                ...activeRow.state.riskReasonCodes,
+                              ].map((code, index) => (
+                                <ReasonCodeBadge
+                                  key={`${activeRow.targetSnapshotId}:state:${code}:${index}`}
+                                  code={code}
+                                />
+                              ))
+                            ) : (
+                              <div className="text-sm text-muted">
+                                No state reason codes were captured.
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      ) : (
-                        <div className="mt-2 text-sm text-muted">
-                          No role transition log rows were recorded yet for this target.
+                      </DetailSection>
+                    ),
+                  },
+                  {
+                    id: 'role-history',
+                    label: 'Role history',
+                    content: (
+                      <DetailSection label="Role history">
+                        <div className="space-y-3">
+                          <DetailGrid
+                            items={[
+                              { label: 'Desired role', value: activeRow.role.desiredRole.label },
+                              { label: 'Current role', value: activeRow.role.currentRole.label },
+                              {
+                                label: 'Previous role',
+                                value: activeRow.role.previousRole ?? NOT_CAPTURED,
+                              },
+                              { label: 'Transition rule', value: activeRow.role.transitionRule },
+                            ]}
+                          />
+                          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+                            <div className="text-xs uppercase tracking-wide text-muted">
+                              Recent role transitions
+                            </div>
+                            {activeRow.roleHistory.length > 0 ? (
+                              <div className="mt-3 space-y-3">
+                                {activeRow.roleHistory.slice(0, 6).map((entry) => (
+                                  <div
+                                    key={entry.roleTransitionLogId}
+                                    className="rounded-lg border border-border bg-surface px-3 py-3"
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="font-semibold text-foreground">
+                                        {entry.fromRole ?? 'None'} → {entry.toRole ?? 'None'}
+                                      </div>
+                                      <div className="text-xs text-muted">
+                                        {formatDateTime(entry.createdAt)}
+                                      </div>
+                                    </div>
+                                    <div className="mt-1 text-xs text-muted">
+                                      Run {entry.runId} · rule {entry.transitionRule ?? NOT_CAPTURED} ·
+                                      desired {entry.desiredRole ?? NOT_CAPTURED}
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                      {[
+                                        ...entry.transitionReasonCodes,
+                                        ...entry.roleReasonCodes,
+                                        ...entry.guardrailReasonCodes,
+                                      ].map((code, index) => (
+                                        <ReasonCodeBadge
+                                          key={`${entry.roleTransitionLogId}:${code}:${index}`}
+                                          code={code}
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="mt-2 text-sm text-muted">
+                                No role transition log rows were recorded yet for this target.
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                </DetailSection>
-
-                <DetailSection label="Guardrails">
-                  <div className="space-y-3">
-                    <DetailGrid
-                      items={[
-                        {
-                          label: 'No-sale spend cap',
-                          value: formatCurrency(activeRow.role.guardrails.categories.noSaleSpendCap),
-                        },
-                        {
-                          label: 'No-sale click cap',
-                          value: formatNumber(activeRow.role.guardrails.categories.noSaleClickCap),
-                        },
-                        {
-                          label: 'Max loss per cycle',
-                          value: formatCurrency(activeRow.role.guardrails.categories.maxLossPerCycle),
-                        },
-                        {
-                          label: 'Max bid increase %',
-                          value: activeRow.role.guardrails.categories.maxBidIncreasePerCyclePct === null
-                            ? '—'
-                            : `${activeRow.role.guardrails.categories.maxBidIncreasePerCyclePct}%`,
-                        },
-                        {
-                          label: 'Max bid decrease %',
-                          value: activeRow.role.guardrails.categories.maxBidDecreasePerCyclePct === null
-                            ? '—'
-                            : `${activeRow.role.guardrails.categories.maxBidDecreasePerCyclePct}%`,
-                        },
-                        {
-                          label: 'Placement bias increase %',
-                          value:
-                            activeRow.role.guardrails.categories.maxPlacementBiasIncreasePerCyclePct === null
-                              ? '—'
-                              : `${activeRow.role.guardrails.categories.maxPlacementBiasIncreasePerCyclePct}%`,
-                        },
-                        {
-                          label: 'Rank push time limit',
-                          value: activeRow.role.guardrails.categories.rankPushTimeLimitDays === null
-                            ? '—'
-                            : `${activeRow.role.guardrails.categories.rankPushTimeLimitDays} days`,
-                        },
-                        {
-                          label: 'Manual approval threshold',
-                          value: labelize(activeRow.role.guardrails.categories.manualApprovalThreshold),
-                        },
-                        {
-                          label: 'Auto-pause threshold',
-                          value: formatCurrency(activeRow.role.guardrails.categories.autoPauseThreshold),
-                        },
-                        {
-                          label: 'Min bid floor',
-                          value: formatCurrency(activeRow.role.guardrails.categories.minBidFloor),
-                        },
-                        {
-                          label: 'Max bid ceiling',
-                          value: formatCurrency(activeRow.role.guardrails.categories.maxBidCeiling),
-                        },
-                      ]}
-                    />
-                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-                      <div className="text-xs uppercase tracking-wide text-muted">Guardrail flags</div>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        <ReasonCodeBadge
-                          code={`requires_manual_approval=${String(activeRow.role.guardrails.flags.requiresManualApproval)}`}
-                        />
-                        <ReasonCodeBadge
-                          code={`auto_pause_eligible=${String(activeRow.role.guardrails.flags.autoPauseEligible)}`}
-                        />
-                        <ReasonCodeBadge
-                          code={`bid_changes_allowed=${String(activeRow.role.guardrails.flags.bidChangesAllowed)}`}
-                        />
-                        <ReasonCodeBadge
-                          code={`placement_changes_allowed=${String(activeRow.role.guardrails.flags.placementChangesAllowed)}`}
-                        />
-                        <ReasonCodeBadge
-                          code={`transition_locked=${String(activeRow.role.guardrails.flags.transitionLocked)}`}
-                        />
-                      </div>
-                      {activeRow.role.guardrails.notes.length > 0 ? (
-                        <ul className="mt-3 space-y-1 text-sm text-foreground">
-                          {activeRow.role.guardrails.notes.map((note) => (
-                            <li key={`${activeRow.targetSnapshotId}:guardrail-note:${note}`}>{note}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="mt-3 text-sm text-muted">
-                          No additional guardrail notes were persisted.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </DetailSection>
-
-                <DetailSection label="Query diagnostics">
-                  <div className="space-y-3">
-                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-                      <div className="text-xs uppercase tracking-wide text-muted">
-                        Same-text query pinning
-                      </div>
-                      {activeRow.recommendation?.queryDiagnostics ? (
-                        <div className="mt-3 space-y-3">
+                      </DetailSection>
+                    ),
+                  },
+                  {
+                    id: 'guardrails',
+                    label: 'Guardrails',
+                    content: (
+                      <DetailSection label="Guardrails">
+                        <div className="space-y-3">
                           <DetailGrid
                             items={[
                               {
-                                label: 'Pinning status',
-                                value: labelize(
-                                  activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
-                                    .status
+                                label: 'No-sale spend cap',
+                                value: formatCurrency(
+                                  activeRow.role.guardrails.categories.noSaleSpendCap
                                 ),
                               },
                               {
-                                label: 'Pinned query',
+                                label: 'No-sale click cap',
+                                value: formatNumber(activeRow.role.guardrails.categories.noSaleClickCap),
+                              },
+                              {
+                                label: 'Max loss per cycle',
+                                value: formatCurrency(
+                                  activeRow.role.guardrails.categories.maxLossPerCycle
+                                ),
+                              },
+                              {
+                                label: 'Max bid increase %',
                                 value:
-                                  activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
-                                    .searchTerm ?? 'Not observed',
+                                  activeRow.role.guardrails.categories.maxBidIncreasePerCyclePct ===
+                                  null
+                                    ? '—'
+                                    : `${activeRow.role.guardrails.categories.maxBidIncreasePerCyclePct}%`,
                               },
                               {
-                                label: 'Click share',
-                                value: formatPercent(
-                                  activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
-                                    .clickShare
+                                label: 'Max bid decrease %',
+                                value:
+                                  activeRow.role.guardrails.categories.maxBidDecreasePerCyclePct ===
+                                  null
+                                    ? '—'
+                                    : `${activeRow.role.guardrails.categories.maxBidDecreasePerCyclePct}%`,
+                              },
+                              {
+                                label: 'Placement bias increase %',
+                                value:
+                                  activeRow.role.guardrails.categories
+                                    .maxPlacementBiasIncreasePerCyclePct === null
+                                    ? '—'
+                                    : `${activeRow.role.guardrails.categories.maxPlacementBiasIncreasePerCyclePct}%`,
+                              },
+                              {
+                                label: 'Rank push time limit',
+                                value:
+                                  activeRow.role.guardrails.categories.rankPushTimeLimitDays === null
+                                    ? '—'
+                                    : `${activeRow.role.guardrails.categories.rankPushTimeLimitDays} days`,
+                              },
+                              {
+                                label: 'Manual approval threshold',
+                                value: labelize(
+                                  activeRow.role.guardrails.categories.manualApprovalThreshold
                                 ),
                               },
                               {
-                                label: 'Order share proxy',
-                                value: formatPercent(
-                                  activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
-                                    .orderShareProxy
+                                label: 'Auto-pause threshold',
+                                value: formatCurrency(
+                                  activeRow.role.guardrails.categories.autoPauseThreshold
+                                ),
+                              },
+                              {
+                                label: 'Min bid floor',
+                                value: formatCurrency(activeRow.role.guardrails.categories.minBidFloor),
+                              },
+                              {
+                                label: 'Max bid ceiling',
+                                value: formatCurrency(
+                                  activeRow.role.guardrails.categories.maxBidCeiling
                                 ),
                               },
                             ]}
                           />
-                          <div className="text-sm text-muted">
-                            {activeRow.recommendation.queryDiagnostics.note}
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {activeRow.recommendation.queryDiagnostics.sameTextQueryPinning.reasonCodes.map(
-                              (code) => (
-                                <ReasonCodeBadge
-                                  key={`${activeRow.targetSnapshotId}:pinning:${code}`}
-                                  code={code}
-                                />
-                              )
+                          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+                            <div className="text-xs uppercase tracking-wide text-muted">
+                              Guardrail flags
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              <ReasonCodeBadge
+                                code={`requires_manual_approval=${String(activeRow.role.guardrails.flags.requiresManualApproval)}`}
+                              />
+                              <ReasonCodeBadge
+                                code={`auto_pause_eligible=${String(activeRow.role.guardrails.flags.autoPauseEligible)}`}
+                              />
+                              <ReasonCodeBadge
+                                code={`bid_changes_allowed=${String(activeRow.role.guardrails.flags.bidChangesAllowed)}`}
+                              />
+                              <ReasonCodeBadge
+                                code={`placement_changes_allowed=${String(activeRow.role.guardrails.flags.placementChangesAllowed)}`}
+                              />
+                              <ReasonCodeBadge
+                                code={`transition_locked=${String(activeRow.role.guardrails.flags.transitionLocked)}`}
+                              />
+                            </div>
+                            {activeRow.role.guardrails.notes.length > 0 ? (
+                              <ul className="mt-3 space-y-1 text-sm text-foreground">
+                                {activeRow.role.guardrails.notes.map((note) => (
+                                  <li key={`${activeRow.targetSnapshotId}:guardrail-note:${note}`}>
+                                    {note}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <div className="mt-3 text-sm text-muted">
+                                No additional guardrail notes were persisted.
+                              </div>
                             )}
                           </div>
                         </div>
-                      ) : (
-                        <div className="mt-2 text-sm text-muted">
-                          Same-text query diagnostics were not captured for this target.
-                        </div>
-                      )}
-                    </div>
-
-                    <DetailGrid
-                      items={[
-                        {
-                          label: 'Representative query',
-                          value:
-                            activeRow.searchTermDiagnostics.representativeSearchTerm ?? 'Not captured',
-                        },
-                        {
-                          label: 'Representative same-text',
-                          value:
-                            activeRow.searchTermDiagnostics.representativeSameText === null
-                              ? 'Not captured'
-                              : String(activeRow.searchTermDiagnostics.representativeSameText),
-                        },
-                        {
-                          label: 'Search term count',
-                          value: formatNumber(activeRow.demandProxies.searchTermCount),
-                        },
-                        {
-                          label: 'Same-text query count',
-                          value: formatNumber(activeRow.demandProxies.sameTextSearchTermCount),
-                        },
-                        {
-                          label: 'Search term impressions',
-                          value: formatNumber(activeRow.demandProxies.totalSearchTermImpressions),
-                        },
-                        {
-                          label: 'Search term clicks',
-                          value: formatNumber(activeRow.demandProxies.totalSearchTermClicks),
-                        },
-                      ]}
-                    />
-                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-                      <div className="text-xs uppercase tracking-wide text-muted">Top query rows</div>
-                      {activeRow.searchTermDiagnostics.note ? (
-                        <div className="mt-2 text-sm text-muted">
-                          {activeRow.searchTermDiagnostics.note}
-                        </div>
-                      ) : null}
-                      {activeRow.searchTermDiagnostics.topTerms.length > 0 ? (
-                        <div className="mt-3 space-y-2">
-                          {activeRow.searchTermDiagnostics.topTerms.map((term, index) => (
-                            <div
-                              key={`${activeRow.targetSnapshotId}:term:${term.searchTerm}:${index}`}
-                              className="rounded-lg border border-border bg-surface px-3 py-3"
-                            >
-                              <div className="font-semibold text-foreground">{term.searchTerm}</div>
-                              <div className="mt-1 text-xs text-muted">
-                                same_text={String(term.sameText)} · clicks {formatNumber(term.clicks)} ·
-                                orders {formatNumber(term.orders)} · spend {formatCurrency(term.spend)} ·
-                                sales {formatCurrency(term.sales)}
-                              </div>
+                      </DetailSection>
+                    ),
+                  },
+                  {
+                    id: 'query-diagnostics',
+                    label: 'Query diagnostics',
+                    content: (
+                      <DetailSection label="Query diagnostics">
+                        <div className="space-y-3">
+                          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+                            <div className="text-xs uppercase tracking-wide text-muted">
+                              Same-text query pinning
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="mt-2 text-sm text-muted">
-                          No search-term diagnostics were captured for this target in the selected run.
-                        </div>
-                      )}
-                    </div>
+                            {activeRow.recommendation?.queryDiagnostics ? (
+                              <div className="mt-3 space-y-3">
+                                <DetailGrid
+                                  items={[
+                                    {
+                                      label: 'Pinning status',
+                                      value: labelize(
+                                        activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
+                                          .status
+                                      ),
+                                    },
+                                    {
+                                      label: 'Pinned query',
+                                      value:
+                                        activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
+                                          .searchTerm ?? 'Not observed',
+                                    },
+                                    {
+                                      label: 'Click share',
+                                      value: formatPercent(
+                                        activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
+                                          .clickShare
+                                      ),
+                                    },
+                                    {
+                                      label: 'Order share proxy',
+                                      value: formatPercent(
+                                        activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
+                                          .orderShareProxy
+                                      ),
+                                    },
+                                  ]}
+                                />
+                                <div className="text-sm text-muted">
+                                  {activeRow.recommendation.queryDiagnostics.note}
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {activeRow.recommendation.queryDiagnostics.sameTextQueryPinning.reasonCodes.map(
+                                    (code) => (
+                                      <ReasonCodeBadge
+                                        key={`${activeRow.targetSnapshotId}:pinning:${code}`}
+                                        code={code}
+                                      />
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="mt-2 text-sm text-muted">
+                                Same-text query diagnostics were not captured for this target.
+                              </div>
+                            )}
+                          </div>
 
-                    {activeRow.recommendation?.queryDiagnostics ? (
-                      <div className="grid gap-3">
-                        <QueryCandidateList
-                          label="Promote-to-exact candidates"
-                          candidates={activeRow.recommendation.queryDiagnostics.promoteToExactCandidates}
-                          emptyLabel="No promote-to-exact candidates were persisted."
-                        />
-                        <QueryCandidateList
-                          label="Isolate candidates"
-                          candidates={activeRow.recommendation.queryDiagnostics.isolateCandidates}
-                          emptyLabel="No isolate candidates were persisted."
-                        />
-                        <QueryCandidateList
-                          label="Negative candidates"
-                          candidates={activeRow.recommendation.queryDiagnostics.negativeCandidates}
-                          emptyLabel="No negative candidates were persisted."
-                        />
-                      </div>
-                    ) : null}
-                  </div>
-                </DetailSection>
-
-                <DetailSection label="Placement diagnostics">
-                  <div className="space-y-3">
-                    <DetailGrid
-                      items={[
-                        {
-                          label: 'Top of search modifier',
-                          value:
-                            activeRow.placementContext.topOfSearchModifierPct === null
-                              ? '—'
-                              : `${activeRow.placementContext.topOfSearchModifierPct}%`,
-                        },
-                        {
-                          label: 'Placement impressions',
-                          value: formatNumber(activeRow.placementContext.impressions),
-                        },
-                        {
-                          label: 'Placement clicks',
-                          value: formatNumber(activeRow.placementContext.clicks),
-                        },
-                        {
-                          label: 'Placement orders',
-                          value: formatNumber(activeRow.placementContext.orders),
-                        },
-                        {
-                          label: 'Placement spend',
-                          value: formatCurrency(activeRow.placementContext.spend),
-                        },
-                        {
-                          label: 'Placement sales',
-                          value: formatCurrency(activeRow.placementContext.sales),
-                        },
-                        {
-                          label: 'Bias recommendation',
-                          value: labelize(
-                            activeRow.recommendation?.placementDiagnostics?.biasRecommendation ??
-                              null
-                          ),
-                        },
-                        {
-                          label: 'Context scope',
-                          value:
-                            activeRow.recommendation?.placementDiagnostics?.contextScope ??
-                            'Not captured',
-                        },
-                      ]}
-                    />
-                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
-                      {activeRow.recommendation?.placementDiagnostics?.note ??
-                        activeRow.placementContext.note ??
-                        'Placement diagnostics were not captured for this target in the selected run.'}
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {activeRow.recommendation?.placementDiagnostics?.reasonCodes.length ? (
-                        activeRow.recommendation.placementDiagnostics.reasonCodes.map((code) => (
-                          <ReasonCodeBadge
-                            key={`${activeRow.targetSnapshotId}:placement:${code}`}
-                            code={code}
+                          <DetailGrid
+                            items={[
+                              {
+                                label: 'Representative query',
+                                value:
+                                  activeRow.searchTermDiagnostics.representativeSearchTerm ??
+                                  NOT_CAPTURED,
+                              },
+                              {
+                                label: 'Representative same-text',
+                                value:
+                                  activeRow.searchTermDiagnostics.representativeSameText === null
+                                    ? NOT_CAPTURED
+                                    : String(activeRow.searchTermDiagnostics.representativeSameText),
+                              },
+                              {
+                                label: 'Search term count',
+                                value: formatNumber(activeRow.demandProxies.searchTermCount),
+                              },
+                              {
+                                label: 'Same-text query count',
+                                value: formatNumber(activeRow.demandProxies.sameTextSearchTermCount),
+                              },
+                              {
+                                label: 'Search term impressions',
+                                value: formatNumber(activeRow.demandProxies.totalSearchTermImpressions),
+                              },
+                              {
+                                label: 'Search term clicks',
+                                value: formatNumber(activeRow.demandProxies.totalSearchTermClicks),
+                              },
+                            ]}
                           />
-                        ))
-                      ) : (
-                        <div className="text-sm text-muted">
-                          No placement-diagnostic reason codes were persisted.
+                          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+                            <div className="text-xs uppercase tracking-wide text-muted">
+                              Top query rows
+                            </div>
+                            {activeRow.searchTermDiagnostics.note ? (
+                              <div className="mt-2 text-sm text-muted">
+                                {activeRow.searchTermDiagnostics.note}
+                              </div>
+                            ) : null}
+                            {activeRow.searchTermDiagnostics.topTerms.length > 0 ? (
+                              <div className="mt-3 space-y-2">
+                                {activeRow.searchTermDiagnostics.topTerms.map((term, index) => (
+                                  <div
+                                    key={`${activeRow.targetSnapshotId}:term:${term.searchTerm}:${index}`}
+                                    className="rounded-lg border border-border bg-surface px-3 py-3"
+                                  >
+                                    <div className="font-semibold text-foreground">
+                                      {term.searchTerm}
+                                    </div>
+                                    <div className="mt-1 text-xs text-muted">
+                                      same_text={String(term.sameText)} · clicks{' '}
+                                      {formatNumber(term.clicks)} · orders{' '}
+                                      {formatNumber(term.orders)} · spend{' '}
+                                      {formatCurrency(term.spend)} · sales{' '}
+                                      {formatCurrency(term.sales)}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="mt-2 text-sm text-muted">
+                                No search-term diagnostics were captured for this target in the selected run.
+                              </div>
+                            )}
+                          </div>
+
+                          {activeRow.recommendation?.queryDiagnostics ? (
+                            <div className="grid gap-3">
+                              <QueryCandidateList
+                                label="Promote-to-exact candidates"
+                                candidates={
+                                  activeRow.recommendation.queryDiagnostics.promoteToExactCandidates
+                                }
+                                emptyLabel="No promote-to-exact candidates were persisted."
+                              />
+                              <QueryCandidateList
+                                label="Isolate candidates"
+                                candidates={activeRow.recommendation.queryDiagnostics.isolateCandidates}
+                                emptyLabel="No isolate candidates were persisted."
+                              />
+                              <QueryCandidateList
+                                label="Negative candidates"
+                                candidates={activeRow.recommendation.queryDiagnostics.negativeCandidates}
+                                emptyLabel="No negative candidates were persisted."
+                              />
+                            </div>
+                          ) : null}
                         </div>
-                      )}
+                      </DetailSection>
+                    ),
+                  },
+                  {
+                    id: 'placement-diagnostics',
+                    label: 'Placement diagnostics',
+                    content: (
+                      <DetailSection label="Placement diagnostics">
+                        <div className="space-y-3">
+                          <DetailGrid
+                            items={[
+                              {
+                                label: 'Top of search modifier',
+                                value:
+                                  activeRow.placementContext.topOfSearchModifierPct === null
+                                    ? '—'
+                                    : `${activeRow.placementContext.topOfSearchModifierPct}%`,
+                              },
+                              {
+                                label: 'Placement impressions',
+                                value: formatNumber(activeRow.placementContext.impressions),
+                              },
+                              {
+                                label: 'Placement clicks',
+                                value: formatNumber(activeRow.placementContext.clicks),
+                              },
+                              {
+                                label: 'Placement orders',
+                                value: formatNumber(activeRow.placementContext.orders),
+                              },
+                              {
+                                label: 'Placement spend',
+                                value: formatCurrency(activeRow.placementContext.spend),
+                              },
+                              {
+                                label: 'Placement sales',
+                                value: formatCurrency(activeRow.placementContext.sales),
+                              },
+                              {
+                                label: 'Bias recommendation',
+                                value: labelize(
+                                  activeRow.recommendation?.placementDiagnostics?.biasRecommendation ??
+                                    null
+                                ),
+                              },
+                              {
+                                label: 'Context scope',
+                                value:
+                                  activeRow.recommendation?.placementDiagnostics?.contextScope ??
+                                  NOT_CAPTURED,
+                              },
+                            ]}
+                          />
+                          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
+                            {activeRow.recommendation?.placementDiagnostics?.note ??
+                              activeRow.placementContext.note ??
+                              'Placement diagnostics were not captured for this target in the selected run.'}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {activeRow.recommendation?.placementDiagnostics?.reasonCodes.length ? (
+                              activeRow.recommendation.placementDiagnostics.reasonCodes.map((code) => (
+                                <ReasonCodeBadge
+                                  key={`${activeRow.targetSnapshotId}:placement:${code}`}
+                                  code={code}
+                                />
+                              ))
+                            ) : (
+                              <div className="text-sm text-muted">
+                                No placement-diagnostic reason codes were persisted.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </DetailSection>
+                    ),
+                  },
+                ];
+
+                const engineChips: Array<{ id: DrawerInspectionSelection; label: string }> = [];
+                engineChips.push({ id: 'action-plan', label: 'Action plan' });
+                if (hasMaterialGuardrailDriver) {
+                  engineChips.push({ id: 'guardrails', label: 'Guardrails' });
+                }
+                if (hasPortfolioConstraint) {
+                  engineChips.push({ id: 'portfolio-caps', label: 'Portfolio caps' });
+                }
+                engineChips.push({ id: 'target-state', label: 'Target state' });
+                if (
+                  activeRow.roleHistory.length > 0 ||
+                  activeRow.role.previousRole !== null ||
+                  activeRow.role.currentRole.label !== activeRow.role.desiredRole.label
+                ) {
+                  engineChips.push({ id: 'role-history', label: 'Role history' });
+                }
+                if (hasMaterialQueryDriver) {
+                  engineChips.push({ id: 'query-diagnostics', label: 'Query diagnostics' });
+                }
+                if (hasMaterialPlacementDriver) {
+                  engineChips.push({ id: 'placement-diagnostics', label: 'Placement diagnostics' });
+                }
+                if (targetComparisonChanges.length > 0) {
+                  engineChips.push({ id: 'run-comparison', label: 'Run comparison' });
+                }
+                if (targetRollbackGuidance.length > 0) {
+                  engineChips.push({ id: 'rollback-guidance', label: 'Rollback guidance' });
+                }
+                engineChips.push({ id: 'raw-metrics', label: 'Raw metrics' });
+                if (hasDerivedMetrics) {
+                  engineChips.push({ id: 'derived-metrics', label: 'Derived metrics' });
+                }
+                engineChips.push({ id: 'all', label: 'All engines' });
+
+                const inspectionSections =
+                  selectedInspectionEngine === null
+                    ? []
+                    : selectedInspectionEngine === 'all'
+                      ? drawerSections
+                      : drawerSections.filter((section) => section.id === selectedInspectionEngine);
+
+                return (
+                  <div className="mt-3 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col">
+                    <div className="border-b border-border bg-surface pb-4 xl:sticky xl:top-0 xl:z-20">
+                      <div className="space-y-4 px-0 xl:px-0 xl:pt-1">
+                        <div>
+                          <div className="text-lg font-semibold text-foreground">
+                            {activeRow.targetText}
+                          </div>
+                          <div className="mt-1 text-sm text-muted">
+                            {activeRow.typeLabel ?? 'Target'} · {activeRow.matchType ?? '—'} ·{' '}
+                            {activeRow.targetId}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <Link
+                            href={buildWorkspaceTargetHref({
+                              asin: props.asin,
+                              start: props.start,
+                              end: props.end,
+                              targetId: activeRow.persistedTargetKey,
+                            })}
+                            className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground"
+                          >
+                            Open in Ads Workspace
+                          </Link>
+                          <form action={props.handoffAction}>
+                            <input type="hidden" name="return_to" value={props.returnTo} />
+                            <input
+                              type="hidden"
+                              name="workspace_return_to"
+                              value={props.workspaceQueueHref}
+                            />
+                            <input type="hidden" name="asin" value={props.asin} />
+                            <input type="hidden" name="start" value={props.start} />
+                            <input type="hidden" name="end" value={props.end} />
+                            <input
+                              type="hidden"
+                              name="target_snapshot_id"
+                              value={activeRow.targetSnapshotId}
+                            />
+                            <button
+                              type="submit"
+                              disabled={getWorkspaceSupportedActions(activeRow).length === 0}
+                              className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Handoff this target
+                            </button>
+                          </form>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <RolePill
+                            value={activeRow.role.currentRole.value}
+                            label={`Current ${activeRow.role.currentRole.label}`}
+                          />
+                          <RolePill
+                            value={activeRow.role.desiredRole.value}
+                            label={`Desired ${activeRow.role.desiredRole.label}`}
+                          />
+                          <StatePill
+                            kind="efficiency"
+                            value={activeRow.state.efficiency.value}
+                            label={activeRow.state.efficiency.label}
+                          />
+                          <StatePill
+                            kind="confidence"
+                            value={activeRow.state.confidence.value}
+                            label={activeRow.state.confidence.label}
+                          />
+                          <StatePill
+                            kind="importance"
+                            value={activeRow.state.importance.value}
+                            label={activeRow.state.importance.label}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain">
+                      <div className="space-y-6">
+                        {activeCriticalWarnings.length > 0 || activeRowSpecificExceptions.length > 0 ? (
+                          <div
+                            className={`rounded-xl border px-4 py-3 text-sm ${
+                              activeCriticalWarnings.length > 0
+                                ? 'border-rose-200 bg-rose-50 text-rose-900'
+                                : 'border-amber-200 bg-amber-50 text-amber-900'
+                            }`}
+                          >
+                            <div className="font-semibold">Row-specific exceptions</div>
+                            {activeCriticalWarnings.length > 0 ? (
+                              <div className="mt-3">
+                                <div className="font-semibold">Critical warnings</div>
+                                <ul className="mt-2 space-y-1">
+                                  {activeCriticalWarnings.map((note) => (
+                                    <li key={`${activeRow.targetSnapshotId}:critical:${note}`}>
+                                      {note}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {activeRowSpecificExceptions.length > 0 ? (
+                              <div className={activeCriticalWarnings.length > 0 ? 'mt-3' : 'mt-2'}>
+                                <div className="font-semibold">Exceptions</div>
+                                <ul className="mt-2 space-y-1">
+                                  {activeRowSpecificExceptions.map((note) => (
+                                    <li key={`${activeRow.targetSnapshotId}:exception:${note}`}>
+                                      {note}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        <div className="space-y-3">
+                          <div className="text-xs uppercase tracking-[0.3em] text-muted">
+                            Proposed changes
+                          </div>
+                          {proposedChangeCards.length > 0 ? (
+                            <div className="grid gap-3">
+                              {proposedChangeCards.map((card) => (
+                                <ProposedChangeSummaryCard key={card.key} card={card} />
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="rounded-xl border border-border bg-surface px-4 py-4 text-sm text-muted">
+                              No concrete changes were proposed for this target in the selected run.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="rounded-xl border border-border bg-surface px-4 py-4">
+                          <div className="text-xs uppercase tracking-[0.3em] text-muted">
+                            Why this target is flagged
+                          </div>
+                          <div className="mt-3 text-sm text-foreground">
+                            {whyFlaggedNarrative}
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="text-xs uppercase tracking-[0.3em] text-muted">
+                            Decision engines
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {engineChips.map((chip) => {
+                              const isActiveChip = selectedInspectionEngine === chip.id;
+                              return (
+                                <button
+                                  key={`${activeRow.targetSnapshotId}:engine:${chip.id}`}
+                                  type="button"
+                                  aria-pressed={isActiveChip}
+                                  className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                                    isActiveChip
+                                      ? 'border-primary bg-primary text-primary-foreground'
+                                      : 'border-border bg-surface text-foreground hover:border-primary/40 hover:text-primary'
+                                  }`}
+                                  onClick={() =>
+                                    setSelectedInspectionEngineState({
+                                      targetSnapshotId: activeRow.targetSnapshotId,
+                                      engine: chip.id,
+                                    })
+                                  }
+                                >
+                                  {chip.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {selectedInspectionEngine === null ? (
+                          <div className="rounded-xl border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
+                            Select an engine above to inspect its details.
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {inspectionSections.map((section) => (
+                              <Fragment key={`inspection-${section.id}`}>{section.content}</Fragment>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </DetailSection>
-              </div>
+                );
+              })()
             ) : (
               <div className="mt-3 text-sm text-muted">
                 Select one queue row to open the target detail drawer.
