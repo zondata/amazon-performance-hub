@@ -9,6 +9,7 @@ import {
   validateCreateAdsOptimizerRulePackVersionPayload,
   validateSaveAdsOptimizerManualOverridePayload,
   validateSaveAdsOptimizerProductSettingsPayload,
+  validateSaveAdsOptimizerRecommendationOverridePayload,
 } from '../apps/web/src/lib/ads-optimizer/validation';
 
 describe('ads optimizer config validation', () => {
@@ -69,5 +70,65 @@ describe('ads optimizer config validation', () => {
     expect(productSettings.guardrail_overrides_json).toEqual({ cap: 10 });
     expect(override.override_key).toBe('approval_threshold');
     expect(override.override_value_json).toEqual({ bid_changes: 'manual' });
+  });
+
+  it('requires an override note and accepts a staged bid-reduction recommendation override bundle', () => {
+    expect(() =>
+      validateSaveAdsOptimizerRecommendationOverridePayload({
+        product_id: 'product-1',
+        asin: 'B001TEST',
+        target_id: 'target-1',
+        run_id: 'run-1',
+        target_snapshot_id: 'target-snapshot-1',
+        recommendation_snapshot_id: 'recommendation-1',
+        override_scope: 'one_time',
+        replacement_action_bundle_json: {
+          actions: [
+            {
+              action_type: 'update_target_bid',
+              entity_context_json: {
+                current_bid: 1.2,
+              },
+              proposed_change_json: {
+                next_bid: 0.96,
+              },
+            },
+          ],
+        },
+      })
+    ).toThrow('operator_note is required.');
+
+    const override = validateSaveAdsOptimizerRecommendationOverridePayload({
+      product_id: 'product-1',
+      asin: 'B001TEST',
+      target_id: 'target-1',
+      run_id: 'run-1',
+      target_snapshot_id: 'target-snapshot-1',
+      recommendation_snapshot_id: 'recommendation-1',
+      override_scope: 'persistent',
+      replacement_action_bundle_json: {
+        actions: [
+          {
+            action_type: 'update_target_bid',
+            entity_context_json: {
+              current_bid: 1.2,
+            },
+            proposed_change_json: {
+              next_bid: 0.96,
+            },
+          },
+        ],
+      },
+      operator_note: 'Reduce bid instead of pausing while the target is still strategically important.',
+    });
+
+    expect(override.override_scope).toBe('persistent');
+    expect(override.replacement_action_bundle_json.actions).toHaveLength(1);
+    expect(override.replacement_action_bundle_json.actions[0]).toMatchObject({
+      action_type: 'update_target_bid',
+      proposed_change_json: {
+        next_bid: 0.96,
+      },
+    });
   });
 });

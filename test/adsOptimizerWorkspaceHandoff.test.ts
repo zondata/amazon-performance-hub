@@ -22,6 +22,46 @@ import {
   executeAdsOptimizerWorkspaceHandoff,
 } from '../apps/web/src/lib/ads-optimizer/handoff';
 import type { AdsOptimizerTargetReviewRow } from '../apps/web/src/lib/ads-optimizer/runtime';
+import type { AdsOptimizerRecommendationOverride } from '../apps/web/src/lib/ads-optimizer/types';
+
+const makeManualOverride = (
+  overrides: Partial<AdsOptimizerRecommendationOverride> = {}
+): AdsOptimizerRecommendationOverride => ({
+  recommendation_override_id: 'override-1',
+  account_id: 'acct',
+  marketplace: 'US',
+  product_id: 'product-1',
+  asin: 'B001TEST',
+  target_id: 'target-1',
+  run_id: 'run-1',
+  target_snapshot_id: 'target-snapshot-1',
+  recommendation_snapshot_id: 'recommendation-1',
+  override_scope: 'one_time',
+  replacement_action_bundle_json: {
+    actions: [
+      {
+        action_type: 'update_target_bid',
+        entity_context_json: {
+          campaign_id: 'campaign-1',
+          target_id: 'target-1',
+          current_bid: 1.2,
+        },
+        proposed_change_json: {
+          next_bid: 0.96,
+        },
+      },
+    ],
+  },
+  operator_note: 'Reduce bid instead of pausing while the target is still strategically important.',
+  is_archived: false,
+  last_applied_at: null,
+  last_applied_change_set_id: null,
+  apply_count: 0,
+  created_at: '2026-03-11T09:55:00Z',
+  updated_at: '2026-03-11T09:55:00Z',
+  archived_at: null,
+  ...overrides,
+});
 
 const makeRow = (overrides: Partial<AdsOptimizerTargetReviewRow> = {}) =>
   ({
@@ -267,6 +307,7 @@ const makeRow = (overrides: Partial<AdsOptimizerTargetReviewRow> = {}) =>
       readOnlyBoundary: 'read_only_recommendation_only',
       hasCoverageGaps: false,
     },
+    manualOverride: null,
     roleHistory: [],
     ...overrides,
   }) as AdsOptimizerTargetReviewRow;
@@ -432,6 +473,95 @@ describe('ads optimizer workspace handoff', () => {
     ).toThrow('Selected optimizer recommendations conflict');
   });
 
+  it('stages the active manual override bundle instead of the original pause recommendation and keeps lineage metadata', () => {
+    const row = makeRow({
+      recommendation: {
+        ...makeRow().recommendation!,
+        actionType: 'update_target_state',
+        primaryActionType: 'update_target_state',
+        spendDirection: 'stop',
+        actions: [
+          {
+            actionType: 'update_target_state',
+            priority: 10,
+            entityContext: {
+              target_id: 'target-1',
+              campaign_id: 'campaign-1',
+              current_state: 'enabled',
+            },
+            proposedChange: {
+              next_state: 'paused',
+            },
+            reasonCodes: ['ACTION_UPDATE_TARGET_STATE_PAUSE'],
+            supportingMetrics: null,
+          },
+        ],
+      },
+      queue: {
+        ...makeRow().queue,
+        primaryActionType: 'update_target_state',
+        spendDirection: 'stop',
+      },
+      manualOverride: makeManualOverride({
+        override_scope: 'persistent',
+        replacement_action_bundle_json: {
+          actions: [
+            {
+              action_type: 'update_target_bid',
+              entity_context_json: {
+                campaign_id: 'campaign-1',
+                target_id: 'target-1',
+                current_bid: 1.2,
+              },
+              proposed_change_json: {
+                next_bid: 0.84,
+              },
+            },
+          ],
+        },
+      }),
+    });
+
+    const plan = buildAdsOptimizerWorkspaceHandoffPlan({
+      asin: 'B001TEST',
+      start: '2026-03-01',
+      end: '2026-03-10',
+      runId: 'run-1',
+      objective: 'Scale Profit',
+      rows: [row],
+      createdAt: '2026-03-11T10:00:00Z',
+    });
+
+    expect(plan.itemPayloads).toHaveLength(1);
+    expect(plan.itemPayloads[0]).toMatchObject({
+      action_type: 'update_target_bid',
+      before_json: { bid: 1.2 },
+      after_json: { bid: 0.84 },
+    });
+    expect(plan.itemPayloads[0]?.notes).toContain('Manual override note:');
+    expect(plan.itemPayloads[0]?.ui_context_json).toMatchObject({
+      optimizer_handoff: {
+        recommendation_snapshot_id: 'recommendation-1',
+        action_type: 'update_target_bid',
+        human_override: {
+          recommendation_override_id: 'override-1',
+          override_scope: 'persistent',
+          operator_note:
+            'Reduce bid instead of pausing while the target is still strategically important.',
+        },
+      },
+    });
+    expect(plan.changeSetPayload.filters_json).toMatchObject({
+      recommendation_override_ids: ['override-1'],
+    });
+    expect(plan.changeSetPayload.generated_artifact_json).toMatchObject({
+      recommendation_override_ids: ['override-1'],
+      overridden_row_count: 1,
+    });
+    expect(plan.skippedUnsupportedActionTypes).toEqual([]);
+    expect(plan.skippedUnsupportedActionCount).toBe(0);
+  });
+
   it('creates a normal Ads Workspace change set and items during handoff', async () => {
     const createChangeSet = vi.fn(async (payload) => ({
       id: 'change-set-1',
@@ -453,6 +583,7 @@ describe('ads optimizer workspace handoff', () => {
     }));
     const createChangeSetItems = vi.fn(async () => []);
     const listChangeSetItems = vi.fn(async () => [{ id: 'item-1' }]);
+    const markRecommendationOverridesApplied = vi.fn(async () => {});
 
     const result = await executeAdsOptimizerWorkspaceHandoff(
       {
@@ -488,6 +619,7 @@ describe('ads optimizer workspace handoff', () => {
             completed_at: '2026-03-11T00:10:00Z',
           },
           latestCompletedRun: null,
+          productId: 'product-1',
           productState: {
             value: 'profitable',
             label: 'Profitable',
@@ -495,11 +627,16 @@ describe('ads optimizer workspace handoff', () => {
             objective: 'Scale Profit',
             objectiveReason: 'Objective ready',
           },
+          comparison: null,
           rows: [makeRow()],
+          requestedRunId: null,
+          resolvedContextSource: 'window',
+          runLookupError: null,
         }),
         createChangeSet,
         createChangeSetItems,
         listChangeSetItems,
+        markRecommendationOverridesApplied,
       }
     );
 
@@ -516,6 +653,98 @@ describe('ads optimizer workspace handoff', () => {
       stagedActionCount: 1,
       selectedRowCount: 1,
       queueCount: 1,
+    });
+    expect(markRecommendationOverridesApplied).toHaveBeenCalledWith({
+      overrideIds: [],
+      changeSetId: 'change-set-1',
+    });
+  });
+
+  it('marks active overrides as applied after handoff staging', async () => {
+    const createChangeSet = vi.fn(async (payload) => ({
+      id: 'change-set-1',
+      account_id: 'acct',
+      marketplace: 'US',
+      experiment_id: null,
+      name: String(payload.name),
+      status: 'draft' as const,
+      objective: payload.objective ?? null,
+      hypothesis: payload.hypothesis ?? null,
+      forecast_window_days: payload.forecast_window_days ?? null,
+      review_after_days: payload.review_after_days ?? null,
+      notes: payload.notes ?? null,
+      filters_json: (payload.filters_json ?? {}) as Record<string, unknown>,
+      generated_run_id: null,
+      generated_artifact_json: (payload.generated_artifact_json ?? null) as Record<string, unknown> | null,
+      created_at: '2026-03-11T10:00:00Z',
+      updated_at: '2026-03-11T10:00:00Z',
+    }));
+    const createChangeSetItems = vi.fn(async () => []);
+    const listChangeSetItems = vi.fn(async () => [{ id: 'item-1' }]);
+    const markRecommendationOverridesApplied = vi.fn(async () => {});
+
+    await executeAdsOptimizerWorkspaceHandoff(
+      {
+        asin: 'B001TEST',
+        start: '2026-03-01',
+        end: '2026-03-10',
+        targetSnapshotIds: ['target-snapshot-1'],
+      },
+      {
+        now: () => '2026-03-11T10:00:00Z',
+        loadTargetsViewData: async () => ({
+          run: {
+            run_id: 'run-1',
+            account_id: 'acct',
+            marketplace: 'US',
+            channel: 'sp',
+            scope_type: 'product',
+            selected_asin: 'B001TEST',
+            run_kind: 'manual',
+            date_start: '2026-03-01',
+            date_end: '2026-03-10',
+            rule_pack_version_id: 'version-1',
+            rule_pack_version_label: 'sp_v1_seed',
+            status: 'completed',
+            input_summary_json: {},
+            diagnostics_json: null,
+            product_snapshot_count: 1,
+            target_snapshot_count: 1,
+            recommendation_snapshot_count: 1,
+            role_transition_count: 0,
+            created_at: '2026-03-11T00:00:00Z',
+            started_at: '2026-03-11T00:00:00Z',
+            completed_at: '2026-03-11T00:10:00Z',
+          },
+          latestCompletedRun: null,
+          productId: 'product-1',
+          productState: {
+            value: 'profitable',
+            label: 'Profitable',
+            reason: 'Ready',
+            objective: 'Scale Profit',
+            objectiveReason: 'Objective ready',
+          },
+          comparison: null,
+          rows: [
+            makeRow({
+              manualOverride: makeManualOverride(),
+            }),
+          ],
+          requestedRunId: null,
+          resolvedContextSource: 'window',
+          runLookupError: null,
+        }),
+        createChangeSet,
+        createChangeSetItems,
+        listChangeSetItems,
+        markRecommendationOverridesApplied,
+      }
+    );
+
+    expect(markRecommendationOverridesApplied).toHaveBeenCalledWith({
+      overrideIds: ['override-1'],
+      changeSetId: 'change-set-1',
     });
   });
 });

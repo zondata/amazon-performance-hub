@@ -19,6 +19,7 @@ export type AdsOptimizerTargetImportanceTier =
   | 'tier_1_dominant'
   | 'tier_2_core'
   | 'tier_3_test_long_tail';
+export type AdsOptimizerTargetLossSeverity = 'shallow' | 'moderate' | 'severe';
 
 export type AdsOptimizerProductRunState = {
   engineVersion: string;
@@ -46,6 +47,17 @@ export type AdsOptimizerTargetRunState = {
   efficiency: AdsOptimizerTargetStateDecision<AdsOptimizerTargetEfficiencyState>;
   confidence: AdsOptimizerTargetStateDecision<AdsOptimizerTargetConfidenceState>;
   importance: AdsOptimizerTargetStateDecision<AdsOptimizerTargetImportanceTier>;
+  protection: {
+    adSalesShare: number | null;
+    adOrderShare: number | null;
+    totalSalesShare: number | null;
+    lossToAdSalesRatio: number | null;
+    lossSeverity: AdsOptimizerTargetLossSeverity | null;
+    protectedContributor: boolean;
+    detail: string;
+    coverageStatus: AdsOptimizerStateCoverageStatus;
+    reasonCodes: string[];
+  };
   opportunityScore: number;
   riskScore: number;
   opportunityReasonCodes: string[];
@@ -55,7 +67,7 @@ export type AdsOptimizerTargetRunState = {
 
 type TargetSnapshotPayloadCoverageStatus = AdsOptimizerTargetCoverageStoredStatus;
 
-type TargetStateInput = {
+export type AdsOptimizerTargetStateInput = {
   raw: {
     impressions: number;
     clicks: number;
@@ -81,6 +93,12 @@ type TargetStateInput = {
     impressionVelocity: number | null;
     organicLeverageProxy: number | null;
     organicContextSignal: string | null;
+    adSalesShare: number | null;
+    adOrderShare: number | null;
+    totalSalesShare: number | null;
+    lossToAdSalesRatio: number | null;
+    lossSeverity: AdsOptimizerTargetLossSeverity | null;
+    protectedContributor: boolean | null;
   };
   coverage: {
     daysObserved: number;
@@ -133,6 +151,13 @@ type StateEngineConfig = {
 };
 
 const STATE_ENGINE_VERSION = 'phase6_v1';
+const SHALLOW_LOSS_RATIO_MAX = 0.15;
+const MODERATE_LOSS_RATIO_MAX = 0.35;
+const PROTECTED_AD_SALES_SHARE_MIN = 0.2;
+const PROTECTED_AD_ORDER_SHARE_MIN = 0.2;
+const PROTECTED_TOTAL_SALES_SHARE_MIN = 0.08;
+const DOMINANT_TOTAL_SALES_SHARE_MIN = 0.12;
+const CORE_TOTAL_SALES_SHARE_MIN = 0.05;
 
 const DEFAULT_STATE_ENGINE_CONFIG: StateEngineConfig = {
   minClicksDirectional: 20,
@@ -164,6 +189,9 @@ const readNumber = (value: JsonObject | RuntimeJsonObject | null, key: string) =
 const readString = (value: JsonObject | RuntimeJsonObject | null, key: string) =>
   typeof value?.[key] === 'string' ? (value[key] as string) : null;
 
+const readBoolean = (value: JsonObject | RuntimeJsonObject | null, key: string) =>
+  typeof value?.[key] === 'boolean' ? (value[key] as boolean) : null;
+
 const asJsonObject = (value: unknown): JsonObject | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as JsonObject;
@@ -180,8 +208,12 @@ const labelize = (value: string | null) =>
     : 'Not captured';
 
 const withUnique = (values: string[]) => [...new Set(values)];
+const safeRatio = (numerator: number, denominator: number | null | undefined) =>
+  denominator && denominator > 0 ? numerator / denominator : null;
 
-const toCoverageStatus = (statuses: TargetStateInput['coverage']['statuses']): AdsOptimizerStateCoverageStatus => {
+const toCoverageStatus = (
+  statuses: AdsOptimizerTargetStateInput['coverage']['statuses']
+): AdsOptimizerStateCoverageStatus => {
   return rollupAdsOptimizerCoverageStatus(Object.values(statuses));
 };
 
@@ -296,7 +328,7 @@ export const deriveAdsOptimizerProductRunState = (
 };
 
 const classifyEfficiency = (
-  input: TargetStateInput,
+  input: AdsOptimizerTargetStateInput,
   config: StateEngineConfig
 ): AdsOptimizerTargetRunState['efficiency'] => {
   const hasActivity =
@@ -391,7 +423,7 @@ const classifyEfficiency = (
 };
 
 const classifyConfidence = (
-  input: TargetStateInput,
+  input: AdsOptimizerTargetStateInput,
   config: StateEngineConfig
 ): AdsOptimizerTargetRunState['confidence'] => {
   const sufficientDays = input.coverage.daysObserved >= config.minDaysDirectional;
@@ -445,23 +477,32 @@ const classifyConfidence = (
 };
 
 const classifyImportance = (
-  input: TargetStateInput,
+  input: AdsOptimizerTargetStateInput,
   config: StateEngineConfig,
   confidence: AdsOptimizerTargetRunState['confidence']
 ): AdsOptimizerTargetRunState['importance'] & { rawScore: number } => {
+  const protection = deriveAdsOptimizerTargetProtectionSignals(input);
   const spendShare =
     input.asinScopeMembership?.productAdSpend && input.asinScopeMembership.productAdSpend > 0
       ? input.raw.spend / input.asinScopeMembership.productAdSpend
       : null;
+  const adSalesShare = protection.adSalesShare;
+  const adOrderShare = protection.adOrderShare;
+  const totalSalesShare = protection.totalSalesShare;
   const clickVelocity = input.derived.clickVelocity ?? 0;
   const demandClicks = input.demandProxies.totalSearchTermClicks;
   const sameTextBonus = input.demandProxies.sameTextSearchTermCount > 0 ? 8 : 0;
   const confidenceBonus =
     confidence.value === 'confirmed' ? 18 : confidence.value === 'directional' ? 9 : 0;
+  const contributionScore =
+    (adSalesShare !== null ? Math.min(35, adSalesShare * 100) : 0) +
+    (adOrderShare !== null ? Math.min(25, adOrderShare * 100) : 0) +
+    (totalSalesShare !== null ? Math.min(12, totalSalesShare * 100) : 0);
 
   const rawScore = clampScore(
     (
       (spendShare !== null ? Math.min(45, spendShare * 100) : 0) +
+      contributionScore +
       Math.min(20, clickVelocity * 6) +
       Math.min(17, demandClicks) +
       sameTextBonus +
@@ -472,21 +513,38 @@ const classifyImportance = (
   const dominant =
     rawScore >= config.dominantImportanceScore ||
     (spendShare !== null && spendShare >= config.dominantSpendShare) ||
+    (adSalesShare !== null && adSalesShare >= config.dominantSpendShare) ||
+    (adOrderShare !== null && adOrderShare >= config.dominantSpendShare) ||
+    (totalSalesShare !== null && totalSalesShare >= DOMINANT_TOTAL_SALES_SHARE_MIN) ||
     clickVelocity >= config.dominantClickVelocity;
   if (dominant) {
+    const contributionReasonCode =
+      adSalesShare !== null && adSalesShare >= config.dominantSpendShare
+        ? 'IMPORTANCE_DOMINANT_AD_SALES_SHARE'
+        : adOrderShare !== null && adOrderShare >= config.dominantSpendShare
+          ? 'IMPORTANCE_DOMINANT_AD_ORDER_SHARE'
+          : totalSalesShare !== null && totalSalesShare >= DOMINANT_TOTAL_SALES_SHARE_MIN
+            ? 'IMPORTANCE_DOMINANT_TOTAL_SALES_SHARE'
+            : spendShare !== null && spendShare >= config.dominantSpendShare
+              ? 'IMPORTANCE_DOMINANT_SPEND_SHARE'
+              : 'IMPORTANCE_DOMINANT_VELOCITY';
     return {
       value: 'tier_1_dominant',
       label: 'Tier 1 dominant',
       detail:
-        'This target carries enough captured spend, click velocity, or demand concentration to be treated as dominant inside the selected ASIN scope.',
-      coverageStatus: spendShare === null ? 'partial' : 'ready',
+        'This target carries enough captured sales, orders, spend, or velocity concentration to be treated as dominant inside the selected ASIN scope.',
+      coverageStatus:
+        spendShare === null &&
+        adSalesShare === null &&
+        adOrderShare === null &&
+        totalSalesShare === null
+          ? 'partial'
+          : 'ready',
       reasonCodes: withUnique([
         rawScore >= config.dominantImportanceScore
           ? 'IMPORTANCE_SCORE_DOMINANT'
           : 'IMPORTANCE_SCORE_SUPPORTING',
-        spendShare !== null && spendShare >= config.dominantSpendShare
-          ? 'IMPORTANCE_DOMINANT_SPEND_SHARE'
-          : 'IMPORTANCE_DOMINANT_VELOCITY',
+        contributionReasonCode,
       ]),
       rawScore,
     };
@@ -495,21 +553,38 @@ const classifyImportance = (
   const core =
     rawScore >= config.coreImportanceScore ||
     (spendShare !== null && spendShare >= config.coreSpendShare) ||
+    (adSalesShare !== null && adSalesShare >= config.coreSpendShare) ||
+    (adOrderShare !== null && adOrderShare >= config.coreSpendShare) ||
+    (totalSalesShare !== null && totalSalesShare >= CORE_TOTAL_SALES_SHARE_MIN) ||
     clickVelocity >= config.coreClickVelocity;
   if (core) {
+    const contributionReasonCode =
+      adSalesShare !== null && adSalesShare >= config.coreSpendShare
+        ? 'IMPORTANCE_CORE_AD_SALES_SHARE'
+        : adOrderShare !== null && adOrderShare >= config.coreSpendShare
+          ? 'IMPORTANCE_CORE_AD_ORDER_SHARE'
+          : totalSalesShare !== null && totalSalesShare >= CORE_TOTAL_SALES_SHARE_MIN
+            ? 'IMPORTANCE_CORE_TOTAL_SALES_SHARE'
+            : spendShare !== null && spendShare >= config.coreSpendShare
+              ? 'IMPORTANCE_CORE_SPEND_SHARE'
+              : 'IMPORTANCE_CORE_VELOCITY';
     return {
       value: 'tier_2_core',
       label: 'Tier 2 core',
       detail:
-        'This target is materially relevant in the captured ASIN scope, but it is not yet dominant enough to sit in the top tier.',
-      coverageStatus: spendShare === null ? 'partial' : 'ready',
+        'This target is materially relevant in the captured ASIN scope because its sales, order, spend, or velocity contribution is no longer just long-tail.',
+      coverageStatus:
+        spendShare === null &&
+        adSalesShare === null &&
+        adOrderShare === null &&
+        totalSalesShare === null
+          ? 'partial'
+          : 'ready',
       reasonCodes: withUnique([
         rawScore >= config.coreImportanceScore
           ? 'IMPORTANCE_SCORE_CORE'
           : 'IMPORTANCE_ACTIVITY_CORE',
-        spendShare !== null && spendShare >= config.coreSpendShare
-          ? 'IMPORTANCE_CORE_SPEND_SHARE'
-          : 'IMPORTANCE_CORE_VELOCITY',
+        contributionReasonCode,
       ]),
       rawScore,
     };
@@ -526,8 +601,83 @@ const classifyImportance = (
   };
 };
 
+const classifyLossSeverity = (
+  ratio: number | null
+): AdsOptimizerTargetLossSeverity | null => {
+  if (ratio === null || ratio <= 0) return null;
+  if (ratio <= SHALLOW_LOSS_RATIO_MAX) return 'shallow';
+  if (ratio <= MODERATE_LOSS_RATIO_MAX) return 'moderate';
+  return 'severe';
+};
+
+export const deriveAdsOptimizerTargetProtectionSignals = (
+  input: AdsOptimizerTargetStateInput
+): AdsOptimizerTargetRunState['protection'] => {
+  const adSalesShare =
+    input.derived.adSalesShare ??
+    safeRatio(input.raw.sales, input.asinScopeMembership?.productAdSales);
+  const adOrderShare =
+    input.derived.adOrderShare ??
+    safeRatio(input.raw.orders, input.asinScopeMembership?.productOrders);
+  const totalSalesShare = input.derived.totalSalesShare ?? null;
+  const lossToAdSalesRatio =
+    input.derived.lossToAdSalesRatio ??
+    safeRatio(input.derived.lossDollars ?? 0, input.raw.sales);
+  const lossSeverity = input.derived.lossSeverity ?? classifyLossSeverity(lossToAdSalesRatio);
+  const protectedContributor =
+    input.derived.protectedContributor ??
+    ((adSalesShare !== null && adSalesShare >= PROTECTED_AD_SALES_SHARE_MIN) ||
+      (adOrderShare !== null && adOrderShare >= PROTECTED_AD_ORDER_SHARE_MIN) ||
+      (totalSalesShare !== null && totalSalesShare >= PROTECTED_TOTAL_SALES_SHARE_MIN));
+
+  const reasonCodes: string[] = [];
+  if (adSalesShare !== null && adSalesShare >= PROTECTED_AD_SALES_SHARE_MIN) {
+    reasonCodes.push('PROTECTION_AD_SALES_SHARE_PROTECTED');
+  }
+  if (adOrderShare !== null && adOrderShare >= PROTECTED_AD_ORDER_SHARE_MIN) {
+    reasonCodes.push('PROTECTION_AD_ORDER_SHARE_PROTECTED');
+  }
+  if (totalSalesShare !== null && totalSalesShare >= PROTECTED_TOTAL_SALES_SHARE_MIN) {
+    reasonCodes.push('PROTECTION_TOTAL_SALES_SHARE_PROTECTED');
+  }
+  if (!protectedContributor) {
+    reasonCodes.push('PROTECTION_LOW_CONTRIBUTION');
+  }
+  if (lossSeverity === 'shallow') {
+    reasonCodes.push('PROTECTION_LOSS_SEVERITY_SHALLOW');
+  } else if (lossSeverity === 'moderate') {
+    reasonCodes.push('PROTECTION_LOSS_SEVERITY_MODERATE');
+  } else if (lossSeverity === 'severe') {
+    reasonCodes.push('PROTECTION_LOSS_SEVERITY_SEVERE');
+  } else if ((input.derived.lossDollars ?? 0) <= 0) {
+    reasonCodes.push('PROTECTION_NO_ACTIVE_LOSS');
+  } else {
+    reasonCodes.push('PROTECTION_LOSS_SEVERITY_UNAVAILABLE');
+  }
+
+  const coverageStatus: AdsOptimizerStateCoverageStatus =
+    adSalesShare !== null || adOrderShare !== null || totalSalesShare !== null
+      ? 'ready'
+      : 'partial';
+  const detail = protectedContributor
+    ? 'ASIN-scope sales or order contribution is large enough to protect this target from immediate suppression unless the loss is severe.'
+    : 'ASIN-scope contribution is still too small to protect this target from suppression when losses persist.';
+
+  return {
+    adSalesShare,
+    adOrderShare,
+    totalSalesShare,
+    lossToAdSalesRatio,
+    lossSeverity,
+    protectedContributor,
+    detail,
+    coverageStatus,
+    reasonCodes: withUnique(reasonCodes),
+  };
+};
+
 const buildOpportunityScore = (args: {
-  input: TargetStateInput;
+  input: AdsOptimizerTargetStateInput;
   efficiency: AdsOptimizerTargetRunState['efficiency'];
   confidence: AdsOptimizerTargetRunState['confidence'];
   importance: AdsOptimizerTargetRunState['importance'] & { rawScore: number };
@@ -586,13 +736,14 @@ const buildOpportunityScore = (args: {
 };
 
 const buildRiskScore = (args: {
-  input: TargetStateInput;
+  input: AdsOptimizerTargetStateInput;
   config: StateEngineConfig;
   efficiency: AdsOptimizerTargetRunState['efficiency'];
   confidence: AdsOptimizerTargetRunState['confidence'];
 }) => {
   let score = 0;
   const reasonCodes: string[] = [];
+  const protection = deriveAdsOptimizerTargetProtectionSignals(args.input);
   const statuses = Object.values(args.input.coverage.statuses).map((status) =>
     normalizeAdsOptimizerCoverageStatus(status)
   );
@@ -602,6 +753,13 @@ const buildRiskScore = (args: {
   if (args.efficiency.value === 'converting_but_loss_making') {
     score += 35;
     reasonCodes.push('RISK_CONVERTING_LOSS_MAKING');
+  }
+  if (protection.lossSeverity === 'moderate') {
+    score += 6;
+    reasonCodes.push('RISK_LOSS_SEVERITY_MODERATE');
+  } else if (protection.lossSeverity === 'severe') {
+    score += 14;
+    reasonCodes.push('RISK_LOSS_SEVERITY_SEVERE');
   }
 
   if (
@@ -643,13 +801,14 @@ const buildRiskScore = (args: {
 };
 
 export const classifyAdsOptimizerTargetState = (
-  input: TargetStateInput,
+  input: AdsOptimizerTargetStateInput,
   rulePackPayload?: AdsOptimizerRulePackPayload | null
 ): AdsOptimizerTargetRunState => {
   const config = resolveAdsOptimizerStateEngineConfig(rulePackPayload);
   const efficiency = classifyEfficiency(input, config);
   const confidence = classifyConfidence(input, config);
   const importance = classifyImportance(input, config, confidence);
+  const protection = deriveAdsOptimizerTargetProtectionSignals(input);
   const opportunity = buildOpportunityScore({
     input,
     efficiency,
@@ -675,6 +834,7 @@ export const classifyAdsOptimizerTargetState = (
       coverageStatus: importance.coverageStatus,
       reasonCodes: importance.reasonCodes,
     },
+    protection,
     opportunityScore: opportunity.score,
     riskScore: risk.score,
     opportunityReasonCodes: opportunity.reasonCodes,
@@ -683,13 +843,14 @@ export const classifyAdsOptimizerTargetState = (
       ...efficiency.reasonCodes,
       ...confidence.reasonCodes,
       ...importance.reasonCodes,
+      ...protection.reasonCodes,
       ...opportunity.reasonCodes,
       ...risk.reasonCodes,
     ]),
   };
 };
 
-const readTargetStateInput = (payload: RuntimeJsonObject): TargetStateInput => {
+const readTargetStateInput = (payload: RuntimeJsonObject): AdsOptimizerTargetStateInput => {
   const totals = asJsonObject(payload.totals);
   const nonAdditive = asJsonObject(payload.non_additive_diagnostics);
   const derivedMetrics = asJsonObject(payload.derived_metrics);
@@ -725,6 +886,16 @@ const readTargetStateInput = (payload: RuntimeJsonObject): TargetStateInput => {
       impressionVelocity: readNumber(derivedMetrics, 'impression_velocity'),
       organicLeverageProxy: readNumber(derivedMetrics, 'organic_leverage_proxy'),
       organicContextSignal: readString(derivedMetrics, 'organic_context_signal'),
+      adSalesShare: readNumber(derivedMetrics, 'ad_sales_share'),
+      adOrderShare: readNumber(derivedMetrics, 'ad_order_share'),
+      totalSalesShare: readNumber(derivedMetrics, 'total_sales_share'),
+      lossToAdSalesRatio: readNumber(derivedMetrics, 'loss_to_ad_sales_ratio'),
+      lossSeverity:
+        (readString(
+          derivedMetrics,
+          'loss_severity'
+        ) as AdsOptimizerTargetLossSeverity | null) ?? null,
+      protectedContributor: readBoolean(derivedMetrics, 'protected_contributor'),
     },
     coverage: {
       daysObserved: numberValue(coverage?.days_observed),
@@ -818,6 +989,17 @@ export const enrichAdsOptimizerTargetSnapshotPayload = (args: {
         coverage_status: state.importance.coverageStatus,
         reason_codes: state.importance.reasonCodes,
       },
+      protection: {
+        ad_sales_share: state.protection.adSalesShare,
+        ad_order_share: state.protection.adOrderShare,
+        total_sales_share: state.protection.totalSalesShare,
+        loss_to_ad_sales_ratio: state.protection.lossToAdSalesRatio,
+        loss_severity: state.protection.lossSeverity,
+        protected_contributor: state.protection.protectedContributor,
+        detail: state.protection.detail,
+        coverage_status: state.protection.coverageStatus,
+        reason_codes: state.protection.reasonCodes,
+      },
       scores: {
         opportunity: state.opportunityScore,
         risk: state.riskScore,
@@ -870,7 +1052,9 @@ export const readAdsOptimizerTargetRunState = (
   const efficiency = asJsonObject(stateEngine.efficiency);
   const confidence = asJsonObject(stateEngine.confidence);
   const importance = asJsonObject(stateEngine.importance);
+  const protection = asJsonObject(stateEngine.protection);
   const scores = asJsonObject(stateEngine.scores);
+  const fallbackProtection = deriveAdsOptimizerTargetProtectionSignals(readTargetStateInput(payload));
 
   return {
     engineVersion: readString(stateEngine, 'engine_version') ?? STATE_ENGINE_VERSION,
@@ -921,6 +1105,33 @@ export const readAdsOptimizerTargetRunState = (
           'coverage_status'
         ) as AdsOptimizerStateCoverageStatus | null) ?? 'missing',
       reasonCodes: readReasonCodes(importance, 'reason_codes'),
+    },
+    protection: {
+      adSalesShare:
+        readNumber(protection, 'ad_sales_share') ?? fallbackProtection.adSalesShare,
+      adOrderShare:
+        readNumber(protection, 'ad_order_share') ?? fallbackProtection.adOrderShare,
+      totalSalesShare:
+        readNumber(protection, 'total_sales_share') ?? fallbackProtection.totalSalesShare,
+      lossToAdSalesRatio:
+        readNumber(protection, 'loss_to_ad_sales_ratio') ?? fallbackProtection.lossToAdSalesRatio,
+      lossSeverity:
+        (readString(
+          protection,
+          'loss_severity'
+        ) as AdsOptimizerTargetLossSeverity | null) ?? fallbackProtection.lossSeverity,
+      protectedContributor:
+        readBoolean(protection, 'protected_contributor') ?? fallbackProtection.protectedContributor,
+      detail: readString(protection, 'detail') ?? fallbackProtection.detail,
+      coverageStatus:
+        (readString(
+          protection,
+          'coverage_status'
+        ) as AdsOptimizerStateCoverageStatus | null) ?? fallbackProtection.coverageStatus,
+      reasonCodes:
+        readReasonCodes(protection, 'reason_codes').length > 0
+          ? readReasonCodes(protection, 'reason_codes')
+          : fallbackProtection.reasonCodes,
     },
     opportunityScore: numberValue(scores?.opportunity),
     riskScore: numberValue(scores?.risk),

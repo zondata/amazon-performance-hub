@@ -2,6 +2,15 @@ export const ADS_OPTIMIZER_CHANNELS = ['sp'] as const;
 export const ADS_OPTIMIZER_SCOPE_TYPES = ['account', 'product'] as const;
 export const ADS_OPTIMIZER_VERSION_STATUSES = ['draft', 'active', 'archived'] as const;
 export const ADS_OPTIMIZER_ARCHETYPES = ['design_led', 'visibility_led', 'hybrid'] as const;
+export const ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_SCOPES = [
+  'one_time',
+  'persistent',
+] as const;
+export const ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_ACTION_TYPES = [
+  'update_target_bid',
+  'update_target_state',
+  'update_placement_modifier',
+] as const;
 
 export type JsonObject = Record<string, unknown>;
 
@@ -9,6 +18,10 @@ export type AdsOptimizerChannel = (typeof ADS_OPTIMIZER_CHANNELS)[number];
 export type AdsOptimizerScopeType = (typeof ADS_OPTIMIZER_SCOPE_TYPES)[number];
 export type AdsOptimizerVersionStatus = (typeof ADS_OPTIMIZER_VERSION_STATUSES)[number];
 export type AdsOptimizerArchetype = (typeof ADS_OPTIMIZER_ARCHETYPES)[number];
+export type AdsOptimizerRecommendationOverrideScope =
+  (typeof ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_SCOPES)[number];
+export type AdsOptimizerRecommendationOverrideActionType =
+  (typeof ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_ACTION_TYPES)[number];
 
 export type AdsOptimizerRoleTemplate = {
   enabled: boolean;
@@ -80,6 +93,36 @@ export type AdsOptimizerManualOverride = {
   archived_at: string | null;
 };
 
+export type AdsOptimizerRecommendationOverrideAction = {
+  action_type: AdsOptimizerRecommendationOverrideActionType;
+  entity_context_json: JsonObject | null;
+  proposed_change_json: JsonObject;
+};
+
+export type AdsOptimizerRecommendationOverride = {
+  recommendation_override_id: string;
+  account_id: string;
+  marketplace: string;
+  product_id: string;
+  asin: string;
+  target_id: string;
+  run_id: string;
+  target_snapshot_id: string;
+  recommendation_snapshot_id: string;
+  override_scope: AdsOptimizerRecommendationOverrideScope;
+  replacement_action_bundle_json: {
+    actions: AdsOptimizerRecommendationOverrideAction[];
+  };
+  operator_note: string;
+  is_archived: boolean;
+  last_applied_at: string | null;
+  last_applied_change_set_id: string | null;
+  apply_count: number;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+};
+
 export type AdsOptimizerRulePackPayloadInput = {
   schema_version?: number;
   channel?: string | null;
@@ -123,6 +166,18 @@ export type SaveAdsOptimizerManualOverridePayload = {
   notes?: string | null;
 };
 
+export type SaveAdsOptimizerRecommendationOverridePayload = {
+  product_id?: string | null;
+  asin?: string | null;
+  target_id?: string | null;
+  run_id?: string | null;
+  target_snapshot_id?: string | null;
+  recommendation_snapshot_id?: string | null;
+  override_scope?: string | null;
+  replacement_action_bundle_json?: unknown;
+  operator_note?: string | null;
+};
+
 export type AdsOptimizerRulePackRow = AdsOptimizerRulePack;
 
 export type AdsOptimizerRulePackVersionRow = Omit<
@@ -144,6 +199,13 @@ export type AdsOptimizerManualOverrideRow = Omit<
   'override_value_json'
 > & {
   override_value_json: unknown;
+};
+
+export type AdsOptimizerRecommendationOverrideRow = Omit<
+  AdsOptimizerRecommendationOverride,
+  'replacement_action_bundle_json'
+> & {
+  replacement_action_bundle_json: unknown;
 };
 
 const asJsonObject = (value: unknown, fieldName: string): JsonObject => {
@@ -198,4 +260,15 @@ export const mapAdsOptimizerManualOverrideRow = (
     row.override_value_json,
     'ads_optimizer_manual_overrides.override_value_json'
   ),
+});
+
+export const mapAdsOptimizerRecommendationOverrideRow = (
+  row: AdsOptimizerRecommendationOverrideRow
+): AdsOptimizerRecommendationOverride => ({
+  ...row,
+  override_scope: row.override_scope as AdsOptimizerRecommendationOverrideScope,
+  replacement_action_bundle_json: asJsonObject(
+    row.replacement_action_bundle_json,
+    'ads_optimizer_recommendation_overrides.replacement_action_bundle_json'
+  ) as AdsOptimizerRecommendationOverride['replacement_action_bundle_json'],
 });

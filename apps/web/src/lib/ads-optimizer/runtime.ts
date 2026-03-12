@@ -5,13 +5,18 @@ import { listChangeSetItems } from '@/lib/ads-workspace/repoChangeSetItems';
 import { listChangeSets } from '@/lib/ads-workspace/repoChangeSets';
 
 import { getProductOptimizerSettingsByProductId, getRulePackVersion } from './repoConfig';
+import { listActiveAdsOptimizerRecommendationOverrides } from './repoOverrides';
 import {
   buildAdsOptimizerRunComparison,
   type AdsOptimizerComparisonRow,
   type AdsOptimizerComparisonRunRef,
   type AdsOptimizerRunComparisonView,
 } from './comparison';
-import { getAdsOptimizerOverviewData, type AdsOptimizerOverviewData } from './overview';
+import {
+  getAdsOptimizerOverviewData,
+  recommendAdsOptimizerObjective,
+  type AdsOptimizerOverviewData,
+} from './overview';
 import {
   buildAdsOptimizerRoleTransitionReason,
   enrichAdsOptimizerTargetSnapshotRolePayload,
@@ -46,6 +51,7 @@ import {
   type AdsOptimizerProductRunState,
 } from './state';
 import type { AdsOptimizerRun, JsonObject } from './runtimeTypes';
+import type { AdsOptimizerRecommendationOverride } from './types';
 import {
   loadAdsOptimizerTargetProfiles,
   mapTargetSnapshotToProfileView,
@@ -104,6 +110,7 @@ export type AdsOptimizerHistoryViewData = {
 export type AdsOptimizerTargetsViewData = {
   run: AdsOptimizerRun | null;
   latestCompletedRun: AdsOptimizerRun | null;
+  productId: string | null;
   productState: AdsOptimizerProductRunState | null;
   comparison: AdsOptimizerRunComparisonView | null;
   rows: AdsOptimizerTargetReviewRow[];
@@ -129,6 +136,7 @@ export type AdsOptimizerTargetRoleHistoryEntry = {
 export type AdsOptimizerTargetReviewRow = AdsOptimizerTargetProfileSnapshotView & {
   persistedTargetKey: string;
   recommendation: AdsOptimizerRecommendationSnapshotView | null;
+  manualOverride?: AdsOptimizerRecommendationOverride | null;
   roleHistory: AdsOptimizerTargetRoleHistoryEntry[];
   queue: {
     priority: number | null;
@@ -151,6 +159,21 @@ type ExecuteManualRunDeps = {
     asin: string;
     currentRunId: string;
   }) => Promise<Map<string, AdsOptimizerTargetRole>>;
+  loadPreviousRecommendationContext: (args: {
+    asin: string;
+    start: string;
+    end: string;
+    currentRunId: string;
+  }) => Promise<
+    Map<
+      string,
+      {
+        recommendationSnapshotId: string;
+        createdAt: string;
+        payload: JsonObject;
+      }
+    >
+  >;
   loadProductSnapshotInput: (args: {
     asin: string;
     start: string;
@@ -245,6 +268,27 @@ const readSnapshotOverview = (snapshotPayload: JsonObject): AdsOptimizerOverview
   return overview as AdsOptimizerOverviewData;
 };
 
+const applyArchetypeObjectiveToOverview = (args: {
+  overview: AdsOptimizerOverviewData;
+  archetype: 'design_led' | 'visibility_led' | 'hybrid';
+}): AdsOptimizerOverviewData => {
+  const adSales = args.overview.economics.adSales;
+  const adSpend = args.overview.economics.adSpend;
+  const acos = adSales > 0 ? adSpend / adSales : null;
+
+  return {
+    ...args.overview,
+    objective: recommendAdsOptimizerObjective({
+      state: args.overview.state.value,
+      acos,
+      breakEvenAcos: args.overview.economics.breakEvenAcos,
+      heroQueryTrend: args.overview.visibility.heroQueryTrend,
+      totalSqpSearchVolume: args.overview.visibility.sqpCoverage.totalSearchVolume,
+      archetype: args.archetype,
+    }),
+  };
+};
+
 export const loadTargetSnapshotInputs = async (
   args: TargetSnapshotLoadArgs
 ): Promise<TargetSnapshotLoadResult> => {
@@ -330,6 +374,7 @@ const buildTargetReviewRows = (args: {
   snapshots: Awaited<ReturnType<typeof listAdsOptimizerTargetSnapshotsByRun>>;
   recommendationSnapshots: Awaited<ReturnType<typeof listAdsOptimizerRecommendationSnapshotsByRun>>;
   roleHistoryByTargetId: Map<string, AdsOptimizerTargetRoleHistoryEntry[]>;
+  activeOverrides?: AdsOptimizerRecommendationOverride[];
 }): AdsOptimizerTargetReviewRow[] => {
   const recommendationsByTargetSnapshotId = new Map(
     args.recommendationSnapshots.map((snapshot) => [
@@ -337,15 +382,28 @@ const buildTargetReviewRows = (args: {
       readAdsOptimizerRecommendationSnapshotView(snapshot),
     ])
   );
+  const activeOverrides = args.activeOverrides ?? [];
 
   return args.snapshots.map((snapshot) => {
     const baseRow = mapTargetSnapshotToProfileView(snapshot);
     const recommendation = recommendationsByTargetSnapshotId.get(snapshot.target_snapshot_id) ?? null;
+    const manualOverride =
+      activeOverrides.find(
+        (override) =>
+          override.override_scope === 'one_time' &&
+          recommendation?.recommendationSnapshotId === override.recommendation_snapshot_id
+      ) ??
+      activeOverrides.find(
+        (override) =>
+          override.override_scope === 'persistent' && override.target_id === snapshot.target_id
+      ) ??
+      null;
 
     return {
       ...baseRow,
       persistedTargetKey: snapshot.target_id,
       recommendation,
+      manualOverride,
       roleHistory: args.roleHistoryByTargetId.get(snapshot.target_id) ?? [],
       queue: {
         priority: recommendation?.actions[0]?.priority ?? null,
@@ -505,6 +563,70 @@ const loadPreviousRoleMap = async (args: {
   return roles;
 };
 
+const loadPreviousRecommendationContext = async (args: {
+  asin: string;
+  start: string;
+  end: string;
+  currentRunId: string;
+}): Promise<
+  Map<
+    string,
+    {
+      recommendationSnapshotId: string;
+      createdAt: string;
+      payload: JsonObject;
+    }
+  >
+> => {
+  const runs = await listAdsOptimizerRuns({
+    asin: args.asin,
+    limit: 30,
+  });
+  const previousComparableRun =
+    runs.find(
+      (run) =>
+        run.run_id !== args.currentRunId &&
+        run.status === 'completed' &&
+        run.selected_asin === args.asin &&
+        run.date_start === args.start &&
+        run.date_end === args.end
+    ) ?? null;
+
+  if (!previousComparableRun) {
+    return new Map();
+  }
+
+  const [targetSnapshots, recommendationSnapshots] = await Promise.all([
+    listAdsOptimizerTargetSnapshotsByRun(previousComparableRun.run_id),
+    listAdsOptimizerRecommendationSnapshotsByRun(previousComparableRun.run_id),
+  ]);
+  const targetIdBySnapshotId = new Map(
+    targetSnapshots.map((snapshot) => [snapshot.target_snapshot_id, snapshot.target_id])
+  );
+  const previousContext = new Map<
+    string,
+    {
+      recommendationSnapshotId: string;
+      createdAt: string;
+      payload: JsonObject;
+    }
+  >();
+
+  recommendationSnapshots.forEach((snapshot) => {
+    const targetId = targetIdBySnapshotId.get(snapshot.target_snapshot_id);
+    if (!targetId || previousContext.has(targetId)) {
+      return;
+    }
+    previousContext.set(targetId, {
+      recommendationSnapshotId: snapshot.recommendation_snapshot_id,
+      createdAt: snapshot.created_at,
+      payload: snapshot.snapshot_payload_json,
+    });
+  });
+
+  return previousContext;
+};
+
 const defaultDeps: ExecuteManualRunDeps = {
   now: () => new Date().toISOString(),
   getRuntimeContext: getAdsOptimizerRuntimeContext,
@@ -512,6 +634,7 @@ const defaultDeps: ExecuteManualRunDeps = {
   updateRun: updateAdsOptimizerRun,
   getProductSettings: getProductOptimizerSettingsByProductId,
   loadPreviousRoleMap,
+  loadPreviousRecommendationContext,
   loadProductSnapshotInput,
   loadTargetSnapshotInputs,
   insertProductSnapshots: insertAdsOptimizerProductSnapshots,
@@ -570,14 +693,26 @@ export const executeAdsOptimizerManualRun = async (
     const productSettings = productSnapshot.productId
       ? await deps.getProductSettings(productSnapshot.productId)
       : null;
+    const effectiveOverview = applyArchetypeObjectiveToOverview({
+      overview: productSnapshot.overview,
+      archetype: productSettings?.archetype ?? 'hybrid',
+    });
     const productSnapshotPayload = enrichAdsOptimizerProductSnapshotPayload({
       payload: productSnapshot.snapshotPayload,
-      overview: productSnapshot.overview,
+      overview: effectiveOverview,
     });
-    const previousRoleMap = await deps.loadPreviousRoleMap({
-      asin: args.asin,
-      currentRunId: run.run_id,
-    });
+    const [previousRoleMap, previousRecommendationContext] = await Promise.all([
+      deps.loadPreviousRoleMap({
+        asin: args.asin,
+        currentRunId: run.run_id,
+      }),
+      deps.loadPreviousRecommendationContext({
+        asin: args.asin,
+        start: args.start,
+        end: args.end,
+        currentRunId: run.run_id,
+      }),
+    ]);
     const targetSnapshotLoad = await deps.loadTargetSnapshotInputs({
       ...args,
       overviewData: readSnapshotOverview(productSnapshotPayload),
@@ -653,6 +788,7 @@ export const executeAdsOptimizerManualRun = async (
         targetSnapshotId: snapshot.target_snapshot_id,
         targetId: snapshot.target_id,
         payload: targetSnapshotRows[index]?.snapshotPayload ?? {},
+        previousRecommendation: previousRecommendationContext.get(snapshot.target_id) ?? null,
       })),
       rulePackPayload: runtimeContext.activeVersion.change_payload_json,
     });
@@ -748,6 +884,7 @@ export const getAdsOptimizerTargetsViewData = async (args: {
       return {
         run: null,
         latestCompletedRun,
+        productId: null,
         productState: null,
         comparison: null,
         rows: [],
@@ -760,6 +897,7 @@ export const getAdsOptimizerTargetsViewData = async (args: {
       return {
         run: null,
         latestCompletedRun,
+        productId: null,
         productState: null,
         comparison: null,
         rows: [],
@@ -785,6 +923,7 @@ export const getAdsOptimizerTargetsViewData = async (args: {
     return {
       run: null,
       latestCompletedRun,
+      productId: null,
       productState: null,
       comparison: null,
       rows: [],
@@ -840,6 +979,17 @@ export const getAdsOptimizerTargetsViewData = async (args: {
       previousComparableRun ? [exactRun.run_id, previousComparableRun.run_id] : [exactRun.run_id]
     ),
   ]);
+  const productId = productSnapshots[0]?.product_id ?? null;
+  const activeOverrides =
+    productId && snapshots.length > 0
+      ? await listActiveAdsOptimizerRecommendationOverrides({
+          productId,
+          targetIds: snapshots.map((snapshot) => snapshot.target_id),
+          recommendationSnapshotIds: recommendationSnapshots.map(
+            (snapshot) => snapshot.recommendation_snapshot_id
+          ),
+        })
+      : [];
   const roleHistoryByTargetId = new Map<string, AdsOptimizerTargetRoleHistoryEntry[]>();
   roleTransitionLogs.forEach((log) => {
     if (!log.target_id) return;
@@ -866,6 +1016,7 @@ export const getAdsOptimizerTargetsViewData = async (args: {
     snapshots,
     recommendationSnapshots,
     roleHistoryByTargetId,
+    activeOverrides,
   });
   const previousRows = previousComparableRun
     ? buildTargetReviewRows({
@@ -915,6 +1066,7 @@ export const getAdsOptimizerTargetsViewData = async (args: {
   return {
     run: exactRun,
     latestCompletedRun,
+    productId,
     productState: productSnapshots[0]
       ? readAdsOptimizerProductRunState(productSnapshots[0].snapshot_payload_json)
       : null,

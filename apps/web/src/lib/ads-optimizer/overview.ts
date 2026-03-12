@@ -1,5 +1,6 @@
 import 'server-only';
 
+import type { AdsOptimizerArchetype } from './types';
 import { getProductRankingDaily, type ProductRankingRow } from '@/lib/ranking/getProductRankingDaily';
 import { getSalesDaily } from '@/lib/sales/getSalesDaily';
 import { getProductSqpWeekly, type SqpKnownKeywordRow } from '@/lib/sqp/getProductSqpWeekly';
@@ -103,6 +104,7 @@ type ObjectiveInput = {
   breakEvenAcos: number | null;
   heroQueryTrend: HeroQueryTrend;
   totalSqpSearchVolume: number | null;
+  archetype?: AdsOptimizerArchetype | null;
 };
 
 const LOW_DATA_ORDERS_THRESHOLD = 3;
@@ -310,6 +312,8 @@ export const classifyAdsOptimizerProductState = (
 export const recommendAdsOptimizerObjective = (
   input: ObjectiveInput
 ): AdsOptimizerOverviewData['objective'] => {
+  const archetype = input.archetype ?? 'hybrid';
+
   if (input.state === 'structurally_weak') {
     return {
       value: 'Recover',
@@ -342,6 +346,13 @@ export const recommendAdsOptimizerObjective = (
 
   if (input.state === 'break_even') {
     if (rankSliding) {
+      if (archetype === 'design_led') {
+        return {
+          value: 'Break Even',
+          reason:
+            'Economics are thin and design-led posture keeps the product margin-first, so the objective stays break-even instead of forcing rank defense.',
+        };
+      }
       return {
         value: 'Rank Defense',
         reason:
@@ -356,6 +367,13 @@ export const recommendAdsOptimizerObjective = (
   }
 
   if (rankSliding) {
+    if (archetype === 'design_led' && (scaleBuffer ?? 0) >= BREAK_EVEN_BUFFER_THRESHOLD) {
+      return {
+        value: 'Scale Profit',
+        reason:
+          'Hero-query rank is softening, but design-led posture keeps profitable scaling ahead of defensive visibility unless the visibility risk is more severe.',
+      };
+    }
     return {
       value: 'Rank Defense',
       reason:
@@ -364,6 +382,13 @@ export const recommendAdsOptimizerObjective = (
   }
 
   if (rankWeak && sqpDemand >= STRONG_SQP_DEMAND) {
+    if (archetype === 'design_led' && (scaleBuffer ?? 0) >= SCALE_BUFFER_THRESHOLD) {
+      return {
+        value: 'Scale Profit',
+        reason:
+          'Demand is present, but design-led posture still prefers profitable scaling before a dedicated rank-growth push.',
+      };
+    }
     return {
       value: 'Rank Growth',
       reason:
@@ -429,6 +454,7 @@ export const getAdsOptimizerOverviewData = async (args: {
   asin: string;
   start: string;
   end: string;
+  archetype?: AdsOptimizerArchetype | null;
 }): Promise<AdsOptimizerOverviewData> => {
   const [meta, salesData, rankingRows, sqpWeekly] = await Promise.all([
     loadProductMeta(args),
@@ -563,6 +589,7 @@ export const getAdsOptimizerOverviewData = async (args: {
     breakEvenAcos,
     heroQueryTrend,
     totalSqpSearchVolume,
+    archetype: args.archetype ?? null,
   });
 
   return {

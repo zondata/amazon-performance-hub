@@ -10,10 +10,16 @@ import {
   createAdsOptimizerDraftVersionAction,
   handoffAdsOptimizerToWorkspaceAction,
   runAdsOptimizerNowAction,
+  saveAdsOptimizerProductSettingsAction,
+  saveAdsOptimizerRecommendationOverrideAction,
 } from '@/app/ads/optimizer/actions';
 import { isAdsOptimizerEnabled } from '@/lib/ads-optimizer/featureFlag';
 import { getAdsOptimizerOverviewData } from '@/lib/ads-optimizer/overview';
-import { getAdsOptimizerConfigViewData } from '@/lib/ads-optimizer/repoConfig';
+import {
+  getAdsOptimizerConfigViewData,
+  getProductOptimizerSettingsByProductId,
+} from '@/lib/ads-optimizer/repoConfig';
+import { findOptimizerProductByAsin } from '@/lib/ads-optimizer/repoRuntime';
 import {
   getAdsOptimizerHistoryViewData,
   getAdsOptimizerTargetsViewData,
@@ -112,6 +118,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
   const view = normalizeAdsOptimizerView(paramValue('view'));
   const notice = pickSearchParam(params?.notice);
   const error = pickSearchParam(params?.error);
+  const overrideError = paramValue('override_error') === '1';
   const overviewData =
     view === 'overview' && asin !== 'all'
       ? await getAdsOptimizerOverviewData({
@@ -123,6 +130,12 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
         })
       : null;
   const configData = view === 'config' ? await getAdsOptimizerConfigViewData() : null;
+  const selectedConfigProduct =
+    view === 'config' && asin !== 'all' ? await findOptimizerProductByAsin(asin) : null;
+  const selectedProductSettings =
+    view === 'config' && selectedConfigProduct?.productId
+      ? await getProductOptimizerSettingsByProductId(selectedConfigProduct.productId)
+      : null;
   const historyData = view === 'history' ? await getAdsOptimizerHistoryViewData(asin) : null;
   const targetsData =
     view === 'targets' && (asin !== 'all' || requestedRunId !== null)
@@ -288,8 +301,16 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           seedMessage={configData?.seedMessage ?? null}
           notice={notice}
           error={error}
+          selectedProductId={selectedConfigProduct?.productId ?? null}
+          selectedProductAsin={selectedConfigProduct?.asin ?? (asin !== 'all' ? asin : null)}
+          selectedProductLabel={
+            asin !== 'all' ? (selectedAsin?.label ?? selectedConfigProduct?.asin ?? asin) : null
+          }
+          selectedProductTitle={selectedConfigProduct?.title ?? null}
+          productSettings={selectedProductSettings}
           createDraftAction={createAdsOptimizerDraftVersionAction}
           activateVersionAction={activateAdsOptimizerRulePackVersionAction}
+          saveProductSettingsAction={saveAdsOptimizerProductSettingsAction}
         />
       ) : view === 'history' ? (
         <OptimizerHistoryPanel
@@ -337,8 +358,13 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
               latestCompletedRun={targetsData?.latestCompletedRun ?? null}
               productState={targetsData?.productState ?? null}
               comparison={targetsData?.comparison ?? null}
+              productId={targetsData?.productId ?? null}
               rows={targetsData?.rows ?? []}
+              notice={notice}
+              error={error}
+              overrideError={overrideError}
               handoffAction={handoffAdsOptimizerToWorkspaceAction}
+              saveRecommendationOverrideAction={saveAdsOptimizerRecommendationOverrideAction}
             />
       ) : (
         <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">

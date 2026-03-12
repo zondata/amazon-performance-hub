@@ -1,10 +1,14 @@
 import {
   ADS_OPTIMIZER_ARCHETYPES,
   ADS_OPTIMIZER_CHANNELS,
+  ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_ACTION_TYPES,
+  ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_SCOPES,
   ADS_OPTIMIZER_SCOPE_TYPES,
   ADS_OPTIMIZER_VERSION_STATUSES,
   type AdsOptimizerArchetype,
   type AdsOptimizerChannel,
+  type AdsOptimizerRecommendationOverrideActionType,
+  type AdsOptimizerRecommendationOverrideScope,
   type AdsOptimizerRulePackPayload,
   type AdsOptimizerScopeType,
   type AdsOptimizerVersionStatus,
@@ -12,6 +16,7 @@ import {
   type CreateAdsOptimizerRulePackVersionPayload,
   type JsonObject,
   type SaveAdsOptimizerManualOverridePayload,
+  type SaveAdsOptimizerRecommendationOverridePayload,
   type SaveAdsOptimizerProductSettingsPayload,
 } from './types';
 
@@ -65,6 +70,42 @@ const asArchetype = (value: unknown, fieldName: string): AdsOptimizerArchetype =
     throw new Error(`${fieldName} must be one of: ${ADS_OPTIMIZER_ARCHETYPES.join(', ')}.`);
   }
   return trimmed as AdsOptimizerArchetype;
+};
+
+const asRecommendationOverrideScope = (
+  value: unknown,
+  fieldName: string
+): AdsOptimizerRecommendationOverrideScope => {
+  const trimmed = trimToNull(value);
+  if (
+    !trimmed ||
+    !ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_SCOPES.includes(
+      trimmed as AdsOptimizerRecommendationOverrideScope
+    )
+  ) {
+    throw new Error(
+      `${fieldName} must be one of: ${ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_SCOPES.join(', ')}.`
+    );
+  }
+  return trimmed as AdsOptimizerRecommendationOverrideScope;
+};
+
+const asRecommendationOverrideActionType = (
+  value: unknown,
+  fieldName: string
+): AdsOptimizerRecommendationOverrideActionType => {
+  const trimmed = trimToNull(value);
+  if (
+    !trimmed ||
+    !ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_ACTION_TYPES.includes(
+      trimmed as AdsOptimizerRecommendationOverrideActionType
+    )
+  ) {
+    throw new Error(
+      `${fieldName} must be one of: ${ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_ACTION_TYPES.join(', ')}.`
+    );
+  }
+  return trimmed as AdsOptimizerRecommendationOverrideActionType;
 };
 
 export const validateAdsOptimizerRulePackPayload = (
@@ -194,5 +235,108 @@ export const validateSaveAdsOptimizerManualOverridePayload = (
     override_key: overrideKey,
     override_value_json: asJsonObject(payload.override_value_json ?? {}, 'override_value_json'),
     notes: trimToNull(payload.notes),
+  };
+};
+
+export const validateSaveAdsOptimizerRecommendationOverridePayload = (
+  payload: SaveAdsOptimizerRecommendationOverridePayload
+) => {
+  const productId = trimToNull(payload.product_id);
+  const asin = trimToNull(payload.asin);
+  const targetId = trimToNull(payload.target_id);
+  const runId = trimToNull(payload.run_id);
+  const targetSnapshotId = trimToNull(payload.target_snapshot_id);
+  const recommendationSnapshotId = trimToNull(payload.recommendation_snapshot_id);
+  const operatorNote = trimToNull(payload.operator_note);
+
+  if (!productId) throw new Error('product_id is required.');
+  if (!asin) throw new Error('asin is required.');
+  if (!targetId) throw new Error('target_id is required.');
+  if (!runId) throw new Error('run_id is required.');
+  if (!targetSnapshotId) throw new Error('target_snapshot_id is required.');
+  if (!recommendationSnapshotId) throw new Error('recommendation_snapshot_id is required.');
+  if (!operatorNote) throw new Error('operator_note is required.');
+
+  const bundle = asJsonObject(
+    payload.replacement_action_bundle_json ?? {},
+    'replacement_action_bundle_json'
+  );
+  const rawActions = Array.isArray(bundle.actions) ? bundle.actions : [];
+  if (rawActions.length === 0) {
+    throw new Error('replacement_action_bundle_json.actions must include at least one action.');
+  }
+
+  const seenActionTypes = new Set<string>();
+  const actions = rawActions.map((entry, index) => {
+    const action = asJsonObject(
+      entry,
+      `replacement_action_bundle_json.actions[${index}]`
+    );
+    const actionType = asRecommendationOverrideActionType(
+      action.action_type,
+      `replacement_action_bundle_json.actions[${index}].action_type`
+    );
+    if (seenActionTypes.has(actionType)) {
+      throw new Error(`replacement action ${actionType} can only appear once per override.`);
+    }
+    seenActionTypes.add(actionType);
+
+    const entityContext =
+      action.entity_context_json === null || action.entity_context_json === undefined
+        ? null
+        : asJsonObject(
+            action.entity_context_json,
+            `replacement_action_bundle_json.actions[${index}].entity_context_json`
+          );
+    const proposedChange = asJsonObject(
+      action.proposed_change_json,
+      `replacement_action_bundle_json.actions[${index}].proposed_change_json`
+    );
+
+    if (actionType === 'update_target_bid') {
+      const nextBid = Number(proposedChange.next_bid);
+      if (!Number.isFinite(nextBid) || nextBid <= 0) {
+        throw new Error('update_target_bid override requires a positive next_bid.');
+      }
+    } else if (actionType === 'update_target_state') {
+      const nextState = trimToNull(proposedChange.next_state);
+      if (!nextState || !['enabled', 'paused', 'archived'].includes(nextState)) {
+        throw new Error(
+          'update_target_state override requires next_state of enabled, paused, or archived.'
+        );
+      }
+    } else if (actionType === 'update_placement_modifier') {
+      const nextPercentage = Number(proposedChange.next_percentage);
+      const placementCode =
+        trimToNull(proposedChange.placement_code) ?? trimToNull(entityContext?.placement_code);
+      if (!placementCode) {
+        throw new Error('update_placement_modifier override requires placement_code.');
+      }
+      if (!Number.isFinite(nextPercentage) || nextPercentage < 0) {
+        throw new Error(
+          'update_placement_modifier override requires next_percentage of 0 or greater.'
+        );
+      }
+    }
+
+    return {
+      action_type: actionType,
+      entity_context_json: entityContext,
+      proposed_change_json: proposedChange,
+    };
+  });
+
+  return {
+    product_id: productId,
+    asin,
+    target_id: targetId,
+    run_id: runId,
+    target_snapshot_id: targetSnapshotId,
+    recommendation_snapshot_id: recommendationSnapshotId,
+    override_scope: asRecommendationOverrideScope(payload.override_scope ?? 'one_time', 'override_scope'),
+    replacement_action_bundle_json: {
+      actions,
+    },
+    operator_note: operatorNote,
   };
 };

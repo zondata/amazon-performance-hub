@@ -262,4 +262,80 @@ describe('ads optimizer phase 6 state engine', () => {
     expect(config.dominantSpendShare).toBe(0.6);
     expect(config.coreSpendShare).toBe(0.25);
   });
+
+  it('treats high ASIN-scope sales contribution as material even when spend share is lighter', () => {
+    const result = classifyAdsOptimizerTargetState(
+      {
+        raw: {
+          impressions: 40,
+          clicks: 10,
+          spend: 14,
+          orders: 2,
+          sales: 120,
+          cpc: 1.4,
+          ctr: 0.25,
+          cvr: 0.2,
+          acos: 0.12,
+          roas: 8.57,
+          tosIs: null,
+          stis: null,
+          stir: null,
+        },
+        derived: {
+          contributionAfterAds: 18,
+          breakEvenGap: 0.08,
+          maxCpcSupportGap: 0.35,
+          lossDollars: null,
+          profitDollars: 18,
+          clickVelocity: 1.4,
+          impressionVelocity: 5.7,
+          organicLeverageProxy: null,
+          organicContextSignal: null,
+          adSalesShare: 0.36,
+          adOrderShare: 0.36,
+          totalSalesShare: 0.09,
+          lossToAdSalesRatio: null,
+          lossSeverity: null,
+          protectedContributor: true,
+        },
+        coverage: {
+          daysObserved: 7,
+          statuses: {
+            tosIs: 'partial',
+            stis: 'partial',
+            stir: 'partial',
+            placementContext: 'ready',
+            searchTerms: 'ready',
+            breakEvenInputs: 'ready',
+          },
+          notes: [],
+        },
+        demandProxies: {
+          searchTermCount: 2,
+          sameTextSearchTermCount: 1,
+          totalSearchTermImpressions: 30,
+          totalSearchTermClicks: 9,
+          representativeClickShare: 0.4,
+        },
+        asinScopeMembership: {
+          productAdSpend: 100,
+          productAdSales: 375,
+          productOrders: 6,
+          productUnits: 6,
+        },
+        productContext: {
+          breakEvenAcos: 0.2,
+          averagePrice: 60,
+          productState: 'profitable',
+          productObjective: 'Scale Profit',
+        },
+      },
+      null
+    );
+
+    expect(result.importance.value).toBe('tier_1_dominant');
+    expect(result.importance.reasonCodes).toContain('IMPORTANCE_DOMINANT_AD_SALES_SHARE');
+    expect(result.protection.protectedContributor).toBe(true);
+    expect(result.protection.reasonCodes).toContain('PROTECTION_AD_SALES_SHARE_PROTECTED');
+  });
 });

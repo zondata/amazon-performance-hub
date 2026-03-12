@@ -1,7 +1,7 @@
 import type { AdsOptimizerRulePackPayload, JsonObject as RulePackJsonObject } from './types';
 import type { JsonObject as RuntimeJsonObject } from './runtimeTypes';
 import { readAdsOptimizerTargetRunRole } from './role';
-import { readAdsOptimizerTargetRunState } from './state';
+import { deriveAdsOptimizerTargetProtectionSignals, readAdsOptimizerTargetRunState } from './state';
 
 export const ADS_OPTIMIZER_SPEND_DIRECTIONS = [
   'increase',
@@ -114,6 +114,21 @@ export type AdsOptimizerRecommendationSet = {
   exceptionSignals: AdsOptimizerExceptionSignal[];
   actions: AdsOptimizerRecommendationAction[];
   supportingMetrics: RuntimeJsonObject;
+  phasedBidPlan: AdsOptimizerPhasedBidPlan | null;
+};
+
+export type AdsOptimizerPhasedBidPlan = {
+  strategyId: string;
+  targetBreakEvenBid: number;
+  recommendedNextBid: number | null;
+  currentStep: number;
+  totalSteps: number;
+  remainingGapPct: number;
+  notFinalBid: boolean;
+  continueNextRun: boolean;
+  stopConditions: string[];
+  exitConditions: string[];
+  reasonCodes: string[];
 };
 
 export type AdsOptimizerRecommendationSnapshotActionView = {
@@ -149,6 +164,7 @@ export type AdsOptimizerRecommendationSnapshotView = {
   outputState: string | null;
   supportingMetrics: RuntimeJsonObject | null;
   actions: AdsOptimizerRecommendationSnapshotActionView[];
+  phasedBidPlan: AdsOptimizerPhasedBidPlan | null;
 };
 
 type RecommendationConfig = {
@@ -199,9 +215,19 @@ type RecommendationRowInput = {
   targetSnapshotId: string;
   targetId: string;
   payload: RuntimeJsonObject;
+  previousRecommendation:
+    | {
+        recommendationSnapshotId: string;
+        createdAt: string;
+        payload: RuntimeJsonObject;
+      }
+    | null
+    | undefined;
 };
 
 const RECOMMENDATION_ENGINE_VERSION = 'phase11_v1';
+const PHASED_BID_PLAN_STRATEGY = 'break_even_bid_ladder_v1';
+const BID_EPSILON = 0.01;
 
 const ACTION_PRIORITY: Record<AdsOptimizerRecommendationActionType, number> = {
   update_target_state: 10,
@@ -256,6 +282,8 @@ const readBoolean = (value: RuntimeJsonObject | null, key: string) =>
 const withUnique = (values: string[]) => [...new Set(values)];
 
 const roundCurrency = (value: number) => Math.round(value * 100) / 100;
+const safeRatio = (numerator: number, denominator: number | null | undefined) =>
+  denominator && denominator > 0 ? numerator / denominator : null;
 
 const normalizeState = (value: string | null) => {
   const normalized = value?.trim().toLowerCase() ?? null;
@@ -370,6 +398,233 @@ const readExecutionContext = (payload: RuntimeJsonObject) => {
   };
 };
 
+const readOptimizerArchetype = (payload: RuntimeJsonObject) => {
+  const optimizerContext = asJsonObject(payload.optimizer_context);
+  return readString(optimizerContext, 'archetype');
+};
+
+const estimateBreakEvenBid = (payload: RuntimeJsonObject) => {
+  const execution = readExecutionContext(payload);
+  const totals = asJsonObject(payload.totals);
+  const derived = asJsonObject(payload.derived_metrics);
+  const currentBid = execution.target.currentBid;
+  const currentCpc = readNumber(totals, 'cpc');
+  const maxCpcSupported =
+    readNumber(derived, 'max_cpc_supported') ??
+    ((currentCpc ?? 0) + (readNumber(derived, 'max_cpc_support_gap') ?? 0));
+
+  if (currentBid === null || currentBid <= 0 || maxCpcSupported === null || maxCpcSupported <= 0) {
+    return null;
+  }
+
+  const bidEstimate =
+    currentCpc !== null && currentCpc > 0
+      ? maxCpcSupported * (currentBid / currentCpc)
+      : maxCpcSupported;
+
+  return roundCurrency(Math.min(currentBid, bidEstimate));
+};
+
+const readRecommendedBidFromPayload = (payload: RuntimeJsonObject | null | undefined) => {
+  if (!payload) return null;
+  const actions = Array.isArray(payload.actions) ? payload.actions : [];
+  const bidAction = actions
+    .map((entry) => asJsonObject(entry))
+    .filter((entry): entry is RuntimeJsonObject => entry !== null)
+    .find((entry) => readString(entry, 'action_type') === 'update_target_bid');
+  const proposedChange = asJsonObject(bidAction?.proposed_change);
+  return readNumber(proposedChange, 'next_bid');
+};
+
+const readPhasedBidPlan = (
+  payload: RuntimeJsonObject | null | undefined
+): AdsOptimizerPhasedBidPlan | null => {
+  const phasedBidPlan = asJsonObject(payload?.phased_bid_plan);
+  if (!phasedBidPlan) return null;
+
+  const strategyId = readString(phasedBidPlan, 'strategy_id');
+  const targetBreakEvenBid = readNumber(phasedBidPlan, 'target_break_even_bid');
+  if (!strategyId || targetBreakEvenBid === null) return null;
+
+  return {
+    strategyId,
+    targetBreakEvenBid,
+    recommendedNextBid: readNumber(phasedBidPlan, 'recommended_next_bid'),
+    currentStep: readNumber(phasedBidPlan, 'current_step') ?? 0,
+    totalSteps: readNumber(phasedBidPlan, 'total_steps') ?? 0,
+    remainingGapPct: readNumber(phasedBidPlan, 'remaining_gap_pct') ?? 0,
+    notFinalBid: readBoolean(phasedBidPlan, 'not_final_bid') ?? false,
+    continueNextRun: readBoolean(phasedBidPlan, 'continue_next_run') ?? false,
+    stopConditions: readStringArray(phasedBidPlan, 'stop_conditions'),
+    exitConditions: readStringArray(phasedBidPlan, 'exit_conditions'),
+    reasonCodes: readStringArray(phasedBidPlan, 'reason_codes'),
+  };
+};
+
+const resolvePhasedBidPlanTotalSteps = (args: {
+  payload: RuntimeJsonObject;
+  state: ReturnType<typeof readAdsOptimizerTargetRunState>;
+  role: ReturnType<typeof readAdsOptimizerTargetRunRole>;
+}) => {
+  const archetype = readOptimizerArchetype(args.payload) ?? 'hybrid';
+
+  if (
+    archetype === 'visibility_led' &&
+    (args.state?.importance.value === 'tier_1_dominant' ||
+      args.role?.currentRole.value === 'Rank Defend')
+  ) {
+    return 5;
+  }
+  if (
+    args.state?.importance.value === 'tier_1_dominant' ||
+    args.role?.currentRole.value === 'Rank Defend'
+  ) {
+    return 4;
+  }
+  if (archetype === 'design_led' || args.state?.importance.value === 'tier_3_test_long_tail') {
+    return 2;
+  }
+  return 3;
+};
+
+const buildPhasedBidPlan = (args: {
+  row: RecommendationRowInput;
+  state: NonNullable<ReturnType<typeof readAdsOptimizerTargetRunState>>;
+  role: NonNullable<ReturnType<typeof readAdsOptimizerTargetRunRole>>;
+}): AdsOptimizerPhasedBidPlan | null => {
+  const execution = readExecutionContext(args.row.payload);
+  const archetype = readOptimizerArchetype(args.row.payload) ?? 'hybrid';
+  const currentBid = execution.target.currentBid;
+  const previousPlan = readPhasedBidPlan(args.row.previousRecommendation?.payload);
+  const targetBreakEvenBid =
+    previousPlan?.continueNextRun
+      ? previousPlan.targetBreakEvenBid
+      : estimateBreakEvenBid(args.row.payload);
+  const previousRecommendedBid = previousPlan?.recommendedNextBid ??
+    readRecommendedBidFromPayload(args.row.previousRecommendation?.payload);
+  const totalSteps = previousPlan?.continueNextRun
+    ? Math.max(
+        previousPlan.totalSteps,
+        resolvePhasedBidPlanTotalSteps({
+          payload: args.row.payload,
+          state: args.state,
+          role: args.role,
+        })
+      )
+    : resolvePhasedBidPlanTotalSteps({
+        payload: args.row.payload,
+        state: args.state,
+        role: args.role,
+      });
+  const stopConditions = [
+    'estimated_break_even_bid_reached',
+    'target_no_longer_protected',
+    'loss_severity_escalates_to_severe',
+    'target_leaves_converting_but_loss_making_state',
+    'current_bid_missing',
+    'break_even_bid_unavailable',
+  ];
+  const reasonCodes: string[] = [];
+
+  const qualifies =
+    args.state.efficiency.value === 'converting_but_loss_making' &&
+    args.state.protection.protectedContributor &&
+    args.state.protection.lossSeverity !== 'severe' &&
+    currentBid !== null &&
+    targetBreakEvenBid !== null;
+
+  if (previousPlan && !qualifies) {
+    return {
+      strategyId: previousPlan.strategyId,
+      targetBreakEvenBid: targetBreakEvenBid ?? previousPlan.targetBreakEvenBid,
+      recommendedNextBid: null,
+      currentStep: previousPlan.currentStep,
+      totalSteps: previousPlan.totalSteps,
+      remainingGapPct: 0,
+      notFinalBid: false,
+      continueNextRun: false,
+      stopConditions,
+      exitConditions: ['target_no_longer_qualifies_for_phased_reduction'],
+      reasonCodes: ['PHASED_BID_PLAN_STOP_NO_LONGER_QUALIFIES'],
+    };
+  }
+
+  if (!qualifies || currentBid === null || targetBreakEvenBid === null) {
+    return null;
+  }
+
+  const strategyId = `${PHASED_BID_PLAN_STRATEGY}:${args.row.targetId}`;
+  if (currentBid <= targetBreakEvenBid + BID_EPSILON) {
+    return {
+      strategyId,
+      targetBreakEvenBid,
+      recommendedNextBid: roundCurrency(targetBreakEvenBid),
+      currentStep: previousPlan?.currentStep ?? totalSteps,
+      totalSteps,
+      remainingGapPct: 0,
+      notFinalBid: false,
+      continueNextRun: false,
+      stopConditions,
+      exitConditions: ['estimated_break_even_bid_reached'],
+      reasonCodes: ['PHASED_BID_PLAN_STOP_BREAK_EVEN_REACHED'],
+    };
+  }
+
+  const previousPlanActive =
+    previousPlan?.strategyId === strategyId && previousPlan.continueNextRun;
+  const previousStepApplied =
+    previousPlanActive &&
+    previousRecommendedBid !== null &&
+    currentBid <= previousRecommendedBid + BID_EPSILON;
+  const currentStep = previousPlanActive
+    ? Math.min(previousPlan.currentStep + (previousStepApplied ? 1 : 0), totalSteps)
+    : 1;
+  const gap = Math.max(0, currentBid - targetBreakEvenBid);
+  const stepsRemaining = Math.max(1, totalSteps - currentStep + 1);
+  const recommendedNextBid = roundCurrency(
+    Math.max(targetBreakEvenBid, currentBid - gap / stepsRemaining)
+  );
+  const remainingGapPct = roundCurrency((safeRatio(gap, currentBid) ?? 0) * 100);
+  const notFinalBid = recommendedNextBid > targetBreakEvenBid + BID_EPSILON;
+  const continueNextRun = notFinalBid;
+
+  reasonCodes.push('PHASED_BID_PLAN_CHOSEN_PROTECTED_LOSS_MAKER');
+  reasonCodes.push(
+    archetype === 'visibility_led'
+      ? 'PHASED_BID_PLAN_ARCHETYPE_VISIBILITY_LED_GRADUAL'
+      : archetype === 'design_led'
+        ? 'PHASED_BID_PLAN_ARCHETYPE_DESIGN_LED_FASTER'
+        : 'PHASED_BID_PLAN_ARCHETYPE_HYBRID'
+  );
+  if (previousPlanActive) {
+    reasonCodes.push(
+      previousStepApplied
+        ? 'PHASED_BID_PLAN_ADVANCED_FROM_PRIOR_RUN'
+        : 'PHASED_BID_PLAN_OPEN_STEP_REPEATED'
+    );
+  } else {
+    reasonCodes.push('PHASED_BID_PLAN_STARTED');
+  }
+  reasonCodes.push(notFinalBid ? 'PHASED_BID_PLAN_NOT_FINAL_BID' : 'PHASED_BID_PLAN_FINAL_STEP');
+  reasonCodes.push(
+    continueNextRun ? 'PHASED_BID_PLAN_CONTINUE_NEXT_RUN' : 'PHASED_BID_PLAN_STOP_AT_TARGET'
+  );
+
+  return {
+    strategyId,
+    targetBreakEvenBid,
+    recommendedNextBid,
+    currentStep,
+    totalSteps,
+    remainingGapPct,
+    notFinalBid,
+    continueNextRun,
+    stopConditions,
+    exitConditions: [],
+    reasonCodes: withUnique(reasonCodes),
+  };
+};
+
 const getConfidenceRank = (value: string | null) => {
   if (value === 'confirmed') return 3;
   if (value === 'directional') return 2;
@@ -396,6 +651,70 @@ const buildPortfolioContexts = (args: {
     const role = readAdsOptimizerTargetRunRole(row.payload);
     const totals = asJsonObject(row.payload.totals);
     const derived = asJsonObject(row.payload.derived_metrics);
+    const protection =
+      state?.protection ??
+      deriveAdsOptimizerTargetProtectionSignals({
+        raw: {
+          impressions: readNumber(totals, 'impressions') ?? 0,
+          clicks: readNumber(totals, 'clicks') ?? 0,
+          spend: readNumber(totals, 'spend') ?? 0,
+          orders: readNumber(totals, 'orders') ?? 0,
+          sales: readNumber(totals, 'sales') ?? 0,
+          cpc: readNumber(totals, 'cpc'),
+          ctr: readNumber(totals, 'ctr'),
+          cvr: readNumber(totals, 'cvr'),
+          acos: readNumber(totals, 'acos'),
+          roas: readNumber(totals, 'roas'),
+          tosIs: null,
+          stis: null,
+          stir: null,
+        },
+        derived: {
+          contributionAfterAds: readNumber(derived, 'contribution_after_ads'),
+          breakEvenGap: readNumber(derived, 'break_even_gap'),
+          maxCpcSupportGap: readNumber(derived, 'max_cpc_support_gap'),
+          lossDollars: readNumber(derived, 'loss_dollars'),
+          profitDollars: readNumber(derived, 'profit_dollars'),
+          clickVelocity: readNumber(derived, 'click_velocity'),
+          impressionVelocity: readNumber(derived, 'impression_velocity'),
+          organicLeverageProxy: readNumber(derived, 'organic_leverage_proxy'),
+          organicContextSignal: readString(derived, 'organic_context_signal'),
+          adSalesShare: readNumber(derived, 'ad_sales_share'),
+          adOrderShare: readNumber(derived, 'ad_order_share'),
+          totalSalesShare: readNumber(derived, 'total_sales_share'),
+          lossToAdSalesRatio: readNumber(derived, 'loss_to_ad_sales_ratio'),
+          lossSeverity: null,
+          protectedContributor: readBoolean(derived, 'protected_contributor'),
+        },
+        coverage: {
+          daysObserved: 0,
+          statuses: {
+            tosIs: 'true_missing',
+            stis: 'true_missing',
+            stir: 'true_missing',
+            placementContext: 'true_missing',
+            searchTerms: 'true_missing',
+            breakEvenInputs: 'true_missing',
+          },
+          notes: [],
+        },
+        demandProxies: {
+          searchTermCount: 0,
+          sameTextSearchTermCount: 0,
+          totalSearchTermImpressions: 0,
+          totalSearchTermClicks: 0,
+          representativeClickShare: null,
+        },
+        asinScopeMembership: null,
+        productContext: {
+          breakEvenAcos: null,
+          averagePrice: null,
+          productState: null,
+          productObjective: null,
+        },
+      });
+    const protectedStopLossContributor =
+      protection.protectedContributor && protection.lossSeverity !== 'severe';
 
     return {
       targetId: row.targetId,
@@ -406,6 +725,7 @@ const buildPortfolioContexts = (args: {
       efficiency: state?.efficiency.value ?? null,
       lossDollars: readNumber(derived, 'loss_dollars') ?? 0,
       riskScore: state?.riskScore ?? -1,
+      protectedStopLossContributor,
     };
   });
 
@@ -429,9 +749,10 @@ const buildPortfolioContexts = (args: {
   const totalStopLossSpend = rowSummaries
     .filter(
       (row) =>
-        row.role === 'Suppress' ||
-        row.lossDollars > 0 ||
-        row.efficiency === 'converting_but_loss_making'
+        !row.protectedStopLossContributor &&
+        (row.role === 'Suppress' ||
+          row.lossDollars > 0 ||
+          row.efficiency === 'converting_but_loss_making')
     )
     .reduce((sum, row) => sum + row.spend, 0);
 
@@ -458,6 +779,7 @@ const buildPortfolioContexts = (args: {
         totalStopLossCap: args.config.totalStopLossCap,
         stopLossCapExceeded:
           totalStopLossSpend > args.config.totalStopLossCap &&
+          !row.protectedStopLossContributor &&
           (row.role === 'Suppress' || row.lossDollars > 0 || row.riskScore >= 70),
         targetSpendShare: totalSpend > 0 ? row.spend / totalSpend : null,
         maxBudgetSharePerTarget: args.config.maxBudgetSharePerTarget,
@@ -594,6 +916,7 @@ export const readAdsOptimizerRecommendationSnapshotView = (snapshot: {
   const sameTextPinning = asJsonObject(queryDiagnostics?.same_text_query_pinning);
   const placementDiagnostics = asJsonObject(payload.placement_diagnostics);
   const exceptionSignals = Array.isArray(payload.exception_signals) ? payload.exception_signals : [];
+  const phasedBidPlan = readPhasedBidPlan(payload);
 
   return {
     recommendationSnapshotId: snapshot.recommendation_snapshot_id,
@@ -737,6 +1060,7 @@ export const readAdsOptimizerRecommendationSnapshotView = (snapshot: {
         reasonCodes: readStringArray(entry, 'reason_codes'),
         supportingMetrics: asJsonObject(entry.supporting_metrics),
       })),
+    phasedBidPlan,
   };
 };
 
@@ -792,14 +1116,26 @@ const buildRecommendationSupportingMetrics = (payload: RuntimeJsonObject) => {
     break_even_gap: readNumber(derived, 'break_even_gap'),
     loss_dollars: readNumber(derived, 'loss_dollars'),
     profit_dollars: readNumber(derived, 'profit_dollars'),
+    ad_sales_share: readNumber(derived, 'ad_sales_share'),
+    ad_order_share: readNumber(derived, 'ad_order_share'),
+    total_sales_share: readNumber(derived, 'total_sales_share'),
+    loss_to_ad_sales_ratio: readNumber(derived, 'loss_to_ad_sales_ratio'),
+    loss_severity: readString(derived, 'loss_severity'),
+    protected_contributor: readBoolean(derived, 'protected_contributor'),
   } satisfies RuntimeJsonObject;
 };
 
-const determineBaseSpendDirection = (payload: RuntimeJsonObject, config: RecommendationConfig) => {
+const determineBaseSpendDirection = (args: {
+  payload: RuntimeJsonObject;
+  config: RecommendationConfig;
+  phasedBidPlan: AdsOptimizerPhasedBidPlan | null;
+}) => {
+  const { payload, config, phasedBidPlan } = args;
   const state = readAdsOptimizerTargetRunState(payload);
   const role = readAdsOptimizerTargetRunRole(payload);
   const derived = asJsonObject(payload.derived_metrics);
   const totals = asJsonObject(payload.totals);
+  const archetype = readOptimizerArchetype(payload) ?? 'hybrid';
 
   if (!state || !role?.currentRole.value) {
     return {
@@ -818,11 +1154,69 @@ const determineBaseSpendDirection = (payload: RuntimeJsonObject, config: Recomme
     role.guardrails.categories.noSaleSpendCap ?? Number.POSITIVE_INFINITY;
   const noSaleClickCap =
     role.guardrails.categories.noSaleClickCap ?? Number.POSITIVE_INFINITY;
+  const protectedLossContributor =
+    state.efficiency.value === 'converting_but_loss_making' &&
+    state.protection.protectedContributor &&
+    state.protection.lossSeverity !== 'severe';
+  const visibilityProtectedTarget =
+    archetype === 'visibility_led' &&
+    state.importance.value !== 'tier_3_test_long_tail' &&
+    (role.currentRole.value === 'Rank Defend' || state.protection.protectedContributor);
   const severeLoss =
     lossDollars >= (role.guardrails.categories.maxLossPerCycle ?? Number.POSITIVE_INFINITY);
   const noSaleCapBreached =
     (state.efficiency.value === 'learning_no_sale' || orders <= 0) &&
     (spend >= noSaleSpendCap || clicks >= noSaleClickCap);
+
+  if (phasedBidPlan?.continueNextRun) {
+    return {
+      value: 'reduce' as const,
+      reasonCodes: ['SPEND_DIRECTION_REDUCE_PHASED_BREAK_EVEN_PLAN'],
+    };
+  }
+
+  if (phasedBidPlan?.exitConditions.includes('estimated_break_even_bid_reached')) {
+    return {
+      value: 'hold' as const,
+      reasonCodes: ['SPEND_DIRECTION_HOLD_BREAK_EVEN_BID_REACHED'],
+    };
+  }
+
+  if (protectedLossContributor) {
+    return {
+      value: 'reduce' as const,
+      reasonCodes: [
+        archetype === 'visibility_led'
+          ? 'SPEND_DIRECTION_REDUCE_VISIBILITY_LED_PROTECTED_CONTRIBUTOR'
+          : 'SPEND_DIRECTION_REDUCE_PROTECTED_LOSS_CONTRIBUTOR',
+      ],
+    };
+  }
+
+  if (
+    archetype === 'design_led' &&
+    state.importance.value === 'tier_3_test_long_tail' &&
+    state.confidence.value !== 'confirmed' &&
+    (state.efficiency.value === 'learning_no_sale' ||
+      state.efficiency.value === 'break_even' ||
+      state.efficiency.value === 'no_data')
+  ) {
+    return {
+      value: 'collapse' as const,
+      reasonCodes: ['SPEND_DIRECTION_COLLAPSE_DESIGN_LED_LONG_TAIL'],
+    };
+  }
+
+  if (
+    visibilityProtectedTarget &&
+    !severeLoss &&
+    (noSaleCapBreached || state.riskScore >= 80)
+  ) {
+    return {
+      value: 'reduce' as const,
+      reasonCodes: ['SPEND_DIRECTION_REDUCE_VISIBILITY_LED_IMPORTANT_TARGET'],
+    };
+  }
 
   if (
     role.currentRole.value === 'Suppress' &&
@@ -883,10 +1277,16 @@ const determineSpendDirection = (args: {
   payload: RuntimeJsonObject;
   config: RecommendationConfig;
   portfolioControls: AdsOptimizerPortfolioControls;
+  phasedBidPlan: AdsOptimizerPhasedBidPlan | null;
 }) => {
-  const base = determineBaseSpendDirection(args.payload, args.config);
+  const base = determineBaseSpendDirection({
+    payload: args.payload,
+    config: args.config,
+    phasedBidPlan: args.phasedBidPlan,
+  });
   const state = readAdsOptimizerTargetRunState(args.payload);
   const role = readAdsOptimizerTargetRunRole(args.payload);
+  const archetype = readOptimizerArchetype(args.payload) ?? 'hybrid';
 
   if (!base.value || !state || !role?.currentRole.value) {
     return base;
@@ -901,8 +1301,18 @@ const determineSpendDirection = (args: {
       state.riskScore >= 70 ||
       state.efficiency.value === 'converting_but_loss_making')
   ) {
-    value = role.guardrails.flags.autoPauseEligible ? 'stop' : 'collapse';
-    reasonCodes.push('SPEND_DIRECTION_PORTFOLIO_STOP_LOSS_CAP');
+    if (
+      archetype === 'visibility_led' &&
+      state.importance.value !== 'tier_3_test_long_tail' &&
+      state.protection.protectedContributor &&
+      state.protection.lossSeverity !== 'severe'
+    ) {
+      value = 'reduce';
+      reasonCodes.push('SPEND_DIRECTION_VISIBILITY_LED_PORTFOLIO_PROTECTION');
+    } else {
+      value = role.guardrails.flags.autoPauseEligible ? 'stop' : 'collapse';
+      reasonCodes.push('SPEND_DIRECTION_PORTFOLIO_STOP_LOSS_CAP');
+    }
   }
 
   if (
@@ -1048,6 +1458,7 @@ const buildPlacementDiagnostics = (args: {
   spendDirection: AdsOptimizerSpendDirection | null;
 }): AdsOptimizerPlacementDiagnostics => {
   const execution = readExecutionContext(args.payload);
+  const archetype = readOptimizerArchetype(args.payload) ?? 'hybrid';
   const placementContext = asJsonObject(args.payload.placement_context);
   const state = readAdsOptimizerTargetRunState(args.payload);
   const role = readAdsOptimizerTargetRunRole(args.payload);
@@ -1073,6 +1484,21 @@ const buildPlacementDiagnostics = (args: {
   if (execution.placement.currentPercentage === null && !placementContext) {
     biasRecommendation = 'unknown';
     reasonCodes.push('PLACEMENT_CONTEXT_UNAVAILABLE');
+  } else if (
+    role?.currentRole.value === 'Rank Defend' &&
+    archetype === 'visibility_led' &&
+    profitableContext &&
+    (args.spendDirection === 'hold' || args.spendDirection === 'reduce')
+  ) {
+    biasRecommendation = 'hold';
+    reasonCodes.push('PLACEMENT_BIAS_HOLD_VISIBILITY_LED_RANK_DEFENSE');
+  } else if (
+    role?.currentRole.value === 'Rank Defend' &&
+    archetype === 'design_led' &&
+    weakContext
+  ) {
+    biasRecommendation = 'weaker';
+    reasonCodes.push('PLACEMENT_BIAS_WEAKER_DESIGN_LED_RANK_DEFENSE');
   } else if (
     args.spendDirection === 'increase' &&
     profitableContext &&
@@ -1204,6 +1630,7 @@ const buildRecommendationActions = (args: {
   config: RecommendationConfig;
   queryDiagnostics: AdsOptimizerQueryDiagnostics;
   placementDiagnostics: AdsOptimizerPlacementDiagnostics;
+  phasedBidPlan: AdsOptimizerPhasedBidPlan | null;
 }) => {
   const actions: AdsOptimizerRecommendationAction[] = [];
   const reasonCodes: string[] = [];
@@ -1212,7 +1639,16 @@ const buildRecommendationActions = (args: {
   const role = readAdsOptimizerTargetRunRole(args.payload);
   const execution = readExecutionContext(args.payload);
   const identity = asJsonObject(args.payload.identity);
-  const supportingMetrics = buildRecommendationSupportingMetrics(args.payload);
+  const supportingMetrics = {
+    ...buildRecommendationSupportingMetrics(args.payload),
+    phased_bid_plan_strategy_id: args.phasedBidPlan?.strategyId ?? null,
+    phased_bid_plan_current_step: args.phasedBidPlan?.currentStep ?? null,
+    phased_bid_plan_total_steps: args.phasedBidPlan?.totalSteps ?? null,
+    phased_bid_plan_remaining_gap_pct: args.phasedBidPlan?.remainingGapPct ?? null,
+    phased_bid_plan_not_final_bid: args.phasedBidPlan?.notFinalBid ?? null,
+    phased_bid_plan_continue_next_run: args.phasedBidPlan?.continueNextRun ?? null,
+    phased_bid_plan_target_break_even_bid: args.phasedBidPlan?.targetBreakEvenBid ?? null,
+  } satisfies RuntimeJsonObject;
 
   if (!state || !role?.currentRole.value) {
     return {
@@ -1260,21 +1696,36 @@ const buildRecommendationActions = (args: {
     } else {
       const increasePct = role.guardrails.categories.maxBidIncreasePerCyclePct ?? 0;
       const decreasePct = role.guardrails.categories.maxBidDecreasePerCyclePct ?? 0;
-      const appliedPct =
-        args.spendDirection === 'increase'
-          ? increasePct
-          : args.spendDirection === 'collapse'
-            ? decreasePct
-            : Math.max(5, Math.round(decreasePct / 2));
-      const multiplier =
-        args.spendDirection === 'increase' ? 1 + appliedPct / 100 : 1 - appliedPct / 100;
-      const unclamped = execution.target.currentBid * multiplier;
-      const nextBid = roundCurrency(
-        Math.min(
-          role.guardrails.categories.maxBidCeiling ?? unclamped,
-          Math.max(role.guardrails.categories.minBidFloor ?? unclamped, unclamped)
-        )
-      );
+      const nextBid =
+        args.spendDirection === 'reduce' &&
+        args.phasedBidPlan?.continueNextRun &&
+        args.phasedBidPlan.recommendedNextBid !== null
+          ? roundCurrency(
+              Math.min(
+                execution.target.currentBid,
+                Math.max(
+                  role.guardrails.categories.minBidFloor ?? args.phasedBidPlan.recommendedNextBid,
+                  args.phasedBidPlan.recommendedNextBid
+                )
+              )
+            )
+          : (() => {
+              const appliedPct =
+                args.spendDirection === 'increase'
+                  ? increasePct
+                  : args.spendDirection === 'collapse'
+                    ? decreasePct
+                    : Math.max(5, Math.round(decreasePct / 2));
+              const multiplier =
+                args.spendDirection === 'increase' ? 1 + appliedPct / 100 : 1 - appliedPct / 100;
+              const unclamped = execution.target.currentBid * multiplier;
+              return roundCurrency(
+                Math.min(
+                  role.guardrails.categories.maxBidCeiling ?? unclamped,
+                  Math.max(role.guardrails.categories.minBidFloor ?? unclamped, unclamped)
+                )
+              );
+            })();
 
       if (nextBid !== execution.target.currentBid) {
         actions.push(
@@ -1296,22 +1747,26 @@ const buildRecommendationActions = (args: {
                   : null,
             },
             reasonCodes: [
-              args.spendDirection === 'increase'
-                ? 'ACTION_UPDATE_TARGET_BID_INCREASE'
-                : args.spendDirection === 'collapse'
-                  ? 'ACTION_UPDATE_TARGET_BID_COLLAPSE'
-                  : 'ACTION_UPDATE_TARGET_BID_REDUCE',
+              args.spendDirection === 'reduce' && args.phasedBidPlan?.continueNextRun
+                ? 'ACTION_UPDATE_TARGET_BID_PHASED_BREAK_EVEN_PLAN'
+                : args.spendDirection === 'increase'
+                  ? 'ACTION_UPDATE_TARGET_BID_INCREASE'
+                  : args.spendDirection === 'collapse'
+                    ? 'ACTION_UPDATE_TARGET_BID_COLLAPSE'
+                    : 'ACTION_UPDATE_TARGET_BID_REDUCE',
               'READ_ONLY_RECOMMENDATION_ONLY',
             ],
             supportingMetrics,
           })
         );
         reasonCodes.push(
-          args.spendDirection === 'increase'
-            ? 'ACTION_UPDATE_TARGET_BID_INCREASE'
-            : args.spendDirection === 'collapse'
-              ? 'ACTION_UPDATE_TARGET_BID_COLLAPSE'
-              : 'ACTION_UPDATE_TARGET_BID_REDUCE'
+          args.spendDirection === 'reduce' && args.phasedBidPlan?.continueNextRun
+            ? 'ACTION_UPDATE_TARGET_BID_PHASED_BREAK_EVEN_PLAN'
+            : args.spendDirection === 'increase'
+              ? 'ACTION_UPDATE_TARGET_BID_INCREASE'
+              : args.spendDirection === 'collapse'
+                ? 'ACTION_UPDATE_TARGET_BID_COLLAPSE'
+                : 'ACTION_UPDATE_TARGET_BID_REDUCE'
         );
       }
     }
@@ -1323,6 +1778,7 @@ const buildRecommendationActions = (args: {
       args.spendDirection === 'collapse') &&
     (role.currentRole.value === 'Scale' ||
       role.currentRole.value === 'Rank Push' ||
+      role.currentRole.value === 'Rank Defend' ||
       role.currentRole.value === 'Suppress') &&
     (args.placementDiagnostics.biasRecommendation === 'stronger' ||
       args.placementDiagnostics.biasRecommendation === 'weaker')
@@ -1481,10 +1937,16 @@ const classifyRecommendationRow = (args: {
   portfolioContext: RecommendationPortfolioContext | null | undefined;
 }): AdsOptimizerRecommendationSet => {
   const portfolioControls = buildPortfolioControls(args.portfolioContext);
+  const state = readAdsOptimizerTargetRunState(args.row.payload);
+  const role = readAdsOptimizerTargetRunRole(args.row.payload);
+  const execution = readExecutionContext(args.row.payload);
+  const phasedBidPlan =
+    state && role?.currentRole.value ? buildPhasedBidPlan({ row: args.row, state, role }) : null;
   const spendDirection = determineSpendDirection({
     payload: args.row.payload,
     config: args.config,
     portfolioControls,
+    phasedBidPlan,
   });
   const coverageFlags = buildCoverageFlags(args.row.payload);
   const confidenceNotes = buildConfidenceNotes(args.row.payload);
@@ -1496,9 +1958,6 @@ const classifyRecommendationRow = (args: {
     payload: args.row.payload,
     spendDirection: spendDirection.value,
   });
-  const state = readAdsOptimizerTargetRunState(args.row.payload);
-  const role = readAdsOptimizerTargetRunRole(args.row.payload);
-  const execution = readExecutionContext(args.row.payload);
 
   if (!spendDirection.value || !state || !role?.currentRole.value) {
     return {
@@ -1519,6 +1978,7 @@ const classifyRecommendationRow = (args: {
         ...buildRecommendationSupportingMetrics(args.row.payload),
         current_bulk_snapshot_date: execution.snapshotDate,
       },
+      phasedBidPlan,
     };
   }
 
@@ -1528,6 +1988,7 @@ const classifyRecommendationRow = (args: {
     config: args.config,
     queryDiagnostics,
     placementDiagnostics,
+    phasedBidPlan,
   });
   const exceptionSignals = buildExceptionSignals({
     payload: args.row.payload,
@@ -1544,6 +2005,7 @@ const classifyRecommendationRow = (args: {
     primaryActionType,
     reasonCodes: withUnique([
       ...spendDirection.reasonCodes,
+      ...(phasedBidPlan?.reasonCodes ?? []),
       ...actions.reasonCodes,
       ...state.summaryReasonCodes,
       ...role.summaryReasonCodes,
@@ -1564,6 +2026,7 @@ const classifyRecommendationRow = (args: {
       ...buildRecommendationSupportingMetrics(args.row.payload),
       current_bulk_snapshot_date: execution.snapshotDate,
     },
+    phasedBidPlan,
   };
 };
 
@@ -1605,6 +2068,7 @@ export const classifyAdsOptimizerRecommendations = (args: {
         targetSnapshotId: '__ads_optimizer_single_row_snapshot__',
         targetId,
         payload: args.payload,
+        previousRecommendation: null,
       },
     ],
     rulePackPayload: args.rulePackPayload,
@@ -1714,6 +2178,21 @@ export const buildAdsOptimizerRecommendationSnapshots = (args: {
         detail: signal.detail,
         reason_codes: signal.reasonCodes,
       })),
+      phased_bid_plan: recommendation.phasedBidPlan
+        ? {
+            strategy_id: recommendation.phasedBidPlan.strategyId,
+            target_break_even_bid: recommendation.phasedBidPlan.targetBreakEvenBid,
+            recommended_next_bid: recommendation.phasedBidPlan.recommendedNextBid,
+            current_step: recommendation.phasedBidPlan.currentStep,
+            total_steps: recommendation.phasedBidPlan.totalSteps,
+            remaining_gap_pct: recommendation.phasedBidPlan.remainingGapPct,
+            not_final_bid: recommendation.phasedBidPlan.notFinalBid,
+            continue_next_run: recommendation.phasedBidPlan.continueNextRun,
+            stop_conditions: recommendation.phasedBidPlan.stopConditions,
+            exit_conditions: recommendation.phasedBidPlan.exitConditions,
+            reason_codes: recommendation.phasedBidPlan.reasonCodes,
+          }
+        : null,
       action_count: recommendation.actions.length,
       actions: recommendation.actions.map((action) => ({
         action_type: action.actionType,
@@ -1739,6 +2218,7 @@ export const buildAdsOptimizerRecommendationSnapshot = (args: {
         targetSnapshotId: args.targetSnapshotId,
         targetId: args.targetId,
         payload: args.payload,
+        previousRecommendation: null,
       },
     ],
     rulePackPayload: args.rulePackPayload,

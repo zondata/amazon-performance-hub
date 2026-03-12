@@ -18,6 +18,9 @@ const makeRulePackPayload = (overrides?: Record<string, unknown>) => ({
 
 const makePayload = () => ({
   phase: 7,
+  optimizer_context: {
+    archetype: 'hybrid',
+  },
   identity: {
     campaign_id: 'campaign-1',
     ad_group_id: 'ad-group-1',
@@ -207,6 +210,37 @@ const makePayload = () => ({
   },
 });
 
+const makeProtectedLossPayload = () => {
+  const payload = makePayload();
+  payload.totals.cpc = 1.5;
+  payload.derived_metrics.contribution_after_ads = -12;
+  payload.derived_metrics.break_even_gap = -0.04;
+  payload.derived_metrics.max_cpc_supported = 1.05;
+  payload.derived_metrics.max_cpc_support_gap = -0.45;
+  payload.derived_metrics.loss_dollars = 12;
+  payload.derived_metrics.profit_dollars = null;
+  payload.derived_metrics.ad_sales_share = 0.42;
+  payload.derived_metrics.ad_order_share = 0.38;
+  payload.derived_metrics.total_sales_share = 0.11;
+  payload.derived_metrics.loss_to_ad_sales_ratio = 0.08;
+  payload.derived_metrics.loss_severity = 'shallow';
+  payload.derived_metrics.protected_contributor = true;
+  payload.execution_context.target.current_bid = 1.8;
+  payload.state_engine.efficiency.value = 'converting_but_loss_making';
+  payload.state_engine.efficiency.label = 'Converting but loss-making';
+  payload.state_engine.efficiency.reason_codes = ['EFFICIENCY_NEGATIVE_CONTRIBUTION_AFTER_ADS'];
+  payload.state_engine.importance.value = 'tier_1_dominant';
+  payload.state_engine.importance.reason_codes = ['IMPORTANCE_DOMINANT_AD_SALES_SHARE'];
+  payload.role_engine.desired_role.value = 'Harvest';
+  payload.role_engine.desired_role.label = 'Harvest';
+  payload.role_engine.desired_role.reason_codes = ['ROLE_DESIRED_HARVEST_PROTECTED_LOSS_MAKER'];
+  payload.role_engine.current_role.value = 'Harvest';
+  payload.role_engine.current_role.label = 'Harvest';
+  payload.role_engine.current_role.reason_codes = ['CURRENT_ROLE_STABLE'];
+  payload.role_engine.reason_codes = ['ROLE_DESIRED_HARVEST_PROTECTED_LOSS_MAKER'];
+  return payload;
+};
+
 describe('ads optimizer phase 11 recommendation engine', () => {
   it('generates deterministic read-only recommendation sets with diagnostics for the same input', () => {
     const payload = makePayload();
@@ -336,5 +370,212 @@ describe('ads optimizer phase 11 recommendation engine', () => {
     expect(snapshot.snapshotPayload.query_diagnostics).toBeTruthy();
     expect(snapshot.snapshotPayload.placement_diagnostics).toBeTruthy();
     expect(snapshot.snapshotPayload.exception_signals).toBeTruthy();
+  });
+
+  it('creates phased bid-plan metadata for protected loss-making contributors on the first run', () => {
+    const payload = makeProtectedLossPayload();
+
+    const snapshot = buildAdsOptimizerRecommendationSnapshot({
+      targetSnapshotId: 'snapshot-1',
+      targetId: 'target-1',
+      payload,
+      rulePackPayload: makeRulePackPayload(),
+    });
+
+    expect(snapshot.snapshotPayload.phased_bid_plan).toMatchObject({
+      strategy_id: 'break_even_bid_ladder_v1:target-1',
+      current_step: 1,
+      total_steps: 4,
+      not_final_bid: true,
+      continue_next_run: true,
+    });
+    expect(snapshot.snapshotPayload.phased_bid_plan.target_break_even_bid).toBeCloseTo(1.26);
+    expect(snapshot.snapshotPayload.phased_bid_plan.recommended_next_bid).toBeCloseTo(1.67);
+    expect(snapshot.reasonCodes).toContain('PHASED_BID_PLAN_CHOSEN_PROTECTED_LOSS_MAKER');
+    expect(snapshot.reasonCodes).toContain('PHASED_BID_PLAN_ARCHETYPE_HYBRID');
+    expect(snapshot.reasonCodes).toContain('PHASED_BID_PLAN_NOT_FINAL_BID');
+    expect(snapshot.reasonCodes).toContain('PHASED_BID_PLAN_CONTINUE_NEXT_RUN');
+    expect(snapshot.snapshotPayload.actions.map((action: { action_type: string }) => action.action_type)).not.toContain(
+      'update_target_state'
+    );
+  });
+
+  it('advances the phased bid plan on the next comparable run after the prior step lands', () => {
+    const firstPayload = makeProtectedLossPayload();
+    const firstSnapshot = buildAdsOptimizerRecommendationSnapshot({
+      targetSnapshotId: 'snapshot-1',
+      targetId: 'target-1',
+      payload: firstPayload,
+      rulePackPayload: makeRulePackPayload(),
+    });
+    const secondPayload = makeProtectedLossPayload();
+    secondPayload.execution_context.target.current_bid = 1.67;
+
+    const result = classifyAdsOptimizerRecommendationsBatch({
+      rows: [
+        {
+          targetSnapshotId: 'snapshot-2',
+          targetId: 'target-1',
+          payload: secondPayload,
+          previousRecommendation: {
+            recommendationSnapshotId: 'recommendation-1',
+            createdAt: '2026-03-10T00:00:00Z',
+            payload: firstSnapshot.snapshotPayload,
+          },
+        },
+      ],
+      rulePackPayload: makeRulePackPayload(),
+    })[0]!.recommendation;
+
+    expect(result.phasedBidPlan).toMatchObject({
+      strategyId: 'break_even_bid_ladder_v1:target-1',
+      currentStep: 2,
+      totalSteps: 4,
+      continueNextRun: true,
+    });
+    expect(result.reasonCodes).toContain('PHASED_BID_PLAN_ADVANCED_FROM_PRIOR_RUN');
+    expect(result.actions.map((action) => action.actionType)).toContain('update_target_bid');
+  });
+
+  it('stops the phased plan once the target reaches the estimated break-even bid', () => {
+    const firstPayload = makeProtectedLossPayload();
+    const firstSnapshot = buildAdsOptimizerRecommendationSnapshot({
+      targetSnapshotId: 'snapshot-1',
+      targetId: 'target-1',
+      payload: firstPayload,
+      rulePackPayload: makeRulePackPayload(),
+    });
+    const settledPayload = makeProtectedLossPayload();
+    settledPayload.execution_context.target.current_bid = 1.26;
+
+    const result = classifyAdsOptimizerRecommendationsBatch({
+      rows: [
+        {
+          targetSnapshotId: 'snapshot-3',
+          targetId: 'target-1',
+          payload: settledPayload,
+          previousRecommendation: {
+            recommendationSnapshotId: 'recommendation-1',
+            createdAt: '2026-03-10T00:00:00Z',
+            payload: firstSnapshot.snapshotPayload,
+          },
+        },
+      ],
+      rulePackPayload: makeRulePackPayload(),
+    })[0]!.recommendation;
+
+    expect(result.spendDirection).toBe('hold');
+    expect(result.phasedBidPlan).toMatchObject({
+      continueNextRun: false,
+      notFinalBid: false,
+      exitConditions: ['estimated_break_even_bid_reached'],
+    });
+    expect(result.reasonCodes).toContain('PHASED_BID_PLAN_STOP_BREAK_EVEN_REACHED');
+  });
+
+  it('still stages a pause for low-contribution severe loss-makers', () => {
+    const payload = makePayload();
+    payload.totals.orders = 1;
+    payload.totals.sales = 30;
+    payload.derived_metrics.contribution_after_ads = -18;
+    payload.derived_metrics.break_even_gap = -0.22;
+    payload.derived_metrics.loss_dollars = 18;
+    payload.derived_metrics.profit_dollars = null;
+    payload.derived_metrics.ad_sales_share = 0.05;
+    payload.derived_metrics.ad_order_share = 0.08;
+    payload.derived_metrics.total_sales_share = 0.01;
+    payload.derived_metrics.loss_to_ad_sales_ratio = 0.6;
+    payload.derived_metrics.loss_severity = 'severe';
+    payload.derived_metrics.protected_contributor = false;
+    payload.state_engine.efficiency.value = 'converting_but_loss_making';
+    payload.state_engine.efficiency.label = 'Converting but loss-making';
+    payload.state_engine.efficiency.reason_codes = ['EFFICIENCY_NEGATIVE_CONTRIBUTION_AFTER_ADS'];
+    payload.state_engine.risk_reason_codes = ['RISK_LOSS_SEVERITY_SEVERE'];
+    payload.state_engine.scores.risk = 88;
+    payload.role_engine.desired_role.value = 'Suppress';
+    payload.role_engine.desired_role.label = 'Suppress';
+    payload.role_engine.desired_role.reason_codes = ['ROLE_DESIRED_SUPPRESS_SEVERE_LOSS_MAKING'];
+    payload.role_engine.current_role.value = 'Suppress';
+    payload.role_engine.current_role.label = 'Suppress';
+    payload.role_engine.current_role.reason_codes = ['CURRENT_ROLE_SUPPRESS_IMMEDIATE'];
+    payload.role_engine.guardrails.flags.auto_pause_eligible = true;
+    payload.role_engine.reason_codes = ['ROLE_DESIRED_SUPPRESS_SEVERE_LOSS_MAKING'];
+
+    const result = classifyAdsOptimizerRecommendations({
+      payload,
+      rulePackPayload: makeRulePackPayload(),
+    });
+
+    expect(result.spendDirection).toBe('stop');
+    expect(result.reasonCodes).toContain('SPEND_DIRECTION_STOP_SUPPRESS_AUTO_PAUSE');
+    expect(result.actions.map((action) => action.actionType)).toContain('update_target_state');
+  });
+
+  it('treats the same protected contributor more gradually under visibility-led posture than design-led posture', () => {
+    const visibilityLedPayload = makeProtectedLossPayload();
+    visibilityLedPayload.optimizer_context.archetype = 'visibility_led';
+    visibilityLedPayload.role_engine.desired_role.value = 'Rank Defend';
+    visibilityLedPayload.role_engine.desired_role.label = 'Rank Defend';
+    visibilityLedPayload.role_engine.desired_role.reason_codes = [
+      'ROLE_DESIRED_RANK_DEFEND_PROTECTED_LOSS_MAKER',
+      'ROLE_ARCHETYPE_VISIBILITY_LED_PROTECTED_CONTRIBUTOR',
+    ];
+    visibilityLedPayload.role_engine.current_role.value = 'Rank Defend';
+    visibilityLedPayload.role_engine.current_role.label = 'Rank Defend';
+    visibilityLedPayload.role_engine.reason_codes = [
+      'ROLE_DESIRED_RANK_DEFEND_PROTECTED_LOSS_MAKER',
+      'ROLE_ARCHETYPE_VISIBILITY_LED_PROTECTED_CONTRIBUTOR',
+    ];
+
+    const designLedPayload = makeProtectedLossPayload();
+    designLedPayload.optimizer_context.archetype = 'design_led';
+
+    const visibilityLed = classifyAdsOptimizerRecommendations({
+      payload: visibilityLedPayload,
+      rulePackPayload: makeRulePackPayload(),
+    });
+    const designLed = classifyAdsOptimizerRecommendations({
+      payload: designLedPayload,
+      rulePackPayload: makeRulePackPayload(),
+    });
+
+    expect(visibilityLed.phasedBidPlan?.totalSteps).toBe(5);
+    expect(designLed.phasedBidPlan?.totalSteps).toBe(4);
+    expect(visibilityLed.reasonCodes).toContain(
+      'PHASED_BID_PLAN_ARCHETYPE_VISIBILITY_LED_GRADUAL'
+    );
+    expect(designLed.reasonCodes).toContain('PHASED_BID_PLAN_ARCHETYPE_DESIGN_LED_FASTER');
+    expect(visibilityLed.placementDiagnostics.biasRecommendation).toBe('hold');
+  });
+
+  it('collapses the same weak long-tail row faster under design-led posture', () => {
+    const designLedPayload = makePayload();
+    designLedPayload.optimizer_context.archetype = 'design_led';
+    designLedPayload.state_engine.efficiency.value = 'break_even';
+    designLedPayload.state_engine.efficiency.label = 'Break even';
+    designLedPayload.state_engine.confidence.value = 'directional';
+    designLedPayload.state_engine.confidence.label = 'Directional';
+    designLedPayload.state_engine.importance.value = 'tier_3_test_long_tail';
+    designLedPayload.state_engine.importance.label = 'Tier 3 test long-tail';
+    designLedPayload.role_engine.current_role.value = 'Harvest';
+    designLedPayload.role_engine.current_role.label = 'Harvest';
+    designLedPayload.role_engine.desired_role.value = 'Harvest';
+    designLedPayload.role_engine.desired_role.label = 'Harvest';
+
+    const visibilityLedPayload = JSON.parse(JSON.stringify(designLedPayload));
+    visibilityLedPayload.optimizer_context.archetype = 'visibility_led';
+
+    const designLed = classifyAdsOptimizerRecommendations({
+      payload: designLedPayload,
+      rulePackPayload: makeRulePackPayload(),
+    });
+    const visibilityLed = classifyAdsOptimizerRecommendations({
+      payload: visibilityLedPayload,
+      rulePackPayload: makeRulePackPayload(),
+    });
+
+    expect(designLed.spendDirection).toBe('collapse');
+    expect(designLed.reasonCodes).toContain('SPEND_DIRECTION_COLLAPSE_DESIGN_LED_LONG_TAIL');
+    expect(visibilityLed.spendDirection).toBe('reduce');
   });
 });

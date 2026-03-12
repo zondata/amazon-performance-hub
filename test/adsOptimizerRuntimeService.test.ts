@@ -133,6 +133,7 @@ describe('ads optimizer phase 4 manual run service', () => {
           updated_at: '2026-03-10T00:00:00Z',
         }),
         loadPreviousRoleMap: async () => new Map([['target-1', 'Harvest']]),
+        loadPreviousRecommendationContext: async () => new Map(),
         loadProductSnapshotInput: async () => ({
           productId: 'product-1',
           asin: 'B001TEST',
@@ -467,6 +468,7 @@ describe('ads optimizer phase 4 manual run service', () => {
         },
         getProductSettings: async () => null,
         loadPreviousRoleMap: async () => new Map(),
+        loadPreviousRecommendationContext: async () => new Map(),
         loadProductSnapshotInput: async () => ({
           productId: 'product-1',
           asin: 'B001TEST',
@@ -597,6 +599,7 @@ describe('ads optimizer phase 4 manual run service', () => {
         },
         getProductSettings: async () => null,
         loadPreviousRoleMap: async () => new Map(),
+        loadPreviousRecommendationContext: async () => new Map(),
         loadProductSnapshotInput: async () => ({
           productId: 'product-1',
           asin: 'B001TEST',
@@ -739,6 +742,7 @@ describe('ads optimizer phase 4 manual run service', () => {
         },
         getProductSettings: async () => null,
         loadPreviousRoleMap: async () => new Map(),
+        loadPreviousRecommendationContext: async () => new Map(),
         loadProductSnapshotInput: async () => ({
           productId: 'product-1',
           asin: 'B001TEST',
@@ -996,6 +1000,7 @@ describe('ads optimizer phase 4 manual run service', () => {
         },
         getProductSettings: async () => null,
         loadPreviousRoleMap: async () => new Map(),
+        loadPreviousRecommendationContext: async () => new Map(),
         loadProductSnapshotInput: async () => ({
           productId: 'product-1',
           asin: 'B001TEST',

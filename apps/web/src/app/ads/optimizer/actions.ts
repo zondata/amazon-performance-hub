@@ -7,8 +7,10 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import {
   activateRulePackVersion,
   createRulePackVersionDraft,
+  saveProductOptimizerSettings,
 } from '@/lib/ads-optimizer/repoConfig';
 import { executeAdsOptimizerWorkspaceHandoff } from '@/lib/ads-optimizer/handoff';
+import { saveAdsOptimizerRecommendationOverride } from '@/lib/ads-optimizer/repoOverrides';
 import { executeAdsOptimizerManualRun } from '@/lib/ads-optimizer/runtime';
 
 const trimToNull = (value: FormDataEntryValue | null): string | null => {
@@ -36,12 +38,13 @@ const ensureWorkspaceReturnTo = (
 
 const redirectWithFlash = (
   returnTo: string,
-  params: { notice?: string; error?: string; seeded?: boolean }
+  params: { notice?: string; error?: string; seeded?: boolean; overrideError?: boolean }
 ) => {
   const url = new URL(returnTo, 'http://localhost');
   url.searchParams.delete('notice');
   url.searchParams.delete('error');
   url.searchParams.delete('seeded');
+  url.searchParams.delete('override_error');
   if (params.notice) {
     url.searchParams.set('notice', params.notice);
   }
@@ -50,6 +53,9 @@ const redirectWithFlash = (
   }
   if (params.seeded) {
     url.searchParams.set('seeded', '1');
+  }
+  if (params.overrideError) {
+    url.searchParams.set('override_error', '1');
   }
   redirect(`${url.pathname}?${url.searchParams.toString()}`);
 };
@@ -133,6 +139,41 @@ export async function activateAdsOptimizerRulePackVersionAction(formData: FormDa
   }
 }
 
+export async function saveAdsOptimizerProductSettingsAction(formData: FormData) {
+  const returnTo = ensureReturnTo(trimToNull(formData.get('return_to')));
+
+  try {
+    const productId = trimToNull(formData.get('product_id'));
+    const productAsin = trimToNull(formData.get('product_asin'));
+    const archetype = trimToNull(formData.get('archetype'));
+    const rulePackVersionId = trimToNull(formData.get('rule_pack_version_id'));
+    const strategicNotes = trimToNull(formData.get('strategic_notes'));
+
+    if (!productId || !archetype || !rulePackVersionId) {
+      throw new Error('product_id, archetype, and rule_pack_version_id are required.');
+    }
+
+    await saveProductOptimizerSettings({
+      product_id: productId,
+      archetype,
+      optimizer_enabled: formData.get('optimizer_enabled') === '1',
+      rule_pack_version_id: rulePackVersionId,
+      strategic_notes: strategicNotes,
+    });
+
+    revalidatePath('/ads/optimizer');
+    redirectWithFlash(returnTo, {
+      notice: `Saved optimizer product settings for ${productAsin ?? productId}.`,
+    });
+  } catch (error) {
+    rethrowRedirectError(error);
+    redirectWithFlash(returnTo, {
+      error:
+        error instanceof Error ? error.message : 'Failed to save optimizer product settings.',
+    });
+  }
+}
+
 export async function runAdsOptimizerNowAction(formData: FormData) {
   const returnTo = ensureReturnTo(
     trimToNull(formData.get('return_to')),
@@ -174,6 +215,110 @@ export async function runAdsOptimizerNowAction(formData: FormData) {
     rethrowRedirectError(error);
     redirectWithFlash(returnTo, {
       error: error instanceof Error ? error.message : 'Failed to run the optimizer snapshot.',
+    });
+  }
+}
+
+const formNumber = (value: FormDataEntryValue | null) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const numeric = Number(trimmed);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+export async function saveAdsOptimizerRecommendationOverrideAction(formData: FormData) {
+  const returnTo = ensureReturnTo(
+    trimToNull(formData.get('return_to')),
+    '/ads/optimizer?view=targets'
+  );
+
+  try {
+    const productId = trimToNull(formData.get('product_id'));
+    const asin = trimToNull(formData.get('asin'));
+    const targetId = trimToNull(formData.get('target_id'));
+    const runId = trimToNull(formData.get('run_id'));
+    const targetSnapshotId = trimToNull(formData.get('target_snapshot_id'));
+    const recommendationSnapshotId = trimToNull(formData.get('recommendation_snapshot_id'));
+    const overrideScope = trimToNull(formData.get('override_scope'));
+    const operatorNote = trimToNull(formData.get('operator_note'));
+    const campaignId = trimToNull(formData.get('campaign_id'));
+    const currentState = trimToNull(formData.get('current_state'));
+    const currentBid = formNumber(formData.get('current_bid'));
+    const currentPlacementCode = trimToNull(formData.get('current_placement_code'));
+    const currentPlacementPercentage = formNumber(formData.get('current_placement_percentage'));
+
+    const replacementActions: Array<Record<string, unknown>> = [];
+
+    if (formData.get('override_bid_enabled') === '1') {
+      replacementActions.push({
+        action_type: 'update_target_bid',
+        entity_context_json: {
+          campaign_id: campaignId,
+          target_id: targetId,
+          current_bid: currentBid,
+        },
+        proposed_change_json: {
+          next_bid: formNumber(formData.get('override_bid_next_bid')),
+        },
+      });
+    }
+
+    if (formData.get('override_state_enabled') === '1') {
+      replacementActions.push({
+        action_type: 'update_target_state',
+        entity_context_json: {
+          campaign_id: campaignId,
+          target_id: targetId,
+          current_state: currentState,
+        },
+        proposed_change_json: {
+          next_state: trimToNull(formData.get('override_state_next_state')),
+        },
+      });
+    }
+
+    if (formData.get('override_placement_enabled') === '1') {
+      replacementActions.push({
+        action_type: 'update_placement_modifier',
+        entity_context_json: {
+          campaign_id: campaignId,
+          placement_code: currentPlacementCode,
+          current_percentage: currentPlacementPercentage,
+        },
+        proposed_change_json: {
+          placement_code: currentPlacementCode,
+          next_percentage: formNumber(formData.get('override_placement_next_percentage')),
+        },
+      });
+    }
+
+    await saveAdsOptimizerRecommendationOverride({
+      product_id: productId,
+      asin,
+      target_id: targetId,
+      run_id: runId,
+      target_snapshot_id: targetSnapshotId,
+      recommendation_snapshot_id: recommendationSnapshotId,
+      override_scope: overrideScope,
+      replacement_action_bundle_json: {
+        actions: replacementActions,
+      },
+      operator_note: operatorNote,
+    });
+
+    revalidatePath('/ads/optimizer');
+    redirectWithFlash(returnTo, {
+      notice: `Saved manual override for ${targetId ?? 'the selected target'}.`,
+    });
+  } catch (error) {
+    rethrowRedirectError(error);
+    redirectWithFlash(returnTo, {
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to save the optimizer recommendation override.',
+      overrideError: true,
     });
   }
 }

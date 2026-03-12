@@ -101,6 +101,44 @@ describe('ads optimizer phase 3 overview logic', () => {
     expect(result.value).toBe('Rank Defense');
   });
 
+  it('keeps the same profitable rank-slip case in scale-profit mode under design-led posture', () => {
+    const visibilityLed = recommendAdsOptimizerObjective({
+      state: 'profitable',
+      acos: 0.2,
+      breakEvenAcos: 0.34,
+      totalSqpSearchVolume: 1800,
+      archetype: 'visibility_led',
+      heroQueryTrend: {
+        status: 'ready',
+        keyword: 'red widgets',
+        searchVolume: 1600,
+        latestOrganicRank: 12,
+        baselineOrganicRank: 5,
+        rankDelta: -7,
+        detail: 'Hero query rank is slipping.',
+      },
+    });
+    const designLed = recommendAdsOptimizerObjective({
+      state: 'profitable',
+      acos: 0.2,
+      breakEvenAcos: 0.34,
+      totalSqpSearchVolume: 1800,
+      archetype: 'design_led',
+      heroQueryTrend: {
+        status: 'ready',
+        keyword: 'red widgets',
+        searchVolume: 1600,
+        latestOrganicRank: 12,
+        baselineOrganicRank: 5,
+        rankDelta: -7,
+        detail: 'Hero query rank is slipping.',
+      },
+    });
+
+    expect(visibilityLed.value).toBe('Rank Defense');
+    expect(designLed.value).toBe('Scale Profit');
+  });
+
   it('builds ranking trend from first and latest observed ranks without averaging the window', () => {
     const trend = buildHeroQueryTrend([
       {

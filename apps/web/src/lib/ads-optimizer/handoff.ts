@@ -13,6 +13,7 @@ import {
   getAdsOptimizerTargetsViewData,
   type AdsOptimizerTargetReviewRow,
 } from './runtime';
+import { markAdsOptimizerRecommendationOverridesApplied } from './repoOverrides';
 
 export const ADS_OPTIMIZER_WORKSPACE_HANDOFF_ACTION_TYPES = [
   'update_target_bid',
@@ -58,6 +59,7 @@ type ExecuteAdsOptimizerWorkspaceHandoffDeps = {
   createChangeSet: typeof createChangeSet;
   createChangeSetItems: typeof createChangeSetItems;
   listChangeSetItems: typeof listChangeSetItems;
+  markRecommendationOverridesApplied: typeof markAdsOptimizerRecommendationOverridesApplied;
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -68,6 +70,7 @@ const defaultDeps: ExecuteAdsOptimizerWorkspaceHandoffDeps = {
   createChangeSet,
   createChangeSetItems,
   listChangeSetItems,
+  markRecommendationOverridesApplied: markAdsOptimizerRecommendationOverridesApplied,
 };
 
 const isWorkspaceSupportedActionType = (
@@ -78,8 +81,23 @@ const isWorkspaceSupportedActionType = (
     value as AdsOptimizerWorkspaceHandoffActionType
   );
 
+const getEffectiveActions = (row: AdsOptimizerTargetReviewRow) =>
+  row.manualOverride?.replacement_action_bundle_json.actions.map((action) => ({
+    actionType: action.action_type,
+    entityContext: action.entity_context_json,
+    proposedChange: action.proposed_change_json,
+    reasonCodes: [
+      'HUMAN_OVERRIDE_REPLACEMENT_ACTION',
+      row.manualOverride?.override_scope === 'persistent'
+        ? 'HUMAN_OVERRIDE_SCOPE_PERSISTENT'
+        : 'HUMAN_OVERRIDE_SCOPE_ONE_TIME',
+    ],
+    supportingMetrics: null,
+  })) ??
+  (row.recommendation?.actions ?? []);
+
 const getUnsupportedReviewOnlyActions = (row: AdsOptimizerTargetReviewRow) =>
-  (row.recommendation?.actions ?? []).filter(
+  getEffectiveActions(row).filter(
     (action) => !isWorkspaceSupportedActionType(action.actionType)
   );
 
@@ -314,6 +332,8 @@ const buildPlacementItemPayload = (args: {
 const buildUiContextJson = (args: {
   row: AdsOptimizerTargetReviewRow;
   actionType: AdsOptimizerWorkspaceHandoffActionType;
+  actionEntityContext: JsonObject | null;
+  actionProposedChange: JsonObject | null;
   runId: string;
   asin: string;
   start: string;
@@ -330,9 +350,8 @@ const buildUiContextJson = (args: {
   placement_label:
     args.actionType === 'update_placement_modifier'
       ? formatPlacementCode(
-          args.row.recommendation?.actions.find(
-            (action) => action.actionType === 'update_placement_modifier'
-          )?.entityContext?.placement_code as string | null | undefined
+          readString(args.actionEntityContext, 'placement_code') ??
+            readString(args.actionProposedChange, 'placement_code')
         )
       : null,
   placement_modifier_pct: args.row.placementContext.topOfSearchModifierPct,
@@ -353,6 +372,16 @@ const buildUiContextJson = (args: {
     action_reason_codes: args.actionReasonCodes,
     source_execution_boundary: args.row.recommendation?.executionBoundary ?? null,
     source_workspace_handoff: args.row.recommendation?.workspaceHandoff ?? null,
+    human_override:
+      args.row.manualOverride
+        ? {
+            recommendation_override_id: args.row.manualOverride.recommendation_override_id,
+            override_scope: args.row.manualOverride.override_scope,
+            operator_note: args.row.manualOverride.operator_note,
+            created_at: args.row.manualOverride.created_at,
+            apply_count_before_handoff: args.row.manualOverride.apply_count,
+          }
+        : null,
   },
 } satisfies JsonObject);
 
@@ -367,7 +396,8 @@ const buildDraftPayloadsForRow = (args: {
   sharedNotes: string;
 }) => {
   const recommendation = args.row.recommendation;
-  if (!recommendation) {
+  const effectiveActions = getEffectiveActions(args.row);
+  if (!recommendation && effectiveActions.length === 0) {
     return {
       payloads: [] as ChangeSetItemPayload[],
       skippedUnsupportedActionTypes: [] as string[],
@@ -378,7 +408,7 @@ const buildDraftPayloadsForRow = (args: {
   const skippedUnsupportedActionTypes: string[] = [];
   const payloads: ChangeSetItemPayload[] = [];
 
-  for (const action of recommendation.actions) {
+  for (const action of effectiveActions) {
     if (!isWorkspaceSupportedActionType(action.actionType)) {
       skippedUnsupportedActionTypes.push(action.actionType);
       continue;
@@ -386,8 +416,11 @@ const buildDraftPayloadsForRow = (args: {
 
     const notes =
       `${args.sharedNotes} Target ${args.row.targetText}. ` +
-      `Recommendation reason codes: ${recommendation.reasonCodes.join(', ') || 'none'}. ` +
-      `Action reason codes: ${action.reasonCodes.join(', ') || 'none'}.`;
+      `Recommendation reason codes: ${recommendation?.reasonCodes.join(', ') || 'none'}. ` +
+      `Action reason codes: ${action.reasonCodes.join(', ') || 'none'}.` +
+      (args.row.manualOverride
+        ? ` Manual override note: ${args.row.manualOverride.operator_note}.`
+        : '');
     const baseFields = {
       row: args.row,
       objective: args.objective,
@@ -419,8 +452,10 @@ const buildDraftPayloadsForRow = (args: {
         asin: args.asin,
         start: args.start,
         end: args.end,
-        recommendationReasonCodes: recommendation.reasonCodes,
+        recommendationReasonCodes: recommendation?.reasonCodes ?? [],
         actionReasonCodes: action.reasonCodes,
+        actionEntityContext: action.entityContext,
+        actionProposedChange: action.proposedChange,
       }),
     });
   }
@@ -480,18 +515,15 @@ export const buildAdsOptimizerWorkspaceHandoffPlan = (args: {
   const recommendationSnapshotIds = args.rows
     .map((row) => row.recommendation?.recommendationSnapshotId ?? null)
     .filter((value): value is string => Boolean(value));
+  const appliedOverrideIds = args.rows
+    .map((row) => row.manualOverride?.recommendation_override_id ?? null)
+    .filter((value): value is string => Boolean(value));
   const supportedActionPreview = args.rows.flatMap((row) =>
-    (row.recommendation?.actions ?? []).filter((action) =>
-      isWorkspaceSupportedActionType(action.actionType)
-    )
+    getEffectiveActions(row).filter((action) => isWorkspaceSupportedActionType(action.actionType))
   );
   const skippedUnsupportedActionTypes = [
     ...new Set(
-      args.rows.flatMap((row) =>
-        (row.recommendation?.actions ?? [])
-          .filter((action) => !isWorkspaceSupportedActionType(action.actionType))
-          .map((action) => action.actionType)
-      )
+      args.rows.flatMap((row) => getUnsupportedReviewOnlyActions(row).map((action) => action.actionType))
     ),
   ];
   const skippedUnsupportedActionCount = args.rows.reduce(
@@ -559,6 +591,7 @@ export const buildAdsOptimizerWorkspaceHandoffPlan = (args: {
         optimizer_run_id: args.runId,
         target_snapshot_ids: args.rows.map((row) => row.targetSnapshotId),
         recommendation_snapshot_ids: recommendationSnapshotIds,
+        recommendation_override_ids: appliedOverrideIds,
       },
       generated_run_id: null,
       generated_artifact_json: {
@@ -568,6 +601,8 @@ export const buildAdsOptimizerWorkspaceHandoffPlan = (args: {
         staged_action_count: itemPayloads.length,
         deduped_action_count: dedupedCount,
         skipped_unsupported_action_types: skippedUnsupportedActionTypes,
+        recommendation_override_ids: appliedOverrideIds,
+        overridden_row_count: appliedOverrideIds.length,
       },
     },
     itemPayloads,
@@ -616,6 +651,12 @@ export const executeAdsOptimizerWorkspaceHandoff = async (
   });
   const changeSet = await deps.createChangeSet(plan.changeSetPayload);
   await deps.createChangeSetItems(changeSet.id, plan.itemPayloads);
+  await deps.markRecommendationOverridesApplied({
+    overrideIds: selectedRows
+      .map((row) => row.manualOverride?.recommendation_override_id ?? null)
+      .filter((value): value is string => Boolean(value)),
+    changeSetId: changeSet.id,
+  });
   const queueCount = (await deps.listChangeSetItems(changeSet.id)).length;
 
   return {

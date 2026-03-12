@@ -186,31 +186,88 @@ const chooseDesiredRole = (
 ): AdsOptimizerTargetRoleDecision => {
   const reasonCodes: string[] = [];
   let value: AdsOptimizerTargetRole | null = null;
+  const objective = input.productObjective ?? input.productState?.objective ?? null;
+  const protection = input.targetState.protection;
+  const isLongTail = input.targetState.importance.value === 'tier_3_test_long_tail';
+  const isImportantTarget = !isLongTail;
+  const designLedSuppressionCandidate =
+    input.archetype === 'design_led' &&
+    isLongTail &&
+    input.targetState.confidence.value !== 'confirmed' &&
+    (input.targetState.efficiency.value === 'learning_no_sale' ||
+      input.targetState.efficiency.value === 'break_even' ||
+      input.targetState.efficiency.value === 'no_data');
 
   if (input.targetState.efficiency.value === 'converting_but_loss_making') {
+    if (protection.protectedContributor && protection.lossSeverity !== 'severe') {
+      const rankProtectiveObjective =
+        objective === 'Rank Growth' ||
+        objective === 'Rank Defense' ||
+        input.archetype === 'visibility_led';
+      value = rankProtectiveObjective ? 'Rank Defend' : 'Harvest';
+      reasonCodes.push(
+        value === 'Rank Defend'
+          ? 'ROLE_DESIRED_RANK_DEFEND_PROTECTED_LOSS_MAKER'
+          : 'ROLE_DESIRED_HARVEST_PROTECTED_LOSS_MAKER'
+      );
+      if (
+        value === 'Rank Defend' &&
+        input.archetype === 'visibility_led' &&
+        objective !== 'Rank Growth' &&
+        objective !== 'Rank Defense'
+      ) {
+        reasonCodes.push('ROLE_ARCHETYPE_VISIBILITY_LED_PROTECTED_CONTRIBUTOR');
+      }
+    } else {
+      value = 'Suppress';
+      reasonCodes.push(
+        protection.lossSeverity === 'severe'
+          ? 'ROLE_DESIRED_SUPPRESS_SEVERE_LOSS_MAKING'
+          : 'ROLE_DESIRED_SUPPRESS_LOW_CONTRIBUTION_LOSS_MAKING'
+      );
+    }
+  } else if (designLedSuppressionCandidate) {
     value = 'Suppress';
-    reasonCodes.push('ROLE_DESIRED_SUPPRESS_LOSS_MAKING');
+    reasonCodes.push('ROLE_ARCHETYPE_DESIGN_LED_LONG_TAIL_SUPPRESS');
   } else if (
     input.targetState.efficiency.value === 'no_data' &&
     input.targetState.confidence.value === 'insufficient' &&
-    input.targetState.importance.value === 'tier_3_test_long_tail'
+    isLongTail
   ) {
     value = 'Suppress';
     reasonCodes.push('ROLE_DESIRED_SUPPRESS_NO_DATA_LONG_TAIL');
   } else {
-    const objective = input.productObjective ?? input.productState?.objective ?? null;
-
     if (objective === 'Rank Growth') {
-      value = input.targetState.importance.value === 'tier_3_test_long_tail' ? 'Discover' : 'Rank Push';
+      value = isLongTail ? 'Discover' : 'Rank Push';
       reasonCodes.push(
         value === 'Rank Push' ? 'ROLE_DESIRED_RANK_GROWTH' : 'ROLE_DESIRED_RANK_GROWTH_NEEDS_DISCOVERY'
       );
     } else if (objective === 'Rank Defense') {
-      value = input.targetState.importance.value === 'tier_3_test_long_tail' ? 'Discover' : 'Rank Defend';
+      if (isLongTail) {
+        value = 'Discover';
+        reasonCodes.push('ROLE_DESIRED_RANK_DEFENSE_NEEDS_DISCOVERY');
+      } else if (
+        input.archetype === 'design_led' &&
+        input.targetState.confidence.value !== 'confirmed' &&
+        input.targetState.importance.value !== 'tier_1_dominant'
+      ) {
+        value = 'Harvest';
+        reasonCodes.push('ROLE_ARCHETYPE_DESIGN_LED_DEESCALATE_RANK_DEFENSE');
+      } else {
+        value = 'Rank Defend';
+        reasonCodes.push('ROLE_DESIRED_RANK_DEFENSE');
+      }
+    } else if (
+      input.archetype === 'visibility_led' &&
+      isImportantTarget &&
+      input.previousRole === 'Rank Defend' &&
+      (objective === 'Harvest Profit' || objective === 'Break Even')
+    ) {
+      value = 'Rank Defend';
       reasonCodes.push(
-        value === 'Rank Defend'
-          ? 'ROLE_DESIRED_RANK_DEFENSE'
-          : 'ROLE_DESIRED_RANK_DEFENSE_NEEDS_DISCOVERY'
+        objective === 'Break Even'
+          ? 'ROLE_ARCHETYPE_VISIBILITY_LED_HOLD_RANK_DEFENSE_BREAK_EVEN'
+          : 'ROLE_ARCHETYPE_VISIBILITY_LED_HOLD_RANK_DEFENSE'
       );
     } else if (input.targetState.efficiency.value === 'profitable') {
       if (objective === 'Harvest Profit' || objective === 'Break Even') {
@@ -702,6 +759,10 @@ export const enrichAdsOptimizerTargetSnapshotRolePayload = (args: {
   return {
     ...args.payload,
     phase: Math.max(Number(args.payload.phase ?? 0), 7),
+    optimizer_context: {
+      ...(asJsonObject(args.payload.optimizer_context) ?? {}),
+      archetype: args.archetype ?? null,
+    },
     role_engine: {
       engine_version: role.engineVersion,
       coverage_status: role.coverageStatus,

@@ -556,46 +556,33 @@ const buildTargetCoverageById = (rows: SpTargetFactRow[]) => {
   );
 };
 
-const buildMembershipByAdGroup = (rows: SpAdvertisedProductRow[]) => {
-  const byAdGroup = new Map<
-    string,
+const buildAsinScopeMembership = (rows: SpAdvertisedProductRow[]) => {
+  if (rows.length === 0) return null;
+
+  return rows.reduce(
+    (bucket, row) => {
+      const observedDate = trimString(row.date);
+      if (observedDate && (!bucket.firstDate || observedDate < bucket.firstDate)) {
+        bucket.firstDate = observedDate;
+      }
+      if (observedDate && (!bucket.lastDate || observedDate > bucket.lastDate)) {
+        bucket.lastDate = observedDate;
+      }
+      bucket.productAdSpend += numberValue(row.spend);
+      bucket.productAdSales += numberValue(row.sales);
+      bucket.productOrders += numberValue(row.orders);
+      bucket.productUnits += numberValue(row.units);
+      return bucket;
+    },
     {
-      firstDate: string | null;
-      lastDate: string | null;
-      productAdSpend: number;
-      productAdSales: number;
-      productOrders: number;
-      productUnits: number;
-    }
-  >();
-
-  rows.forEach((row) => {
-    const adGroupId = trimString(row.ad_group_id);
-    if (!adGroupId) return;
-
-    const bucket = byAdGroup.get(adGroupId) ?? {
-      firstDate: null,
-      lastDate: null,
+      firstDate: null as string | null,
+      lastDate: null as string | null,
       productAdSpend: 0,
       productAdSales: 0,
       productOrders: 0,
       productUnits: 0,
-    };
-    const observedDate = trimString(row.date);
-    if (observedDate && (!bucket.firstDate || observedDate < bucket.firstDate)) {
-      bucket.firstDate = observedDate;
     }
-    if (observedDate && (!bucket.lastDate || observedDate > bucket.lastDate)) {
-      bucket.lastDate = observedDate;
-    }
-    bucket.productAdSpend += numberValue(row.spend);
-    bucket.productAdSales += numberValue(row.sales);
-    bucket.productOrders += numberValue(row.orders);
-    bucket.productUnits += numberValue(row.units);
-    byAdGroup.set(adGroupId, bucket);
-  });
-
-  return byAdGroup;
+  );
 };
 
 const loadTargetScopeMembership = async (args: {
@@ -827,6 +814,32 @@ const buildTargetProfileViewRow = (args: {
     breakEvenAcos !== null && args.target.acos !== null ? breakEvenAcos - args.target.acos : null;
   const maxCpcSupportGap =
     supportedMaxCpc !== null && args.target.cpc !== null ? supportedMaxCpc - args.target.cpc : null;
+  const lossDollars =
+    contributionAfterAds !== null && contributionAfterAds < 0 ? -contributionAfterAds : null;
+  const adSalesShare =
+    args.membership && args.membership.productAdSales > 0
+      ? safeRatio(args.target.sales, args.membership.productAdSales)
+      : null;
+  const adOrderShare =
+    args.membership && args.membership.productOrders > 0
+      ? safeRatio(args.target.orders, args.membership.productOrders)
+      : null;
+  const totalSalesShare =
+    args.overview.economics.sales > 0 ? safeRatio(args.target.sales, args.overview.economics.sales) : null;
+  const lossToAdSalesRatio =
+    lossDollars !== null && args.target.sales > 0 ? safeRatio(lossDollars, args.target.sales) : null;
+  const lossSeverity =
+    lossToAdSalesRatio === null || lossToAdSalesRatio <= 0
+      ? null
+      : lossToAdSalesRatio <= 0.15
+        ? 'shallow'
+        : lossToAdSalesRatio <= 0.35
+          ? 'moderate'
+          : 'severe';
+  const protectedContributor =
+    (adSalesShare !== null && adSalesShare >= 0.2) ||
+    (adOrderShare !== null && adOrderShare >= 0.2) ||
+    (totalSalesShare !== null && totalSalesShare >= 0.08);
   const organicContextSignal =
     sameTextSearchTerms.length > 0
       ? 'same_text_visibility_context'
@@ -1014,8 +1027,7 @@ const buildTargetProfileViewRow = (args: {
         break_even_gap: breakEvenGap,
         max_cpc_supported: supportedMaxCpc,
         max_cpc_support_gap: maxCpcSupportGap,
-        loss_dollars:
-          contributionAfterAds !== null && contributionAfterAds < 0 ? -contributionAfterAds : null,
+        loss_dollars: lossDollars,
         profit_dollars:
           contributionAfterAds !== null && contributionAfterAds > 0 ? contributionAfterAds : null,
         click_velocity:
@@ -1028,18 +1040,33 @@ const buildTargetProfileViewRow = (args: {
             : null,
         organic_leverage_proxy: null,
         organic_context_signal: organicContextSignal,
+        ad_sales_share: adSalesShare,
+        ad_order_share: adOrderShare,
+        total_sales_share: totalSalesShare,
+        loss_to_ad_sales_ratio: lossToAdSalesRatio,
+        loss_severity: lossSeverity,
+        protected_contributor: protectedContributor,
         formula_notes: {
           contribution_after_ads:
             'Approximated as (target sales * product break-even ACoS) - target spend.',
           max_cpc_support_gap:
             'Approximated as ((target sales * product break-even ACoS) / target clicks) - actual CPC.',
+          ad_sales_share:
+            'Approximated as target attributed sales divided by ASIN-scope attributed ad sales for the selected window.',
+          ad_order_share:
+            'Approximated as target attributed orders divided by ASIN-scope attributed ad orders for the selected window.',
+          total_sales_share:
+            'Approximated as target attributed sales divided by the product total sales captured in overview economics for the selected window.',
+          loss_to_ad_sales_ratio:
+            'Approximated as loss dollars divided by target attributed sales when both are available.',
           organic_context_signal:
             'Qualitative context only. Non-additive diagnostics can inform review notes and reason codes, but not default V1 score math.',
         },
       },
       asin_scope_membership: args.membership
         ? {
-            ad_group_id: args.target.ad_group_id,
+            scope_level: 'asin',
+            asin: args.asin,
             first_observed_date: args.membership.firstDate,
             last_observed_date: args.membership.lastDate,
             product_ad_spend: args.membership.productAdSpend,
@@ -1534,7 +1561,7 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
     };
   }
 
-  const membershipByAdGroup = buildMembershipByAdGroup(advertisedRows);
+  const asinScopeMembership = buildAsinScopeMembership(advertisedRows);
   const targetingRows = await loadTargetingRowsByScope({
     idColumn: 'ad_group_id',
     ids: scopeSummary.adGroupIds,
@@ -1690,11 +1717,7 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
         target,
         rawIdentity: rawIdentityByProfileKey.get(target.target_id) ?? null,
         coverageWindow: coverageByTarget.get(target.target_id) ?? null,
-        membership:
-          rawIdentityByProfileKey.get(target.target_id)?.rawAdGroupId
-            ? membershipByAdGroup.get(rawIdentityByProfileKey.get(target.target_id)?.rawAdGroupId ?? '') ??
-              null
-            : null,
+        membership: asinScopeMembership,
         tosTrend: buildNonAdditiveTrend(
           tosTrendByTarget.get(target.target_id) ?? [],
           target.tos_is

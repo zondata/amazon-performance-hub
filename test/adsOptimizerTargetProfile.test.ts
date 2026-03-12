@@ -215,6 +215,19 @@ describe('ads optimizer phase 5 target profile engine', () => {
       {
         account_id: 'acct',
         date: '2026-03-03',
+        campaign_id: 'campaign-2',
+        ad_group_id: 'ad-group-2',
+        advertised_asin_norm: 'B001TEST',
+        impressions: 70,
+        clicks: 6,
+        spend: 15,
+        sales: 80,
+        orders: 2,
+        units: 2,
+      },
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
         campaign_id: 'campaign-1',
         ad_group_id: 'ad-group-1',
         advertised_asin_norm: 'B001TEST',
@@ -318,6 +331,20 @@ describe('ads optimizer phase 5 target profile engine', () => {
     expect(result.rows[0]?.snapshotPayload.derived_metrics.max_cpc_support_gap).toBeCloseTo(1.325);
     expect(result.rows[0]?.snapshotPayload.derived_metrics.click_velocity).toBe(8);
     expect(result.rows[0]?.snapshotPayload.derived_metrics.impression_velocity).toBe(80);
+    expect(result.rows[0]?.snapshotPayload.derived_metrics.ad_sales_share).toBeCloseTo(0.45);
+    expect(result.rows[0]?.snapshotPayload.derived_metrics.ad_order_share).toBeCloseTo(0.4);
+    expect(result.rows[0]?.snapshotPayload.derived_metrics.total_sales_share).toBeCloseTo(0.05);
+    expect(result.rows[0]?.snapshotPayload.derived_metrics.loss_to_ad_sales_ratio).toBeNull();
+    expect(result.rows[0]?.snapshotPayload.derived_metrics.loss_severity).toBeNull();
+    expect(result.rows[0]?.snapshotPayload.derived_metrics.protected_contributor).toBe(true);
+    expect(result.rows[0]?.snapshotPayload.asin_scope_membership).toMatchObject({
+      scope_level: 'asin',
+      asin: 'B001TEST',
+      product_ad_spend: 40,
+      product_ad_sales: 200,
+      product_orders: 5,
+      product_units: 5,
+    });
     expect(result.rows[0]?.snapshotPayload.non_additive_diagnostics).toMatchObject({
       latest_observed_tos_is: 0.34,
       latest_observed_tos_is_observed_date: '2026-03-03',

@@ -143,6 +143,195 @@ describe('ads optimizer phase 7 role engine', () => {
     expect(result.guardrails.categories.manualApprovalThreshold).toBe('all');
   });
 
+  it('keeps protected shallow-loss contributors in harvest posture instead of suppressing them', () => {
+    const payload = {
+      ...makePayload(),
+      derived_metrics: {
+        contribution_after_ads: -12,
+        break_even_gap: -0.04,
+        loss_dollars: 12,
+        profit_dollars: null,
+        ad_sales_share: 0.42,
+        ad_order_share: 0.38,
+        total_sales_share: 0.11,
+        loss_to_ad_sales_ratio: 0.08,
+        loss_severity: 'shallow',
+        protected_contributor: true,
+      },
+      state_engine: {
+        ...makePayload().state_engine,
+        efficiency: {
+          value: 'converting_but_loss_making',
+          label: 'Converting but loss-making',
+          detail: 'loss-making',
+          coverage_status: 'ready',
+          reason_codes: ['EFFICIENCY_NEGATIVE_CONTRIBUTION_AFTER_ADS'],
+        },
+        importance: {
+          value: 'tier_1_dominant',
+          label: 'Tier 1 dominant',
+          detail: 'dominant contributor',
+          coverage_status: 'ready',
+          reason_codes: ['IMPORTANCE_DOMINANT_AD_SALES_SHARE'],
+        },
+      },
+    };
+
+    const result = classifyAdsOptimizerTargetRole({
+      payload,
+      previousRole: 'Harvest',
+      archetype: 'hybrid',
+      productOverrides: null,
+      rulePackPayload: {
+        schema_version: 1,
+        channel: 'sp',
+        role_templates: {},
+        guardrail_templates: {},
+        scoring_weights: {},
+        state_engine: {},
+        action_policy: {},
+      },
+    });
+
+    expect(result.desiredRole.value).toBe('Harvest');
+    expect(result.currentRole.value).toBe('Harvest');
+    expect(result.desiredRole.reasonCodes).toContain(
+      'ROLE_DESIRED_HARVEST_PROTECTED_LOSS_MAKER'
+    );
+  });
+
+  it('routes protected visibility-led loss-makers into rank defense instead of suppressing them', () => {
+    const payload = {
+      ...makePayload(),
+      derived_metrics: {
+        contribution_after_ads: -16,
+        break_even_gap: -0.06,
+        loss_dollars: 16,
+        profit_dollars: null,
+        ad_sales_share: 0.36,
+        ad_order_share: 0.34,
+        total_sales_share: 0.1,
+        loss_to_ad_sales_ratio: 0.11,
+        loss_severity: 'shallow',
+        protected_contributor: true,
+      },
+      product_context: {
+        product_objective: 'Rank Defense',
+      },
+      state_engine: {
+        ...makePayload().state_engine,
+        efficiency: {
+          value: 'converting_but_loss_making',
+          label: 'Converting but loss-making',
+          detail: 'loss-making',
+          coverage_status: 'ready',
+          reason_codes: ['EFFICIENCY_NEGATIVE_CONTRIBUTION_AFTER_ADS'],
+        },
+        importance: {
+          value: 'tier_1_dominant',
+          label: 'Tier 1 dominant',
+          detail: 'dominant contributor',
+          coverage_status: 'ready',
+          reason_codes: ['IMPORTANCE_DOMINANT_AD_ORDER_SHARE'],
+        },
+      },
+    };
+
+    const result = classifyAdsOptimizerTargetRole({
+      payload,
+      previousRole: null,
+      archetype: 'visibility_led',
+      productOverrides: null,
+      rulePackPayload: {
+        schema_version: 1,
+        channel: 'sp',
+        role_templates: {},
+        guardrail_templates: {},
+        scoring_weights: {},
+        state_engine: {},
+        action_policy: {},
+      },
+    });
+
+    expect(result.desiredRole.value).toBe('Rank Defend');
+    expect(result.currentRole.value).toBe('Rank Defend');
+    expect(result.desiredRole.reasonCodes).toContain(
+      'ROLE_DESIRED_RANK_DEFEND_PROTECTED_LOSS_MAKER'
+    );
+  });
+
+  it('resolves the same protected loss-maker differently under design-led vs visibility-led posture', () => {
+    const payload = {
+      ...makePayload(),
+      derived_metrics: {
+        contribution_after_ads: -16,
+        break_even_gap: -0.06,
+        loss_dollars: 16,
+        profit_dollars: null,
+        ad_sales_share: 0.36,
+        ad_order_share: 0.34,
+        total_sales_share: 0.1,
+        loss_to_ad_sales_ratio: 0.11,
+        loss_severity: 'shallow',
+        protected_contributor: true,
+      },
+      state_engine: {
+        ...makePayload().state_engine,
+        efficiency: {
+          value: 'converting_but_loss_making',
+          label: 'Converting but loss-making',
+          detail: 'loss-making',
+          coverage_status: 'ready',
+          reason_codes: ['EFFICIENCY_NEGATIVE_CONTRIBUTION_AFTER_ADS'],
+        },
+        importance: {
+          value: 'tier_1_dominant',
+          label: 'Tier 1 dominant',
+          detail: 'dominant contributor',
+          coverage_status: 'ready',
+          reason_codes: ['IMPORTANCE_DOMINANT_AD_ORDER_SHARE'],
+        },
+      },
+    };
+
+    const designLed = classifyAdsOptimizerTargetRole({
+      payload,
+      previousRole: 'Harvest',
+      archetype: 'design_led',
+      productOverrides: null,
+      rulePackPayload: {
+        schema_version: 1,
+        channel: 'sp',
+        role_templates: {},
+        guardrail_templates: {},
+        scoring_weights: {},
+        state_engine: {},
+        action_policy: {},
+      },
+    });
+    const visibilityLed = classifyAdsOptimizerTargetRole({
+      payload,
+      previousRole: 'Harvest',
+      archetype: 'visibility_led',
+      productOverrides: null,
+      rulePackPayload: {
+        schema_version: 1,
+        channel: 'sp',
+        role_templates: {},
+        guardrail_templates: {},
+        scoring_weights: {},
+        state_engine: {},
+        action_policy: {},
+      },
+    });
+
+    expect(designLed.desiredRole.value).toBe('Harvest');
+    expect(visibilityLed.desiredRole.value).toBe('Rank Defend');
+    expect(visibilityLed.desiredRole.reasonCodes).toContain(
+      'ROLE_ARCHETYPE_VISIBILITY_LED_PROTECTED_CONTRIBUTOR'
+    );
+  });
+
   it('round-trips persisted role-engine payloads', () => {
     const payload = {
       role_engine: {

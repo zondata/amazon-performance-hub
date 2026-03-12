@@ -9,6 +9,7 @@ import type { AdsOptimizerTargetRole } from '@/lib/ads-optimizer/role';
 import type { AdsOptimizerTargetReviewRow } from '@/lib/ads-optimizer/runtime';
 import type { AdsOptimizerRun } from '@/lib/ads-optimizer/runtimeTypes';
 import type { AdsOptimizerProductRunState } from '@/lib/ads-optimizer/state';
+import type { AdsOptimizerRecommendationOverride } from '@/lib/ads-optimizer/types';
 import {
   formatUiDateRange,
   formatUiDateTime as formatDateTime,
@@ -23,13 +24,18 @@ type OptimizerTargetsPanelProps = {
   workspaceQueueHref: string;
   run: AdsOptimizerRun | null;
   latestCompletedRun: AdsOptimizerRun | null;
+  productId: string | null;
   productState: AdsOptimizerProductRunState | null;
   comparison: AdsOptimizerRunComparisonView | null;
   rows: AdsOptimizerTargetReviewRow[];
   requestedRunId: string | null;
   resolvedContextSource: 'run_id' | 'window' | null;
   runLookupError: string | null;
+  notice: string | null;
+  error: string | null;
+  overrideError: boolean;
   handoffAction: (formData: FormData) => Promise<void>;
+  saveRecommendationOverrideAction: (formData: FormData) => Promise<void>;
 };
 
 type QueueSort =
@@ -452,7 +458,13 @@ const isWorkspaceSupportedActionType = (
   value === 'update_placement_modifier';
 
 const getWorkspaceSupportedActions = (row: AdsOptimizerTargetReviewRow) =>
-  (row.recommendation?.actions ?? []).filter((action) =>
+  (
+    row.manualOverride?.replacement_action_bundle_json.actions.map((action) => ({
+      actionType: action.action_type,
+    })) ??
+    row.recommendation?.actions ??
+    []
+  ).filter((action) =>
     isWorkspaceSupportedActionType(action.actionType)
   );
 
@@ -460,6 +472,12 @@ const getUnsupportedReviewOnlyActions = (row: AdsOptimizerTargetReviewRow) =>
   (row.recommendation?.actions ?? []).filter(
     (action) => !isWorkspaceSupportedActionType(action.actionType)
   );
+
+const getOverrideActions = (override: AdsOptimizerRecommendationOverride | null | undefined) =>
+  override?.replacement_action_bundle_json.actions ?? [];
+
+const buildOverrideBadgeLabel = (override: AdsOptimizerRecommendationOverride) =>
+  override.override_scope === 'persistent' ? 'Human override · persistent' : 'Human override';
 
 const getHighestExceptionSeverityRank = (row: AdsOptimizerTargetReviewRow) =>
   Math.max(0, ...(row.recommendation?.exceptionSignals ?? []).map((signal) => getSeverityRank(signal.severity)));
@@ -550,14 +568,20 @@ const sentenceCase = (value: string | null) => {
   return labelize(value).toLowerCase();
 };
 
-const buildProposedChangeCards = (row: AdsOptimizerTargetReviewRow): ProposedChangeCard[] => {
+const buildActionCards = (args: {
+  cardKeyPrefix: string;
+  actions: Array<{
+    actionType: string;
+    entityContext: Record<string, unknown> | null;
+    proposedChange: Record<string, unknown> | null;
+  }>;
+}): ProposedChangeCard[] => {
   const cards: ProposedChangeCard[] = [];
-  const actions = row.recommendation?.actions ?? [];
 
-  for (const action of actions) {
+  for (const action of args.actions) {
     if (action.actionType === 'update_target_state') {
       cards.push({
-        key: `${row.targetSnapshotId}:state`,
+        key: `${args.cardKeyPrefix}:state`,
         title: 'Update target state',
         category: 'execution',
         reviewOnly: false,
@@ -572,7 +596,7 @@ const buildProposedChangeCards = (row: AdsOptimizerTargetReviewRow): ProposedCha
       const nextBid = readJsonNumber(action.proposedChange, 'next_bid');
       const deltaPct = formatSignedPercentChange(readJsonNumber(action.proposedChange, 'delta_pct'));
       cards.push({
-        key: `${row.targetSnapshotId}:bid`,
+        key: `${args.cardKeyPrefix}:bid`,
         title: 'Update target bid',
         category: 'execution',
         reviewOnly: false,
@@ -589,7 +613,7 @@ const buildProposedChangeCards = (row: AdsOptimizerTargetReviewRow): ProposedCha
 
     if (action.actionType === 'update_placement_modifier') {
       cards.push({
-        key: `${row.targetSnapshotId}:placement`,
+        key: `${args.cardKeyPrefix}:placement`,
         title: 'Update placement modifier',
         category: 'execution',
         reviewOnly: false,
@@ -601,7 +625,7 @@ const buildProposedChangeCards = (row: AdsOptimizerTargetReviewRow): ProposedCha
 
     if (action.actionType === 'change_review_cadence') {
       cards.push({
-        key: `${row.targetSnapshotId}:cadence`,
+        key: `${args.cardKeyPrefix}:cadence`,
         title: 'Change review cadence',
         category: 'cadence',
         reviewOnly: false,
@@ -609,9 +633,19 @@ const buildProposedChangeCards = (row: AdsOptimizerTargetReviewRow): ProposedCha
         proposedValue: labelize(readJsonString(action.proposedChange, 'recommended_cadence')),
         detail: 'Current cadence is not persisted in this snapshot.',
       });
-      continue;
     }
+  }
 
+  return cards;
+};
+
+const buildProposedChangeCards = (row: AdsOptimizerTargetReviewRow): ProposedChangeCard[] => {
+  const cards: ProposedChangeCard[] = buildActionCards({
+    cardKeyPrefix: row.targetSnapshotId,
+    actions: row.recommendation?.actions ?? [],
+  });
+
+  for (const action of row.recommendation?.actions ?? []) {
     if (action.actionType === 'negative_candidate') {
       const searchTerm = readJsonString(action.entityContext, 'search_term') ?? 'this query';
       cards.push({
@@ -653,6 +687,115 @@ const buildProposedChangeCards = (row: AdsOptimizerTargetReviewRow): ProposedCha
       executionOrder[left.category] - executionOrder[right.category] ||
       left.title.localeCompare(right.title)
   );
+};
+
+const buildManualOverrideCards = (row: AdsOptimizerTargetReviewRow): ProposedChangeCard[] =>
+  buildActionCards({
+    cardKeyPrefix: `${row.targetSnapshotId}:override`,
+    actions: getOverrideActions(row.manualOverride).map((action) => ({
+      actionType: action.action_type,
+      entityContext: action.entity_context_json,
+      proposedChange: action.proposed_change_json,
+    })),
+  });
+
+const getActionEditorSource = (
+  row: AdsOptimizerTargetReviewRow,
+  actionType: WorkspaceSupportedActionType
+) => {
+  const overrideAction = getOverrideActions(row.manualOverride).find(
+    (action) => action.action_type === actionType
+  );
+  if (overrideAction) {
+    return {
+      entityContext: overrideAction.entity_context_json,
+      proposedChange: overrideAction.proposed_change_json,
+      source: 'override' as const,
+    };
+  }
+
+  const recommendationAction =
+    row.recommendation?.actions.find((action) => action.actionType === actionType) ?? null;
+
+  return {
+    entityContext: recommendationAction?.entityContext ?? null,
+    proposedChange: recommendationAction?.proposedChange ?? null,
+    source: recommendationAction ? ('recommendation' as const) : ('none' as const),
+  };
+};
+
+const formatPlacementLabel = (value: string | null) => {
+  if (value === 'PLACEMENT_TOP') return 'Top of Search';
+  if (value === 'PLACEMENT_REST_OF_SEARCH') return 'Rest of Search';
+  if (value === 'PLACEMENT_PRODUCT_PAGE') return 'Product Pages';
+  return labelize(value);
+};
+
+const OverrideDisclosureCard = (props: {
+  id: string;
+  label: string;
+  status: 'None' | 'Active' | 'Applied';
+  summary: string;
+  notePreview: string;
+  highlight: boolean;
+  defaultExpanded: boolean;
+  children: ReactNode;
+}) => {
+  const [expanded, setExpanded] = useState(props.defaultExpanded);
+
+  return (
+    <div className="space-y-4">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={props.id}
+        className={`flex w-full items-start justify-between gap-3 rounded-xl border px-4 py-4 text-left transition hover:border-primary/40 ${
+          props.highlight ? 'border-amber-200 bg-amber-50/70' : 'border-border bg-surface-2'
+        }`}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-xs uppercase tracking-[0.3em] text-muted">{props.label}</div>
+            <div
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${getOverrideStatusClass(
+                props.status
+              )}`}
+            >
+              {props.status}
+            </div>
+          </div>
+          <div className="mt-2 line-clamp-1 text-sm font-semibold text-foreground">
+            {props.summary}
+          </div>
+          <div className="mt-1 line-clamp-1 text-sm text-muted">{props.notePreview}</div>
+        </div>
+        <div className="pt-0.5 text-xs font-semibold uppercase tracking-wide text-muted">
+          {expanded ? 'Collapse' : 'Expand'}
+        </div>
+      </button>
+
+      {expanded ? <div id={props.id}>{props.children}</div> : null}
+    </div>
+  );
+};
+
+const getOverrideStatus = (override: AdsOptimizerRecommendationOverride | null | undefined) => {
+  if (!override) return 'None';
+  return override.apply_count > 0 ? 'Applied' : 'Active';
+};
+
+const getOverrideStatusClass = (status: 'None' | 'Active' | 'Applied') => {
+  if (status === 'Active') return 'border-amber-200 bg-amber-50 text-amber-800';
+  if (status === 'Applied') return 'border-sky-200 bg-sky-50 text-sky-800';
+  return 'border-border bg-surface-2 text-muted';
+};
+
+const buildOverrideActionSummary = (cards: ProposedChangeCard[]) => {
+  const primaryCard = cards[0] ?? null;
+  if (!primaryCard) return 'No saved override bundle.';
+  if (primaryCard.reviewOnly) return primaryCard.detail;
+  return `${primaryCard.title}: ${primaryCard.proposedValue}`;
 };
 
 const buildTargetActivityFact = (row: AdsOptimizerTargetReviewRow) => {
@@ -1045,6 +1188,17 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
 
   return (
     <div className="space-y-6">
+      {props.notice ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          {props.notice}
+        </div>
+      ) : null}
+      {props.error ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+          {props.error}
+        </div>
+      ) : null}
+
       <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -2035,6 +2189,16 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                               >
                                 {isActive ? 'Viewing' : 'Open'}
                               </button>
+                              {row.manualOverride ? (
+                                <div className="mt-2 space-y-1">
+                                  <div className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                                    {buildOverrideBadgeLabel(row.manualOverride)}
+                                  </div>
+                                  <div className="line-clamp-2 text-[11px] leading-tight text-muted">
+                                    {row.manualOverride.operator_note}
+                                  </div>
+                                </div>
+                              ) : null}
                             </td>
                             <td className="px-3 py-2.5 text-foreground">
                               {buildPriorityLabel(row.queue.priority, row.queue.primaryActionType)}
@@ -2050,7 +2214,9 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                                 {formatNumber(workspaceSupportedActions.length)}
                               </div>
                               <div className="mt-1 text-xs text-muted">
-                                {unsupportedReviewOnlyActions.length > 0
+                                {row.manualOverride
+                                  ? 'Override bundle will stage'
+                                  : unsupportedReviewOnlyActions.length > 0
                                   ? `${formatNumber(unsupportedReviewOnlyActions.length)} review-only`
                                   : 'Ready for handoff'}
                               </div>
@@ -2197,6 +2363,40 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
             {activeRow ? (
               (() => {
                 const proposedChangeCards = buildProposedChangeCards(activeRow);
+                const manualOverrideCards = buildManualOverrideCards(activeRow);
+                const bidActionEditor = getActionEditorSource(activeRow, 'update_target_bid');
+                const stateActionEditor = getActionEditorSource(activeRow, 'update_target_state');
+                const placementActionEditor = getActionEditorSource(
+                  activeRow,
+                  'update_placement_modifier'
+                );
+                const currentBidForOverride =
+                  readJsonNumber(bidActionEditor.entityContext, 'current_bid') ?? activeRow.raw.cpc;
+                const nextBidForOverride = readJsonNumber(
+                  bidActionEditor.proposedChange,
+                  'next_bid'
+                );
+                const currentStateForOverride = readJsonString(
+                  stateActionEditor.entityContext,
+                  'current_state'
+                );
+                const nextStateForOverride = readJsonString(
+                  stateActionEditor.proposedChange,
+                  'next_state'
+                );
+                const currentPlacementCodeForOverride =
+                  readJsonString(placementActionEditor.entityContext, 'placement_code') ??
+                  readJsonString(placementActionEditor.proposedChange, 'placement_code') ??
+                  activeRow.recommendation?.placementDiagnostics?.currentPlacementCode ??
+                  'PLACEMENT_TOP';
+                const currentPlacementPctForOverride =
+                  readJsonNumber(placementActionEditor.entityContext, 'current_percentage') ??
+                  activeRow.recommendation?.placementDiagnostics?.currentPercentage ??
+                  activeRow.placementContext.topOfSearchModifierPct;
+                const nextPlacementPctForOverride = readJsonNumber(
+                  placementActionEditor.proposedChange,
+                  'next_percentage'
+                );
                 const whyFlaggedNarrative = buildWhyFlaggedNarrative({
                   row: activeRow,
                   productState: props.productState,
@@ -3325,6 +3525,11 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                             value={activeRow.state.importance.value}
                             label={activeRow.state.importance.label}
                           />
+                          {activeRow.manualOverride ? (
+                            <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
+                              {buildOverrideBadgeLabel(activeRow.manualOverride)}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -3382,6 +3587,264 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
                               No concrete changes were proposed for this target in the selected run.
                             </div>
                           )}
+                        </div>
+
+                        <div className="rounded-xl border border-border bg-surface px-4 py-4">
+                          {(() => {
+                            const overrideStatus = getOverrideStatus(activeRow.manualOverride);
+                            const overrideSummary = buildOverrideActionSummary(manualOverrideCards);
+                            const overrideSectionId = `human-override-panel-${activeRow.targetSnapshotId}`;
+
+                            return (
+                              <OverrideDisclosureCard
+                                key={`${activeRow.targetSnapshotId}:${props.overrideError ? 'error' : 'default'}`}
+                                id={overrideSectionId}
+                                label="Human override"
+                                status={overrideStatus}
+                                summary={overrideSummary}
+                                notePreview={
+                                  activeRow.manualOverride?.operator_note ??
+                                  'Open to create or replace a staged override bundle.'
+                                }
+                                highlight={Boolean(activeRow.manualOverride)}
+                                defaultExpanded={props.overrideError}
+                              >
+                                <div className="space-y-4">
+                                    <div className="text-sm text-foreground">
+                                      Replace staged actions
+                                    </div>
+                                    <div className="text-sm text-muted">
+                                      This override replaces the staged Ads Workspace bundle. The
+                                      persisted optimizer proposal above remains visible for audit
+                                      review.
+                                    </div>
+
+                                    {activeRow.manualOverride ? (
+                                      <div className="space-y-3">
+                                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <div className="rounded-full border border-amber-200 bg-surface px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                                              {buildOverrideBadgeLabel(activeRow.manualOverride)}
+                                            </div>
+                                            <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+                                              Override scope
+                                            </div>
+                                            <div className="text-sm text-foreground">
+                                              {labelize(activeRow.manualOverride.override_scope)}
+                                            </div>
+                                          </div>
+                                          <div className="mt-3 text-sm text-foreground">
+                                            <span className="font-semibold">Override note:</span>{' '}
+                                            {activeRow.manualOverride.operator_note}
+                                          </div>
+                                          <div className="mt-2 text-xs text-muted">
+                                            Created {formatDateTime(activeRow.manualOverride.created_at)}{' '}
+                                            · applied{' '}
+                                            {formatNumber(activeRow.manualOverride.apply_count)} time(s)
+                                          </div>
+                                        </div>
+                                        {manualOverrideCards.length > 0 ? (
+                                          <div className="grid gap-3">
+                                            {manualOverrideCards.map((card) => (
+                                              <ProposedChangeSummaryCard key={card.key} card={card} />
+                                            ))}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    ) : (
+                                      <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
+                                        No active human override is saved for this target.
+                                      </div>
+                                    )}
+
+                                    {props.productId && activeRow.recommendation ? (
+                                      <form
+                                        key={`${activeRow.targetSnapshotId}:${activeRow.recommendation.recommendationSnapshotId}:override-form`}
+                                        action={props.saveRecommendationOverrideAction}
+                                        className="space-y-4"
+                                      >
+                                        <input type="hidden" name="return_to" value={props.returnTo} />
+                                        <input type="hidden" name="product_id" value={props.productId} />
+                                        <input type="hidden" name="asin" value={activeRow.asin} />
+                                        <input type="hidden" name="target_id" value={activeRow.targetId} />
+                                        <input type="hidden" name="run_id" value={activeRow.runId} />
+                                        <input
+                                          type="hidden"
+                                          name="target_snapshot_id"
+                                          value={activeRow.targetSnapshotId}
+                                        />
+                                        <input
+                                          type="hidden"
+                                          name="recommendation_snapshot_id"
+                                          value={activeRow.recommendation.recommendationSnapshotId}
+                                        />
+                                        <input
+                                          type="hidden"
+                                          name="campaign_id"
+                                          value={activeRow.campaignId}
+                                        />
+                                        <input
+                                          type="hidden"
+                                          name="current_state"
+                                          value={currentStateForOverride ?? ''}
+                                        />
+                                        <input
+                                          type="hidden"
+                                          name="current_bid"
+                                          value={currentBidForOverride ?? ''}
+                                        />
+                                        <input
+                                          type="hidden"
+                                          name="current_placement_code"
+                                          value={currentPlacementCodeForOverride}
+                                        />
+                                        <input
+                                          type="hidden"
+                                          name="current_placement_percentage"
+                                          value={currentPlacementPctForOverride ?? ''}
+                                        />
+
+                                        <div className="grid gap-4 lg:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+                                          <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                                            Override scope
+                                            <select
+                                              name="override_scope"
+                                              defaultValue={
+                                                activeRow.manualOverride?.override_scope ?? 'one_time'
+                                              }
+                                              className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                                            >
+                                              <option value="one_time">One time</option>
+                                              <option value="persistent">Persistent</option>
+                                            </select>
+                                          </label>
+                                          <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+                                            Operator note
+                                            <textarea
+                                              name="operator_note"
+                                              required
+                                              rows={3}
+                                              defaultValue={activeRow.manualOverride?.operator_note ?? ''}
+                                              className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                                              placeholder="Required. Explain why the staged bundle is being replaced."
+                                            />
+                                          </label>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                          <div className="text-xs uppercase tracking-wide text-muted">
+                                            Replacement action bundle
+                                          </div>
+
+                                          <label className="flex flex-col gap-3 rounded-lg border border-border bg-surface-2 px-4 py-4 text-sm text-foreground">
+                                            <div className="flex items-start gap-3">
+                                              <input
+                                                type="checkbox"
+                                                name="override_bid_enabled"
+                                                value="1"
+                                                defaultChecked={bidActionEditor.source !== 'none'}
+                                                className="mt-0.5"
+                                              />
+                                              <div className="min-w-0">
+                                                <div className="font-semibold">Update target bid</div>
+                                                <div className="mt-1 text-xs text-muted">
+                                                  Current: {formatCurrency(currentBidForOverride)}
+                                                </div>
+                                              </div>
+                                            </div>
+                                            <input
+                                              type="number"
+                                              name="override_bid_next_bid"
+                                              min="0.01"
+                                              step="0.01"
+                                              defaultValue={nextBidForOverride ?? ''}
+                                              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                                              placeholder="Next bid"
+                                            />
+                                          </label>
+
+                                          <label className="flex flex-col gap-3 rounded-lg border border-border bg-surface-2 px-4 py-4 text-sm text-foreground">
+                                            <div className="flex items-start gap-3">
+                                              <input
+                                                type="checkbox"
+                                                name="override_state_enabled"
+                                                value="1"
+                                                defaultChecked={stateActionEditor.source !== 'none'}
+                                                className="mt-0.5"
+                                              />
+                                              <div className="min-w-0">
+                                                <div className="font-semibold">Update target state</div>
+                                                <div className="mt-1 text-xs text-muted">
+                                                  Current: {sentenceCase(currentStateForOverride)}
+                                                </div>
+                                              </div>
+                                            </div>
+                                            <select
+                                              name="override_state_next_state"
+                                              defaultValue={nextStateForOverride ?? 'paused'}
+                                              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                                            >
+                                              <option value="enabled">Enabled</option>
+                                              <option value="paused">Paused</option>
+                                              <option value="archived">Archived</option>
+                                            </select>
+                                          </label>
+
+                                          <label className="flex flex-col gap-3 rounded-lg border border-border bg-surface-2 px-4 py-4 text-sm text-foreground">
+                                            <div className="flex items-start gap-3">
+                                              <input
+                                                type="checkbox"
+                                                name="override_placement_enabled"
+                                                value="1"
+                                                defaultChecked={placementActionEditor.source !== 'none'}
+                                                className="mt-0.5"
+                                              />
+                                              <div className="min-w-0">
+                                                <div className="font-semibold">
+                                                  Update placement modifier
+                                                </div>
+                                                <div className="mt-1 text-xs text-muted">
+                                                  {formatPlacementLabel(currentPlacementCodeForOverride)}{' '}
+                                                  · current{' '}
+                                                  {formatWholePercent(currentPlacementPctForOverride)}
+                                                </div>
+                                              </div>
+                                            </div>
+                                            <input
+                                              type="number"
+                                              name="override_placement_next_percentage"
+                                              min="0"
+                                              step="1"
+                                              defaultValue={nextPlacementPctForOverride ?? ''}
+                                              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                                              placeholder="Next placement percentage"
+                                            />
+                                          </label>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-3">
+                                          <button
+                                            type="submit"
+                                            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+                                          >
+                                            Save override bundle
+                                          </button>
+                                          <div className="text-xs text-muted">
+                                            Supported override actions: bid, target state, and
+                                            placement modifier only.
+                                          </div>
+                                        </div>
+                                      </form>
+                                    ) : (
+                                      <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
+                                        Product scope or recommendation context is missing, so this
+                                        target cannot accept a saved override yet.
+                                      </div>
+                                    )}
+                                </div>
+                              </OverrideDisclosureCard>
+                            );
+                          })()}
                         </div>
 
                         <div className="rounded-xl border border-border bg-surface px-4 py-4">

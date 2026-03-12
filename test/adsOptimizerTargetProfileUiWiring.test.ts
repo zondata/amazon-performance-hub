@@ -22,6 +22,8 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('<OptimizerTargetsPanel');
     expect(source).toContain('Review + comparison queue');
     expect(source).toContain('handoffAdsOptimizerToWorkspaceAction');
+    expect(source).toContain('saveAdsOptimizerRecommendationOverrideAction');
+    expect(source).toContain("paramValue('override_error') === '1'");
     expect(source).toContain('runId: requestedRunId');
   });
 
@@ -71,6 +73,21 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('Critical warnings');
     expect(source).toContain('Row-specific exceptions');
     expect(source).toContain('Proposed changes');
+    expect(source).toContain('Human override');
+    expect(source).toContain('No saved override bundle.');
+    expect(source).toContain('Open to create or replace a staged override bundle.');
+    expect(source).toContain('Expand');
+    expect(source).toContain('Collapse');
+    expect(source).toContain('OverrideDisclosureCard');
+    expect(source).toContain('defaultExpanded={props.overrideError}');
+    expect(source).toContain('getOverrideStatus');
+    expect(source).toContain('buildOverrideActionSummary');
+    expect(source).toContain('Replace staged actions');
+    expect(source).toContain('Override note:');
+    expect(source).toContain('Override scope');
+    expect(source).toContain('Save override bundle');
+    expect(source).toContain('This override replaces the staged Ads Workspace bundle');
+    expect(source).toContain('replacement_action_bundle_json');
     expect(source).toContain('Why this target is flagged');
     expect(source).toContain('Decision engines');
     expect(source).toContain('Select an engine above to inspect its details.');
@@ -101,9 +118,12 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('buildPriorityLabel');
     expect(source).toContain('buildTopList');
     expect(source).toContain('filterRows');
+    expect(source).toContain('getActionEditorSource');
+    expect(source).toContain('buildManualOverrideCards');
     expect(source).toContain('runLookupError');
     expect(source).toContain('requestedRunId');
     expect(source).toContain('resolvedContextSource');
+    expect(source).toContain('aria-expanded={expanded}');
     expect(source).toContain('Requested persisted optimizer run could not be loaded.');
     expect(source).toContain('aria-controls={');
     expect(source).toContain('target-detail-drawer-');
@@ -127,6 +147,7 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('run.date_start === args.start');
     expect(source).toContain('run.date_end === args.end');
     expect(source).toContain('listAdsOptimizerProductSnapshotsByRun');
+    expect(source).toContain('listActiveAdsOptimizerRecommendationOverrides');
     expect(source).toContain('readAdsOptimizerProductRunState');
     expect(source).toContain('listAdsOptimizerTargetSnapshotsByRun');
     expect(source).toContain('listAdsOptimizerRecommendationSnapshotsByRun');
@@ -135,6 +156,8 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('mapTargetSnapshotToProfileView');
     expect(source).toContain('recommendationsByTargetSnapshotId');
     expect(source).toContain('roleHistoryByTargetId');
+    expect(source).toContain('manualOverride');
+    expect(source).toContain('productId');
     expect(source).toContain('requestedRunId');
     expect(source).toContain("resolvedContextSource = 'run_id'");
   });
