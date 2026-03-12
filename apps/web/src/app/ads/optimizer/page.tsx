@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import OptimizerConfigManager from '@/components/ads-optimizer/OptimizerConfigManager';
 import OptimizerHistoryPanel from '@/components/ads-optimizer/OptimizerHistoryPanel';
 import OptimizerOverviewPanel from '@/components/ads-optimizer/OptimizerOverviewPanel';
+import OptimizerOutcomeReviewPanel from '@/components/ads-optimizer/OptimizerOutcomeReviewPanel';
 import OptimizerTargetsPanel from '@/components/ads-optimizer/OptimizerTargetsPanel';
 import Tabs from '@/components/Tabs';
 import {
@@ -15,6 +16,7 @@ import {
 } from '@/app/ads/optimizer/actions';
 import { isAdsOptimizerEnabled } from '@/lib/ads-optimizer/featureFlag';
 import { getAdsOptimizerOverviewData } from '@/lib/ads-optimizer/overview';
+import { getAdsOptimizerOutcomeReviewData } from '@/lib/ads-optimizer/outcomeReview';
 import {
   getAdsOptimizerConfigViewData,
   getProductOptimizerSettingsByProductId,
@@ -27,6 +29,8 @@ import {
 import {
   ADS_OPTIMIZER_VIEWS,
   buildAdsOptimizerHref,
+  normalizeAdsOptimizerOutcomeHorizon,
+  normalizeAdsOptimizerOutcomeMetric,
   normalizeAdsOptimizerView,
   type AdsOptimizerView,
 } from '@/lib/ads-optimizer/shell';
@@ -63,6 +67,12 @@ const EMPTY_STATE_COPY: Record<
     title: 'Select one ASIN and capture a run to review the target queue.',
     body:
       'Phase 12 reads persisted target profile, state, role, diagnostics, comparison cues, and recommendation snapshots into an ASIN command center, target queue, and trust layer. Supported actions can be handed off into Ads Workspace draft staging, but execution still stays there.',
+  },
+  outcomes: {
+    eyebrow: 'Outcome review scope',
+    title: 'Select one ASIN to review validated optimizer outcome lineage.',
+    body:
+      'Phase 1 Outcome Review is product-scoped and read-only. It links optimizer-originated Ads Workspace handoffs to bulkgen logbook validations, shows KPI trend context, and keeps unvalidated phases visible without pretending an outcome score already exists.',
   },
   config: {
     eyebrow: 'Config placeholder',
@@ -116,6 +126,8 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
   const asin = paramValue('asin') ?? 'all';
   const requestedRunId = paramValue('runId')?.trim() || null;
   const view = normalizeAdsOptimizerView(paramValue('view'));
+  const outcomeHorizon = normalizeAdsOptimizerOutcomeHorizon(paramValue('horizon'));
+  const outcomeMetric = normalizeAdsOptimizerOutcomeMetric(paramValue('metric'));
   const notice = pickSearchParam(params?.notice);
   const error = pickSearchParam(params?.error);
   const overrideError = paramValue('override_error') === '1';
@@ -146,6 +158,16 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           runId: requestedRunId,
         })
       : null;
+  const outcomeReviewData =
+    view === 'outcomes' && asin !== 'all'
+      ? await getAdsOptimizerOutcomeReviewData({
+          asin,
+          start,
+          end,
+          horizon: outcomeHorizon,
+          metric: outcomeMetric,
+        })
+      : null;
   const effectiveAsin = view === 'targets' ? targetsData?.run?.selected_asin ?? asin : asin;
   const effectiveStart = view === 'targets' ? targetsData?.run?.date_start ?? start : start;
   const effectiveEnd = view === 'targets' ? targetsData?.run?.date_end ?? end : end;
@@ -162,6 +184,8 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
       asin: effectiveAsin,
       view: item.value,
       runId: item.value === 'targets' ? effectiveRunId : null,
+      horizon: outcomeHorizon,
+      metric: outcomeMetric,
     }),
   }));
   const emptyState = EMPTY_STATE_COPY[view];
@@ -171,6 +195,8 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
     asin: effectiveAsin,
     view,
     runId: view === 'targets' ? effectiveRunId : null,
+    horizon: view === 'outcomes' ? outcomeHorizon : null,
+    metric: view === 'outcomes' ? outcomeMetric : null,
   });
   const phaseBadge =
     view === 'config'
@@ -179,6 +205,8 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
         ? 'Read-only optimizer active'
         : view === 'targets'
           ? 'Review + comparison queue'
+          : view === 'outcomes'
+            ? 'Outcome review lineage'
           : view === 'history'
             ? 'Recommendation engine'
             : 'Recommendation shell only';
@@ -205,6 +233,12 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
             className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_auto] xl:items-end"
           >
             <input type="hidden" name="view" value={view} />
+            {view === 'outcomes' ? (
+              <>
+                <input type="hidden" name="horizon" value={outcomeHorizon} />
+                <input type="hidden" name="metric" value={outcomeMetric} />
+              </>
+            ) : null}
             <label className="flex min-w-0 flex-col text-xs uppercase tracking-wide text-muted">
               Start
               <input
@@ -323,6 +357,13 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           notice={notice}
           error={error}
           runNowAction={runAdsOptimizerNowAction}
+        />
+      ) : view === 'outcomes' && outcomeReviewData ? (
+        <OptimizerOutcomeReviewPanel
+          asin={effectiveAsin}
+          start={effectiveStart}
+          end={effectiveEnd}
+          data={outcomeReviewData}
         />
       ) : view === 'targets' ? (
             <OptimizerTargetsPanel
