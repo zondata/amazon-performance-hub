@@ -3,6 +3,7 @@
 import { Fragment, type ReactNode, useState } from 'react';
 import Link from 'next/link';
 
+import { readAdsOptimizerRunEffectiveVersionContext } from '@/lib/ads-optimizer/effectiveVersion';
 import type { AdsOptimizerRunComparisonView } from '@/lib/ads-optimizer/comparison';
 import { buildAdsOptimizerCoverageSummary } from '@/lib/ads-optimizer/coverage';
 import type { AdsOptimizerTargetRole } from '@/lib/ads-optimizer/role';
@@ -117,6 +118,20 @@ const formatCurrency = (value: number | null) => {
     maximumFractionDigits: value >= 100 ? 0 : 2,
   });
 };
+
+const formatVersionResolutionSource = (value: 'product_assignment' | 'account_active_fallback') =>
+  value === 'product_assignment' ? 'Product assignment' : 'Account fallback';
+
+const formatVersionFallbackReason = (value: string | null) => {
+  if (value === 'optimizer_disabled') return 'Product policy disabled';
+  if (value === 'no_product_settings') return 'No product settings';
+  if (value === 'assigned_version_missing') return 'Assigned version missing';
+  if (value === 'no_product_row') return 'No product row';
+  return 'Assignment active';
+};
+
+const formatStrategyProfile = (value: string | null | undefined) =>
+  value ? value.replace(/_/g, ' ') : 'hybrid';
 
 const formatPercent = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return '—';
@@ -1021,6 +1036,9 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
       : null;
   const activeRow =
     filteredRows.find((row) => row.targetSnapshotId === activeTargetSnapshotId) ?? null;
+  const effectiveVersionContext = props.run
+    ? readAdsOptimizerRunEffectiveVersionContext(props.run.input_summary_json)
+    : null;
 
   if (props.asin === 'all') {
     return (
@@ -1242,6 +1260,19 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
               <div className="mt-1 text-sky-800">
                 This Targets view is pinned to run {props.run.run_id}. It is reviewing saved
                 historical optimizer output, not triggering a fresh recompute.
+                {effectiveVersionContext
+                  ? ` ${formatVersionResolutionSource(
+                      effectiveVersionContext.resolutionSource
+                    )} was recorded for this run, using ${formatStrategyProfile(
+                      effectiveVersionContext.strategyProfile
+                    )}${
+                      effectiveVersionContext.productArchetype
+                        ? ` for a ${formatStrategyProfile(
+                            effectiveVersionContext.productArchetype
+                          )} product archetype`
+                        : ''
+                    }.`
+                  : ''}
               </div>
             </div>
             <Link href={props.historyHref} className="text-sm font-semibold text-sky-900 underline">
@@ -1298,7 +1329,7 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
         </div>
       </details>
 
-      <section className="grid gap-4 xl:grid-cols-6">
+      <section className="grid gap-4 xl:grid-cols-8">
         <SummaryCard
           label="Product objective"
           value={props.productState?.objective ?? 'Not captured'}
@@ -1315,9 +1346,27 @@ export default function OptimizerTargetsPanel(props: OptimizerTargetsPanelProps)
           detail={`Created ${formatDateTime(props.run.created_at)}`}
         />
         <SummaryCard
-          label="Rule pack"
+          label="Effective rule pack"
           value={props.run.rule_pack_version_label}
-          detail="Active version recorded on the run snapshot."
+          detail={
+            effectiveVersionContext
+              ? `${formatVersionResolutionSource(effectiveVersionContext.resolutionSource)} · ${formatStrategyProfile(
+                  effectiveVersionContext.strategyProfile
+                )} · ${formatVersionFallbackReason(
+                  effectiveVersionContext.fallbackReason
+                )}`
+              : 'Effective version recorded on the run snapshot.'
+          }
+        />
+        <SummaryCard
+          label="Strategy profile"
+          value={formatStrategyProfile(effectiveVersionContext?.strategyProfile)}
+          detail="Persisted from the effective rule-pack version used for this run."
+        />
+        <SummaryCard
+          label="Product archetype"
+          value={formatStrategyProfile(effectiveVersionContext?.productArchetype)}
+          detail="Persisted from saved product settings when available."
         />
         <SummaryCard
           label="Persisted targets"

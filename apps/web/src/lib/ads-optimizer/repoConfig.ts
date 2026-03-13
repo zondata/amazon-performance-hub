@@ -9,6 +9,9 @@ import {
   ADS_OPTIMIZER_DEFAULT_VERSION_LABEL,
   buildDefaultAdsOptimizerRulePackPayload,
 } from './defaults';
+import { mergeAdsOptimizerDraftPayload } from './ruleEditor';
+import { resolveAdsOptimizerStrategyProfile } from './ruleConfig';
+import { ADS_OPTIMIZER_STRATEGY_PROFILES } from './types';
 import type {
   AdsOptimizerManualOverride,
   AdsOptimizerManualOverrideRow,
@@ -19,6 +22,7 @@ import type {
   AdsOptimizerRulePackVersion,
   AdsOptimizerRulePackVersionRow,
   AdsOptimizerScopeType,
+  AdsOptimizerStrategyProfile,
   CreateAdsOptimizerRulePackPayload,
   CreateAdsOptimizerRulePackVersionPayload,
   SaveAdsOptimizerManualOverridePayload,
@@ -355,6 +359,51 @@ export const createRulePackVersionDraft = async (args: {
   });
 };
 
+export const updateRulePackVersionDraft = async (args: {
+  rulePackVersionId: string;
+  versionLabel: string;
+  changeSummary: string;
+  changePayloadPatch: Record<string, unknown>;
+}): Promise<AdsOptimizerRulePackVersion> => {
+  const existing = await assertRulePackVersionInScope(args.rulePackVersionId);
+  if (existing.status !== 'draft') {
+    throw new Error(
+      'Only draft optimizer rule pack versions can be edited in place. Clone a new draft to make changes.'
+    );
+  }
+
+  const value = validateCreateAdsOptimizerRulePackVersionPayload({
+    rule_pack_id: existing.rule_pack_id,
+    version_label: args.versionLabel,
+    change_summary: args.changeSummary,
+    change_payload_json: mergeAdsOptimizerDraftPayload(
+      existing.change_payload_json,
+      args.changePayloadPatch as Partial<AdsOptimizerRulePackVersion['change_payload_json']>
+    ),
+    created_from_version_id: existing.created_from_version_id,
+    status: 'draft',
+  });
+
+  const { data, error } = await supabaseAdmin
+    .from('ads_optimizer_rule_pack_versions')
+    .update({
+      version_label: value.version_label,
+      change_summary: value.change_summary,
+      change_payload_json: value.change_payload_json,
+    })
+    .eq('rule_pack_version_id', args.rulePackVersionId)
+    .select(RULE_PACK_VERSION_SELECT)
+    .single();
+
+  if (error || !data) {
+    throw new Error(
+      `Failed to save optimizer draft version: ${error?.message ?? 'unknown error'}`
+    );
+  }
+
+  return mapAdsOptimizerRulePackVersionRow(data as unknown as AdsOptimizerRulePackVersionRow);
+};
+
 export const activateRulePackVersion = async (
   rulePackVersionId: string
 ): Promise<AdsOptimizerRulePackVersion> => {
@@ -460,6 +509,54 @@ const buildSeedVersionLabel = (versions: AdsOptimizerRulePackVersion[]) => {
     suffix += 1;
   }
   return `${ADS_OPTIMIZER_DEFAULT_VERSION_LABEL}_${suffix}`;
+};
+
+const STARTER_VERSION_LABELS: Record<AdsOptimizerStrategyProfile, string> = {
+  hybrid: 'sp_v1_hybrid_starter',
+  visibility_led: 'sp_v1_visibility_led_starter',
+  design_led: 'sp_v1_design_led_starter',
+};
+
+export const listMissingStarterStrategyProfiles = (
+  versions: AdsOptimizerRulePackVersion[]
+): AdsOptimizerStrategyProfile[] => {
+  const existingLabels = new Set(versions.map((version) => version.version_label));
+
+  return ADS_OPTIMIZER_STRATEGY_PROFILES.filter(
+    (profile) => !existingLabels.has(STARTER_VERSION_LABELS[profile])
+  );
+};
+
+export const seedStarterRulePackVersionDrafts = async (
+  rulePackId: string
+): Promise<AdsOptimizerRulePackVersion[]> => {
+  const versions = await listRulePackVersions(rulePackId, { includeArchived: true });
+  const activeVersion = versions.find((version) => version.status === 'active');
+  if (!activeVersion) {
+    throw new Error(
+      'An active optimizer rule pack version is required before starter drafts can be seeded.'
+    );
+  }
+
+  const missingProfiles = listMissingStarterStrategyProfiles(versions);
+  const created: AdsOptimizerRulePackVersion[] = [];
+
+  for (const profile of missingProfiles) {
+    created.push(
+      await createRulePackVersion({
+        rule_pack_id: rulePackId,
+        version_label: STARTER_VERSION_LABELS[profile],
+        change_summary: `Starter draft for ${profile} strategy profile cloned from ${activeVersion.version_label}.`,
+        change_payload_json: mergeAdsOptimizerDraftPayload(activeVersion.change_payload_json, {
+          strategy_profile: profile,
+        }),
+        created_from_version_id: activeVersion.rule_pack_version_id,
+        status: 'draft',
+      })
+    );
+  }
+
+  return created;
 };
 
 export const saveProductOptimizerSettings = async (
@@ -624,5 +721,17 @@ export const ensureDefaultRulePackVersion = async (): Promise<{
 };
 
 export const getAdsOptimizerConfigViewData = async () => {
-  return ensureDefaultRulePackVersion();
+  const result = await ensureDefaultRulePackVersion();
+  return {
+    ...result,
+    missingStarterProfiles: listMissingStarterStrategyProfiles(result.versions),
+    versionStrategyProfiles: Object.fromEntries(
+      result.versions.map((version) => [
+        version.rule_pack_version_id,
+        resolveAdsOptimizerStrategyProfile({
+          rulePackPayload: version.change_payload_json,
+        }),
+      ])
+    ) as Record<string, AdsOptimizerStrategyProfile>,
+  };
 };

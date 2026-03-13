@@ -7,8 +7,18 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import {
   activateRulePackVersion,
   createRulePackVersionDraft,
+  seedStarterRulePackVersionDrafts,
   saveProductOptimizerSettings,
+  updateRulePackVersionDraft,
 } from '@/lib/ads-optimizer/repoConfig';
+import {
+  ADS_OPTIMIZER_EDITOR_GUARDRAIL_FIELDS,
+  ADS_OPTIMIZER_EDITOR_RECOMMENDATION_FIELDS,
+  ADS_OPTIMIZER_EDITOR_ROLE_BIAS_FIELDS,
+  ADS_OPTIMIZER_EDITOR_STATE_ENGINE_FIELDS,
+  adsOptimizerDraftFieldName,
+} from '@/lib/ads-optimizer/ruleEditor';
+import { ADS_OPTIMIZER_TARGET_ROLES } from '@/lib/ads-optimizer/role';
 import { executeAdsOptimizerWorkspaceHandoff } from '@/lib/ads-optimizer/handoff';
 import { saveAdsOptimizerRecommendationOverride } from '@/lib/ads-optimizer/repoOverrides';
 import { executeAdsOptimizerManualRun } from '@/lib/ads-optimizer/runtime';
@@ -139,6 +149,35 @@ export async function activateAdsOptimizerRulePackVersionAction(formData: FormDa
   }
 }
 
+export async function seedAdsOptimizerStarterVersionsAction(formData: FormData) {
+  const returnTo = ensureReturnTo(trimToNull(formData.get('return_to')));
+
+  try {
+    const rulePackId = trimToNull(formData.get('rule_pack_id'));
+    if (!rulePackId) {
+      throw new Error('rule_pack_id is required.');
+    }
+
+    const created = await seedStarterRulePackVersionDrafts(rulePackId);
+    revalidatePath('/ads/optimizer');
+    if (created.length === 0) {
+      redirectWithFlash(returnTo, {
+        notice: 'Starter drafts already exist for hybrid, visibility_led, and design_led.',
+      });
+    }
+
+    redirectWithFlash(returnTo, {
+      notice: `Seeded ${created.length} starter draft version(s) for the strategy library.`,
+    });
+  } catch (error) {
+    rethrowRedirectError(error);
+    redirectWithFlash(returnTo, {
+      error:
+        error instanceof Error ? error.message : 'Failed to seed starter optimizer versions.',
+    });
+  }
+}
+
 export async function saveAdsOptimizerProductSettingsAction(formData: FormData) {
   const returnTo = ensureReturnTo(trimToNull(formData.get('return_to')));
 
@@ -226,6 +265,16 @@ const formNumber = (value: FormDataEntryValue | null) => {
   const numeric = Number(trimmed);
   return Number.isFinite(numeric) ? numeric : null;
 };
+
+const requiredFormNumber = (formData: FormData, name: string, label: string) => {
+  const value = formNumber(formData.get(name));
+  if (value === null) {
+    throw new Error(`${label} is required.`);
+  }
+  return value;
+};
+
+const isChecked = (formData: FormData, name: string) => formData.get(name) === '1';
 
 export async function saveAdsOptimizerRecommendationOverrideAction(formData: FormData) {
   const returnTo = ensureReturnTo(
@@ -319,6 +368,179 @@ export async function saveAdsOptimizerRecommendationOverrideAction(formData: For
           ? error.message
           : 'Failed to save the optimizer recommendation override.',
       overrideError: true,
+    });
+  }
+}
+
+export async function saveAdsOptimizerDraftVersionAction(formData: FormData) {
+  const returnTo = ensureReturnTo(trimToNull(formData.get('return_to')));
+
+  try {
+    const rulePackVersionId = trimToNull(formData.get('rule_pack_version_id'));
+    const versionLabel = trimToNull(formData.get('version_label'));
+    const changeSummary = trimToNull(formData.get('change_summary'));
+    const strategyProfile = trimToNull(formData.get('strategy_profile'));
+    const manualApprovalThreshold = trimToNull(
+      formData.get(adsOptimizerDraftFieldName('guardrails', 'manual_approval_threshold'))
+    );
+
+    if (!rulePackVersionId || !versionLabel || !changeSummary || !strategyProfile) {
+      throw new Error(
+        'rule_pack_version_id, version_label, change_summary, and strategy_profile are required.'
+      );
+    }
+
+    if (!manualApprovalThreshold) {
+      throw new Error('Manual approval threshold is required.');
+    }
+
+    const stateThresholds = Object.fromEntries(
+      ADS_OPTIMIZER_EDITOR_STATE_ENGINE_FIELDS.map((field) => [
+        field.key,
+        requiredFormNumber(
+          formData,
+          adsOptimizerDraftFieldName('state', field.key),
+          field.label
+        ),
+      ])
+    );
+    const recommendationThresholds = Object.fromEntries(
+      ADS_OPTIMIZER_EDITOR_RECOMMENDATION_FIELDS.map((field) => [
+        field.key,
+        requiredFormNumber(
+          formData,
+          adsOptimizerDraftFieldName('recommendation', field.key),
+          field.label
+        ),
+      ])
+    );
+    const guardrailThresholds = Object.fromEntries(
+      ADS_OPTIMIZER_EDITOR_GUARDRAIL_FIELDS.filter((field) => 'step' in field).map((field) => [
+        field.key,
+        requiredFormNumber(
+          formData,
+          adsOptimizerDraftFieldName('guardrails', field.key),
+          field.label
+        ),
+      ])
+    );
+    const lossMakerPolicy = {
+      protected_ad_sales_share_min: requiredFormNumber(
+        formData,
+        adsOptimizerDraftFieldName('loss_maker', 'protected_ad_sales_share_min'),
+        'Protected ad sales share minimum'
+      ),
+      protected_order_share_min: requiredFormNumber(
+        formData,
+        adsOptimizerDraftFieldName('loss_maker', 'protected_order_share_min'),
+        'Protected order share minimum'
+      ),
+      protected_total_sales_share_min: requiredFormNumber(
+        formData,
+        adsOptimizerDraftFieldName('loss_maker', 'protected_total_sales_share_min'),
+        'Protected total sales share minimum'
+      ),
+      shallow_loss_ratio_max: requiredFormNumber(
+        formData,
+        adsOptimizerDraftFieldName('loss_maker', 'shallow_loss_ratio_max'),
+        'Shallow loss ratio maximum'
+      ),
+      moderate_loss_ratio_max: requiredFormNumber(
+        formData,
+        adsOptimizerDraftFieldName('loss_maker', 'moderate_loss_ratio_max'),
+        'Moderate loss ratio maximum'
+      ),
+      severe_loss_ratio_min: requiredFormNumber(
+        formData,
+        adsOptimizerDraftFieldName('loss_maker', 'severe_loss_ratio_min'),
+        'Severe loss ratio minimum'
+      ),
+      pause_protected_contributors: isChecked(
+        formData,
+        adsOptimizerDraftFieldName('loss_maker', 'pause_protected_contributors')
+      ),
+    };
+    const phasedRecoveryPolicy = {
+      default_steps: requiredFormNumber(
+        formData,
+        adsOptimizerDraftFieldName('phased_recovery', 'default_steps'),
+        'Default phased recovery steps'
+      ),
+      important_target_steps: requiredFormNumber(
+        formData,
+        adsOptimizerDraftFieldName('phased_recovery', 'important_target_steps'),
+        'Important target phased recovery steps'
+      ),
+      visibility_led_steps: requiredFormNumber(
+        formData,
+        adsOptimizerDraftFieldName('phased_recovery', 'visibility_led_steps'),
+        'Visibility-led phased recovery steps'
+      ),
+      design_led_steps: requiredFormNumber(
+        formData,
+        adsOptimizerDraftFieldName('phased_recovery', 'design_led_steps'),
+        'Design-led phased recovery steps'
+      ),
+      max_step_bid_decrease_pct: requiredFormNumber(
+        formData,
+        adsOptimizerDraftFieldName('phased_recovery', 'max_step_bid_decrease_pct'),
+        'Max step bid decrease %'
+      ),
+      continue_until_break_even: isChecked(
+        formData,
+        adsOptimizerDraftFieldName('phased_recovery', 'continue_until_break_even')
+      ),
+    };
+    const roleBiasPolicy = Object.fromEntries(
+      ADS_OPTIMIZER_EDITOR_ROLE_BIAS_FIELDS.map((field) => [
+        field.key,
+        isChecked(formData, adsOptimizerDraftFieldName('role_bias', field.key)),
+      ])
+    );
+    const roleTemplates = Object.fromEntries(
+      ADS_OPTIMIZER_TARGET_ROLES.map((role) => [
+        role,
+        {
+          enabled: isChecked(formData, adsOptimizerDraftFieldName('role_template', role)),
+        },
+      ])
+    );
+
+    const saved = await updateRulePackVersionDraft({
+      rulePackVersionId,
+      versionLabel,
+      changeSummary,
+      changePayloadPatch: {
+        strategy_profile: strategyProfile,
+        state_engine: {
+          thresholds: stateThresholds,
+        },
+        guardrail_templates: {
+          default: {
+            thresholds: {
+              ...guardrailThresholds,
+              manual_approval_threshold: manualApprovalThreshold,
+            },
+          },
+        },
+        action_policy: {
+          recommendation_thresholds: recommendationThresholds,
+        },
+        loss_maker_policy: lossMakerPolicy,
+        phased_recovery_policy: phasedRecoveryPolicy,
+        role_bias_policy: roleBiasPolicy,
+        role_templates: roleTemplates,
+      },
+    });
+
+    revalidatePath('/ads/optimizer');
+    redirectWithFlash(returnTo, {
+      notice: `Saved draft version ${saved.version_label}.`,
+    });
+  } catch (error) {
+    rethrowRedirectError(error);
+    redirectWithFlash(returnTo, {
+      error: error instanceof Error ? error.message : 'Failed to save optimizer draft version.',
     });
   }
 }

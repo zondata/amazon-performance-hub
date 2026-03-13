@@ -5,6 +5,17 @@ import {
   readAdsOptimizerTargetRunRole,
 } from '../apps/web/src/lib/ads-optimizer/role';
 
+const makeRulePackPayload = (overrides?: Record<string, unknown>) => ({
+  schema_version: 2,
+  channel: 'sp' as const,
+  role_templates: {},
+  guardrail_templates: {},
+  scoring_weights: {},
+  state_engine: {},
+  action_policy: {},
+  ...(overrides ?? {}),
+});
+
 const makePayload = () => ({
   phase: 6,
   totals: {
@@ -68,15 +79,7 @@ describe('ads optimizer phase 7 role engine', () => {
       productOverrides: {
         max_bid_increase_per_cycle_pct: 9,
       },
-      rulePackPayload: {
-        schema_version: 1,
-        channel: 'sp',
-        role_templates: {},
-        guardrail_templates: {},
-        scoring_weights: {},
-        state_engine: {},
-        action_policy: {},
-      },
+      rulePackPayload: makeRulePackPayload(),
     });
     const second = classifyAdsOptimizerTargetRole({
       payload,
@@ -85,15 +88,7 @@ describe('ads optimizer phase 7 role engine', () => {
       productOverrides: {
         max_bid_increase_per_cycle_pct: 9,
       },
-      rulePackPayload: {
-        schema_version: 1,
-        channel: 'sp',
-        role_templates: {},
-        guardrail_templates: {},
-        scoring_weights: {},
-        state_engine: {},
-        action_policy: {},
-      },
+      rulePackPayload: makeRulePackPayload(),
     });
 
     expect(first).toEqual(second);
@@ -125,15 +120,7 @@ describe('ads optimizer phase 7 role engine', () => {
       previousRole: 'Rank Push',
       archetype: 'visibility_led',
       productOverrides: null,
-      rulePackPayload: {
-        schema_version: 1,
-        channel: 'sp',
-        role_templates: {},
-        guardrail_templates: {},
-        scoring_weights: {},
-        state_engine: {},
-        action_policy: {},
-      },
+      rulePackPayload: makeRulePackPayload(),
     });
 
     expect(result.desiredRole.value).toBe('Scale');
@@ -182,15 +169,7 @@ describe('ads optimizer phase 7 role engine', () => {
       previousRole: 'Harvest',
       archetype: 'hybrid',
       productOverrides: null,
-      rulePackPayload: {
-        schema_version: 1,
-        channel: 'sp',
-        role_templates: {},
-        guardrail_templates: {},
-        scoring_weights: {},
-        state_engine: {},
-        action_policy: {},
-      },
+      rulePackPayload: makeRulePackPayload(),
     });
 
     expect(result.desiredRole.value).toBe('Harvest');
@@ -242,15 +221,7 @@ describe('ads optimizer phase 7 role engine', () => {
       previousRole: null,
       archetype: 'visibility_led',
       productOverrides: null,
-      rulePackPayload: {
-        schema_version: 1,
-        channel: 'sp',
-        role_templates: {},
-        guardrail_templates: {},
-        scoring_weights: {},
-        state_engine: {},
-        action_policy: {},
-      },
+      rulePackPayload: makeRulePackPayload(),
     });
 
     expect(result.desiredRole.value).toBe('Rank Defend');
@@ -260,7 +231,7 @@ describe('ads optimizer phase 7 role engine', () => {
     );
   });
 
-  it('resolves the same protected loss-maker differently under design-led vs visibility-led posture', () => {
+  it('resolves the same protected loss-maker differently under saved strategy profiles', () => {
     const payload = {
       ...makePayload(),
       derived_metrics: {
@@ -297,32 +268,23 @@ describe('ads optimizer phase 7 role engine', () => {
     const designLed = classifyAdsOptimizerTargetRole({
       payload,
       previousRole: 'Harvest',
-      archetype: 'design_led',
+      archetype: 'hybrid',
       productOverrides: null,
-      rulePackPayload: {
-        schema_version: 1,
-        channel: 'sp',
-        role_templates: {},
-        guardrail_templates: {},
-        scoring_weights: {},
-        state_engine: {},
-        action_policy: {},
-      },
+      rulePackPayload: makeRulePackPayload({
+        strategy_profile: 'design_led',
+      }),
     });
     const visibilityLed = classifyAdsOptimizerTargetRole({
       payload,
       previousRole: 'Harvest',
-      archetype: 'visibility_led',
+      archetype: 'hybrid',
       productOverrides: null,
-      rulePackPayload: {
-        schema_version: 1,
-        channel: 'sp',
-        role_templates: {},
-        guardrail_templates: {},
-        scoring_weights: {},
-        state_engine: {},
-        action_policy: {},
-      },
+      rulePackPayload: makeRulePackPayload({
+        strategy_profile: 'visibility_led',
+        role_bias_policy: {
+          visibility_led_rank_defend_bias: true,
+        },
+      }),
     });
 
     expect(designLed.desiredRole.value).toBe('Harvest');

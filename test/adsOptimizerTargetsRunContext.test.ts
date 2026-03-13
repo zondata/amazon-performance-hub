@@ -23,6 +23,7 @@ vi.mock('../apps/web/src/lib/ads-optimizer/repoRuntime', () => ({
   findOptimizerProductByAsin: vi.fn(),
   getAdsOptimizerRunById: repoState.getRunById,
   getAdsOptimizerRuntimeContext: vi.fn(),
+  resolveAdsOptimizerRuntimeContextForAsin: vi.fn(),
   insertAdsOptimizerProductSnapshots: vi.fn(),
   insertAdsOptimizerRecommendationSnapshots: vi.fn(),
   insertAdsOptimizerRoleTransitionLogs: vi.fn(),

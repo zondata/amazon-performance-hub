@@ -28,6 +28,7 @@ const makeActiveVersion = () => ({
   change_payload_json: {
     schema_version: 1,
     channel: 'sp' as const,
+    strategy_profile: 'hybrid' as const,
     role_templates: {},
     guardrail_templates: {},
     scoring_weights: {},
@@ -64,6 +65,119 @@ const makeRun = () => ({
   completed_at: null,
 });
 
+const makeRuntimeContext = (args: {
+  activeVersion?: ReturnType<typeof makeActiveVersion>;
+  effectiveVersion?: ReturnType<typeof makeActiveVersion>;
+  productSettings?: {
+    product_id: string;
+    account_id: string;
+    marketplace: 'US';
+    archetype: 'design_led' | 'visibility_led' | 'hybrid';
+    optimizer_enabled: boolean;
+    default_objective_mode: string | null;
+    rule_pack_version_id: string;
+    strategic_notes: string | null;
+    guardrail_overrides_json: Record<string, unknown> | null;
+    created_at: string;
+    updated_at: string;
+  } | null;
+  selectedProductId?: string | null;
+  resolutionSource?: 'product_assignment' | 'account_active_fallback';
+  fallbackReason?:
+    | 'no_product_row'
+    | 'no_product_settings'
+    | 'optimizer_disabled'
+    | 'assigned_version_missing'
+    | null;
+}) => {
+  const activeVersion = args.activeVersion ?? makeActiveVersion();
+  const effectiveVersion = args.effectiveVersion ?? activeVersion;
+  const productSettings = args.productSettings ?? null;
+
+  return {
+    activeVersion,
+    effectiveVersion,
+    effectiveVersionContext: {
+      rulePackVersionId: effectiveVersion.rule_pack_version_id,
+      versionLabel: effectiveVersion.version_label,
+      resolutionSource: args.resolutionSource ?? 'account_active_fallback',
+      strategyProfile:
+        (effectiveVersion.change_payload_json.strategy_profile as
+          | 'design_led'
+          | 'visibility_led'
+          | 'hybrid'
+          | undefined) ?? 'hybrid',
+      productArchetype: productSettings?.archetype ?? null,
+      productPolicyDisabled: productSettings?.optimizer_enabled === false,
+      productOptimizerEnabled: productSettings?.optimizer_enabled ?? null,
+      selectedProductId: args.selectedProductId ?? productSettings?.product_id ?? null,
+      assignedRulePackVersionId: productSettings?.rule_pack_version_id ?? null,
+      assignedVersionLabel:
+        productSettings?.rule_pack_version_id === effectiveVersion.rule_pack_version_id
+          ? effectiveVersion.version_label
+          : null,
+      accountActiveRulePackVersionId: activeVersion.rule_pack_version_id,
+      accountActiveVersionLabel: activeVersion.version_label,
+      fallbackReason: args.fallbackReason ?? null,
+    },
+    product: (args.selectedProductId ?? productSettings?.product_id)
+      ? {
+          productId: args.selectedProductId ?? productSettings?.product_id ?? 'product-1',
+          asin: 'B001TEST',
+          title: 'Test product',
+        }
+      : null,
+    productSettings,
+  };
+};
+
+const makeOverview = () => ({
+  product: { asin: 'B001TEST', title: 'Test', shortName: 'Test', displayName: 'Test' },
+  economics: {
+    sales: 100,
+    orders: 2,
+    units: 2,
+    adSpend: 20,
+    adSales: 50,
+    tacos: 0.2,
+    averagePrice: 50,
+    costCoverage: 0.5,
+    breakEvenAcos: 0.35,
+    contributionBeforeAdsPerUnit: 10,
+    contributionAfterAds: 15,
+  },
+  visibility: {
+    rankingCoverage: { status: 'ready' as const, trackedKeywords: 1, detail: 'ready' },
+    heroQueryTrend: {
+      status: 'ready' as const,
+      keyword: 'blue widget',
+      searchVolume: 1000,
+      latestOrganicRank: 8,
+      baselineOrganicRank: 10,
+      rankDelta: 2,
+      detail: 'ready',
+    },
+    sqpCoverage: {
+      status: 'ready' as const,
+      selectedWeekEnd: '2026-03-08',
+      trackedQueries: 1,
+      totalSearchVolume: 1000,
+      topQuery: 'blue widget',
+      detail: 'ready',
+    },
+  },
+  state: { value: 'profitable' as const, label: 'Profitable', reason: 'ready' },
+  objective: { value: 'Scale Profit' as const, reason: 'ready' },
+  warnings: [],
+});
+
+const makeProductSnapshotInput = (productId: string | null = 'product-1') => ({
+  productId,
+  asin: 'B001TEST',
+  overview: makeOverview(),
+  snapshotPayload: { phase: 4 },
+});
+
 describe('ads optimizer phase 4 manual run service', () => {
   it('creates a completed run with product, target, and recommendation snapshots', async () => {
     const updateCalls: Array<Record<string, unknown>> = [];
@@ -83,13 +197,36 @@ describe('ads optimizer phase 4 manual run service', () => {
           .fn()
           .mockReturnValueOnce('2026-03-10T01:00:00Z')
           .mockReturnValueOnce('2026-03-10T01:05:00Z'),
-        getRuntimeContext: async () => ({
-          activeVersion: makeActiveVersion(),
-        }),
+        getRuntimeContext: async () =>
+          makeRuntimeContext({
+            resolutionSource: 'product_assignment',
+            selectedProductId: 'product-1',
+            productSettings: {
+              product_id: 'product-1',
+              account_id: 'acct',
+              marketplace: 'US',
+              archetype: 'hybrid',
+              optimizer_enabled: true,
+              default_objective_mode: null,
+              rule_pack_version_id: 'version-1',
+              strategic_notes: null,
+              guardrail_overrides_json: {
+                max_bid_increase_per_cycle_pct: 9,
+              },
+              created_at: '2026-03-10T00:00:00Z',
+              updated_at: '2026-03-10T00:00:00Z',
+            },
+          }),
         createRun: async (payload) => {
           expect(payload.selectedAsin).toBe('B001TEST');
           expect(payload.rulePackVersionLabel).toBe('sp_v1_seed');
           expect(payload.inputSummary.phase).toBe(11);
+          expect(payload.inputSummary.rule_pack_version).toMatchObject({
+            rule_pack_version_id: 'version-1',
+            version_label: 'sp_v1_seed',
+            resolution_source: 'product_assignment',
+            strategy_profile: 'hybrid',
+          });
           expect(payload.inputSummary.snapshot_boundaries).toBeTruthy();
           expect(payload.inputSummary.snapshot_boundaries.target_profile_engine).toBe(
             'phase5_target_profile_engine'
@@ -420,6 +557,14 @@ describe('ads optimizer phase 4 manual run service', () => {
     expect(insertedProductRows[0]?.snapshotPayload.state_engine.product_state.value).toBe(
       'profitable'
     );
+    expect(
+      insertedProductRows[0]?.snapshotPayload.runtime_context.effective_rule_pack_version
+    ).toMatchObject({
+      rule_pack_version_id: 'version-1',
+      version_label: 'sp_v1_seed',
+      resolution_source: 'product_assignment',
+      strategy_profile: 'hybrid',
+    });
     expect(insertedTargetRows[0]?.snapshotPayload.phase).toBe(7);
     expect(insertedTargetRows[0]?.snapshotPayload.state_engine.efficiency.value).toBe(
       'profitable'
@@ -448,9 +593,7 @@ describe('ads optimizer phase 4 manual run service', () => {
           .fn()
           .mockReturnValueOnce('2026-03-10T02:00:00Z')
           .mockReturnValueOnce('2026-03-10T02:05:00Z'),
-        getRuntimeContext: async () => ({
-          activeVersion: makeActiveVersion(),
-        }),
+        getRuntimeContext: async () => makeRuntimeContext({}),
         createRun: async () => makeRun(),
         updateRun: async (_runId, payload) => {
           updateCalls.push(payload as unknown as Record<string, unknown>);
@@ -579,9 +722,7 @@ describe('ads optimizer phase 4 manual run service', () => {
           .fn()
           .mockReturnValueOnce('2026-03-10T03:00:00Z')
           .mockReturnValueOnce('2026-03-10T03:05:00Z'),
-        getRuntimeContext: async () => ({
-          activeVersion: makeActiveVersion(),
-        }),
+        getRuntimeContext: async () => makeRuntimeContext({}),
         createRun: async () => makeRun(),
         updateRun: async (_runId, payload) => {
           updateCalls.push(payload as unknown as Record<string, unknown>);
@@ -722,9 +863,7 @@ describe('ads optimizer phase 4 manual run service', () => {
           .fn()
           .mockReturnValueOnce('2026-03-10T04:00:00Z')
           .mockReturnValueOnce('2026-03-10T04:05:00Z'),
-        getRuntimeContext: async () => ({
-          activeVersion: makeActiveVersion(),
-        }),
+        getRuntimeContext: async () => makeRuntimeContext({}),
         createRun: async () => makeRun(),
         updateRun: async (_runId, payload) => {
           updateCalls.push(payload as unknown as Record<string, unknown>);
@@ -980,9 +1119,7 @@ describe('ads optimizer phase 4 manual run service', () => {
           .fn()
           .mockReturnValueOnce('2026-03-10T05:00:00Z')
           .mockReturnValueOnce('2026-03-10T05:05:00Z'),
-        getRuntimeContext: async () => ({
-          activeVersion: makeActiveVersion(),
-        }),
+        getRuntimeContext: async () => makeRuntimeContext({}),
         createRun: async () => makeRun(),
         updateRun: async (_runId, payload) => {
           updateCalls.push(payload as unknown as Record<string, unknown>);
@@ -1205,5 +1342,546 @@ describe('ads optimizer phase 4 manual run service', () => {
     expect(result.status).toBe('failed');
     expect(result.diagnostics?.error_message).toContain('count mismatch');
     expect(updateCalls[1]?.status).toBe('failed');
+  });
+
+  it('uses a product-assigned version instead of the account active version when product policy is enabled', async () => {
+    const assignedVersion = {
+      ...makeActiveVersion(),
+      rule_pack_version_id: 'version-2',
+      version_label: 'sp_v1_visibility',
+      change_payload_json: {
+        ...makeActiveVersion().change_payload_json,
+        strategy_profile: 'visibility_led' as const,
+      },
+    };
+    const createRun = vi.fn(async () => makeRun());
+
+    await executeAdsOptimizerManualRun(
+      {
+        asin: 'B001TEST',
+        start: '2026-03-01',
+        end: '2026-03-10',
+      },
+      {
+        now: vi
+          .fn()
+          .mockReturnValueOnce('2026-03-10T06:00:00Z')
+          .mockReturnValueOnce('2026-03-10T06:05:00Z'),
+        getRuntimeContext: async () =>
+          makeRuntimeContext({
+            activeVersion: makeActiveVersion(),
+            effectiveVersion: assignedVersion,
+            resolutionSource: 'product_assignment',
+            selectedProductId: 'product-1',
+            productSettings: {
+              product_id: 'product-1',
+              account_id: 'acct',
+              marketplace: 'US',
+              archetype: 'visibility_led',
+              optimizer_enabled: true,
+              default_objective_mode: null,
+              rule_pack_version_id: 'version-2',
+              strategic_notes: null,
+              guardrail_overrides_json: null,
+              created_at: '2026-03-10T00:00:00Z',
+              updated_at: '2026-03-10T00:00:00Z',
+            },
+          }),
+        createRun,
+        updateRun: async (_runId, payload) => ({
+          ...makeRun(),
+          rule_pack_version_id: assignedVersion.rule_pack_version_id,
+          rule_pack_version_label: assignedVersion.version_label,
+          status: payload.status,
+          diagnostics_json: payload.diagnostics ?? null,
+          started_at: payload.startedAt ?? null,
+          completed_at: payload.completedAt ?? null,
+          product_snapshot_count: payload.productSnapshotCount ?? 0,
+          target_snapshot_count: payload.targetSnapshotCount ?? 0,
+          recommendation_snapshot_count: payload.recommendationSnapshotCount ?? 0,
+          role_transition_count: payload.roleTransitionCount ?? 0,
+        }),
+        getProductSettings: async () => null,
+        loadPreviousRoleMap: async () => new Map(),
+        loadPreviousRecommendationContext: async () => new Map(),
+        loadProductSnapshotInput: async () => makeProductSnapshotInput(),
+        loadTargetSnapshotInputs: async () => ({
+          rows: [],
+          zeroTargetDiagnostics: null,
+        }),
+        insertProductSnapshots: async () => [],
+        insertTargetSnapshots: async () => [],
+        insertRoleTransitionLogs: async () => [],
+        insertRecommendationSnapshots: async () => [],
+      }
+    );
+
+    expect(createRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rulePackVersionId: 'version-2',
+        rulePackVersionLabel: 'sp_v1_visibility',
+        inputSummary: expect.objectContaining({
+          rule_pack_version: expect.objectContaining({
+            resolution_source: 'product_assignment',
+            rule_pack_version_id: 'version-2',
+            strategy_profile: 'visibility_led',
+          }),
+        }),
+      })
+    );
+  });
+
+  it('uses the effective assigned version payload for final recommendation generation, not the account active payload', async () => {
+    const activeVersion = {
+      ...makeActiveVersion(),
+      version_label: 'sp_v1_active_hold_bias',
+      change_payload_json: {
+        ...makeActiveVersion().change_payload_json,
+        action_policy: {
+          recommendation_thresholds: {
+            increase_opportunity_gap: 100,
+          },
+        },
+      },
+    };
+    const assignedVersion = {
+      ...makeActiveVersion(),
+      rule_pack_version_id: 'version-2',
+      version_label: 'sp_v1_assigned_scale_bias',
+    };
+    let insertedRecommendationRows: Array<Record<string, unknown>> = [];
+
+    await executeAdsOptimizerManualRun(
+      {
+        asin: 'B001TEST',
+        start: '2026-03-01',
+        end: '2026-03-10',
+      },
+      {
+        now: vi
+          .fn()
+          .mockReturnValueOnce('2026-03-10T06:30:00Z')
+          .mockReturnValueOnce('2026-03-10T06:35:00Z'),
+        getRuntimeContext: async () =>
+          makeRuntimeContext({
+            activeVersion,
+            effectiveVersion: assignedVersion,
+            resolutionSource: 'product_assignment',
+            selectedProductId: 'product-1',
+            productSettings: {
+              product_id: 'product-1',
+              account_id: 'acct',
+              marketplace: 'US',
+              archetype: 'hybrid',
+              optimizer_enabled: true,
+              default_objective_mode: null,
+              rule_pack_version_id: 'version-2',
+              strategic_notes: null,
+              guardrail_overrides_json: null,
+              created_at: '2026-03-10T00:00:00Z',
+              updated_at: '2026-03-10T00:00:00Z',
+            },
+          }),
+        createRun: async () => makeRun(),
+        updateRun: async (_runId, payload) => ({
+          ...makeRun(),
+          rule_pack_version_id: assignedVersion.rule_pack_version_id,
+          rule_pack_version_label: assignedVersion.version_label,
+          status: payload.status,
+          diagnostics_json: payload.diagnostics ?? null,
+          started_at: payload.startedAt ?? null,
+          completed_at: payload.completedAt ?? null,
+          product_snapshot_count: payload.productSnapshotCount ?? 0,
+          target_snapshot_count: payload.targetSnapshotCount ?? 0,
+          recommendation_snapshot_count: payload.recommendationSnapshotCount ?? 0,
+          role_transition_count: payload.roleTransitionCount ?? 0,
+        }),
+        getProductSettings: async () => ({
+          product_id: 'product-1',
+          account_id: 'acct',
+          marketplace: 'US',
+          archetype: 'hybrid',
+          optimizer_enabled: true,
+          default_objective_mode: null,
+          rule_pack_version_id: 'version-2',
+          strategic_notes: null,
+          guardrail_overrides_json: null,
+          created_at: '2026-03-10T00:00:00Z',
+          updated_at: '2026-03-10T00:00:00Z',
+        }),
+        loadPreviousRoleMap: async () => new Map(),
+        loadPreviousRecommendationContext: async () => new Map(),
+        loadProductSnapshotInput: async () => ({
+          productId: 'product-1',
+          asin: 'B001TEST',
+          overview: {
+            product: {
+              asin: 'B001TEST',
+              title: 'Test product',
+              shortName: 'Test',
+              displayName: 'Test',
+            },
+            economics: {
+              sales: 1800,
+              orders: 30,
+              units: 32,
+              adSpend: 420,
+              adSales: 950,
+              tacos: 0.23,
+              averagePrice: 56.25,
+              costCoverage: 0.62,
+              breakEvenAcos: 0.34,
+              contributionBeforeAdsPerUnit: 18,
+              contributionAfterAds: 226,
+            },
+            visibility: {
+              rankingCoverage: {
+                status: 'ready' as const,
+                trackedKeywords: 5,
+                detail: 'ready',
+              },
+              heroQueryTrend: {
+                status: 'ready' as const,
+                keyword: 'blue widget',
+                searchVolume: 2200,
+                latestOrganicRank: 9,
+                baselineOrganicRank: 13,
+                rankDelta: 4,
+                detail: 'ready',
+              },
+              sqpCoverage: {
+                status: 'ready' as const,
+                selectedWeekEnd: '2026-03-08',
+                trackedQueries: 4,
+                totalSearchVolume: 4200,
+                topQuery: 'blue widget',
+                detail: 'ready',
+              },
+            },
+            state: {
+              value: 'profitable' as const,
+              label: 'Profitable',
+              reason: 'ready',
+            },
+            objective: {
+              value: 'Scale Profit' as const,
+              reason: 'ready',
+            },
+            warnings: [],
+          },
+          snapshotPayload: {
+            phase: 4,
+            capture_type: 'product_snapshot',
+            overview: {
+              state: {
+                value: 'profitable',
+                label: 'Profitable',
+                reason: 'ready',
+              },
+              objective: {
+                value: 'Scale Profit',
+                reason: 'ready',
+              },
+            },
+          },
+        }),
+        loadTargetSnapshotInputs: async () => ({
+          rows: [
+            {
+              asin: 'B001TEST',
+              campaignId: 'campaign-1',
+              adGroupId: 'ad-group-1',
+              targetId: 'target-1',
+              sourceScope: 'asin_via_sp_advertised_product_membership',
+              coverageNote: 'Coverage note.',
+              snapshotPayload: {
+                phase: 5,
+                capture_type: 'target_snapshot',
+                totals: {
+                  impressions: 80,
+                  clicks: 8,
+                  spend: 20,
+                  orders: 2,
+                  sales: 90,
+                  cpc: 2.5,
+                  ctr: 0.1,
+                  cvr: 0.25,
+                  acos: 0.22,
+                  roas: 4.5,
+                },
+                non_additive_diagnostics: {
+                  top_of_search_impression_share_latest: 0.34,
+                  representative_stis_latest: 0.22,
+                  representative_stir_latest: 7,
+                },
+                derived_metrics: {
+                  contribution_after_ads: 10.6,
+                  break_even_gap: 0.12,
+                  max_cpc_support_gap: 1.82,
+                  loss_dollars: null,
+                  profit_dollars: 10.6,
+                  click_velocity: 8,
+                  impression_velocity: 80,
+                  organic_leverage_proxy: 0.031,
+                },
+                demand_proxies: {
+                  search_term_count: 1,
+                  same_text_search_term_count: 1,
+                  total_search_term_impressions: 50,
+                  total_search_term_clicks: 6,
+                  representative_click_share: 0.75,
+                },
+                asin_scope_membership: {
+                  product_ad_spend: 120,
+                  product_ad_sales: 360,
+                  product_orders: 10,
+                  product_units: 10,
+                },
+                product_context: {
+                  break_even_acos: 0.34,
+                  average_price: 56.25,
+                  product_state: 'profitable',
+                  product_objective: 'Scale Profit',
+                },
+                execution_context: {
+                  snapshot_date: '2026-03-10',
+                  target: {
+                    id: 'target-1',
+                    text: 'blue widget',
+                    match_type: 'exact',
+                    is_negative: false,
+                    current_state: 'enabled',
+                    current_bid: 1.4,
+                  },
+                  ad_group: {
+                    id: 'ad-group-1',
+                    name: 'Ad Group 1',
+                    current_state: 'enabled',
+                    current_default_bid: 1.6,
+                  },
+                  campaign: {
+                    id: 'campaign-1',
+                    name: 'Campaign 1',
+                    current_state: 'enabled',
+                    current_budget: 50,
+                    current_bidding_strategy: 'dynamic down only',
+                  },
+                  placement: {
+                    placement_code: 'PLACEMENT_TOP',
+                    label: 'Top of search',
+                    current_percentage: 20,
+                  },
+                },
+                coverage: {
+                  days_observed: 5,
+                  statuses: {
+                    tos_is: 'ready',
+                    stis: 'ready',
+                    stir: 'ready',
+                    placement_context: 'ready',
+                    search_terms: 'ready',
+                    break_even_inputs: 'ready',
+                  },
+                  notes: ['Coverage note.'],
+                },
+              },
+            },
+          ],
+          zeroTargetDiagnostics: null,
+        }),
+        insertProductSnapshots: async () => [],
+        insertTargetSnapshots: async (rows) =>
+          rows.map((row, index) => ({
+            target_snapshot_id: `target-snapshot-${index + 1}`,
+            run_id: row.runId,
+            account_id: 'acct',
+            marketplace: 'US',
+            asin: row.asin,
+            campaign_id: row.campaignId,
+            ad_group_id: row.adGroupId,
+            target_id: row.targetId,
+            source_scope: row.sourceScope,
+            coverage_note: row.coverageNote,
+            snapshot_payload_json: row.snapshotPayload,
+            created_at: '2026-03-10T06:31:00Z',
+          })),
+        insertRoleTransitionLogs: async () => [],
+        insertRecommendationSnapshots: async (rows) => {
+          insertedRecommendationRows = rows as unknown as Array<Record<string, unknown>>;
+          return rows.map((row, index) => ({
+            recommendation_snapshot_id: `recommendation-snapshot-${index + 1}`,
+            run_id: row.runId,
+            target_snapshot_id: row.targetSnapshotId,
+            account_id: 'acct',
+            marketplace: 'US',
+            asin: row.asin,
+            status: row.status,
+            action_type: row.actionType,
+            reason_codes_json: row.reasonCodes,
+            snapshot_payload_json: row.snapshotPayload,
+            created_at: '2026-03-10T06:33:00Z',
+          }));
+        },
+      }
+    );
+
+    expect(insertedRecommendationRows).toHaveLength(1);
+    expect(insertedRecommendationRows[0]?.status).toBe('generated');
+    expect(insertedRecommendationRows[0]?.actionType).toBe('update_target_bid');
+    expect(insertedRecommendationRows[0]?.reasonCodes).toContain(
+      'SPEND_DIRECTION_INCREASE_SCALE_HEADROOM'
+    );
+    expect(insertedRecommendationRows[0]?.reasonCodes).not.toContain(
+      'SPEND_DIRECTION_HOLD_STABLE'
+    );
+  });
+
+  it('falls back to the account active version when no product settings exist', async () => {
+    const createRun = vi.fn(async () => makeRun());
+
+    await executeAdsOptimizerManualRun(
+      {
+        asin: 'B001TEST',
+        start: '2026-03-01',
+        end: '2026-03-10',
+      },
+      {
+        now: vi
+          .fn()
+          .mockReturnValueOnce('2026-03-10T07:00:00Z')
+          .mockReturnValueOnce('2026-03-10T07:05:00Z'),
+        getRuntimeContext: async () =>
+          makeRuntimeContext({
+            activeVersion: makeActiveVersion(),
+            resolutionSource: 'account_active_fallback',
+            selectedProductId: 'product-1',
+            fallbackReason: 'no_product_settings',
+          }),
+        createRun,
+        updateRun: async (_runId, payload) => ({
+          ...makeRun(),
+          status: payload.status,
+          diagnostics_json: payload.diagnostics ?? null,
+          started_at: payload.startedAt ?? null,
+          completed_at: payload.completedAt ?? null,
+          product_snapshot_count: payload.productSnapshotCount ?? 0,
+          target_snapshot_count: payload.targetSnapshotCount ?? 0,
+          recommendation_snapshot_count: payload.recommendationSnapshotCount ?? 0,
+          role_transition_count: payload.roleTransitionCount ?? 0,
+        }),
+        getProductSettings: async () => null,
+        loadPreviousRoleMap: async () => new Map(),
+        loadPreviousRecommendationContext: async () => new Map(),
+        loadProductSnapshotInput: async () => makeProductSnapshotInput(),
+        loadTargetSnapshotInputs: async () => ({
+          rows: [],
+          zeroTargetDiagnostics: null,
+        }),
+        insertProductSnapshots: async () => [],
+        insertTargetSnapshots: async () => [],
+        insertRoleTransitionLogs: async () => [],
+        insertRecommendationSnapshots: async () => [],
+      }
+    );
+
+    expect(createRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rulePackVersionId: 'version-1',
+        inputSummary: expect.objectContaining({
+          rule_pack_version: expect.objectContaining({
+            resolution_source: 'account_active_fallback',
+            fallback_reason: 'no_product_settings',
+            strategy_profile: 'hybrid',
+          }),
+        }),
+      })
+    );
+  });
+
+  it('makes disabled product policy fallback explicit on the run payload', async () => {
+    const createRun = vi.fn(async () => makeRun());
+    let insertedProductRows: Array<Record<string, unknown>> = [];
+
+    await executeAdsOptimizerManualRun(
+      {
+        asin: 'B001TEST',
+        start: '2026-03-01',
+        end: '2026-03-10',
+      },
+      {
+        now: vi
+          .fn()
+          .mockReturnValueOnce('2026-03-10T08:00:00Z')
+          .mockReturnValueOnce('2026-03-10T08:05:00Z'),
+        getRuntimeContext: async () =>
+          makeRuntimeContext({
+            activeVersion: makeActiveVersion(),
+            resolutionSource: 'account_active_fallback',
+            fallbackReason: 'optimizer_disabled',
+            selectedProductId: 'product-1',
+            productSettings: {
+              product_id: 'product-1',
+              account_id: 'acct',
+              marketplace: 'US',
+              archetype: 'design_led',
+              optimizer_enabled: false,
+              default_objective_mode: null,
+              rule_pack_version_id: 'version-9',
+              strategic_notes: null,
+              guardrail_overrides_json: null,
+              created_at: '2026-03-10T00:00:00Z',
+              updated_at: '2026-03-10T00:00:00Z',
+            },
+          }),
+        createRun,
+        updateRun: async (_runId, payload) => ({
+          ...makeRun(),
+          status: payload.status,
+          diagnostics_json: payload.diagnostics ?? null,
+          started_at: payload.startedAt ?? null,
+          completed_at: payload.completedAt ?? null,
+          product_snapshot_count: payload.productSnapshotCount ?? 0,
+          target_snapshot_count: payload.targetSnapshotCount ?? 0,
+          recommendation_snapshot_count: payload.recommendationSnapshotCount ?? 0,
+          role_transition_count: payload.roleTransitionCount ?? 0,
+        }),
+        getProductSettings: async () => null,
+        loadPreviousRoleMap: async () => new Map(),
+        loadPreviousRecommendationContext: async () => new Map(),
+        loadProductSnapshotInput: async () => makeProductSnapshotInput(),
+        loadTargetSnapshotInputs: async () => ({
+          rows: [],
+          zeroTargetDiagnostics: null,
+        }),
+        insertProductSnapshots: async (rows) => {
+          insertedProductRows = rows as unknown as Array<Record<string, unknown>>;
+          return [];
+        },
+        insertTargetSnapshots: async () => [],
+        insertRoleTransitionLogs: async () => [],
+        insertRecommendationSnapshots: async () => [],
+      }
+    );
+
+    expect(createRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inputSummary: expect.objectContaining({
+          rule_pack_version: expect.objectContaining({
+            resolution_source: 'account_active_fallback',
+            product_policy_disabled: true,
+            fallback_reason: 'optimizer_disabled',
+            strategy_profile: 'hybrid',
+          }),
+        }),
+      })
+    );
+    expect(
+      insertedProductRows[0]?.snapshotPayload.runtime_context.effective_rule_pack_version
+    ).toMatchObject({
+      resolution_source: 'account_active_fallback',
+      product_policy_disabled: true,
+      fallback_reason: 'optimizer_disabled',
+      strategy_profile: 'hybrid',
+    });
   });
 });

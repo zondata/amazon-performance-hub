@@ -1,4 +1,5 @@
 import type { AdsOptimizerObjective, AdsOptimizerOverviewData, AdsOptimizerProductState } from './overview';
+import { resolveAdsOptimizerLossMakerPolicy } from './ruleConfig';
 import type { JsonObject as RuntimeJsonObject } from './runtimeTypes';
 import type { AdsOptimizerRulePackPayload, JsonObject } from './types';
 import {
@@ -148,14 +149,15 @@ type StateEngineConfig = {
   noSaleSpendRisk: number;
   noSaleClicksRisk: number;
   importanceWeight: number;
+  protectedAdSalesShareMin: number;
+  protectedAdOrderShareMin: number;
+  protectedTotalSalesShareMin: number;
+  shallowLossRatioMax: number;
+  moderateLossRatioMax: number;
+  severeLossRatioMin: number;
 };
 
 const STATE_ENGINE_VERSION = 'phase6_v1';
-const SHALLOW_LOSS_RATIO_MAX = 0.15;
-const MODERATE_LOSS_RATIO_MAX = 0.35;
-const PROTECTED_AD_SALES_SHARE_MIN = 0.2;
-const PROTECTED_AD_ORDER_SHARE_MIN = 0.2;
-const PROTECTED_TOTAL_SALES_SHARE_MIN = 0.08;
 const DOMINANT_TOTAL_SALES_SHARE_MIN = 0.12;
 const CORE_TOTAL_SALES_SHARE_MIN = 0.05;
 
@@ -174,6 +176,12 @@ const DEFAULT_STATE_ENGINE_CONFIG: StateEngineConfig = {
   noSaleSpendRisk: 20,
   noSaleClicksRisk: 10,
   importanceWeight: 1,
+  protectedAdSalesShareMin: 0.2,
+  protectedAdOrderShareMin: 0.2,
+  protectedTotalSalesShareMin: 0.08,
+  shallowLossRatioMax: 0.15,
+  moderateLossRatioMax: 0.35,
+  severeLossRatioMin: 0.35,
 };
 
 const numberValue = (value: unknown): number => {
@@ -228,6 +236,7 @@ export const resolveAdsOptimizerStateEngineConfig = (
   const stateEngine = asJsonObject(rulePackPayload?.state_engine ?? null);
   const thresholds = asJsonObject(stateEngine?.thresholds);
   const scoringWeights = asJsonObject(rulePackPayload?.scoring_weights ?? null);
+  const lossMakerPolicy = resolveAdsOptimizerLossMakerPolicy(rulePackPayload);
 
   return {
     minClicksDirectional: readConfigNumber(
@@ -300,6 +309,12 @@ export const resolveAdsOptimizerStateEngineConfig = (
       'importance',
       DEFAULT_STATE_ENGINE_CONFIG.importanceWeight
     ),
+    protectedAdSalesShareMin: lossMakerPolicy.protected_ad_sales_share_min,
+    protectedAdOrderShareMin: lossMakerPolicy.protected_order_share_min,
+    protectedTotalSalesShareMin: lossMakerPolicy.protected_total_sales_share_min,
+    shallowLossRatioMax: lossMakerPolicy.shallow_loss_ratio_max,
+    moderateLossRatioMax: lossMakerPolicy.moderate_loss_ratio_max,
+    severeLossRatioMin: lossMakerPolicy.severe_loss_ratio_min,
   };
 };
 
@@ -481,7 +496,7 @@ const classifyImportance = (
   config: StateEngineConfig,
   confidence: AdsOptimizerTargetRunState['confidence']
 ): AdsOptimizerTargetRunState['importance'] & { rawScore: number } => {
-  const protection = deriveAdsOptimizerTargetProtectionSignals(input);
+  const protection = deriveAdsOptimizerTargetProtectionSignals(input, config);
   const spendShare =
     input.asinScopeMembership?.productAdSpend && input.asinScopeMembership.productAdSpend > 0
       ? input.raw.spend / input.asinScopeMembership.productAdSpend
@@ -602,16 +617,33 @@ const classifyImportance = (
 };
 
 const classifyLossSeverity = (
-  ratio: number | null
+  ratio: number | null,
+  config: Pick<
+    StateEngineConfig,
+    'shallowLossRatioMax' | 'moderateLossRatioMax' | 'severeLossRatioMin'
+  >
 ): AdsOptimizerTargetLossSeverity | null => {
   if (ratio === null || ratio <= 0) return null;
-  if (ratio <= SHALLOW_LOSS_RATIO_MAX) return 'shallow';
-  if (ratio <= MODERATE_LOSS_RATIO_MAX) return 'moderate';
+  const shallowLossRatioMax = Math.max(0, config.shallowLossRatioMax);
+  const moderateLossRatioMax = Math.max(shallowLossRatioMax, config.moderateLossRatioMax);
+  const severeLossRatioMin = Math.max(moderateLossRatioMax, config.severeLossRatioMin);
+
+  if (ratio <= shallowLossRatioMax) return 'shallow';
+  if (ratio < severeLossRatioMin) return 'moderate';
   return 'severe';
 };
 
 export const deriveAdsOptimizerTargetProtectionSignals = (
-  input: AdsOptimizerTargetStateInput
+  input: AdsOptimizerTargetStateInput,
+  config: Pick<
+    StateEngineConfig,
+    | 'protectedAdSalesShareMin'
+    | 'protectedAdOrderShareMin'
+    | 'protectedTotalSalesShareMin'
+    | 'shallowLossRatioMax'
+    | 'moderateLossRatioMax'
+    | 'severeLossRatioMin'
+  > = DEFAULT_STATE_ENGINE_CONFIG
 ): AdsOptimizerTargetRunState['protection'] => {
   const adSalesShare =
     input.derived.adSalesShare ??
@@ -623,21 +655,22 @@ export const deriveAdsOptimizerTargetProtectionSignals = (
   const lossToAdSalesRatio =
     input.derived.lossToAdSalesRatio ??
     safeRatio(input.derived.lossDollars ?? 0, input.raw.sales);
-  const lossSeverity = input.derived.lossSeverity ?? classifyLossSeverity(lossToAdSalesRatio);
+  const lossSeverity =
+    input.derived.lossSeverity ?? classifyLossSeverity(lossToAdSalesRatio, config);
   const protectedContributor =
     input.derived.protectedContributor ??
-    ((adSalesShare !== null && adSalesShare >= PROTECTED_AD_SALES_SHARE_MIN) ||
-      (adOrderShare !== null && adOrderShare >= PROTECTED_AD_ORDER_SHARE_MIN) ||
-      (totalSalesShare !== null && totalSalesShare >= PROTECTED_TOTAL_SALES_SHARE_MIN));
+    ((adSalesShare !== null && adSalesShare >= config.protectedAdSalesShareMin) ||
+      (adOrderShare !== null && adOrderShare >= config.protectedAdOrderShareMin) ||
+      (totalSalesShare !== null && totalSalesShare >= config.protectedTotalSalesShareMin));
 
   const reasonCodes: string[] = [];
-  if (adSalesShare !== null && adSalesShare >= PROTECTED_AD_SALES_SHARE_MIN) {
+  if (adSalesShare !== null && adSalesShare >= config.protectedAdSalesShareMin) {
     reasonCodes.push('PROTECTION_AD_SALES_SHARE_PROTECTED');
   }
-  if (adOrderShare !== null && adOrderShare >= PROTECTED_AD_ORDER_SHARE_MIN) {
+  if (adOrderShare !== null && adOrderShare >= config.protectedAdOrderShareMin) {
     reasonCodes.push('PROTECTION_AD_ORDER_SHARE_PROTECTED');
   }
-  if (totalSalesShare !== null && totalSalesShare >= PROTECTED_TOTAL_SALES_SHARE_MIN) {
+  if (totalSalesShare !== null && totalSalesShare >= config.protectedTotalSalesShareMin) {
     reasonCodes.push('PROTECTION_TOTAL_SALES_SHARE_PROTECTED');
   }
   if (!protectedContributor) {
@@ -743,7 +776,7 @@ const buildRiskScore = (args: {
 }) => {
   let score = 0;
   const reasonCodes: string[] = [];
-  const protection = deriveAdsOptimizerTargetProtectionSignals(args.input);
+  const protection = deriveAdsOptimizerTargetProtectionSignals(args.input, args.config);
   const statuses = Object.values(args.input.coverage.statuses).map((status) =>
     normalizeAdsOptimizerCoverageStatus(status)
   );
@@ -808,7 +841,7 @@ export const classifyAdsOptimizerTargetState = (
   const efficiency = classifyEfficiency(input, config);
   const confidence = classifyConfidence(input, config);
   const importance = classifyImportance(input, config, confidence);
-  const protection = deriveAdsOptimizerTargetProtectionSignals(input);
+  const protection = deriveAdsOptimizerTargetProtectionSignals(input, config);
   const opportunity = buildOpportunityScore({
     input,
     efficiency,

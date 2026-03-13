@@ -1,4 +1,8 @@
 import type { AdsOptimizerArchetype, AdsOptimizerRulePackPayload } from './types';
+import {
+  resolveAdsOptimizerRoleBiasPolicy,
+  resolveAdsOptimizerStrategyProfile,
+} from './ruleConfig';
 import type { JsonObject as RuntimeJsonObject } from './runtimeTypes';
 import {
   readAdsOptimizerProductRunState,
@@ -186,12 +190,18 @@ const chooseDesiredRole = (
 ): AdsOptimizerTargetRoleDecision => {
   const reasonCodes: string[] = [];
   let value: AdsOptimizerTargetRole | null = null;
+  const strategyProfile = resolveAdsOptimizerStrategyProfile({
+    rulePackPayload,
+    fallbackArchetype: input.archetype,
+  });
+  const roleBiasPolicy = resolveAdsOptimizerRoleBiasPolicy(rulePackPayload);
   const objective = input.productObjective ?? input.productState?.objective ?? null;
   const protection = input.targetState.protection;
   const isLongTail = input.targetState.importance.value === 'tier_3_test_long_tail';
   const isImportantTarget = !isLongTail;
   const designLedSuppressionCandidate =
-    input.archetype === 'design_led' &&
+    strategyProfile === 'design_led' &&
+    roleBiasPolicy.design_led_long_tail_suppress_bias &&
     isLongTail &&
     input.targetState.confidence.value !== 'confirmed' &&
     (input.targetState.efficiency.value === 'learning_no_sale' ||
@@ -203,7 +213,8 @@ const chooseDesiredRole = (
       const rankProtectiveObjective =
         objective === 'Rank Growth' ||
         objective === 'Rank Defense' ||
-        input.archetype === 'visibility_led';
+        (strategyProfile === 'visibility_led' &&
+          roleBiasPolicy.visibility_led_rank_defend_bias);
       value = rankProtectiveObjective ? 'Rank Defend' : 'Harvest';
       reasonCodes.push(
         value === 'Rank Defend'
@@ -212,7 +223,8 @@ const chooseDesiredRole = (
       );
       if (
         value === 'Rank Defend' &&
-        input.archetype === 'visibility_led' &&
+        strategyProfile === 'visibility_led' &&
+        roleBiasPolicy.visibility_led_rank_defend_bias &&
         objective !== 'Rank Growth' &&
         objective !== 'Rank Defense'
       ) {
@@ -247,7 +259,7 @@ const chooseDesiredRole = (
         value = 'Discover';
         reasonCodes.push('ROLE_DESIRED_RANK_DEFENSE_NEEDS_DISCOVERY');
       } else if (
-        input.archetype === 'design_led' &&
+        strategyProfile === 'design_led' &&
         input.targetState.confidence.value !== 'confirmed' &&
         input.targetState.importance.value !== 'tier_1_dominant'
       ) {
@@ -258,7 +270,8 @@ const chooseDesiredRole = (
         reasonCodes.push('ROLE_DESIRED_RANK_DEFENSE');
       }
     } else if (
-      input.archetype === 'visibility_led' &&
+      strategyProfile === 'visibility_led' &&
+      roleBiasPolicy.visibility_led_rank_defend_bias &&
       isImportantTarget &&
       input.previousRole === 'Rank Defend' &&
       (objective === 'Harvest Profit' || objective === 'Break Even')
@@ -420,6 +433,10 @@ const resolveGuardrails = (
   const reasonCodes: string[] = [];
   const notes = [...input.coverageNotes];
   const base = readTemplateThresholds(rulePackPayload);
+  const strategyProfile = resolveAdsOptimizerStrategyProfile({
+    rulePackPayload,
+    fallbackArchetype: input.archetype,
+  });
   let config: AdsOptimizerResolvedGuardrails['categories'] = {
     noSaleSpendCap: base.noSaleSpendCap,
     noSaleClickCap: base.noSaleClickCap,
@@ -514,7 +531,7 @@ const resolveGuardrails = (
     reasonCodes.push('GUARDRAIL_OBJECTIVE_RECOVER_OR_BREAK_EVEN');
   }
 
-  if (input.archetype === 'visibility_led') {
+  if (strategyProfile === 'visibility_led') {
     config = {
       ...config,
       maxPlacementBiasIncreasePerCyclePct: Math.max(
@@ -524,7 +541,7 @@ const resolveGuardrails = (
       rankPushTimeLimitDays: Math.max(config.rankPushTimeLimitDays ?? 14, 18),
     };
     reasonCodes.push('GUARDRAIL_ARCHETYPE_VISIBILITY_LED');
-  } else if (input.archetype === 'design_led') {
+  } else if (strategyProfile === 'design_led') {
     config = {
       ...config,
       maxLossPerCycle: Math.min(config.maxLossPerCycle ?? 25, 18),

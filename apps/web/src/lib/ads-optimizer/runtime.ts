@@ -4,6 +4,10 @@ import { env } from '@/lib/env';
 import { listChangeSetItems } from '@/lib/ads-workspace/repoChangeSetItems';
 import { listChangeSets } from '@/lib/ads-workspace/repoChangeSets';
 
+import {
+  toAdsOptimizerEffectiveVersionContextJson,
+  type AdsOptimizerEffectiveVersionContext,
+} from './effectiveVersion';
 import { getProductOptimizerSettingsByProductId, getRulePackVersion } from './repoConfig';
 import { listActiveAdsOptimizerRecommendationOverrides } from './repoOverrides';
 import {
@@ -29,6 +33,7 @@ import {
   findOptimizerProductByAsin,
   getAdsOptimizerRunById,
   getAdsOptimizerRuntimeContext,
+  resolveAdsOptimizerRuntimeContextForAsin,
   insertAdsOptimizerProductSnapshots,
   insertAdsOptimizerRecommendationSnapshots,
   insertAdsOptimizerRoleTransitionLogs,
@@ -104,6 +109,7 @@ export type AdsOptimizerManualRunResult = {
 
 export type AdsOptimizerHistoryViewData = {
   activeVersionLabel: string;
+  runNowVersionContext: AdsOptimizerEffectiveVersionContext | null;
   runs: Awaited<ReturnType<typeof listAdsOptimizerRuns>>;
 };
 
@@ -151,7 +157,7 @@ export type AdsOptimizerTargetReviewRow = AdsOptimizerTargetProfileSnapshotView 
 
 type ExecuteManualRunDeps = {
   now: () => string;
-  getRuntimeContext: typeof getAdsOptimizerRuntimeContext;
+  getRuntimeContext: typeof resolveAdsOptimizerRuntimeContextForAsin;
   createRun: typeof createAdsOptimizerRun;
   updateRun: typeof updateAdsOptimizerRun;
   getProductSettings: typeof getProductOptimizerSettingsByProductId;
@@ -629,7 +635,7 @@ const loadPreviousRecommendationContext = async (args: {
 
 const defaultDeps: ExecuteManualRunDeps = {
   now: () => new Date().toISOString(),
-  getRuntimeContext: getAdsOptimizerRuntimeContext,
+  getRuntimeContext: resolveAdsOptimizerRuntimeContextForAsin,
   createRun: createAdsOptimizerRun,
   updateRun: updateAdsOptimizerRun,
   getProductSettings: getProductOptimizerSettingsByProductId,
@@ -648,13 +654,15 @@ export const executeAdsOptimizerManualRun = async (
   deps: ExecuteManualRunDeps = defaultDeps
 ): Promise<AdsOptimizerManualRunResult> => {
   const args = normalizeManualRunInput(input);
-  const runtimeContext = await deps.getRuntimeContext();
+  const runtimeContext = await deps.getRuntimeContext({
+    asin: args.asin,
+  });
   const run = await deps.createRun({
     selectedAsin: args.asin,
     dateStart: args.start,
     dateEnd: args.end,
-    rulePackVersionId: runtimeContext.activeVersion.rule_pack_version_id,
-    rulePackVersionLabel: runtimeContext.activeVersion.version_label,
+    rulePackVersionId: runtimeContext.effectiveVersion.rule_pack_version_id,
+    rulePackVersionLabel: runtimeContext.effectiveVersion.version_label,
     inputSummary: {
       phase: 11,
       requested_scope: {
@@ -664,10 +672,9 @@ export const executeAdsOptimizerManualRun = async (
         channel: 'sp',
         run_kind: 'manual',
       },
-      rule_pack_version: {
-        rule_pack_version_id: runtimeContext.activeVersion.rule_pack_version_id,
-        version_label: runtimeContext.activeVersion.version_label,
-      },
+      rule_pack_version: toAdsOptimizerEffectiveVersionContextJson(
+        runtimeContext.effectiveVersionContext
+      ),
       snapshot_boundaries: {
         product_snapshot_source: 'phase3_product_command_center',
         target_snapshot_source: TARGET_SOURCE_SCOPE,
@@ -690,17 +697,30 @@ export const executeAdsOptimizerManualRun = async (
 
   try {
     const productSnapshot = await deps.loadProductSnapshotInput(args);
-    const productSettings = productSnapshot.productId
-      ? await deps.getProductSettings(productSnapshot.productId)
-      : null;
+    const productSettings =
+      runtimeContext.productSettings ??
+      (productSnapshot.productId
+        ? await deps.getProductSettings(productSnapshot.productId)
+        : null);
+    const effectiveProductSettings = productSettings?.optimizer_enabled ? productSettings : null;
     const effectiveOverview = applyArchetypeObjectiveToOverview({
       overview: productSnapshot.overview,
-      archetype: productSettings?.archetype ?? 'hybrid',
+      archetype: effectiveProductSettings?.archetype ?? 'hybrid',
     });
-    const productSnapshotPayload = enrichAdsOptimizerProductSnapshotPayload({
+    const productSnapshotPayloadBase = enrichAdsOptimizerProductSnapshotPayload({
       payload: productSnapshot.snapshotPayload,
       overview: effectiveOverview,
     });
+    const existingRuntimeContext = asJsonObject(productSnapshotPayloadBase.runtime_context) ?? {};
+    const productSnapshotPayload = {
+      ...productSnapshotPayloadBase,
+      runtime_context: {
+        ...existingRuntimeContext,
+        effective_rule_pack_version: toAdsOptimizerEffectiveVersionContextJson(
+          runtimeContext.effectiveVersionContext
+        ),
+      },
+    };
     const [previousRoleMap, previousRecommendationContext] = await Promise.all([
       deps.loadPreviousRoleMap({
         asin: args.asin,
@@ -722,12 +742,12 @@ export const executeAdsOptimizerManualRun = async (
       snapshotPayload: enrichAdsOptimizerTargetSnapshotRolePayload({
         payload: enrichAdsOptimizerTargetSnapshotPayload({
           payload: row.snapshotPayload,
-          rulePackPayload: runtimeContext.activeVersion.change_payload_json,
+          rulePackPayload: runtimeContext.effectiveVersion.change_payload_json,
         }),
-        rulePackPayload: runtimeContext.activeVersion.change_payload_json,
+        rulePackPayload: runtimeContext.effectiveVersion.change_payload_json,
         previousRole: previousRoleMap.get(row.targetId) ?? null,
-        archetype: productSettings?.archetype ?? null,
-        productOverrides: productSettings?.guardrail_overrides_json ?? null,
+        archetype: effectiveProductSettings?.archetype ?? null,
+        productOverrides: effectiveProductSettings?.guardrail_overrides_json ?? null,
       }),
     }));
 
@@ -790,7 +810,7 @@ export const executeAdsOptimizerManualRun = async (
         payload: targetSnapshotRows[index]?.snapshotPayload ?? {},
         previousRecommendation: previousRecommendationContext.get(snapshot.target_id) ?? null,
       })),
-      rulePackPayload: runtimeContext.activeVersion.change_payload_json,
+      rulePackPayload: runtimeContext.effectiveVersion.change_payload_json,
     });
 
     const insertedRecommendationSnapshots = await deps.insertRecommendationSnapshots(
@@ -849,14 +869,21 @@ export const executeAdsOptimizerManualRun = async (
 export const getAdsOptimizerHistoryViewData = async (
   asin: string
 ): Promise<AdsOptimizerHistoryViewData> => {
-  const runtimeContext = await getAdsOptimizerRuntimeContext();
+  const activeRuntimeContext =
+    asin === 'all' ? await getAdsOptimizerRuntimeContext() : null;
+  const resolvedRuntimeContext =
+    asin === 'all' ? null : await resolveAdsOptimizerRuntimeContextForAsin({ asin });
   const runs = await listAdsOptimizerRuns({
     asin: asin === 'all' ? undefined : asin,
     limit: 30,
   });
 
   return {
-    activeVersionLabel: runtimeContext.activeVersion.version_label,
+    activeVersionLabel:
+      resolvedRuntimeContext?.activeVersion.version_label ??
+      activeRuntimeContext?.activeVersion.version_label ??
+      '—',
+    runNowVersionContext: resolvedRuntimeContext?.effectiveVersionContext ?? null,
     runs,
   };
 };

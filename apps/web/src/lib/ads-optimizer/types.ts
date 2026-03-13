@@ -2,6 +2,7 @@ export const ADS_OPTIMIZER_CHANNELS = ['sp'] as const;
 export const ADS_OPTIMIZER_SCOPE_TYPES = ['account', 'product'] as const;
 export const ADS_OPTIMIZER_VERSION_STATUSES = ['draft', 'active', 'archived'] as const;
 export const ADS_OPTIMIZER_ARCHETYPES = ['design_led', 'visibility_led', 'hybrid'] as const;
+export const ADS_OPTIMIZER_STRATEGY_PROFILES = ADS_OPTIMIZER_ARCHETYPES;
 export const ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_SCOPES = [
   'one_time',
   'persistent',
@@ -18,6 +19,7 @@ export type AdsOptimizerChannel = (typeof ADS_OPTIMIZER_CHANNELS)[number];
 export type AdsOptimizerScopeType = (typeof ADS_OPTIMIZER_SCOPE_TYPES)[number];
 export type AdsOptimizerVersionStatus = (typeof ADS_OPTIMIZER_VERSION_STATUSES)[number];
 export type AdsOptimizerArchetype = (typeof ADS_OPTIMIZER_ARCHETYPES)[number];
+export type AdsOptimizerStrategyProfile = (typeof ADS_OPTIMIZER_STRATEGY_PROFILES)[number];
 export type AdsOptimizerRecommendationOverrideScope =
   (typeof ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_SCOPES)[number];
 export type AdsOptimizerRecommendationOverrideActionType =
@@ -28,14 +30,42 @@ export type AdsOptimizerRoleTemplate = {
   notes: string;
 };
 
+export type AdsOptimizerLossMakerPolicy = {
+  protected_ad_sales_share_min: number;
+  protected_order_share_min: number;
+  protected_total_sales_share_min: number;
+  shallow_loss_ratio_max: number;
+  moderate_loss_ratio_max: number;
+  severe_loss_ratio_min: number;
+  pause_protected_contributors: boolean;
+};
+
+export type AdsOptimizerPhasedRecoveryPolicy = {
+  default_steps: number;
+  important_target_steps: number;
+  visibility_led_steps: number;
+  design_led_steps: number;
+  max_step_bid_decrease_pct: number;
+  continue_until_break_even: boolean;
+};
+
+export type AdsOptimizerRoleBiasPolicy = {
+  visibility_led_rank_defend_bias: boolean;
+  design_led_long_tail_suppress_bias: boolean;
+};
+
 export type AdsOptimizerRulePackPayload = {
   schema_version: number;
   channel: AdsOptimizerChannel;
+  strategy_profile?: AdsOptimizerStrategyProfile | null;
   role_templates: Record<string, AdsOptimizerRoleTemplate>;
   guardrail_templates: JsonObject;
   scoring_weights: Record<string, number>;
   action_policy: JsonObject;
   state_engine: JsonObject;
+  loss_maker_policy?: Partial<AdsOptimizerLossMakerPolicy> | null;
+  phased_recovery_policy?: Partial<AdsOptimizerPhasedRecoveryPolicy> | null;
+  role_bias_policy?: Partial<AdsOptimizerRoleBiasPolicy> | null;
 };
 
 export type AdsOptimizerRulePack = {
@@ -126,10 +156,15 @@ export type AdsOptimizerRecommendationOverride = {
 export type AdsOptimizerRulePackPayloadInput = {
   schema_version?: number;
   channel?: string | null;
+  strategy_profile?: string | null;
   role_templates?: unknown;
   guardrail_templates?: unknown;
   scoring_weights?: unknown;
   action_policy?: unknown;
+  state_engine?: unknown;
+  loss_maker_policy?: unknown;
+  phased_recovery_policy?: unknown;
+  role_bias_policy?: unknown;
 };
 
 export type CreateAdsOptimizerRulePackPayload = {

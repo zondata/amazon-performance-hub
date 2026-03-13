@@ -1,5 +1,9 @@
 import Link from 'next/link';
 
+import {
+  readAdsOptimizerRunEffectiveVersionContext,
+  type AdsOptimizerEffectiveVersionContext,
+} from '@/lib/ads-optimizer/effectiveVersion';
 import type { AdsOptimizerRun } from '@/lib/ads-optimizer/runtimeTypes';
 import { buildAdsOptimizerHref } from '@/lib/ads-optimizer/shell';
 import {
@@ -13,6 +17,7 @@ type OptimizerHistoryPanelProps = {
   end: string;
   returnTo: string;
   activeVersionLabel: string;
+  runNowVersionContext: AdsOptimizerEffectiveVersionContext | null;
   runs: AdsOptimizerRun[];
   notice: string | null;
   error: string | null;
@@ -40,8 +45,34 @@ const MetricCard = (props: { label: string; value: string; detail?: string }) =>
   </div>
 );
 
+const formatResolutionSource = (value: AdsOptimizerEffectiveVersionContext['resolutionSource']) =>
+  value === 'product_assignment' ? 'Product assignment' : 'Account fallback';
+
+const formatFallbackReason = (
+  value: AdsOptimizerEffectiveVersionContext['fallbackReason']
+) => {
+  if (value === 'optimizer_disabled') return 'Product policy disabled';
+  if (value === 'no_product_settings') return 'No product settings';
+  if (value === 'assigned_version_missing') return 'Assigned version missing';
+  if (value === 'no_product_row') return 'No product row';
+  return 'Product assignment active';
+};
+
+const formatStrategyProfile = (value: string | null | undefined) =>
+  value ? value.replace(/_/g, ' ') : 'hybrid';
+
 export default function OptimizerHistoryPanel(props: OptimizerHistoryPanelProps) {
   const runDisabled = props.asin === 'all';
+  const runNowVersionLabel = props.runNowVersionContext?.versionLabel ?? props.activeVersionLabel;
+  const runNowVersionDetail = props.runNowVersionContext
+    ? `${formatResolutionSource(props.runNowVersionContext.resolutionSource)} · ${formatStrategyProfile(
+        props.runNowVersionContext.strategyProfile
+      )}${
+        props.runNowVersionContext.productArchetype
+          ? ` · ${formatStrategyProfile(props.runNowVersionContext.productArchetype)}`
+          : ''
+      }`
+    : 'Select one ASIN to preview product-specific version resolution.';
 
   return (
     <div className="space-y-6">
@@ -81,14 +112,24 @@ export default function OptimizerHistoryPanel(props: OptimizerHistoryPanelProps)
           <div className="text-xs uppercase tracking-[0.3em] text-muted">Run now</div>
           <div className="mt-2 text-sm text-muted">
             New runs are append-only. Each run freezes the selected date window, ASIN scope, and
-            active optimizer rule-pack version for auditability.
+            resolved effective optimizer rule-pack version for auditability.
           </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <MetricCard label="Selected ASIN" value={props.asin === 'all' ? 'All ASINs' : props.asin} />
             <MetricCard
-              label="Active rule pack"
-              value={props.activeVersionLabel}
-              detail="The active config version is copied onto the run header."
+              label="Effective rule pack"
+              value={runNowVersionLabel}
+              detail={runNowVersionDetail}
+            />
+            <MetricCard
+              label="Strategy profile"
+              value={formatStrategyProfile(props.runNowVersionContext?.strategyProfile)}
+              detail="Resolved before the run is created and persisted into run context."
+            />
+            <MetricCard
+              label="Product archetype"
+              value={formatStrategyProfile(props.runNowVersionContext?.productArchetype)}
+              detail="Taken from saved product settings when available."
             />
             <MetricCard label="Start" value={props.start} />
             <MetricCard label="End" value={props.end} />
@@ -133,84 +174,113 @@ export default function OptimizerHistoryPanel(props: OptimizerHistoryPanelProps)
             </div>
           ) : (
             <div className="mt-4 space-y-4">
-              {props.runs.map((run) => (
-                <div key={run.run_id} className="rounded-xl border border-border bg-surface p-4">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <div className="text-base font-semibold text-foreground">
-                          {run.selected_asin} · {formatUiDateRange(run.date_start, run.date_end)}
+              {props.runs.map((run) => {
+                const effectiveVersionContext = readAdsOptimizerRunEffectiveVersionContext(
+                  run.input_summary_json
+                );
+
+                return (
+                  <div key={run.run_id} className="rounded-xl border border-border bg-surface p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="text-base font-semibold text-foreground">
+                            {run.selected_asin} · {formatUiDateRange(run.date_start, run.date_end)}
+                          </div>
+                          <span
+                            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusBadgeClass(
+                              run.status
+                            )}`}
+                          >
+                            {run.status}
+                          </span>
                         </div>
-                        <span
-                          className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusBadgeClass(
-                            run.status
-                          )}`}
+                        <div className="mt-2 text-sm text-muted">
+                          Created {formatDateTime(run.created_at)} · Rule pack {run.rule_pack_version_label}
+                          {effectiveVersionContext
+                            ? ` · ${formatResolutionSource(effectiveVersionContext.resolutionSource)} · ${formatStrategyProfile(
+                                effectiveVersionContext.strategyProfile
+                              )}`
+                            : ''}
+                        </div>
+                        {effectiveVersionContext ? (
+                          <div className="mt-1 text-xs uppercase tracking-wide text-muted">
+                            {formatFallbackReason(effectiveVersionContext.fallbackReason)}
+                            {effectiveVersionContext.productArchetype
+                              ? ` · product archetype ${formatStrategyProfile(
+                                  effectiveVersionContext.productArchetype
+                                )}`
+                              : ''}
+                          </div>
+                        ) : null}
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                          <MetricCard
+                            label="Strategy profile"
+                            value={formatStrategyProfile(effectiveVersionContext?.strategyProfile)}
+                          />
+                          <MetricCard
+                            label="Product archetype"
+                            value={formatStrategyProfile(effectiveVersionContext?.productArchetype)}
+                          />
+                          <MetricCard
+                            label="Product snapshots"
+                            value={String(run.product_snapshot_count)}
+                          />
+                          <MetricCard
+                            label="Target snapshots"
+                            value={String(run.target_snapshot_count)}
+                          />
+                          <MetricCard
+                            label="Recommendation snapshots"
+                            value={String(run.recommendation_snapshot_count)}
+                            detail="Read-only recommendation sets captured during Phase 8 runs."
+                          />
+                          <MetricCard
+                            label="Role transitions"
+                            value={String(run.role_transition_count)}
+                            detail="Append-only transition logs captured during Phase 7 runs."
+                          />
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm text-muted">
+                        <div>Started {formatDateTime(run.started_at)}</div>
+                        <div className="mt-1">Completed {formatDateTime(run.completed_at)}</div>
+                        <Link
+                          href={buildAdsOptimizerHref({
+                            asin: run.selected_asin,
+                            start: run.date_start,
+                            end: run.date_end,
+                            view: 'targets',
+                            runId: run.run_id,
+                          })}
+                          className="mt-3 inline-flex rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground transition hover:border-primary/40 hover:text-primary"
                         >
-                          {run.status}
-                        </span>
-                      </div>
-                      <div className="mt-2 text-sm text-muted">
-                        Created {formatDateTime(run.created_at)} · Rule pack {run.rule_pack_version_label}
-                      </div>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                        <MetricCard
-                          label="Product snapshots"
-                          value={String(run.product_snapshot_count)}
-                        />
-                        <MetricCard
-                          label="Target snapshots"
-                          value={String(run.target_snapshot_count)}
-                        />
-                        <MetricCard
-                          label="Recommendation snapshots"
-                          value={String(run.recommendation_snapshot_count)}
-                          detail="Read-only recommendation sets captured during Phase 8 runs."
-                        />
-                        <MetricCard
-                          label="Role transitions"
-                          value={String(run.role_transition_count)}
-                          detail="Append-only transition logs captured during Phase 7 runs."
-                        />
+                          Open in Targets
+                        </Link>
                       </div>
                     </div>
-                    <div className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm text-muted">
-                      <div>Started {formatDateTime(run.started_at)}</div>
-                      <div className="mt-1">Completed {formatDateTime(run.completed_at)}</div>
-                      <Link
-                        href={buildAdsOptimizerHref({
-                          asin: run.selected_asin,
-                          start: run.date_start,
-                          end: run.date_end,
-                          view: 'targets',
-                          runId: run.run_id,
-                        })}
-                        className="mt-3 inline-flex rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground transition hover:border-primary/40 hover:text-primary"
-                      >
-                        Open in Targets
-                      </Link>
-                    </div>
+                    <details className="mt-4 rounded-xl border border-border bg-surface-2 px-4 py-3">
+                      <summary className="cursor-pointer text-sm font-semibold text-foreground">
+                        Run details
+                      </summary>
+                      <div className="mt-3 grid gap-4 xl:grid-cols-2">
+                        <div>
+                          <div className="text-xs uppercase tracking-wide text-muted">Inputs</div>
+                          <pre className="mt-2 overflow-x-auto rounded-lg border border-border bg-surface p-3 text-xs text-muted">
+                            {JSON.stringify(run.input_summary_json, null, 2)}
+                          </pre>
+                        </div>
+                        <div>
+                          <div className="text-xs uppercase tracking-wide text-muted">Diagnostics</div>
+                          <pre className="mt-2 overflow-x-auto rounded-lg border border-border bg-surface p-3 text-xs text-muted">
+                            {JSON.stringify(run.diagnostics_json, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+                    </details>
                   </div>
-                  <details className="mt-4 rounded-xl border border-border bg-surface-2 px-4 py-3">
-                    <summary className="cursor-pointer text-sm font-semibold text-foreground">
-                      Run details
-                    </summary>
-                    <div className="mt-3 grid gap-4 xl:grid-cols-2">
-                      <div>
-                        <div className="text-xs uppercase tracking-wide text-muted">Inputs</div>
-                        <pre className="mt-2 overflow-x-auto rounded-lg border border-border bg-surface p-3 text-xs text-muted">
-                          {JSON.stringify(run.input_summary_json, null, 2)}
-                        </pre>
-                      </div>
-                      <div>
-                        <div className="text-xs uppercase tracking-wide text-muted">Diagnostics</div>
-                        <pre className="mt-2 overflow-x-auto rounded-lg border border-border bg-surface p-3 text-xs text-muted">
-                          {JSON.stringify(run.diagnostics_json, null, 2)}
-                        </pre>
-                      </div>
-                    </div>
-                  </details>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

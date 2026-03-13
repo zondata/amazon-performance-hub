@@ -3,7 +3,15 @@ import 'server-only';
 import { env } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-import { ensureDefaultRulePackVersion } from './repoConfig';
+import {
+  resolveAdsOptimizerEffectiveVersion,
+  type AdsOptimizerEffectiveVersionContext,
+} from './effectiveVersion';
+import {
+  ensureDefaultRulePackVersion,
+  getProductOptimizerSettingsByProductId,
+  getRulePackVersion,
+} from './repoConfig';
 import type {
   AdsOptimizerRoleTransitionLog,
   AdsOptimizerRoleTransitionLogRow,
@@ -26,7 +34,10 @@ import {
   mapAdsOptimizerRunRow,
   mapAdsOptimizerTargetSnapshotRow,
 } from './runtimeTypes';
-import type { AdsOptimizerRulePackVersion } from './types';
+import type {
+  AdsOptimizerProductSettings,
+  AdsOptimizerRulePackVersion,
+} from './types';
 
 const RUN_SELECT = [
   'run_id',
@@ -113,6 +124,18 @@ const PHASE4_PLACEHOLDER_REASON_CODES = new Set([
 
 export type AdsOptimizerRuntimeContext = {
   activeVersion: AdsOptimizerRulePackVersion;
+};
+
+export type ResolvedAdsOptimizerRuntimeContext = {
+  activeVersion: AdsOptimizerRulePackVersion;
+  effectiveVersion: AdsOptimizerRulePackVersion;
+  effectiveVersionContext: AdsOptimizerEffectiveVersionContext;
+  product: {
+    productId: string;
+    asin: string;
+    title: string | null;
+  } | null;
+  productSettings: AdsOptimizerProductSettings | null;
 };
 
 export type CreateAdsOptimizerRunPayload = {
@@ -279,6 +302,37 @@ export const getAdsOptimizerRuntimeContext = async (): Promise<AdsOptimizerRunti
 
   return {
     activeVersion: foundation.activeVersion,
+  };
+};
+
+export const resolveAdsOptimizerRuntimeContextForAsin = async (args: {
+  asin: string;
+}): Promise<ResolvedAdsOptimizerRuntimeContext> => {
+  const foundation = await ensureDefaultRulePackVersion();
+  if (!foundation.activeVersion) {
+    throw new Error('No active optimizer rule pack version is available for manual runs.');
+  }
+
+  const product = await findOptimizerProductByAsin(args.asin);
+  const productSettings = product?.productId
+    ? await getProductOptimizerSettingsByProductId(product.productId)
+    : null;
+  const assignedVersion = productSettings?.rule_pack_version_id
+    ? await getRulePackVersion(productSettings.rule_pack_version_id)
+    : null;
+  const resolved = resolveAdsOptimizerEffectiveVersion({
+    activeVersion: foundation.activeVersion,
+    assignedVersion,
+    productId: product?.productId ?? null,
+    productSettings,
+  });
+
+  return {
+    activeVersion: foundation.activeVersion,
+    effectiveVersion: resolved.effectiveVersion,
+    effectiveVersionContext: resolved.context,
+    product,
+    productSettings,
   };
 };
 

@@ -59,6 +59,7 @@ const resolveVersionList = () => {
 const createQuery = (table: string) => {
   const filters: Array<{ type: 'eq' | 'is' | 'neq'; column: string; value: unknown }> = [];
   let pendingInsert: Record<string, unknown> | null = null;
+  let pendingUpdate: Record<string, unknown> | null = null;
   let shouldSelectAfterMutate = false;
 
   const matchesFilters = (row: Record<string, unknown>) =>
@@ -79,6 +80,20 @@ const createQuery = (table: string) => {
       return clone(state.insertedVersions.find((row) => matchesFilters(row)) ?? null);
     }
     return resolveVersionList().filter((row) => matchesFilters(row));
+  };
+
+  const applyVersionUpdate = () => {
+    const index = state.insertedVersions.findIndex((row) => matchesFilters(row));
+    if (index < 0 || !pendingUpdate) {
+      return null;
+    }
+
+    const updated: RulePackVersionRow = {
+      ...state.insertedVersions[index]!,
+      ...clone(pendingUpdate) as Partial<RulePackVersionRow>,
+    };
+    state.insertedVersions[index] = updated;
+    return clone(updated);
   };
 
   const query: any = {
@@ -103,6 +118,10 @@ const createQuery = (table: string) => {
       pendingInsert = value;
       return query;
     },
+    update: (value: Record<string, unknown>) => {
+      pendingUpdate = value;
+      return query;
+    },
     maybeSingle: async () => {
       if (table === 'ads_optimizer_rule_packs') {
         return { data: readRulePack(), error: null };
@@ -117,6 +136,14 @@ const createQuery = (table: string) => {
       throw new Error(`Unsupported maybeSingle table in test: ${table}`);
     },
     single: async () => {
+      if (pendingUpdate && shouldSelectAfterMutate && table === 'ads_optimizer_rule_pack_versions') {
+        const updated = applyVersionUpdate();
+        return {
+          data: updated,
+          error: updated ? null : { message: 'not found' },
+        };
+      }
+
       if (!pendingInsert || !shouldSelectAfterMutate) {
         throw new Error(`Unsupported single() usage in test for table: ${table}`);
       }
@@ -146,6 +173,14 @@ const createQuery = (table: string) => {
   };
 
   query.then = (resolve: (value: { data: RulePackVersionRow[]; error: null }) => unknown) => {
+    if (pendingUpdate && table === 'ads_optimizer_rule_pack_versions') {
+      const updated = applyVersionUpdate();
+      return Promise.resolve({
+        data: updated ? [updated] : [],
+        error: null,
+      }).then(resolve);
+    }
+
     if (table !== 'ads_optimizer_rule_pack_versions') {
       throw new Error(`Unsupported list query table in test: ${table}`);
     }
@@ -173,7 +208,13 @@ vi.mock('../apps/web/src/lib/supabaseAdmin', () => ({
   },
 }));
 
-import { getAdsOptimizerConfigViewData } from '../apps/web/src/lib/ads-optimizer/repoConfig';
+import {
+  activateRulePackVersion,
+  createRulePackVersionDraft,
+  getAdsOptimizerConfigViewData,
+  seedStarterRulePackVersionDrafts,
+  updateRulePackVersionDraft,
+} from '../apps/web/src/lib/ads-optimizer/repoConfig';
 
 describe('ads optimizer config repo initialization', () => {
   beforeEach(() => {
@@ -193,9 +234,33 @@ describe('ads optimizer config repo initialization', () => {
         updated_at: '2026-03-10T00:00:00Z',
       },
     ];
+    state.insertedVersions = [
+      {
+        rule_pack_version_id: 'version-active',
+        rule_pack_id: 'pack-1',
+        version_label: 'sp_v1_seed',
+        status: 'active',
+        change_summary: 'Seed version.',
+        change_payload_json: {
+          schema_version: 2,
+          channel: 'sp',
+          strategy_profile: 'hybrid',
+          role_templates: {},
+          guardrail_templates: {},
+          scoring_weights: {},
+          state_engine: {},
+          action_policy: {},
+        },
+        created_from_version_id: null,
+        created_at: '2026-03-10T00:00:00Z',
+        activated_at: '2026-03-10T00:00:00Z',
+        archived_at: null,
+      },
+    ];
   });
 
   it('returns the created seed version immediately when repairing a pack-only foundation', async () => {
+    state.insertedVersions = [];
     state.versionListResponses = [[], []];
 
     const result = await getAdsOptimizerConfigViewData();
@@ -207,5 +272,102 @@ describe('ads optimizer config repo initialization', () => {
     expect(result.versions[0]?.version_label).toBe('sp_v1_seed');
     expect(result.versions[0]?.status).toBe('active');
     expect(result.activeVersion?.rule_pack_version_id).toBe(result.versions[0]?.rule_pack_version_id);
+  });
+
+  it('creates a draft from a prior version, edits the draft payload, and activates it later', async () => {
+    const draft = await createRulePackVersionDraft({
+      rulePackId: 'pack-1',
+      sourceVersionId: 'version-active',
+      versionLabel: 'sp_v1_visibility_draft',
+      changeSummary: 'Clone active to visibility-led draft.',
+    });
+
+    expect(draft.status).toBe('draft');
+    expect(draft.created_from_version_id).toBe('version-active');
+    expect(draft.change_payload_json.strategy_profile).toBe('hybrid');
+
+    const savedDraft = await updateRulePackVersionDraft({
+      rulePackVersionId: draft.rule_pack_version_id,
+      versionLabel: 'sp_v1_visibility_draft',
+      changeSummary: 'Tune visibility-led protection and phased recovery.',
+      changePayloadPatch: {
+        strategy_profile: 'visibility_led',
+        loss_maker_policy: {
+          protected_ad_sales_share_min: 0.15,
+        },
+        phased_recovery_policy: {
+          visibility_led_steps: 6,
+        },
+      },
+    });
+
+    expect(savedDraft.status).toBe('draft');
+    expect(savedDraft.change_summary).toContain('visibility-led');
+    expect(savedDraft.change_payload_json.strategy_profile).toBe('visibility_led');
+    expect(savedDraft.change_payload_json.loss_maker_policy).toMatchObject({
+      protected_ad_sales_share_min: 0.15,
+    });
+    expect(savedDraft.change_payload_json.phased_recovery_policy).toMatchObject({
+      visibility_led_steps: 6,
+    });
+
+    const activated = await activateRulePackVersion(savedDraft.rule_pack_version_id);
+    const archivedActive = state.insertedVersions.find(
+      (row) => row.rule_pack_version_id === 'version-active'
+    );
+
+    expect(activated.status).toBe('active');
+    expect(activated.rule_pack_version_id).toBe(savedDraft.rule_pack_version_id);
+    expect(archivedActive?.status).toBe('archived');
+  });
+
+  it('prevents editing active versions in place', async () => {
+    await expect(
+      updateRulePackVersionDraft({
+        rulePackVersionId: 'version-active',
+        versionLabel: 'sp_v1_seed',
+        changeSummary: 'Try to overwrite active version.',
+        changePayloadPatch: {
+          strategy_profile: 'design_led',
+        },
+      })
+    ).rejects.toThrow(
+      'Only draft optimizer rule pack versions can be edited in place. Clone a new draft to make changes.'
+    );
+  });
+
+  it('seeds starter drafts for hybrid, visibility_led, and design_led when missing', async () => {
+    const created = await seedStarterRulePackVersionDrafts('pack-1');
+    const result = await getAdsOptimizerConfigViewData();
+
+    expect(created).toHaveLength(3);
+    expect([...created.map((version) => version.version_label)].sort()).toEqual([
+      'sp_v1_design_led_starter',
+      'sp_v1_hybrid_starter',
+      'sp_v1_visibility_led_starter',
+    ]);
+    expect([...created.map((version) => version.change_payload_json.strategy_profile)].sort()).toEqual([
+      'design_led',
+      'hybrid',
+      'visibility_led',
+    ]);
+    expect(created.every((version) => version.status === 'draft')).toBe(true);
+    expect(created.every((version) => version.created_from_version_id === 'version-active')).toBe(
+      true
+    );
+    expect(result.missingStarterProfiles).toEqual([]);
+    const hybridStarter = created.find((version) => version.version_label === 'sp_v1_hybrid_starter');
+    const visibilityStarter = created.find(
+      (version) => version.version_label === 'sp_v1_visibility_led_starter'
+    );
+    const designStarter = created.find(
+      (version) => version.version_label === 'sp_v1_design_led_starter'
+    );
+
+    expect(result.versionStrategyProfiles[hybridStarter!.rule_pack_version_id]).toBe('hybrid');
+    expect(result.versionStrategyProfiles[visibilityStarter!.rule_pack_version_id]).toBe(
+      'visibility_led'
+    );
+    expect(result.versionStrategyProfiles[designStarter!.rule_pack_version_id]).toBe('design_led');
   });
 });

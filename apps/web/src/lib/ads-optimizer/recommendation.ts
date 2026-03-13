@@ -1,5 +1,19 @@
-import type { AdsOptimizerRulePackPayload, JsonObject as RulePackJsonObject } from './types';
+import type {
+  AdsOptimizerArchetype,
+  AdsOptimizerLossMakerPolicy,
+  AdsOptimizerPhasedRecoveryPolicy,
+  AdsOptimizerRoleBiasPolicy,
+  AdsOptimizerRulePackPayload,
+  AdsOptimizerStrategyProfile,
+  JsonObject as RulePackJsonObject,
+} from './types';
 import type { JsonObject as RuntimeJsonObject } from './runtimeTypes';
+import {
+  resolveAdsOptimizerLossMakerPolicy,
+  resolveAdsOptimizerPhasedRecoveryPolicy,
+  resolveAdsOptimizerRoleBiasPolicy,
+  resolveAdsOptimizerStrategyProfile,
+} from './ruleConfig';
 import { readAdsOptimizerTargetRunRole } from './role';
 import { deriveAdsOptimizerTargetProtectionSignals, readAdsOptimizerTargetRunState } from './state';
 
@@ -168,6 +182,11 @@ export type AdsOptimizerRecommendationSnapshotView = {
 };
 
 type RecommendationConfig = {
+  strategyProfile: AdsOptimizerStrategyProfile;
+  strategyProfilePinned: boolean;
+  lossMakerPolicy: AdsOptimizerLossMakerPolicy;
+  phasedRecoveryPolicy: AdsOptimizerPhasedRecoveryPolicy;
+  roleBiasPolicy: AdsOptimizerRoleBiasPolicy;
   isolateQueryClicksMin: number;
   negativeQueryClicksMin: number;
   negativeQuerySpendMin: number;
@@ -239,6 +258,11 @@ const ACTION_PRIORITY: Record<AdsOptimizerRecommendationActionType, number> = {
 };
 
 const DEFAULT_RECOMMENDATION_CONFIG: RecommendationConfig = {
+  strategyProfile: 'hybrid',
+  strategyProfilePinned: false,
+  lossMakerPolicy: resolveAdsOptimizerLossMakerPolicy(null),
+  phasedRecoveryPolicy: resolveAdsOptimizerPhasedRecoveryPolicy(null),
+  roleBiasPolicy: resolveAdsOptimizerRoleBiasPolicy(null),
   isolateQueryClicksMin: 4,
   negativeQueryClicksMin: 6,
   negativeQuerySpendMin: 12,
@@ -290,13 +314,47 @@ const normalizeState = (value: string | null) => {
   return normalized && normalized.length > 0 ? normalized : null;
 };
 
+const normalizePhasedStepCount = (value: number) => Math.max(1, Math.round(value));
+
+const resolveRuntimeStrategyProfile = (
+  payload: RuntimeJsonObject,
+  config: RecommendationConfig
+): AdsOptimizerStrategyProfile =>
+  config.strategyProfilePinned
+    ? config.strategyProfile
+    : resolveAdsOptimizerStrategyProfile({
+        fallbackArchetype: readOptimizerArchetype(payload),
+      });
+
+const buildProtectionConfigFromLossMakerPolicy = (
+  lossMakerPolicy: AdsOptimizerLossMakerPolicy
+) => ({
+  protectedAdSalesShareMin: lossMakerPolicy.protected_ad_sales_share_min,
+  protectedAdOrderShareMin: lossMakerPolicy.protected_order_share_min,
+  protectedTotalSalesShareMin: lossMakerPolicy.protected_total_sales_share_min,
+  shallowLossRatioMax: lossMakerPolicy.shallow_loss_ratio_max,
+  moderateLossRatioMax: lossMakerPolicy.moderate_loss_ratio_max,
+  severeLossRatioMin: lossMakerPolicy.severe_loss_ratio_min,
+});
+
 const readRecommendationConfig = (
   rulePackPayload: AdsOptimizerRulePackPayload | null | undefined
 ): RecommendationConfig => {
   const actionPolicy = asJsonObject(rulePackPayload?.action_policy ?? null);
   const thresholds = asJsonObject(actionPolicy?.recommendation_thresholds);
+  const strategyProfile = resolveAdsOptimizerStrategyProfile({
+    rulePackPayload,
+  });
+  const lossMakerPolicy = resolveAdsOptimizerLossMakerPolicy(rulePackPayload);
+  const phasedRecoveryPolicy = resolveAdsOptimizerPhasedRecoveryPolicy(rulePackPayload);
+  const roleBiasPolicy = resolveAdsOptimizerRoleBiasPolicy(rulePackPayload);
 
   return {
+    strategyProfile,
+    strategyProfilePinned: rulePackPayload?.strategy_profile !== undefined,
+    lossMakerPolicy,
+    phasedRecoveryPolicy,
+    roleBiasPolicy,
     isolateQueryClicksMin:
       readNumber(thresholds, 'isolate_query_clicks_min') ??
       DEFAULT_RECOMMENDATION_CONFIG.isolateQueryClicksMin,
@@ -400,7 +458,10 @@ const readExecutionContext = (payload: RuntimeJsonObject) => {
 
 const readOptimizerArchetype = (payload: RuntimeJsonObject) => {
   const optimizerContext = asJsonObject(payload.optimizer_context);
-  return readString(optimizerContext, 'archetype');
+  const archetype = readString(optimizerContext, 'archetype');
+  return archetype === 'hybrid' || archetype === 'visibility_led' || archetype === 'design_led'
+    ? (archetype as AdsOptimizerArchetype)
+    : null;
 };
 
 const estimateBreakEvenBid = (payload: RuntimeJsonObject) => {
@@ -463,37 +524,42 @@ const readPhasedBidPlan = (
 
 const resolvePhasedBidPlanTotalSteps = (args: {
   payload: RuntimeJsonObject;
+  config: RecommendationConfig;
   state: ReturnType<typeof readAdsOptimizerTargetRunState>;
   role: ReturnType<typeof readAdsOptimizerTargetRunRole>;
 }) => {
-  const archetype = readOptimizerArchetype(args.payload) ?? 'hybrid';
+  const strategyProfile = resolveRuntimeStrategyProfile(args.payload, args.config);
 
   if (
-    archetype === 'visibility_led' &&
+    strategyProfile === 'visibility_led' &&
     (args.state?.importance.value === 'tier_1_dominant' ||
       args.role?.currentRole.value === 'Rank Defend')
   ) {
-    return 5;
+    return normalizePhasedStepCount(args.config.phasedRecoveryPolicy.visibility_led_steps);
   }
   if (
     args.state?.importance.value === 'tier_1_dominant' ||
     args.role?.currentRole.value === 'Rank Defend'
   ) {
-    return 4;
+    return normalizePhasedStepCount(args.config.phasedRecoveryPolicy.important_target_steps);
   }
-  if (archetype === 'design_led' || args.state?.importance.value === 'tier_3_test_long_tail') {
-    return 2;
+  if (
+    strategyProfile === 'design_led' ||
+    args.state?.importance.value === 'tier_3_test_long_tail'
+  ) {
+    return normalizePhasedStepCount(args.config.phasedRecoveryPolicy.design_led_steps);
   }
-  return 3;
+  return normalizePhasedStepCount(args.config.phasedRecoveryPolicy.default_steps);
 };
 
 const buildPhasedBidPlan = (args: {
   row: RecommendationRowInput;
+  config: RecommendationConfig;
   state: NonNullable<ReturnType<typeof readAdsOptimizerTargetRunState>>;
   role: NonNullable<ReturnType<typeof readAdsOptimizerTargetRunRole>>;
 }): AdsOptimizerPhasedBidPlan | null => {
   const execution = readExecutionContext(args.row.payload);
-  const archetype = readOptimizerArchetype(args.row.payload) ?? 'hybrid';
+  const strategyProfile = resolveRuntimeStrategyProfile(args.row.payload, args.config);
   const currentBid = execution.target.currentBid;
   const previousPlan = readPhasedBidPlan(args.row.previousRecommendation?.payload);
   const targetBreakEvenBid =
@@ -507,12 +573,14 @@ const buildPhasedBidPlan = (args: {
         previousPlan.totalSteps,
         resolvePhasedBidPlanTotalSteps({
           payload: args.row.payload,
+          config: args.config,
           state: args.state,
           role: args.role,
         })
       )
     : resolvePhasedBidPlanTotalSteps({
         payload: args.row.payload,
+        config: args.config,
         state: args.state,
         role: args.role,
       });
@@ -532,6 +600,7 @@ const buildPhasedBidPlan = (args: {
     args.state.protection.lossSeverity !== 'severe' &&
     currentBid !== null &&
     targetBreakEvenBid !== null;
+  const pauseProtectedContributors = args.config.lossMakerPolicy.pause_protected_contributors;
 
   if (previousPlan && !qualifies) {
     return {
@@ -553,14 +622,35 @@ const buildPhasedBidPlan = (args: {
     return null;
   }
 
+  if (pauseProtectedContributors) {
+    if (previousPlan) {
+      return {
+        strategyId: previousPlan.strategyId,
+        targetBreakEvenBid: targetBreakEvenBid ?? previousPlan.targetBreakEvenBid,
+        recommendedNextBid: null,
+        currentStep: previousPlan.currentStep,
+        totalSteps: previousPlan.totalSteps,
+        remainingGapPct: 0,
+        notFinalBid: false,
+        continueNextRun: false,
+        stopConditions,
+        exitConditions: ['policy_pauses_protected_loss_makers'],
+        reasonCodes: ['PHASED_BID_PLAN_STOP_POLICY_PROTECTED_PAUSE'],
+      };
+    }
+
+    return null;
+  }
+
   const strategyId = `${PHASED_BID_PLAN_STRATEGY}:${args.row.targetId}`;
+  const singleStepRecovery = !args.config.phasedRecoveryPolicy.continue_until_break_even;
   if (currentBid <= targetBreakEvenBid + BID_EPSILON) {
     return {
       strategyId,
       targetBreakEvenBid,
       recommendedNextBid: roundCurrency(targetBreakEvenBid),
-      currentStep: previousPlan?.currentStep ?? totalSteps,
-      totalSteps,
+      currentStep: previousPlan?.currentStep ?? (singleStepRecovery ? 1 : totalSteps),
+      totalSteps: singleStepRecovery ? 1 : totalSteps,
       remainingGapPct: 0,
       notFinalBid: false,
       continueNextRun: false,
@@ -576,23 +666,29 @@ const buildPhasedBidPlan = (args: {
     previousPlanActive &&
     previousRecommendedBid !== null &&
     currentBid <= previousRecommendedBid + BID_EPSILON;
+  const effectiveTotalSteps = singleStepRecovery ? 1 : totalSteps;
   const currentStep = previousPlanActive
-    ? Math.min(previousPlan.currentStep + (previousStepApplied ? 1 : 0), totalSteps)
+    ? Math.min(previousPlan.currentStep + (previousStepApplied ? 1 : 0), effectiveTotalSteps)
     : 1;
   const gap = Math.max(0, currentBid - targetBreakEvenBid);
-  const stepsRemaining = Math.max(1, totalSteps - currentStep + 1);
+  const stepsRemaining = Math.max(1, effectiveTotalSteps - currentStep + 1);
+  const maxStepBidDecreasePct = Math.max(
+    0,
+    args.config.phasedRecoveryPolicy.max_step_bid_decrease_pct
+  );
+  const maxStepBidFloor = currentBid * (1 - maxStepBidDecreasePct / 100);
   const recommendedNextBid = roundCurrency(
-    Math.max(targetBreakEvenBid, currentBid - gap / stepsRemaining)
+    Math.max(targetBreakEvenBid, currentBid - gap / stepsRemaining, maxStepBidFloor)
   );
   const remainingGapPct = roundCurrency((safeRatio(gap, currentBid) ?? 0) * 100);
   const notFinalBid = recommendedNextBid > targetBreakEvenBid + BID_EPSILON;
-  const continueNextRun = notFinalBid;
+  const continueNextRun = !singleStepRecovery && notFinalBid;
 
   reasonCodes.push('PHASED_BID_PLAN_CHOSEN_PROTECTED_LOSS_MAKER');
   reasonCodes.push(
-    archetype === 'visibility_led'
+    strategyProfile === 'visibility_led'
       ? 'PHASED_BID_PLAN_ARCHETYPE_VISIBILITY_LED_GRADUAL'
-      : archetype === 'design_led'
+      : strategyProfile === 'design_led'
         ? 'PHASED_BID_PLAN_ARCHETYPE_DESIGN_LED_FASTER'
         : 'PHASED_BID_PLAN_ARCHETYPE_HYBRID'
   );
@@ -605,6 +701,12 @@ const buildPhasedBidPlan = (args: {
   } else {
     reasonCodes.push('PHASED_BID_PLAN_STARTED');
   }
+  if (singleStepRecovery) {
+    reasonCodes.push('PHASED_BID_PLAN_POLICY_SINGLE_STEP');
+  }
+  if (recommendedNextBid >= maxStepBidFloor - BID_EPSILON && gap / stepsRemaining > currentBid - maxStepBidFloor) {
+    reasonCodes.push('PHASED_BID_PLAN_MAX_STEP_DECREASE_CAP_APPLIED');
+  }
   reasonCodes.push(notFinalBid ? 'PHASED_BID_PLAN_NOT_FINAL_BID' : 'PHASED_BID_PLAN_FINAL_STEP');
   reasonCodes.push(
     continueNextRun ? 'PHASED_BID_PLAN_CONTINUE_NEXT_RUN' : 'PHASED_BID_PLAN_STOP_AT_TARGET'
@@ -615,7 +717,7 @@ const buildPhasedBidPlan = (args: {
     targetBreakEvenBid,
     recommendedNextBid,
     currentStep,
-    totalSteps,
+    totalSteps: effectiveTotalSteps,
     remainingGapPct,
     notFinalBid,
     continueNextRun,
@@ -712,7 +814,7 @@ const buildPortfolioContexts = (args: {
           productState: null,
           productObjective: null,
         },
-      });
+      }, buildProtectionConfigFromLossMakerPolicy(args.config.lossMakerPolicy));
     const protectedStopLossContributor =
       protection.protectedContributor && protection.lossSeverity !== 'severe';
 
@@ -1135,7 +1237,7 @@ const determineBaseSpendDirection = (args: {
   const role = readAdsOptimizerTargetRunRole(payload);
   const derived = asJsonObject(payload.derived_metrics);
   const totals = asJsonObject(payload.totals);
-  const archetype = readOptimizerArchetype(payload) ?? 'hybrid';
+  const strategyProfile = resolveRuntimeStrategyProfile(payload, config);
 
   if (!state || !role?.currentRole.value) {
     return {
@@ -1158,8 +1260,10 @@ const determineBaseSpendDirection = (args: {
     state.efficiency.value === 'converting_but_loss_making' &&
     state.protection.protectedContributor &&
     state.protection.lossSeverity !== 'severe';
+  const pauseProtectedContributors = config.lossMakerPolicy.pause_protected_contributors;
   const visibilityProtectedTarget =
-    archetype === 'visibility_led' &&
+    strategyProfile === 'visibility_led' &&
+    config.roleBiasPolicy.visibility_led_rank_defend_bias &&
     state.importance.value !== 'tier_3_test_long_tail' &&
     (role.currentRole.value === 'Rank Defend' || state.protection.protectedContributor);
   const severeLoss =
@@ -1184,9 +1288,11 @@ const determineBaseSpendDirection = (args: {
 
   if (protectedLossContributor) {
     return {
-      value: 'reduce' as const,
+      value: pauseProtectedContributors ? ('collapse' as const) : ('reduce' as const),
       reasonCodes: [
-        archetype === 'visibility_led'
+        pauseProtectedContributors
+          ? 'SPEND_DIRECTION_COLLAPSE_PROTECTED_LOSS_CONTRIBUTOR_POLICY'
+          : strategyProfile === 'visibility_led'
           ? 'SPEND_DIRECTION_REDUCE_VISIBILITY_LED_PROTECTED_CONTRIBUTOR'
           : 'SPEND_DIRECTION_REDUCE_PROTECTED_LOSS_CONTRIBUTOR',
       ],
@@ -1194,7 +1300,8 @@ const determineBaseSpendDirection = (args: {
   }
 
   if (
-    archetype === 'design_led' &&
+    strategyProfile === 'design_led' &&
+    config.roleBiasPolicy.design_led_long_tail_suppress_bias &&
     state.importance.value === 'tier_3_test_long_tail' &&
     state.confidence.value !== 'confirmed' &&
     (state.efficiency.value === 'learning_no_sale' ||
@@ -1286,7 +1393,7 @@ const determineSpendDirection = (args: {
   });
   const state = readAdsOptimizerTargetRunState(args.payload);
   const role = readAdsOptimizerTargetRunRole(args.payload);
-  const archetype = readOptimizerArchetype(args.payload) ?? 'hybrid';
+  const strategyProfile = resolveRuntimeStrategyProfile(args.payload, args.config);
 
   if (!base.value || !state || !role?.currentRole.value) {
     return base;
@@ -1302,7 +1409,8 @@ const determineSpendDirection = (args: {
       state.efficiency.value === 'converting_but_loss_making')
   ) {
     if (
-      archetype === 'visibility_led' &&
+      strategyProfile === 'visibility_led' &&
+      args.config.roleBiasPolicy.visibility_led_rank_defend_bias &&
       state.importance.value !== 'tier_3_test_long_tail' &&
       state.protection.protectedContributor &&
       state.protection.lossSeverity !== 'severe'
@@ -1455,10 +1563,11 @@ const buildQueryDiagnostics = (args: {
 
 const buildPlacementDiagnostics = (args: {
   payload: RuntimeJsonObject;
+  config: RecommendationConfig;
   spendDirection: AdsOptimizerSpendDirection | null;
 }): AdsOptimizerPlacementDiagnostics => {
   const execution = readExecutionContext(args.payload);
-  const archetype = readOptimizerArchetype(args.payload) ?? 'hybrid';
+  const strategyProfile = resolveRuntimeStrategyProfile(args.payload, args.config);
   const placementContext = asJsonObject(args.payload.placement_context);
   const state = readAdsOptimizerTargetRunState(args.payload);
   const role = readAdsOptimizerTargetRunRole(args.payload);
@@ -1486,7 +1595,8 @@ const buildPlacementDiagnostics = (args: {
     reasonCodes.push('PLACEMENT_CONTEXT_UNAVAILABLE');
   } else if (
     role?.currentRole.value === 'Rank Defend' &&
-    archetype === 'visibility_led' &&
+    strategyProfile === 'visibility_led' &&
+    args.config.roleBiasPolicy.visibility_led_rank_defend_bias &&
     profitableContext &&
     (args.spendDirection === 'hold' || args.spendDirection === 'reduce')
   ) {
@@ -1494,7 +1604,7 @@ const buildPlacementDiagnostics = (args: {
     reasonCodes.push('PLACEMENT_BIAS_HOLD_VISIBILITY_LED_RANK_DEFENSE');
   } else if (
     role?.currentRole.value === 'Rank Defend' &&
-    archetype === 'design_led' &&
+    strategyProfile === 'design_led' &&
     weakContext
   ) {
     biasRecommendation = 'weaker';
@@ -1941,7 +2051,9 @@ const classifyRecommendationRow = (args: {
   const role = readAdsOptimizerTargetRunRole(args.row.payload);
   const execution = readExecutionContext(args.row.payload);
   const phasedBidPlan =
-    state && role?.currentRole.value ? buildPhasedBidPlan({ row: args.row, state, role }) : null;
+    state && role?.currentRole.value
+      ? buildPhasedBidPlan({ row: args.row, config: args.config, state, role })
+      : null;
   const spendDirection = determineSpendDirection({
     payload: args.row.payload,
     config: args.config,
@@ -1956,6 +2068,7 @@ const classifyRecommendationRow = (args: {
   });
   const placementDiagnostics = buildPlacementDiagnostics({
     payload: args.row.payload,
+    config: args.config,
     spendDirection: spendDirection.value,
   });
 

@@ -4,13 +4,18 @@ import {
   ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_ACTION_TYPES,
   ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_SCOPES,
   ADS_OPTIMIZER_SCOPE_TYPES,
+  ADS_OPTIMIZER_STRATEGY_PROFILES,
   ADS_OPTIMIZER_VERSION_STATUSES,
   type AdsOptimizerArchetype,
   type AdsOptimizerChannel,
+  type AdsOptimizerLossMakerPolicy,
+  type AdsOptimizerPhasedRecoveryPolicy,
   type AdsOptimizerRecommendationOverrideActionType,
   type AdsOptimizerRecommendationOverrideScope,
+  type AdsOptimizerRoleBiasPolicy,
   type AdsOptimizerRulePackPayload,
   type AdsOptimizerScopeType,
+  type AdsOptimizerStrategyProfile,
   type AdsOptimizerVersionStatus,
   type CreateAdsOptimizerRulePackPayload,
   type CreateAdsOptimizerRulePackVersionPayload,
@@ -72,6 +77,39 @@ const asArchetype = (value: unknown, fieldName: string): AdsOptimizerArchetype =
   return trimmed as AdsOptimizerArchetype;
 };
 
+const asStrategyProfile = (
+  value: unknown,
+  fieldName: string
+): AdsOptimizerStrategyProfile => {
+  const trimmed = trimToNull(value);
+  if (
+    !trimmed ||
+    !ADS_OPTIMIZER_STRATEGY_PROFILES.includes(trimmed as AdsOptimizerStrategyProfile)
+  ) {
+    throw new Error(
+      `${fieldName} must be one of: ${ADS_OPTIMIZER_STRATEGY_PROFILES.join(', ')}.`
+    );
+  }
+  return trimmed as AdsOptimizerStrategyProfile;
+};
+
+const asOptionalNumber = (value: unknown, fieldName: string) => {
+  if (value === null || value === undefined || value === '') return undefined;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    throw new Error(`${fieldName} must be a finite number when provided.`);
+  }
+  return numeric;
+};
+
+const asOptionalBoolean = (value: unknown, fieldName: string) => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value !== 'boolean') {
+    throw new Error(`${fieldName} must be a boolean when provided.`);
+  }
+  return value;
+};
+
 const asRecommendationOverrideScope = (
   value: unknown,
   fieldName: string
@@ -108,6 +146,92 @@ const asRecommendationOverrideActionType = (
   return trimmed as AdsOptimizerRecommendationOverrideActionType;
 };
 
+const validateLossMakerPolicy = (value: unknown): Partial<AdsOptimizerLossMakerPolicy> | null => {
+  if (value === null || value === undefined) return null;
+  const policy = asJsonObject(value, 'change_payload_json.loss_maker_policy');
+
+  return {
+    protected_ad_sales_share_min: asOptionalNumber(
+      policy.protected_ad_sales_share_min,
+      'change_payload_json.loss_maker_policy.protected_ad_sales_share_min'
+    ),
+    protected_order_share_min: asOptionalNumber(
+      policy.protected_order_share_min,
+      'change_payload_json.loss_maker_policy.protected_order_share_min'
+    ),
+    protected_total_sales_share_min: asOptionalNumber(
+      policy.protected_total_sales_share_min,
+      'change_payload_json.loss_maker_policy.protected_total_sales_share_min'
+    ),
+    shallow_loss_ratio_max: asOptionalNumber(
+      policy.shallow_loss_ratio_max,
+      'change_payload_json.loss_maker_policy.shallow_loss_ratio_max'
+    ),
+    moderate_loss_ratio_max: asOptionalNumber(
+      policy.moderate_loss_ratio_max,
+      'change_payload_json.loss_maker_policy.moderate_loss_ratio_max'
+    ),
+    severe_loss_ratio_min: asOptionalNumber(
+      policy.severe_loss_ratio_min,
+      'change_payload_json.loss_maker_policy.severe_loss_ratio_min'
+    ),
+    pause_protected_contributors: asOptionalBoolean(
+      policy.pause_protected_contributors,
+      'change_payload_json.loss_maker_policy.pause_protected_contributors'
+    ),
+  };
+};
+
+const validatePhasedRecoveryPolicy = (
+  value: unknown
+): Partial<AdsOptimizerPhasedRecoveryPolicy> | null => {
+  if (value === null || value === undefined) return null;
+  const policy = asJsonObject(value, 'change_payload_json.phased_recovery_policy');
+
+  return {
+    default_steps: asOptionalNumber(
+      policy.default_steps,
+      'change_payload_json.phased_recovery_policy.default_steps'
+    ),
+    important_target_steps: asOptionalNumber(
+      policy.important_target_steps,
+      'change_payload_json.phased_recovery_policy.important_target_steps'
+    ),
+    visibility_led_steps: asOptionalNumber(
+      policy.visibility_led_steps,
+      'change_payload_json.phased_recovery_policy.visibility_led_steps'
+    ),
+    design_led_steps: asOptionalNumber(
+      policy.design_led_steps,
+      'change_payload_json.phased_recovery_policy.design_led_steps'
+    ),
+    max_step_bid_decrease_pct: asOptionalNumber(
+      policy.max_step_bid_decrease_pct,
+      'change_payload_json.phased_recovery_policy.max_step_bid_decrease_pct'
+    ),
+    continue_until_break_even: asOptionalBoolean(
+      policy.continue_until_break_even,
+      'change_payload_json.phased_recovery_policy.continue_until_break_even'
+    ),
+  };
+};
+
+const validateRoleBiasPolicy = (value: unknown): Partial<AdsOptimizerRoleBiasPolicy> | null => {
+  if (value === null || value === undefined) return null;
+  const policy = asJsonObject(value, 'change_payload_json.role_bias_policy');
+
+  return {
+    visibility_led_rank_defend_bias: asOptionalBoolean(
+      policy.visibility_led_rank_defend_bias,
+      'change_payload_json.role_bias_policy.visibility_led_rank_defend_bias'
+    ),
+    design_led_long_tail_suppress_bias: asOptionalBoolean(
+      policy.design_led_long_tail_suppress_bias,
+      'change_payload_json.role_bias_policy.design_led_long_tail_suppress_bias'
+    ),
+  };
+};
+
 export const validateAdsOptimizerRulePackPayload = (
   value: unknown
 ): AdsOptimizerRulePackPayload => {
@@ -116,8 +240,12 @@ export const validateAdsOptimizerRulePackPayload = (
     schema_version:
       typeof payload.schema_version === 'number' && Number.isFinite(payload.schema_version)
         ? payload.schema_version
-        : 1,
+        : 2,
     channel: asChannel(payload.channel ?? 'sp', 'change_payload_json.channel'),
+    strategy_profile:
+      payload.strategy_profile === null || payload.strategy_profile === undefined
+        ? undefined
+        : asStrategyProfile(payload.strategy_profile, 'change_payload_json.strategy_profile'),
     role_templates: asJsonObject(
       payload.role_templates ?? {},
       'change_payload_json.role_templates'
@@ -132,6 +260,9 @@ export const validateAdsOptimizerRulePackPayload = (
     ) as AdsOptimizerRulePackPayload['scoring_weights'],
     state_engine: asJsonObject(payload.state_engine ?? {}, 'change_payload_json.state_engine'),
     action_policy: asJsonObject(payload.action_policy ?? {}, 'change_payload_json.action_policy'),
+    loss_maker_policy: validateLossMakerPolicy(payload.loss_maker_policy),
+    phased_recovery_policy: validatePhasedRecoveryPolicy(payload.phased_recovery_policy),
+    role_bias_policy: validateRoleBiasPolicy(payload.role_bias_policy),
   };
 };
 

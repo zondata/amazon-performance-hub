@@ -145,6 +145,11 @@ vi.mock('../apps/web/src/lib/ads-optimizer/repoRuntime', () => ({
   getAdsOptimizerRuntimeContext: async () => {
     throw new Error('getAdsOptimizerRuntimeContext should not be called in target scope tests');
   },
+  resolveAdsOptimizerRuntimeContextForAsin: async () => {
+    throw new Error(
+      'resolveAdsOptimizerRuntimeContextForAsin should not be called in target scope tests'
+    );
+  },
   insertAdsOptimizerProductSnapshots: async () => {
     throw new Error('insertAdsOptimizerProductSnapshots should not be called in target scope tests');
   },

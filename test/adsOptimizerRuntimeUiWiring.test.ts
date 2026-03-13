@@ -9,6 +9,10 @@ const panelPath = path.join(
   process.cwd(),
   'apps/web/src/components/ads-optimizer/OptimizerHistoryPanel.tsx'
 );
+const targetsPanelPath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads-optimizer/OptimizerTargetsPanel.tsx'
+);
 const runtimePath = path.join(
   process.cwd(),
   'apps/web/src/lib/ads-optimizer/runtime.ts'
@@ -50,10 +54,23 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     expect(source).toContain('Phase 8 now persists deterministic read-only recommendation sets');
     expect(source).toContain('handoff still happens later from the Targets view');
     expect(source).toContain('optimizer-owned tables here');
+    expect(source).toContain('resolved effective optimizer rule-pack version');
+    expect(source).toContain('Effective rule pack');
+    expect(source).toContain('Strategy profile');
+    expect(source).toContain('Product archetype');
     expect(source).toContain('Run optimizer now');
     expect(source).toContain('Phase 4 manual runs support one ASIN at a time.');
     expect(source).toContain('Open in Targets');
     expect(source).toContain('runId: run.run_id');
+  });
+
+  it('keeps the targets panel explicit about persisted archetype and strategy-profile context', () => {
+    const source = fs.readFileSync(targetsPanelPath, 'utf-8');
+
+    expect(source).toContain('using ${formatStrategyProfile(');
+    expect(source).toContain('Product archetype');
+    expect(source).toContain('Strategy profile');
+    expect(source).toContain('Persisted from the effective rule-pack version used for this run.');
   });
 
   it('stores recommendation snapshots as read-only Phase 11 recommendation sets', () => {
@@ -73,6 +90,7 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     expect(runtimeSource).toContain('previousComparableRun');
     expect(runtimeSource).toContain('buildAdsOptimizerRunComparison');
     expect(runtimeSource).toContain('getRulePackVersion');
+    expect(runtimeSource).toContain('resolveAdsOptimizerRuntimeContextForAsin');
     expect(runtimeSource).toContain('loadOptimizerWorkspaceHandoffAudit');
     expect(runtimeSource).toContain('comparison');
     expect(runtimeSource).toContain('getAdsOptimizerRunById');

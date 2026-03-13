@@ -1,15 +1,22 @@
 import type { AdsOptimizerRulePackPayload } from './types';
+import {
+  DEFAULT_ADS_OPTIMIZER_LOSS_MAKER_POLICY,
+  DEFAULT_ADS_OPTIMIZER_PHASED_RECOVERY_POLICY,
+  DEFAULT_ADS_OPTIMIZER_ROLE_BIAS_POLICY,
+  DEFAULT_ADS_OPTIMIZER_STRATEGY_PROFILE,
+} from './ruleConfig';
 
 export const ADS_OPTIMIZER_DEFAULT_RULE_PACK_NAME = 'SP V1 Default Rule Pack';
 export const ADS_OPTIMIZER_DEFAULT_RULE_PACK_DESCRIPTION =
   'Account-level Sponsored Products optimizer configuration foundation for V1.';
 export const ADS_OPTIMIZER_DEFAULT_VERSION_LABEL = 'sp_v1_seed';
 export const ADS_OPTIMIZER_DEFAULT_CHANGE_SUMMARY =
-  'Seeded Phase 2 SP-only config foundation with placeholder role templates, guardrails, scoring weights, and manual approval policy. No engine or execution flow is active yet.';
+  'Seeded SP-only optimizer configuration foundation with versioned strategy profile, loss-maker protection policy, phased recovery policy, guardrails, and read-only recommendation thresholds.';
 
 export const buildDefaultAdsOptimizerRulePackPayload = (): AdsOptimizerRulePackPayload => ({
-  schema_version: 1,
+  schema_version: 2,
   channel: 'sp',
+  strategy_profile: DEFAULT_ADS_OPTIMIZER_STRATEGY_PROFILE,
   role_templates: {
     Discover: { enabled: true, notes: 'Placeholder role template for future engine phases.' },
     Harvest: { enabled: true, notes: 'Placeholder role template for future engine phases.' },
@@ -63,6 +70,15 @@ export const buildDefaultAdsOptimizerRulePackPayload = (): AdsOptimizerRulePackP
       no_sale_spend_risk: 20,
       no_sale_clicks_risk: 10,
     },
+  },
+  loss_maker_policy: {
+    ...DEFAULT_ADS_OPTIMIZER_LOSS_MAKER_POLICY,
+  },
+  phased_recovery_policy: {
+    ...DEFAULT_ADS_OPTIMIZER_PHASED_RECOVERY_POLICY,
+  },
+  role_bias_policy: {
+    ...DEFAULT_ADS_OPTIMIZER_ROLE_BIAS_POLICY,
   },
   action_policy: {
     manual_review_required: true,

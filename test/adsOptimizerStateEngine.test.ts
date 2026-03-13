@@ -6,6 +6,19 @@ import {
   resolveAdsOptimizerStateEngineConfig,
 } from '../apps/web/src/lib/ads-optimizer/state';
 
+const makeRulePackPayload = (overrides?: Record<string, unknown>) => ({
+  schema_version: 2,
+  channel: 'sp' as const,
+  role_templates: {},
+  guardrail_templates: {},
+  scoring_weights: {
+    importance: 1,
+  },
+  state_engine: {},
+  action_policy: {},
+  ...(overrides ?? {}),
+});
+
 describe('ads optimizer phase 6 state engine', () => {
   it('derives deterministic product run state from the phase 3 overview output', () => {
     const result = deriveAdsOptimizerProductRunState({
@@ -337,5 +350,92 @@ describe('ads optimizer phase 6 state engine', () => {
     expect(result.importance.reasonCodes).toContain('IMPORTANCE_DOMINANT_AD_SALES_SHARE');
     expect(result.protection.protectedContributor).toBe(true);
     expect(result.protection.reasonCodes).toContain('PROTECTION_AD_SALES_SHARE_PROTECTED');
+  });
+
+  it('changes protection behavior when the saved loss-maker policy thresholds change', () => {
+    const input = {
+      raw: {
+        impressions: 50,
+        clicks: 12,
+        spend: 18,
+        orders: 2,
+        sales: 90,
+        cpc: 1.5,
+        ctr: 0.24,
+        cvr: 0.17,
+        acos: 0.2,
+        roas: 5,
+        tosIs: null,
+        stis: null,
+        stir: null,
+      },
+      derived: {
+        contributionAfterAds: -5,
+        breakEvenGap: -0.04,
+        maxCpcSupportGap: -0.2,
+        lossDollars: 5,
+        profitDollars: null,
+        clickVelocity: 1.8,
+        impressionVelocity: 7.1,
+        organicLeverageProxy: null,
+        organicContextSignal: null,
+        adSalesShare: 0.16,
+        adOrderShare: 0.17,
+        totalSalesShare: 0.07,
+        lossToAdSalesRatio: 0.18,
+        lossSeverity: null,
+        protectedContributor: null,
+      },
+      coverage: {
+        daysObserved: 6,
+        statuses: {
+          tosIs: 'ready' as const,
+          stis: 'ready' as const,
+          stir: 'ready' as const,
+          placementContext: 'ready' as const,
+          searchTerms: 'ready' as const,
+          breakEvenInputs: 'ready' as const,
+        },
+        notes: [],
+      },
+      demandProxies: {
+        searchTermCount: 2,
+        sameTextSearchTermCount: 1,
+        totalSearchTermImpressions: 22,
+        totalSearchTermClicks: 8,
+        representativeClickShare: 0.45,
+      },
+      asinScopeMembership: {
+        productAdSpend: 90,
+        productAdSales: 300,
+        productOrders: 10,
+        productUnits: 10,
+      },
+      productContext: {
+        breakEvenAcos: 0.24,
+        averagePrice: 45,
+        productState: 'recovering',
+        productObjective: 'Break Even',
+      },
+    };
+
+    const defaultPolicy = classifyAdsOptimizerTargetState(input, makeRulePackPayload());
+    const relaxedPolicy = classifyAdsOptimizerTargetState(
+      input,
+      makeRulePackPayload({
+        loss_maker_policy: {
+          protected_ad_sales_share_min: 0.15,
+          protected_order_share_min: 0.15,
+          protected_total_sales_share_min: 0.06,
+          shallow_loss_ratio_max: 0.2,
+          moderate_loss_ratio_max: 0.2,
+        },
+      })
+    );
+
+    expect(defaultPolicy.protection.protectedContributor).toBe(false);
+    expect(relaxedPolicy.protection.protectedContributor).toBe(true);
+    expect(defaultPolicy.protection.lossSeverity).toBe('moderate');
+    expect(relaxedPolicy.protection.lossSeverity).toBe('shallow');
   });
 });

@@ -11,8 +11,10 @@ import {
   createAdsOptimizerDraftVersionAction,
   handoffAdsOptimizerToWorkspaceAction,
   runAdsOptimizerNowAction,
+  saveAdsOptimizerDraftVersionAction,
   saveAdsOptimizerProductSettingsAction,
   saveAdsOptimizerRecommendationOverrideAction,
+  seedAdsOptimizerStarterVersionsAction,
 } from '@/app/ads/optimizer/actions';
 import { isAdsOptimizerEnabled } from '@/lib/ads-optimizer/featureFlag';
 import { getAdsOptimizerOverviewData } from '@/lib/ads-optimizer/overview';
@@ -21,7 +23,10 @@ import {
   getAdsOptimizerConfigViewData,
   getProductOptimizerSettingsByProductId,
 } from '@/lib/ads-optimizer/repoConfig';
-import { findOptimizerProductByAsin } from '@/lib/ads-optimizer/repoRuntime';
+import {
+  findOptimizerProductByAsin,
+  resolveAdsOptimizerRuntimeContextForAsin,
+} from '@/lib/ads-optimizer/repoRuntime';
 import {
   getAdsOptimizerHistoryViewData,
   getAdsOptimizerTargetsViewData,
@@ -75,16 +80,16 @@ const EMPTY_STATE_COPY: Record<
       'Phase 1 Outcome Review is product-scoped and read-only. It links optimizer-originated Ads Workspace handoffs to bulkgen logbook validations, shows KPI trend context, and keeps unvalidated phases visible without pretending an outcome score already exists.',
   },
   config: {
-    eyebrow: 'Config placeholder',
-    title: 'No optimizer config tables are wired yet.',
+    eyebrow: 'Config runtime',
+    title: 'Optimizer config is live for manual runs.',
     body:
-      'Rule-pack versions, product settings, and manual overrides are Phase 2 work. This shell intentionally avoids pretending that config storage already exists.',
+      'Rule-pack versions and product settings now drive manual-run version resolution inside Ads Optimizer. Product assignment wins when enabled, and the account active version remains the explicit fallback.',
   },
   history: {
-    eyebrow: 'History placeholder',
-    title: 'No optimizer run history exists yet.',
+    eyebrow: 'History runtime',
+    title: 'Manual runs capture versioned optimizer history.',
     body:
-      'Manual runs, snapshot persistence, and audit history are later phases. The route is showing the final shell location only.',
+      'Each manual run records the effective rule-pack version that actually drove the run, including explicit fallback context when a product assignment is absent or disabled.',
   },
 };
 
@@ -148,6 +153,10 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
     view === 'config' && selectedConfigProduct?.productId
       ? await getProductOptimizerSettingsByProductId(selectedConfigProduct.productId)
       : null;
+  const selectedConfigRuntimeContext =
+    view === 'config' && asin !== 'all'
+      ? await resolveAdsOptimizerRuntimeContextForAsin({ asin })
+      : null;
   const historyData = view === 'history' ? await getAdsOptimizerHistoryViewData(asin) : null;
   const targetsData =
     view === 'targets' && (asin !== 'all' || requestedRunId !== null)
@@ -200,7 +209,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
   });
   const phaseBadge =
     view === 'config'
-      ? 'Config foundation only'
+      ? 'Live versioned config'
       : view === 'overview'
         ? 'Read-only optimizer active'
         : view === 'targets'
@@ -331,6 +340,8 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           rulePack={configData?.rulePack ?? null}
           activeVersion={configData?.activeVersion ?? null}
           versions={configData?.versions ?? []}
+          missingStarterProfiles={configData?.missingStarterProfiles ?? []}
+          versionStrategyProfiles={configData?.versionStrategyProfiles ?? {}}
           seeded={configData?.seeded ?? false}
           seedMessage={configData?.seedMessage ?? null}
           notice={notice}
@@ -342,9 +353,12 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           }
           selectedProductTitle={selectedConfigProduct?.title ?? null}
           productSettings={selectedProductSettings}
+          effectiveVersionContext={selectedConfigRuntimeContext?.effectiveVersionContext ?? null}
           createDraftAction={createAdsOptimizerDraftVersionAction}
           activateVersionAction={activateAdsOptimizerRulePackVersionAction}
+          saveDraftAction={saveAdsOptimizerDraftVersionAction}
           saveProductSettingsAction={saveAdsOptimizerProductSettingsAction}
+          seedStarterVersionsAction={seedAdsOptimizerStarterVersionsAction}
         />
       ) : view === 'history' ? (
         <OptimizerHistoryPanel
@@ -353,6 +367,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           end={end}
           returnTo={returnTo}
           activeVersionLabel={historyData?.activeVersionLabel ?? '—'}
+          runNowVersionContext={historyData?.runNowVersionContext ?? null}
           runs={historyData?.runs ?? []}
           notice={notice}
           error={error}

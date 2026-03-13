@@ -6,15 +6,54 @@ import {
   classifyAdsOptimizerRecommendationsBatch,
 } from '../apps/web/src/lib/ads-optimizer/recommendation';
 
-const makeRulePackPayload = (overrides?: Record<string, unknown>) => ({
-  schema_version: 1,
-  channel: 'sp' as const,
-  role_templates: {},
-  guardrail_templates: {},
-  scoring_weights: {},
-  state_engine: {},
-  action_policy: overrides ?? {},
-});
+const makeRulePackPayload = (overrides?: Record<string, unknown>) => {
+  const base = {
+    schema_version: 2,
+    channel: 'sp' as const,
+    role_templates: {},
+    guardrail_templates: {},
+    scoring_weights: {},
+    state_engine: {},
+    action_policy: {},
+  };
+  const rawOverrides = { ...(overrides ?? {}) };
+  const topLevelKeys = new Set([
+    'schema_version',
+    'channel',
+    'role_templates',
+    'guardrail_templates',
+    'scoring_weights',
+    'state_engine',
+    'action_policy',
+    'strategy_profile',
+    'loss_maker_policy',
+    'phased_recovery_policy',
+    'role_bias_policy',
+  ]);
+  const topLevelOverrides = Object.fromEntries(
+    Object.entries(rawOverrides).filter(([key]) => topLevelKeys.has(key))
+  );
+  const legacyActionPolicyOverrides = Object.fromEntries(
+    Object.entries(rawOverrides).filter(([key]) => !topLevelKeys.has(key))
+  );
+  const actionPolicyOverrides =
+    typeof topLevelOverrides.action_policy === 'object' &&
+    topLevelOverrides.action_policy &&
+    !Array.isArray(topLevelOverrides.action_policy)
+      ? (topLevelOverrides.action_policy as Record<string, unknown>)
+      : null;
+  delete topLevelOverrides.action_policy;
+
+  return {
+    ...base,
+    ...topLevelOverrides,
+    action_policy: {
+      ...base.action_policy,
+      ...legacyActionPolicyOverrides,
+      ...(actionPolicyOverrides ?? {}),
+    },
+  };
+};
 
 const makePayload = () => ({
   phase: 7,
@@ -511,35 +550,45 @@ describe('ads optimizer phase 11 recommendation engine', () => {
     expect(result.actions.map((action) => action.actionType)).toContain('update_target_state');
   });
 
-  it('treats the same protected contributor more gradually under visibility-led posture than design-led posture', () => {
-    const visibilityLedPayload = makeProtectedLossPayload();
-    visibilityLedPayload.optimizer_context.archetype = 'visibility_led';
-    visibilityLedPayload.role_engine.desired_role.value = 'Rank Defend';
-    visibilityLedPayload.role_engine.desired_role.label = 'Rank Defend';
-    visibilityLedPayload.role_engine.desired_role.reason_codes = [
+  it('changes phased recovery behavior for the same payload under different saved strategy profiles', () => {
+    const payload = makeProtectedLossPayload();
+    payload.optimizer_context.archetype = 'hybrid';
+    payload.role_engine.desired_role.value = 'Rank Defend';
+    payload.role_engine.desired_role.label = 'Rank Defend';
+    payload.role_engine.desired_role.reason_codes = [
       'ROLE_DESIRED_RANK_DEFEND_PROTECTED_LOSS_MAKER',
       'ROLE_ARCHETYPE_VISIBILITY_LED_PROTECTED_CONTRIBUTOR',
     ];
-    visibilityLedPayload.role_engine.current_role.value = 'Rank Defend';
-    visibilityLedPayload.role_engine.current_role.label = 'Rank Defend';
-    visibilityLedPayload.role_engine.reason_codes = [
+    payload.role_engine.current_role.value = 'Rank Defend';
+    payload.role_engine.current_role.label = 'Rank Defend';
+    payload.role_engine.reason_codes = [
       'ROLE_DESIRED_RANK_DEFEND_PROTECTED_LOSS_MAKER',
       'ROLE_ARCHETYPE_VISIBILITY_LED_PROTECTED_CONTRIBUTOR',
     ];
-
-    const designLedPayload = makeProtectedLossPayload();
-    designLedPayload.optimizer_context.archetype = 'design_led';
 
     const visibilityLed = classifyAdsOptimizerRecommendations({
-      payload: visibilityLedPayload,
-      rulePackPayload: makeRulePackPayload(),
+      payload,
+      rulePackPayload: makeRulePackPayload({
+        strategy_profile: 'visibility_led',
+        phased_recovery_policy: {
+          visibility_led_steps: 6,
+        },
+        role_bias_policy: {
+          visibility_led_rank_defend_bias: true,
+        },
+      }),
     });
     const designLed = classifyAdsOptimizerRecommendations({
-      payload: designLedPayload,
-      rulePackPayload: makeRulePackPayload(),
+      payload,
+      rulePackPayload: makeRulePackPayload({
+        strategy_profile: 'design_led',
+        phased_recovery_policy: {
+          design_led_steps: 2,
+        },
+      }),
     });
 
-    expect(visibilityLed.phasedBidPlan?.totalSteps).toBe(5);
+    expect(visibilityLed.phasedBidPlan?.totalSteps).toBe(6);
     expect(designLed.phasedBidPlan?.totalSteps).toBe(4);
     expect(visibilityLed.reasonCodes).toContain(
       'PHASED_BID_PLAN_ARCHETYPE_VISIBILITY_LED_GRADUAL'
@@ -548,34 +597,66 @@ describe('ads optimizer phase 11 recommendation engine', () => {
     expect(visibilityLed.placementDiagnostics.biasRecommendation).toBe('hold');
   });
 
-  it('collapses the same weak long-tail row faster under design-led posture', () => {
-    const designLedPayload = makePayload();
-    designLedPayload.optimizer_context.archetype = 'design_led';
-    designLedPayload.state_engine.efficiency.value = 'break_even';
-    designLedPayload.state_engine.efficiency.label = 'Break even';
-    designLedPayload.state_engine.confidence.value = 'directional';
-    designLedPayload.state_engine.confidence.label = 'Directional';
-    designLedPayload.state_engine.importance.value = 'tier_3_test_long_tail';
-    designLedPayload.state_engine.importance.label = 'Tier 3 test long-tail';
-    designLedPayload.role_engine.current_role.value = 'Harvest';
-    designLedPayload.role_engine.current_role.label = 'Harvest';
-    designLedPayload.role_engine.desired_role.value = 'Harvest';
-    designLedPayload.role_engine.desired_role.label = 'Harvest';
-
-    const visibilityLedPayload = JSON.parse(JSON.stringify(designLedPayload));
-    visibilityLedPayload.optimizer_context.archetype = 'visibility_led';
+  it('changes long-tail spend direction for the same payload under different saved rule payloads', () => {
+    const payload = makePayload();
+    payload.optimizer_context.archetype = 'hybrid';
+    payload.state_engine.efficiency.value = 'break_even';
+    payload.state_engine.efficiency.label = 'Break even';
+    payload.state_engine.confidence.value = 'directional';
+    payload.state_engine.confidence.label = 'Directional';
+    payload.state_engine.importance.value = 'tier_3_test_long_tail';
+    payload.state_engine.importance.label = 'Tier 3 test long-tail';
+    payload.role_engine.current_role.value = 'Harvest';
+    payload.role_engine.current_role.label = 'Harvest';
+    payload.role_engine.desired_role.value = 'Harvest';
+    payload.role_engine.desired_role.label = 'Harvest';
 
     const designLed = classifyAdsOptimizerRecommendations({
-      payload: designLedPayload,
-      rulePackPayload: makeRulePackPayload(),
+      payload,
+      rulePackPayload: makeRulePackPayload({
+        strategy_profile: 'design_led',
+        role_bias_policy: {
+          design_led_long_tail_suppress_bias: true,
+        },
+      }),
     });
-    const visibilityLed = classifyAdsOptimizerRecommendations({
-      payload: visibilityLedPayload,
-      rulePackPayload: makeRulePackPayload(),
+    const hybrid = classifyAdsOptimizerRecommendations({
+      payload,
+      rulePackPayload: makeRulePackPayload({
+        strategy_profile: 'hybrid',
+        role_bias_policy: {
+          design_led_long_tail_suppress_bias: false,
+        },
+      }),
     });
 
     expect(designLed.spendDirection).toBe('collapse');
     expect(designLed.reasonCodes).toContain('SPEND_DIRECTION_COLLAPSE_DESIGN_LED_LONG_TAIL');
-    expect(visibilityLed.spendDirection).toBe('reduce');
+    expect(hybrid.spendDirection).toBe('reduce');
+  });
+
+  it('can pause protected contributors instead of continuing the phased recovery ladder', () => {
+    const payload = makeProtectedLossPayload();
+
+    const defaultResult = classifyAdsOptimizerRecommendations({
+      payload,
+      rulePackPayload: makeRulePackPayload(),
+    });
+    const pausedResult = classifyAdsOptimizerRecommendations({
+      payload,
+      rulePackPayload: makeRulePackPayload({
+        loss_maker_policy: {
+          pause_protected_contributors: true,
+        },
+      }),
+    });
+
+    expect(defaultResult.phasedBidPlan?.continueNextRun).toBe(true);
+    expect(defaultResult.spendDirection).toBe('reduce');
+    expect(pausedResult.phasedBidPlan).toBeNull();
+    expect(pausedResult.spendDirection).toBe('collapse');
+    expect(pausedResult.reasonCodes).toContain(
+      'SPEND_DIRECTION_COLLAPSE_PROTECTED_LOSS_CONTRIBUTOR_POLICY'
+    );
   });
 });

@@ -19,7 +19,11 @@ describe('ads optimizer config validation', () => {
     expect(payload.channel).toBe('sp');
     expect(payload.action_policy['manual_review_required']).toBe(true);
     expect(payload.action_policy['auto_execute']).toBe(false);
-    expect(ADS_OPTIMIZER_DEFAULT_CHANGE_SUMMARY).toContain('No engine');
+    expect(payload.strategy_profile).toBe('hybrid');
+    expect(payload.loss_maker_policy).toBeTruthy();
+    expect(payload.phased_recovery_policy).toBeTruthy();
+    expect(payload.role_bias_policy).toBeTruthy();
+    expect(ADS_OPTIMIZER_DEFAULT_CHANGE_SUMMARY).toContain('versioned strategy');
   });
 
   it('normalizes a rule pack version payload and keeps the payload object intact', () => {
