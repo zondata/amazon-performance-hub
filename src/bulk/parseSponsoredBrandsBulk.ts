@@ -121,6 +121,8 @@ export async function parseSponsoredBrandsBulk(xlsxPath: string, snapshotDate: s
     const isKeyword = entityLower.includes("keyword");
     const isProductTargeting = entityLower.includes("product targeting");
     if (!isKeyword && !isProductTargeting) return;
+    const campaignId = cleanId(getCell(row, "Campaign ID"));
+    if (!campaignId) return;
 
     const targetId = cleanId(
       isKeyword ? getCell(row, "Keyword ID") : getCell(row, "Product Targeting ID")
@@ -137,7 +139,7 @@ export async function parseSponsoredBrandsBulk(xlsxPath: string, snapshotDate: s
     targets.push({
       targetId,
       adGroupId: cleanId(getCell(row, "Ad Group ID")),
-      campaignId: cleanId(getCell(row, "Campaign ID")),
+      campaignId,
       expressionRaw,
       expressionNorm: normText(expressionRaw),
       matchType,
@@ -153,7 +155,7 @@ export async function parseSponsoredBrandsBulk(xlsxPath: string, snapshotDate: s
       const syntheticName = "Ad group";
       adGroups.push({
         adGroupId,
-        campaignId: cleanId(getCell(row, "Campaign ID")),
+        campaignId,
         adGroupNameRaw: syntheticName,
         adGroupNameNorm: normText(syntheticName),
         state: "",

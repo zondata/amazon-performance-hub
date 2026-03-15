@@ -7,6 +7,7 @@ import { parseSponsoredBrandsBulk } from "../src/bulk/parseSponsoredBrandsBulk";
 const SB_CAMPAIGN_HEADER = [
   "Entity",
   "Campaign ID",
+  "Draft Campaign ID",
   "Campaign Name",
   "Portfolio ID",
   "State",
@@ -25,6 +26,7 @@ const SB_CAMPAIGN_HEADER = [
 const SB_MULTI_HEADER = [
   "Entity",
   "Campaign ID",
+  "Draft Campaign ID",
   "Campaign Name",
   "Portfolio ID",
   "State",
@@ -190,5 +192,62 @@ describe("parseSponsoredBrandsBulk", () => {
 
     expect(snap.placements[0]?.placementCode).toBe("HOME");
     expect(snap.placements[0]?.placementRawNorm).toBe("home page");
+  });
+
+  it("skips draft target rows without a live campaign id", async () => {
+    const tmpDir = path.resolve(__dirname, "tmp");
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    const filePath = path.join(tmpDir, `bulk-sb-draft-${Date.now()}.xlsx`);
+
+    const campaignRows = [
+      SB_CAMPAIGN_HEADER,
+      rowFromMap(SB_CAMPAIGN_HEADER, {
+        Entity: "Campaign",
+        "Campaign ID": "321",
+        "Campaign Name": "Live SB",
+        State: "enabled",
+      }),
+      rowFromMap(SB_CAMPAIGN_HEADER, {
+        Entity: "Draft Campaign",
+        "Campaign ID": "",
+        "Draft Campaign ID": "175399346526051",
+        "Campaign Name": "Draft SB",
+        State: "enabled",
+      }),
+      rowFromMap(SB_CAMPAIGN_HEADER, {
+        Entity: "Draft Keyword",
+        "Campaign ID": "",
+        "Draft Campaign ID": "175399346526051",
+        "Ad Group ID": "274548903667427",
+        "Keyword ID": "999",
+        "Keyword Text": "draft keyword",
+        "Match Type": "BROAD",
+        State: "enabled",
+        Bid: "0.5",
+      }),
+      rowFromMap(SB_CAMPAIGN_HEADER, {
+        Entity: "Keyword",
+        "Campaign ID": "321",
+        "Ad Group ID": "888",
+        "Keyword ID": "111",
+        "Keyword Text": "live keyword",
+        "Match Type": "PHRASE",
+        State: "enabled",
+        Bid: "0.7",
+      }),
+    ];
+
+    makeSbWorkbook(filePath, campaignRows, [SB_MULTI_HEADER]);
+
+    const snap = await parseSponsoredBrandsBulk(filePath, "2026-03-14");
+
+    expect(snap.campaigns.map((row) => row.campaignId)).toEqual(["321"]);
+    expect(snap.targets).toHaveLength(1);
+    expect(snap.targets[0]?.targetId).toBe("111");
+    expect(snap.targets.every((row) => row.campaignId !== null)).toBe(true);
+    expect(snap.adGroups).toHaveLength(1);
+    expect(snap.adGroups[0]?.adGroupId).toBe("888");
+    expect(snap.adGroups[0]?.campaignId).toBe("321");
+    expect(snap.adGroups.find((row) => row.adGroupId === "274548903667427")).toBeUndefined();
   });
 });

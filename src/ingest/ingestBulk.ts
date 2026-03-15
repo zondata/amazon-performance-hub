@@ -773,7 +773,7 @@ export async function ingestBulk(
     "sb_ad_group_name_history",
     "ad_group_id",
     sbSnapshot.adGroups
-      .filter((row) => row.adGroupId)
+      .filter((row) => row.adGroupId && row.campaignId)
       .map((row) => ({
         id: row.adGroupId as string,
         nameRaw: row.adGroupNameRaw,
