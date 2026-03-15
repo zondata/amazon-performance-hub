@@ -414,6 +414,12 @@ SB snapshot behavior:
 - Targets: keyword, negative keyword, product targeting (`match_type=TARGETING_EXPRESSION`).
 - Placements: from SB Multi sheet `Bidding Adjustment by Placement` rows; normalize placement code and keep `placement_raw_norm`.
 
+#### SB bulk draft-row guardrail
+- In SB bulk parsing, do not treat draft keyword rows as live entities when `Campaign ID` is missing.
+- Do not substitute `Draft Campaign ID` into live `campaign_id`.
+- Any persisted SB ad-group/history row must require both `ad_group_id` and `campaign_id`.
+- SB Store vs SB Video is not the deciding factor here; the relevant distinction is draft vs live row shape.
+
 ### Milestone 2 — Snapshot Diff Engine
 Command:
 - `npm run bulk:diff -- <old.xlsx> <new.xlsx>`
