@@ -196,6 +196,9 @@ export default async function ImportsHealthPage({
         `/imports-health?seed=ok&inserted=${result.insertedCount}&skipped=${result.skippedCount}&total=${result.totalFactsAsins}`
       );
     } catch (error) {
+      if (error instanceof Error && error.message.includes('NEXT_REDIRECT')) {
+        throw error;
+      }
       const message = error instanceof Error ? error.message : 'Seed failed.';
       redirect(`/imports-health?seed=error&error=${encodeURIComponent(message)}`);
     }
