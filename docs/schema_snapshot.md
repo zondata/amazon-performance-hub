@@ -1,5 +1,5 @@
 # Supabase Schema Snapshot
-Generated: 2026-03-07T01:20:45.236Z
+Generated: 2026-03-15T05:33:46.411Z
 
 ## accounts (BASE TABLE)
 | column | type | nullable |
@@ -81,6 +81,171 @@ Generated: 2026-03-07T01:20:45.236Z
 | is_archived | boolean | NO |
 | created_at | timestamp with time zone | NO |
 | updated_at | timestamp with time zone | NO |
+
+## ads_optimizer_manual_overrides (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| manual_override_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| product_id | uuid | NO |
+| override_key | text | NO |
+| override_value_json | jsonb | NO |
+| notes | text | YES |
+| is_archived | boolean | NO |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+| archived_at | timestamp with time zone | YES |
+
+## ads_optimizer_product_settings (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| product_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| archetype | text | NO |
+| optimizer_enabled | boolean | NO |
+| default_objective_mode | text | YES |
+| rule_pack_version_id | uuid | NO |
+| strategic_notes | text | YES |
+| guardrail_overrides_json | jsonb | YES |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+
+## ads_optimizer_product_snapshot (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| product_snapshot_id | uuid | NO |
+| run_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| product_id | uuid | YES |
+| asin | text | NO |
+| snapshot_payload_json | jsonb | NO |
+| created_at | timestamp with time zone | NO |
+
+## ads_optimizer_recommendation_overrides (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| recommendation_override_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| product_id | uuid | NO |
+| asin | text | NO |
+| target_id | text | NO |
+| run_id | uuid | NO |
+| target_snapshot_id | uuid | NO |
+| recommendation_snapshot_id | uuid | NO |
+| override_scope | text | NO |
+| replacement_action_bundle_json | jsonb | NO |
+| operator_note | text | NO |
+| is_archived | boolean | NO |
+| last_applied_at | timestamp with time zone | YES |
+| last_applied_change_set_id | uuid | YES |
+| apply_count | integer | NO |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+| archived_at | timestamp with time zone | YES |
+
+## ads_optimizer_recommendation_snapshot (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| recommendation_snapshot_id | uuid | NO |
+| run_id | uuid | NO |
+| target_snapshot_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| asin | text | NO |
+| status | text | NO |
+| action_type | text | YES |
+| reason_codes_json | jsonb | YES |
+| snapshot_payload_json | jsonb | NO |
+| created_at | timestamp with time zone | NO |
+
+## ads_optimizer_role_transition_log (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| role_transition_log_id | uuid | NO |
+| run_id | uuid | NO |
+| target_snapshot_id | uuid | YES |
+| account_id | text | NO |
+| marketplace | text | NO |
+| asin | text | NO |
+| target_id | text | YES |
+| from_role | text | YES |
+| to_role | text | YES |
+| transition_reason_json | jsonb | YES |
+| created_at | timestamp with time zone | NO |
+
+## ads_optimizer_rule_pack_versions (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| rule_pack_version_id | uuid | NO |
+| rule_pack_id | uuid | NO |
+| version_label | text | NO |
+| status | text | NO |
+| change_summary | text | NO |
+| change_payload_json | jsonb | NO |
+| created_from_version_id | uuid | YES |
+| created_at | timestamp with time zone | NO |
+| activated_at | timestamp with time zone | YES |
+| archived_at | timestamp with time zone | YES |
+
+## ads_optimizer_rule_packs (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| rule_pack_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| channel | text | NO |
+| scope_type | text | NO |
+| scope_value | text | YES |
+| name | text | NO |
+| description | text | YES |
+| is_archived | boolean | NO |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+
+## ads_optimizer_runs (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| run_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| channel | text | NO |
+| scope_type | text | NO |
+| selected_asin | text | NO |
+| run_kind | text | NO |
+| date_start | date | NO |
+| date_end | date | NO |
+| rule_pack_version_id | uuid | NO |
+| rule_pack_version_label | text | NO |
+| status | text | NO |
+| input_summary_json | jsonb | NO |
+| diagnostics_json | jsonb | YES |
+| product_snapshot_count | integer | NO |
+| target_snapshot_count | integer | NO |
+| recommendation_snapshot_count | integer | NO |
+| role_transition_count | integer | NO |
+| created_at | timestamp with time zone | NO |
+| started_at | timestamp with time zone | YES |
+| completed_at | timestamp with time zone | YES |
+
+## ads_optimizer_target_snapshot (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| target_snapshot_id | uuid | NO |
+| run_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| asin | text | NO |
+| campaign_id | text | NO |
+| ad_group_id | text | NO |
+| target_id | text | NO |
+| source_scope | text | NO |
+| coverage_note | text | YES |
+| snapshot_payload_json | jsonb | NO |
+| created_at | timestamp with time zone | NO |
 
 ## bulk_ad_groups (BASE TABLE)
 | column | type | nullable |
