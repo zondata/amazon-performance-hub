@@ -1,9 +1,10 @@
 # Ads Optimizer — AGENTS
 
 ## Goal
-Build a **profit-first, role-based Ads Optimizer** inside Amazon Performance Hub without breaking the current Ads Workspace, Bulksheet Ops, product pages, or existing reporting flows.
+Build a **profit-first, role-based Ads Optimizer V2 surface** inside Amazon Performance Hub without breaking the current Ads Workspace, Bulksheet Ops, product pages, or existing reporting flows.
 
 This optimizer is a **new recommendation system**, not a replacement for the current manual-first Ads Workspace.
+V2 is a **surface-first migration** on top of the existing V1 backend and persisted runs, not a greenfield rebuild.
 
 ## Working thesis
 - The optimizer should evaluate product objective, target role, confidence, importance, guardrails, and recommended actions behind the scenes.
@@ -15,10 +16,14 @@ This optimizer is a **new recommendation system**, not a replacement for the cur
 - **SP only for V1.**
 - New left-sidebar section: **Ads Optimizer**.
 - Route lives at `/ads/optimizer`.
+- **Only `Overview` and `Targets` are primary tabs in V2.**
+- **`History`, `Config`, and `Outcome Review` remain available as secondary utilities.**
 - Existing `/ads/performance` stays intact.
 - Existing Bulksheet Ops and logbook validation remain intact.
 - Core V1 is deterministic and rule-based.
 - AI is optional later and must not be required for the core engine.
+- Product objective remains dynamic by ASIN.
+- Manual overrides remain first-class.
 
 ## Non-negotiable invariants
 
@@ -46,15 +51,21 @@ This optimizer is a **new recommendation system**, not a replacement for the cur
    - Existing Ads Workspace change sets / draft queue remain the only execution path in early V1.
    - Do not add direct auto-execution unless an explicit later phase calls for it.
 
-6. **Reason-code discipline**
+6. **V2 surface shape**
+   - Treat the existing runtime/config/history/outcome-review loaders as reusable backend infrastructure.
+   - Prefer thin wrappers and new V2 subcomponents over giant in-place rewrites.
+   - Inline target expansion is the intended default review interaction; the old queue + drawer model is not the default V2 direction.
+   - Keep old optimizer links usable by normalizing legacy `view=` URLs into the new shell contract.
+
+7. **Reason-code discipline**
    - Every target recommendation must include reason codes and the metrics used to reach that result.
    - Avoid “black box” recommendations.
 
-7. **Manual run first**
+8. **Manual run first**
    - V1 may use a manual optimizer run action or CLI command.
    - Do not block V1 waiting for cron / background scheduling.
 
-8. **KPI scope integrity still applies**
+9. **KPI scope integrity still applies**
    - Placement metrics remain campaign-level context.
    - Do not flatten campaign placement facts into target-level facts.
    - STIS / STIR / TOS IS remain non-additive diagnostics and must not be silently averaged.
@@ -63,13 +74,13 @@ This optimizer is a **new recommendation system**, not a replacement for the cur
    - Non-additive diagnostics may inform UI context and reason codes, but they must not silently change default V1 score math.
    - Zero-click targets can legitimately lack STIS / STIR / search-term diagnostics; treat that as expected availability behavior unless other evidence makes it suspicious.
 
-9. **Use the current repo patterns**
+10. **Use the current repo patterns**
    - Reuse semantic theme tokens.
    - Reuse shared horizontal-scroll conventions.
    - Reuse current change-set / bulksheet / validation flows where practical.
    - Follow the existing AGENTS/build-plan culture already present in this repo.
 
-10. **Feature-flag incomplete surfaces**
+11. **Feature-flag incomplete surfaces**
    - Use `ENABLE_ADS_OPTIMIZER` or equivalent to keep unfinished work hidden.
 
 ## Required optimizer outputs
@@ -149,13 +160,13 @@ For every phase:
 - `/products/[asin]` must still work.
 - Only mark the phase complete after all checks pass.
 
-## Progressive Disclosure Workbench Pattern
-- Future dense optimizer review pages should prefer the Progressive Disclosure Workbench pattern when appropriate.
-- Keep top/context sections compact or collapsed by default so the main workbench owns most of the desktop height.
-- Treat queue and drawer as separate responsibilities: queue for scan/select/compare, drawer for full explanation and diagnostics.
-- Make scroll ownership explicit: queue owns its own scroll, drawer owns its own scroll, and the page shell should not accidentally become the effective scroll owner.
-- Sticky headers and frozen columns must attach to the real queue scroll pane, with explicit background and z-index layering.
-- Reference: [progressive-disclosure-workbench.md](/home/albert/code/amazon-performance-hub/docs/ui-patterns/progressive-disclosure-workbench.md)
+## V2 surface guidance
+- Source of truth for the migration is `docs/ads-optimizer/ads_optimizer_v2_build_plan.md`.
+- Primary navigation is `Overview` + `Targets` only.
+- `History`, `Config`, and `Outcome Review` must remain reachable as utilities without becoming first-level tabs again.
+- Ads Workspace remains the only staging/execution boundary.
+- Keep current-versus-proposed values visible anywhere recommendations change something.
+- Keep missing-data behavior explicit and honest.
 
 ## When in doubt
 Choose the safer option that:

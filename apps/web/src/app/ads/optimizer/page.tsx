@@ -5,6 +5,7 @@ import OptimizerHistoryPanel from '@/components/ads-optimizer/OptimizerHistoryPa
 import OptimizerOverviewPanel from '@/components/ads-optimizer/OptimizerOverviewPanel';
 import OptimizerOutcomeReviewPanel from '@/components/ads-optimizer/OptimizerOutcomeReviewPanel';
 import OptimizerTargetsPanel from '@/components/ads-optimizer/OptimizerTargetsPanel';
+import OptimizerUtilityNav from '@/components/ads-optimizer/OptimizerUtilityNav';
 import Tabs from '@/components/Tabs';
 import {
   activateAdsOptimizerRulePackVersionAction,
@@ -32,12 +33,13 @@ import {
   getAdsOptimizerTargetsViewData,
 } from '@/lib/ads-optimizer/runtime';
 import {
+  ADS_OPTIMIZER_UTILITIES,
   ADS_OPTIMIZER_VIEWS,
   buildAdsOptimizerHref,
   normalizeAdsOptimizerOutcomeHorizon,
   normalizeAdsOptimizerOutcomeMetric,
-  normalizeAdsOptimizerView,
-  type AdsOptimizerView,
+  normalizeAdsOptimizerShell,
+  type AdsOptimizerLegacyView,
 } from '@/lib/ads-optimizer/shell';
 import { env } from '@/lib/env';
 import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
@@ -54,7 +56,7 @@ const normalizeDate = (value?: string): string | undefined => {
 };
 
 const EMPTY_STATE_COPY: Record<
-  AdsOptimizerView,
+  AdsOptimizerLegacyView,
   {
     eyebrow: string;
     title: string;
@@ -130,14 +132,19 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
 
   const asin = paramValue('asin') ?? 'all';
   const requestedRunId = paramValue('runId')?.trim() || null;
-  const view = normalizeAdsOptimizerView(paramValue('view'));
+  const shell = normalizeAdsOptimizerShell({
+    view: paramValue('view'),
+    utility: paramValue('utility'),
+  });
+  const view = shell.view;
+  const utility = shell.utility;
   const outcomeHorizon = normalizeAdsOptimizerOutcomeHorizon(paramValue('horizon'));
   const outcomeMetric = normalizeAdsOptimizerOutcomeMetric(paramValue('metric'));
   const notice = pickSearchParam(params?.notice);
   const error = pickSearchParam(params?.error);
   const overrideError = paramValue('override_error') === '1';
   const overviewData =
-    view === 'overview' && asin !== 'all'
+    view === 'overview' && utility === null && asin !== 'all'
       ? await getAdsOptimizerOverviewData({
           accountId: env.accountId,
           marketplace: env.marketplace,
@@ -146,20 +153,20 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           end,
         })
       : null;
-  const configData = view === 'config' ? await getAdsOptimizerConfigViewData() : null;
+  const configData = utility === 'config' ? await getAdsOptimizerConfigViewData() : null;
   const selectedConfigProduct =
-    view === 'config' && asin !== 'all' ? await findOptimizerProductByAsin(asin) : null;
+    utility === 'config' && asin !== 'all' ? await findOptimizerProductByAsin(asin) : null;
   const selectedProductSettings =
-    view === 'config' && selectedConfigProduct?.productId
+    utility === 'config' && selectedConfigProduct?.productId
       ? await getProductOptimizerSettingsByProductId(selectedConfigProduct.productId)
       : null;
   const selectedConfigRuntimeContext =
-    view === 'config' && asin !== 'all'
+    utility === 'config' && asin !== 'all'
       ? await resolveAdsOptimizerRuntimeContextForAsin({ asin })
       : null;
-  const historyData = view === 'history' ? await getAdsOptimizerHistoryViewData(asin) : null;
+  const historyData = utility === 'history' ? await getAdsOptimizerHistoryViewData(asin) : null;
   const targetsData =
-    view === 'targets' && (asin !== 'all' || requestedRunId !== null)
+    view === 'targets' && utility === null && (asin !== 'all' || requestedRunId !== null)
       ? await getAdsOptimizerTargetsViewData({
           asin,
           start,
@@ -168,7 +175,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
         })
       : null;
   const outcomeReviewData =
-    view === 'outcomes' && asin !== 'all'
+    utility === 'outcomes' && asin !== 'all'
       ? await getAdsOptimizerOutcomeReviewData({
           asin,
           start,
@@ -180,10 +187,10 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
   const effectiveAsin = view === 'targets' ? targetsData?.run?.selected_asin ?? asin : asin;
   const effectiveStart = view === 'targets' ? targetsData?.run?.date_start ?? start : start;
   const effectiveEnd = view === 'targets' ? targetsData?.run?.date_end ?? end : end;
-  const effectiveRunId = view === 'targets' ? targetsData?.run?.run_id ?? null : null;
+  const effectiveRunId =
+    view === 'targets' ? targetsData?.run?.run_id ?? requestedRunId : null;
   const asinOptions = await fetchAsinOptions(env.accountId, env.marketplace);
-  const selectedAsin =
-    asinOptions.find((option) => option.asin === effectiveAsin) ?? null;
+  const selectedAsin = asinOptions.find((option) => option.asin === effectiveAsin) ?? null;
   const viewTabs = ADS_OPTIMIZER_VIEWS.map((item) => ({
     label: item.label,
     value: item.value,
@@ -193,32 +200,52 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
       asin: effectiveAsin,
       view: item.value,
       runId: item.value === 'targets' ? effectiveRunId : null,
-      horizon: outcomeHorizon,
-      metric: outcomeMetric,
     }),
   }));
-  const emptyState = EMPTY_STATE_COPY[view];
+  const utilityLinks = ADS_OPTIMIZER_UTILITIES.map((item) => ({
+    label: item.label,
+    value: item.value,
+    href: buildAdsOptimizerHref({
+      start: effectiveStart,
+      end: effectiveEnd,
+      asin: effectiveAsin,
+      view: item.parentView,
+      utility: item.value,
+      runId: item.parentView === 'targets' ? effectiveRunId : null,
+      horizon: item.value === 'outcomes' ? outcomeHorizon : null,
+      metric: item.value === 'outcomes' ? outcomeMetric : null,
+    }),
+  }));
+  const emptyState = EMPTY_STATE_COPY[(utility ?? view) as AdsOptimizerLegacyView];
   const returnTo = buildAdsOptimizerHref({
     start: effectiveStart,
     end: effectiveEnd,
     asin: effectiveAsin,
     view,
+    utility,
     runId: view === 'targets' ? effectiveRunId : null,
-    horizon: view === 'outcomes' ? outcomeHorizon : null,
-    metric: view === 'outcomes' ? outcomeMetric : null,
+    horizon: utility === 'outcomes' ? outcomeHorizon : null,
+    metric: utility === 'outcomes' ? outcomeMetric : null,
+  });
+  const clearUtilityHref = buildAdsOptimizerHref({
+    start: effectiveStart,
+    end: effectiveEnd,
+    asin: effectiveAsin,
+    view,
+    runId: view === 'targets' ? effectiveRunId : null,
   });
   const phaseBadge =
-    view === 'config'
+    utility === 'config'
       ? 'Live versioned config'
+      : utility === 'outcomes'
+        ? 'Outcome review lineage'
+        : utility === 'history'
+          ? 'Recommendation engine'
       : view === 'overview'
         ? 'Read-only optimizer active'
         : view === 'targets'
           ? 'Review + comparison queue'
-          : view === 'outcomes'
-            ? 'Outcome review lineage'
-          : view === 'history'
-            ? 'Recommendation engine'
-            : 'Recommendation shell only';
+          : 'Recommendation shell only';
 
   return (
     <div className="space-y-8">
@@ -242,7 +269,8 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
             className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_auto] xl:items-end"
           >
             <input type="hidden" name="view" value={view} />
-            {view === 'outcomes' ? (
+            {utility ? <input type="hidden" name="utility" value={utility} /> : null}
+            {utility === 'outcomes' ? (
               <>
                 <input type="hidden" name="horizon" value={outcomeHorizon} />
                 <input type="hidden" name="metric" value={outcomeMetric} />
@@ -293,6 +321,11 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
 
       <section className="space-y-4">
         <Tabs items={viewTabs} current={view} />
+        <OptimizerUtilityNav
+          items={utilityLinks}
+          activeUtility={utility}
+          clearHref={clearUtilityHref}
+        />
       </section>
 
       <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
@@ -332,9 +365,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
         </div>
       </section>
 
-      {view === 'overview' ? (
-        <OptimizerOverviewPanel asin={asin} start={start} end={end} data={overviewData} />
-      ) : view === 'config' ? (
+      {utility === 'config' ? (
         <OptimizerConfigManager
           returnTo={returnTo}
           rulePack={configData?.rulePack ?? null}
@@ -360,7 +391,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           saveProductSettingsAction={saveAdsOptimizerProductSettingsAction}
           seedStarterVersionsAction={seedAdsOptimizerStarterVersionsAction}
         />
-      ) : view === 'history' ? (
+      ) : utility === 'history' ? (
         <OptimizerHistoryPanel
           asin={asin}
           start={start}
@@ -373,55 +404,58 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           error={error}
           runNowAction={runAdsOptimizerNowAction}
         />
-      ) : view === 'outcomes' && outcomeReviewData ? (
+      ) : utility === 'outcomes' && outcomeReviewData ? (
         <OptimizerOutcomeReviewPanel
           asin={effectiveAsin}
           start={effectiveStart}
           end={effectiveEnd}
           data={outcomeReviewData}
         />
+      ) : view === 'overview' ? (
+        <OptimizerOverviewPanel asin={asin} start={start} end={end} data={overviewData} />
       ) : view === 'targets' ? (
-            <OptimizerTargetsPanel
-              asin={effectiveAsin}
-              start={effectiveStart}
-              end={effectiveEnd}
-              requestedRunId={targetsData?.requestedRunId ?? requestedRunId}
-              resolvedContextSource={targetsData?.resolvedContextSource ?? null}
-              runLookupError={targetsData?.runLookupError ?? null}
-              historyHref={buildAdsOptimizerHref({
-                start: effectiveStart,
-                end: effectiveEnd,
-                asin: effectiveAsin,
-                view: 'history',
-              })}
-              returnTo={buildAdsOptimizerHref({
-                start: effectiveStart,
-                end: effectiveEnd,
-                asin: effectiveAsin,
-                view: 'targets',
-                runId: effectiveRunId,
-              })}
-              workspaceQueueHref={`/ads/performance?${new URLSearchParams({
-                panel: 'queue',
-                channel: 'sp',
-                level: 'targets',
-                view: 'table',
-                asin: effectiveAsin,
-                start: effectiveStart,
-                end: effectiveEnd,
-              }).toString()}`}
-              run={targetsData?.run ?? null}
-              latestCompletedRun={targetsData?.latestCompletedRun ?? null}
-              productState={targetsData?.productState ?? null}
-              comparison={targetsData?.comparison ?? null}
-              productId={targetsData?.productId ?? null}
-              rows={targetsData?.rows ?? []}
-              notice={notice}
-              error={error}
-              overrideError={overrideError}
-              handoffAction={handoffAdsOptimizerToWorkspaceAction}
-              saveRecommendationOverrideAction={saveAdsOptimizerRecommendationOverrideAction}
-            />
+        <OptimizerTargetsPanel
+          asin={effectiveAsin}
+          start={effectiveStart}
+          end={effectiveEnd}
+          requestedRunId={targetsData?.requestedRunId ?? requestedRunId}
+          resolvedContextSource={targetsData?.resolvedContextSource ?? null}
+          runLookupError={targetsData?.runLookupError ?? null}
+          historyHref={buildAdsOptimizerHref({
+            start: effectiveStart,
+            end: effectiveEnd,
+            asin: effectiveAsin,
+            view: 'targets',
+            utility: 'history',
+          })}
+          returnTo={buildAdsOptimizerHref({
+            start: effectiveStart,
+            end: effectiveEnd,
+            asin: effectiveAsin,
+            view: 'targets',
+            runId: effectiveRunId,
+          })}
+          workspaceQueueHref={`/ads/performance?${new URLSearchParams({
+            panel: 'queue',
+            channel: 'sp',
+            level: 'targets',
+            view: 'table',
+            asin: effectiveAsin,
+            start: effectiveStart,
+            end: effectiveEnd,
+          }).toString()}`}
+          run={targetsData?.run ?? null}
+          latestCompletedRun={targetsData?.latestCompletedRun ?? null}
+          productState={targetsData?.productState ?? null}
+          comparison={targetsData?.comparison ?? null}
+          productId={targetsData?.productId ?? null}
+          rows={targetsData?.rows ?? []}
+          notice={notice}
+          error={error}
+          overrideError={overrideError}
+          handoffAction={handoffAdsOptimizerToWorkspaceAction}
+          saveRecommendationOverrideAction={saveAdsOptimizerRecommendationOverrideAction}
+        />
       ) : (
         <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">{emptyState.eyebrow}</div>

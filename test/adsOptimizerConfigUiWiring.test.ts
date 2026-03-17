@@ -17,13 +17,14 @@ const managerPath = path.join(
 );
 
 describe('ads optimizer config UI wiring', () => {
-  it('loads config data only for the config view and renders the config manager', () => {
+  it('loads config data only for the config utility and renders the config manager', () => {
     const source = fs.readFileSync(pagePath, 'utf-8');
 
-    expect(source).toContain("view === 'config' ? await getAdsOptimizerConfigViewData() : null");
-    expect(source).toContain("view === 'config' && asin !== 'all' ? await findOptimizerProductByAsin(asin) : null");
+    expect(source).toContain("utility === 'config' ? await getAdsOptimizerConfigViewData() : null");
+    expect(source).toContain("utility === 'config' && asin !== 'all' ? await findOptimizerProductByAsin(asin) : null");
     expect(source).toContain('await getProductOptimizerSettingsByProductId(selectedConfigProduct.productId)');
     expect(source).toContain('<OptimizerConfigManager');
+    expect(source).toContain("utility === 'config'");
     expect(source).toContain('createAdsOptimizerDraftVersionAction');
     expect(source).toContain('activateAdsOptimizerRulePackVersionAction');
     expect(source).toContain('saveAdsOptimizerDraftVersionAction');

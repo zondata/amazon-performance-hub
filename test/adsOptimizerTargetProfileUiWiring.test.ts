@@ -17,7 +17,9 @@ describe('ads optimizer phase 9 target review wiring', () => {
   it('loads targets view data only for the targets view and renders the targets panel', () => {
     const source = fs.readFileSync(pagePath, 'utf-8');
 
-    expect(source).toContain("view === 'targets' && (asin !== 'all' || requestedRunId !== null)");
+    expect(source).toContain(
+      "view === 'targets' && utility === null && (asin !== 'all' || requestedRunId !== null)"
+    );
     expect(source).toContain('getAdsOptimizerTargetsViewData');
     expect(source).toContain('<OptimizerTargetsPanel');
     expect(source).toContain('Review + comparison queue');

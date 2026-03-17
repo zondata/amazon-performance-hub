@@ -17,7 +17,7 @@ describe('ads optimizer phase 3 overview wiring', () => {
   it('loads overview data only for the overview view and renders the overview panel', () => {
     const source = fs.readFileSync(pagePath, 'utf-8');
 
-    expect(source).toContain("view === 'overview' && asin !== 'all'");
+    expect(source).toContain("view === 'overview' && utility === null && asin !== 'all'");
     expect(source).toContain('await getAdsOptimizerOverviewData({');
     expect(source).toContain('<OptimizerOverviewPanel asin={asin} start={start} end={end} data={overviewData} />');
   });

@@ -789,7 +789,8 @@ export const getAdsOptimizerOutcomeReviewDetailData = async (args: {
     start: selectedStartDate,
     end: selectedEndDate,
     asin,
-    view: 'outcomes',
+    view: 'overview',
+    utility: 'outcomes',
     horizon: args.horizon,
     metric,
   });

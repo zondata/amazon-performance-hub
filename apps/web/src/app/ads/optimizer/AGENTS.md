@@ -2,7 +2,7 @@
 
 Follow:
 - `docs/ads-optimizer/AGENTS.md`
-- `docs/ads-optimizer/BUILD_PLAN.md`
+- `docs/ads-optimizer/ads_optimizer_v2_build_plan.md`
 
 ## Local reminders
 - This route is a new optimizer surface, not the existing Ads Workspace.
@@ -10,15 +10,16 @@ Follow:
 - SP only for V1.
 - Feature-flag unfinished work.
 - Optimizer is recommendation-first.
+- V2 is a surface migration on top of the existing backend/runtime tables.
+- Only `Overview` and `Targets` are primary tabs.
+- `History`, `Config`, and `Outcome Review` stay available as secondary utilities.
 - Reuse semantic theme tokens and shared horizontal-scroll patterns.
 - Prefer linking into the current Ads Workspace draft flow instead of inventing a new execution path.
 - Product-level and target-level coverage notes must be explicit.
+- Keep product objective dynamic by ASIN.
+- Manual overrides remain first-class.
 - STIS / STIR / TOS IS and ranking are non-additive diagnostics; only show latest observed values or explicit trend metadata, never synthetic window rollups.
 - Zero-click targets can legitimately show expected-unavailable search-term diagnostics; do not frame that as broken coverage by default.
-
-## Progressive Disclosure Workbench Pattern
-- For dense optimizer review surfaces, prefer the Progressive Disclosure Workbench pattern documented in [progressive-disclosure-workbench.md](/home/albert/code/amazon-performance-hub/docs/ui-patterns/progressive-disclosure-workbench.md).
-- Keep top/context sections compact or collapsed by default on desktop.
-- Let the main queue + drawer workbench own most of the viewport height.
-- Make queue scroll ownership, drawer scroll ownership, sticky headers, and any frozen first column attach to the real pane-level scroller, not the page shell.
-- On mobile/tablet, prefer the simpler single-scroll fallback over nested-scroll traps.
+- Old optimizer deep links must remain usable: normalize legacy `view=history|config|outcomes` into the V2 shell instead of breaking them.
+- Prefer compact header/adjacent controls for utilities over adding more primary tabs.
+- Inline row expansion is the target-review direction for later phases; do not re-entrench queue + drawer as the default interaction model.

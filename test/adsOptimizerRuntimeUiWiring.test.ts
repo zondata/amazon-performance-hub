@@ -23,11 +23,13 @@ const recommendationPath = path.join(
 );
 
 describe('ads optimizer phase 4 runtime wiring', () => {
-  it('loads history data only for the history view and renders the history panel', () => {
+  it('loads history data only for the history utility and renders the history panel', () => {
     const source = fs.readFileSync(pagePath, 'utf-8');
 
-    expect(source).toContain("view === 'history' ? await getAdsOptimizerHistoryViewData(asin) : null");
+    expect(source).toContain("utility === 'history' ? await getAdsOptimizerHistoryViewData(asin) : null");
     expect(source).toContain('<OptimizerHistoryPanel');
+    expect(source).toContain('<OptimizerUtilityNav');
+    expect(source).toContain("utility: 'history'");
     expect(source).toContain('runAdsOptimizerNowAction');
     expect(source).toContain("const requestedRunId = paramValue('runId')?.trim() || null");
     expect(source).toContain('buildAdsOptimizerHref');

@@ -21,30 +21,37 @@ const loaderPath = path.join(
 );
 
 describe('ads optimizer outcome review wiring', () => {
-  it('adds the new outcomes shell view and safe search-param helpers', () => {
+  it('keeps outcome review as a utility and preserves safe search-param helpers', () => {
     const source = fs.readFileSync(shellPath, 'utf-8');
 
-    expect(source).toContain("{ label: 'Outcome Review', value: 'outcomes' }");
+    expect(source).toContain("{ label: 'Outcome Review', value: 'outcomes', parentView: 'overview' }");
+    expect(source).toContain('export const ADS_OPTIMIZER_UTILITIES = [');
+    expect(source).toContain("utility: 'outcomes'");
     expect(source).toContain('normalizeAdsOptimizerOutcomeHorizon');
     expect(source).toContain('normalizeAdsOptimizerOutcomeMetric');
     expect(source).toContain(": '7';");
     expect(source).toContain(": 'contribution_after_ads';");
+    expect(source).toContain("if (shell.utility) {");
+    expect(source).toContain("if (shell.utility === 'outcomes' && params.horizon)");
     expect(source).toContain("usp.set('horizon', params.horizon)");
     expect(source).toContain("usp.set('metric', params.metric)");
   });
 
-  it('loads and renders the outcomes view with honest product-scoped empty state copy', () => {
+  it('loads and renders the outcomes utility with honest product-scoped empty state copy', () => {
     const source = fs.readFileSync(pagePath, 'utf-8');
 
     expect(source).toContain("outcomes: {");
     expect(source).toContain('Outcome review scope');
     expect(source).toContain('Select one ASIN to review validated optimizer outcome lineage.');
+    expect(source).toContain("const utility = shell.utility;");
     expect(source).toContain('normalizeAdsOptimizerOutcomeHorizon');
     expect(source).toContain('normalizeAdsOptimizerOutcomeMetric');
-    expect(source).toContain("view === 'outcomes' && asin !== 'all'");
+    expect(source).toContain("utility === 'outcomes' && asin !== 'all'");
     expect(source).toContain('getAdsOptimizerOutcomeReviewData');
     expect(source).toContain('<OptimizerOutcomeReviewPanel');
     expect(source).toContain('Outcome review lineage');
+    expect(source).toContain('<OptimizerUtilityNav');
+    expect(source).toContain("name=\"utility\"");
     expect(source).toContain("name=\"horizon\"");
     expect(source).toContain("name=\"metric\"");
   });
