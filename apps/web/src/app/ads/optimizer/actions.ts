@@ -22,6 +22,7 @@ import { ADS_OPTIMIZER_TARGET_ROLES } from '@/lib/ads-optimizer/role';
 import { executeAdsOptimizerWorkspaceHandoff } from '@/lib/ads-optimizer/handoff';
 import { saveAdsOptimizerRecommendationOverride } from '@/lib/ads-optimizer/repoOverrides';
 import { executeAdsOptimizerManualRun } from '@/lib/ads-optimizer/runtime';
+import { buildAdsOptimizerHref } from '@/lib/ads-optimizer/shell';
 
 const trimToNull = (value: FormDataEntryValue | null): string | null => {
   if (typeof value !== 'string') return null;
@@ -216,13 +217,14 @@ export async function saveAdsOptimizerProductSettingsAction(formData: FormData) 
 export async function runAdsOptimizerNowAction(formData: FormData) {
   const returnTo = ensureReturnTo(
     trimToNull(formData.get('return_to')),
-    '/ads/optimizer?view=history'
+    '/ads/optimizer?view=overview'
   );
 
   try {
     const asin = trimToNull(formData.get('asin'));
     const start = trimToNull(formData.get('start'));
     const end = trimToNull(formData.get('end'));
+    const successView = trimToNull(formData.get('success_view'));
 
     if (!asin || !start || !end) {
       throw new Error('asin, start, and end are required.');
@@ -233,6 +235,16 @@ export async function runAdsOptimizerNowAction(formData: FormData) {
       start,
       end,
     });
+    const successReturnTo =
+      successView === 'targets'
+        ? buildAdsOptimizerHref({
+            asin,
+            start,
+            end,
+            view: 'targets',
+            runId: result.runId,
+          })
+        : returnTo;
 
     revalidatePath('/ads/optimizer');
     if (result.status === 'failed') {
@@ -242,12 +254,12 @@ export async function runAdsOptimizerNowAction(formData: FormData) {
     }
 
     if (result.diagnostics && result.targetSnapshotCount === 0) {
-      redirectWithFlash(returnTo, {
+      redirectWithFlash(successReturnTo, {
         notice: `Optimizer run ${result.runId} completed with 0 target snapshot(s) and 0 recommendation snapshot(s). Diagnostics were saved to history.`,
       });
     }
 
-    redirectWithFlash(returnTo, {
+    redirectWithFlash(successReturnTo, {
       notice: `Optimizer run ${result.runId} completed with ${result.targetSnapshotCount} target snapshot(s) and ${result.recommendationSnapshotCount} recommendation snapshot(s).`,
     });
   } catch (error) {

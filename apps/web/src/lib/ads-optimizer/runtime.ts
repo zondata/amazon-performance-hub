@@ -113,6 +113,14 @@ export type AdsOptimizerHistoryViewData = {
   runs: Awaited<ReturnType<typeof listAdsOptimizerRuns>>;
 };
 
+export type AdsOptimizerHeaderRunContext = {
+  requestedRunId: string | null;
+  requestedRun: AdsOptimizerRun | null;
+  requestedRunError: string | null;
+  matchingWindowRun: AdsOptimizerRun | null;
+  latestCompletedRun: AdsOptimizerRun | null;
+};
+
 export type AdsOptimizerTargetsViewData = {
   run: AdsOptimizerRun | null;
   latestCompletedRun: AdsOptimizerRun | null;
@@ -885,6 +893,52 @@ export const getAdsOptimizerHistoryViewData = async (
       '—',
     runNowVersionContext: resolvedRuntimeContext?.effectiveVersionContext ?? null,
     runs,
+  };
+};
+
+export const getAdsOptimizerHeaderRunContext = async (args: {
+  asin: string;
+  start: string;
+  end: string;
+  runId?: string | null;
+}): Promise<AdsOptimizerHeaderRunContext> => {
+  const requestedRunId = args.runId?.trim() ? args.runId.trim() : null;
+  const runs = await listAdsOptimizerRuns({
+    asin: args.asin === 'all' ? undefined : args.asin,
+    limit: 30,
+  });
+  const completedRuns = runs.filter((run) => run.status === 'completed');
+  const latestCompletedRun = completedRuns[0] ?? null;
+
+  let requestedRun: AdsOptimizerRun | null = null;
+  let requestedRunError: string | null = null;
+  if (requestedRunId) {
+    const runById = await getAdsOptimizerRunById(requestedRunId);
+    if (!runById) {
+      requestedRunError = `Persisted run ${requestedRunId} was not found for this account/marketplace.`;
+    } else if (runById.status !== 'completed') {
+      requestedRunError = `Persisted run ${requestedRunId} is ${runById.status} and is not reviewable in Targets yet.`;
+    } else {
+      requestedRun = runById;
+    }
+  }
+
+  const matchingWindowRun =
+    args.asin === 'all'
+      ? null
+      : completedRuns.find(
+          (run) =>
+            run.selected_asin === args.asin &&
+            run.date_start === args.start &&
+            run.date_end === args.end
+        ) ?? null;
+
+  return {
+    requestedRunId,
+    requestedRun,
+    requestedRunError,
+    matchingWindowRun,
+    latestCompletedRun,
   };
 };
 

@@ -5,6 +5,10 @@ import { describe, expect, it } from 'vitest';
 
 const pagePath = path.join(process.cwd(), 'apps/web/src/app/ads/optimizer/page.tsx');
 const actionsPath = path.join(process.cwd(), 'apps/web/src/app/ads/optimizer/actions.ts');
+const headerPath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads-optimizer/OptimizerRunScopeHeader.tsx'
+);
 const panelPath = path.join(
   process.cwd(),
   'apps/web/src/components/ads-optimizer/OptimizerHistoryPanel.tsx'
@@ -35,16 +39,39 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     expect(source).toContain('buildAdsOptimizerHref');
   });
 
+  it('wires the shared header to run-now and latest-run context without making Overview run-bound', () => {
+    const pageSource = fs.readFileSync(pagePath, 'utf-8');
+    const headerSource = fs.readFileSync(headerPath, 'utf-8');
+
+    expect(pageSource).toContain('getAdsOptimizerHeaderRunContext');
+    expect(pageSource).toContain('<OptimizerRunScopeHeader');
+    expect(pageSource).toContain('runNowAction={runAdsOptimizerNowAction}');
+    expect(pageSource).toContain('persistentRunId={effectiveRunId}');
+    expect(pageSource).toContain('runId: effectiveRunId');
+
+    expect(headerSource).toContain('Overview stays ASIN + date-range driven.');
+    expect(headerSource).toContain('Targets stays the persisted run-review');
+    expect(headerSource).toContain('surface, and any supported handoff still stages into Ads Workspace.');
+    expect(headerSource).toContain('Run context');
+    expect(headerSource).toContain('Latest completed run');
+    expect(headerSource).toContain('Open latest in Targets');
+    expect(headerSource).toContain('Run now');
+    expect(headerSource).toContain('success_view');
+    expect(headerSource).toContain('Creates a new persisted run');
+  });
+
   it('wires a manual run server action through the runtime service', () => {
     const source = fs.readFileSync(actionsPath, 'utf-8');
 
     expect(source).toContain('executeAdsOptimizerManualRun');
+    expect(source).toContain('buildAdsOptimizerHref');
     expect(source).toContain('executeAdsOptimizerWorkspaceHandoff');
     expect(source).toContain('export async function runAdsOptimizerNowAction');
     expect(source).toContain('export async function handoffAdsOptimizerToWorkspaceAction');
     expect(source).toContain("revalidatePath('/ads/optimizer')");
     expect(source).toContain("revalidatePath('/ads/performance')");
     expect(source).toContain('Optimizer run ${result.runId} completed');
+    expect(source).toContain("successView === 'targets'");
     expect(source).toContain('Optimizer handoff created draft ${result.changeSetName}');
     expect(source).toContain('Diagnostics were saved to history.');
   });

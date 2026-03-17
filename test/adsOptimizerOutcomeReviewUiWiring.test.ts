@@ -11,6 +11,10 @@ const pagePath = path.join(
   process.cwd(),
   'apps/web/src/app/ads/optimizer/page.tsx'
 );
+const headerPath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads-optimizer/OptimizerRunScopeHeader.tsx'
+);
 const panelPath = path.join(
   process.cwd(),
   'apps/web/src/components/ads-optimizer/OptimizerOutcomeReviewPanel.tsx'
@@ -39,6 +43,7 @@ describe('ads optimizer outcome review wiring', () => {
 
   it('loads and renders the outcomes utility with honest product-scoped empty state copy', () => {
     const source = fs.readFileSync(pagePath, 'utf-8');
+    const headerSource = fs.readFileSync(headerPath, 'utf-8');
 
     expect(source).toContain("outcomes: {");
     expect(source).toContain('Outcome review scope');
@@ -51,9 +56,9 @@ describe('ads optimizer outcome review wiring', () => {
     expect(source).toContain('<OptimizerOutcomeReviewPanel');
     expect(source).toContain('Outcome review lineage');
     expect(source).toContain('<OptimizerUtilityNav');
-    expect(source).toContain("name=\"utility\"");
-    expect(source).toContain("name=\"horizon\"");
-    expect(source).toContain("name=\"metric\"");
+    expect(headerSource).toContain("name=\"utility\"");
+    expect(headerSource).toContain("name=\"horizon\"");
+    expect(headerSource).toContain("name=\"metric\"");
   });
 
   it('keeps the panel and loader read-only, lineage-first, and marker-driven', () => {

@@ -79,7 +79,10 @@ vi.mock('../apps/web/src/lib/ads-workspace/repoChangeSetItems', () => ({
   listChangeSetItems: vi.fn(async () => []),
 }));
 
-import { getAdsOptimizerTargetsViewData } from '../apps/web/src/lib/ads-optimizer/runtime';
+import {
+  getAdsOptimizerHeaderRunContext,
+  getAdsOptimizerTargetsViewData,
+} from '../apps/web/src/lib/ads-optimizer/runtime';
 
 const makeRun = () => ({
   run_id: 'run-1',
@@ -157,5 +160,23 @@ describe('ads optimizer targets run context', () => {
     expect(result.rows).toEqual([]);
     expect(result.resolvedContextSource).toBeNull();
     expect(result.runLookupError).toContain('Persisted run missing-run was not found');
+  });
+
+  it('returns latest and matching run context for the shared header flow', async () => {
+    const run = makeRun();
+    repoState.getRunById.mockResolvedValue(run);
+    repoState.listRuns.mockResolvedValue([run]);
+
+    const result = await getAdsOptimizerHeaderRunContext({
+      asin: 'B001TEST',
+      start: '2026-03-01',
+      end: '2026-03-10',
+      runId: 'run-1',
+    });
+
+    expect(result.requestedRun?.run_id).toBe('run-1');
+    expect(result.matchingWindowRun?.run_id).toBe('run-1');
+    expect(result.latestCompletedRun?.run_id).toBe('run-1');
+    expect(result.requestedRunError).toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import OptimizerConfigManager from '@/components/ads-optimizer/OptimizerConfigMa
 import OptimizerHistoryPanel from '@/components/ads-optimizer/OptimizerHistoryPanel';
 import OptimizerOverviewPanel from '@/components/ads-optimizer/OptimizerOverviewPanel';
 import OptimizerOutcomeReviewPanel from '@/components/ads-optimizer/OptimizerOutcomeReviewPanel';
+import OptimizerRunScopeHeader from '@/components/ads-optimizer/OptimizerRunScopeHeader';
 import OptimizerTargetsPanel from '@/components/ads-optimizer/OptimizerTargetsPanel';
 import OptimizerUtilityNav from '@/components/ads-optimizer/OptimizerUtilityNav';
 import Tabs from '@/components/Tabs';
@@ -29,6 +30,7 @@ import {
   resolveAdsOptimizerRuntimeContextForAsin,
 } from '@/lib/ads-optimizer/repoRuntime';
 import {
+  getAdsOptimizerHeaderRunContext,
   getAdsOptimizerHistoryViewData,
   getAdsOptimizerTargetsViewData,
 } from '@/lib/ads-optimizer/runtime';
@@ -44,7 +46,6 @@ import {
 import { env } from '@/lib/env';
 import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
 import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
-import { formatUiDateRange } from '@/lib/time/formatUiDate';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -184,11 +185,30 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           metric: outcomeMetric,
         })
       : null;
+  const headerRunContext =
+    view === 'targets' && utility === null
+      ? {
+          requestedRunId,
+          requestedRun:
+            requestedRunId && targetsData?.resolvedContextSource === 'run_id'
+              ? targetsData.run
+              : null,
+          requestedRunError: requestedRunId ? targetsData?.runLookupError ?? null : null,
+          matchingWindowRun:
+            targetsData?.resolvedContextSource === 'window' ? targetsData.run : null,
+          latestCompletedRun: targetsData?.latestCompletedRun ?? null,
+        }
+      : await getAdsOptimizerHeaderRunContext({
+          asin,
+          start,
+          end,
+          runId: requestedRunId,
+        });
   const effectiveAsin = view === 'targets' ? targetsData?.run?.selected_asin ?? asin : asin;
   const effectiveStart = view === 'targets' ? targetsData?.run?.date_start ?? start : start;
   const effectiveEnd = view === 'targets' ? targetsData?.run?.date_end ?? end : end;
   const effectiveRunId =
-    view === 'targets' ? targetsData?.run?.run_id ?? requestedRunId : null;
+    view === 'targets' ? targetsData?.run?.run_id ?? requestedRunId : requestedRunId;
   const asinOptions = await fetchAsinOptions(env.accountId, env.marketplace);
   const selectedAsin = asinOptions.find((option) => option.asin === effectiveAsin) ?? null;
   const viewTabs = ADS_OPTIMIZER_VIEWS.map((item) => ({
@@ -199,7 +219,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
       end: effectiveEnd,
       asin: effectiveAsin,
       view: item.value,
-      runId: item.value === 'targets' ? effectiveRunId : null,
+      runId: effectiveRunId,
     }),
   }));
   const utilityLinks = ADS_OPTIMIZER_UTILITIES.map((item) => ({
@@ -211,7 +231,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
       asin: effectiveAsin,
       view: item.parentView,
       utility: item.value,
-      runId: item.parentView === 'targets' ? effectiveRunId : null,
+      runId: effectiveRunId,
       horizon: item.value === 'outcomes' ? outcomeHorizon : null,
       metric: item.value === 'outcomes' ? outcomeMetric : null,
     }),
@@ -223,7 +243,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
     asin: effectiveAsin,
     view,
     utility,
-    runId: view === 'targets' ? effectiveRunId : null,
+    runId: effectiveRunId,
     horizon: utility === 'outcomes' ? outcomeHorizon : null,
     metric: utility === 'outcomes' ? outcomeMetric : null,
   });
@@ -232,7 +252,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
     end: effectiveEnd,
     asin: effectiveAsin,
     view,
-    runId: view === 'targets' ? effectiveRunId : null,
+    runId: effectiveRunId,
   });
   const phaseBadge =
     utility === 'config'
@@ -249,75 +269,23 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
 
   return (
     <div className="space-y-8">
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0">
-            <div className="text-xs uppercase tracking-[0.3em] text-muted">
-              Ads optimizer
-            </div>
-            <div className="mt-2 text-lg font-semibold text-foreground">
-              {formatUiDateRange(effectiveStart, effectiveEnd)}
-            </div>
-            <div className="mt-2 max-w-3xl text-sm text-muted">
-              Feature-flagged SP optimizer route. Recommendations are reviewed here first, and any
-              supported handoff still stages into the existing Ads Workspace rather than executing
-              directly from the optimizer.
-            </div>
-          </div>
-          <form
-            method="get"
-            className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_auto] xl:items-end"
-          >
-            <input type="hidden" name="view" value={view} />
-            {utility ? <input type="hidden" name="utility" value={utility} /> : null}
-            {utility === 'outcomes' ? (
-              <>
-                <input type="hidden" name="horizon" value={outcomeHorizon} />
-                <input type="hidden" name="metric" value={outcomeMetric} />
-              </>
-            ) : null}
-            <label className="flex min-w-0 flex-col text-xs uppercase tracking-wide text-muted">
-              Start
-              <input
-                type="date"
-                name="start"
-                defaultValue={effectiveStart}
-                className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-              />
-            </label>
-            <label className="flex min-w-0 flex-col text-xs uppercase tracking-wide text-muted">
-              End
-              <input
-                type="date"
-                name="end"
-                defaultValue={effectiveEnd}
-                className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-              />
-            </label>
-            <label className="flex min-w-0 flex-col text-xs uppercase tracking-wide text-muted sm:col-span-2 xl:col-span-1">
-              Product
-              <select
-                name="asin"
-                defaultValue={effectiveAsin}
-                className="mt-1 w-full min-w-0 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-              >
-                <option value="all">All advertised ASINs</option>
-                {asinOptions.map((option) => (
-                  <option key={option.asin} value={option.asin}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="submit"
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground xl:self-end"
-            >
-              Apply
-            </button>
-          </form>
-        </div>
-      </section>
+      <OptimizerRunScopeHeader
+        accountId={env.accountId}
+        marketplace={env.marketplace}
+        asin={effectiveAsin}
+        start={effectiveStart}
+        end={effectiveEnd}
+        selectedAsinLabel={selectedAsin?.label ?? null}
+        asinOptions={asinOptions}
+        view={view}
+        utility={utility}
+        persistentRunId={effectiveRunId}
+        outcomeHorizon={outcomeHorizon}
+        outcomeMetric={outcomeMetric}
+        returnTo={returnTo}
+        runContext={headerRunContext}
+        runNowAction={runAdsOptimizerNowAction}
+      />
 
       <section className="space-y-4">
         <Tabs items={viewTabs} current={view} />
@@ -326,27 +294,6 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           activeUtility={utility}
           clearHref={clearUtilityHref}
         />
-      </section>
-
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-3">
-          <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-muted">Account</div>
-            <div className="mt-2 text-sm font-medium text-foreground">{env.accountId}</div>
-          </div>
-          <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-muted">Marketplace</div>
-            <div className="mt-2 text-sm font-medium text-foreground">{env.marketplace}</div>
-          </div>
-          <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-muted">ASIN scope</div>
-            <div className="mt-2 text-sm font-medium text-foreground">
-              {effectiveAsin === 'all'
-                ? 'All advertised ASINs'
-                : selectedAsin?.label ?? effectiveAsin}
-            </div>
-          </div>
-        </div>
       </section>
 
       <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
