@@ -19,7 +19,10 @@ describe('ads optimizer phase 3 overview wiring', () => {
 
     expect(source).toContain("view === 'overview' && utility === null && asin !== 'all'");
     expect(source).toContain('await getAdsOptimizerOverviewData({');
-    expect(source).toContain('<OptimizerOverviewPanel asin={asin} start={start} end={end} data={overviewData} />');
+    expect(source).toContain('trendEnabled: overviewTrendEnabled');
+    expect(source).toContain('trendMode: overviewTrendMode');
+    expect(source).toContain('<OptimizerOverviewPanel');
+    expect(source).toContain('trendEnabled={overviewTrendEnabled}');
   });
 
   it('defines deterministic product-state and objective helpers', () => {
@@ -40,5 +43,17 @@ describe('ads optimizer phase 3 overview wiring', () => {
     expect(source).toContain('recommendations are active in the optimizer run flow');
     expect(source).toContain('Execution handoff or staging into Ads Workspace is');
     expect(source).toContain('still not active in this phase.');
+    expect(source).toContain('Traffic and conversion inputs');
+    expect(source).toContain('Selected date range defines the current analysis window:');
+    expect(source).toContain('The previous period is auto-derived as the equal-length range immediately before it.');
+    expect(source).toContain('Trend mode only shows the trend for that selected window.');
+    expect(source).toContain('Trend mode');
+    expect(source).toContain('Previous window');
+    expect(source).toContain('Ranking ladder');
+    expect(source).toContain('Δ vs prev');
+    expect(source).toContain('band.currentCount');
+    expect(source).toContain('band.deltaCount');
+    expect(source).not.toContain('Traffic block');
+    expect(source).not.toContain('Conversion block');
   });
 });

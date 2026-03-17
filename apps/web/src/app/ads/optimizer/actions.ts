@@ -71,6 +71,13 @@ const redirectWithFlash = (
   redirect(`${url.pathname}?${url.searchParams.toString()}`);
 };
 
+const appendQueryParam = (href: string, name: string, value: string | null) => {
+  if (!value) return href;
+  const url = new URL(href, 'http://localhost');
+  url.searchParams.set(name, value);
+  return `${url.pathname}?${url.searchParams.toString()}`;
+};
+
 const redirectWorkspaceWithFlash = (
   returnTo: string,
   params: { notice?: string; error?: string; changeSetId?: string | null }
@@ -225,6 +232,7 @@ export async function runAdsOptimizerNowAction(formData: FormData) {
     const start = trimToNull(formData.get('start'));
     const end = trimToNull(formData.get('end'));
     const successView = trimToNull(formData.get('success_view'));
+    const successTrend = trimToNull(formData.get('success_trend'));
 
     if (!asin || !start || !end) {
       throw new Error('asin, start, and end are required.');
@@ -237,13 +245,17 @@ export async function runAdsOptimizerNowAction(formData: FormData) {
     });
     const successReturnTo =
       successView === 'targets'
-        ? buildAdsOptimizerHref({
-            asin,
-            start,
-            end,
-            view: 'targets',
-            runId: result.runId,
-          })
+        ? appendQueryParam(
+            buildAdsOptimizerHref({
+              asin,
+              start,
+              end,
+              view: 'targets',
+              runId: result.runId,
+            }),
+            'trend',
+            successTrend
+          )
         : returnTo;
 
     revalidatePath('/ads/optimizer');

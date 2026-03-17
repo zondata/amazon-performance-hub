@@ -47,16 +47,26 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     expect(pageSource).toContain('<OptimizerRunScopeHeader');
     expect(pageSource).toContain('runNowAction={runAdsOptimizerNowAction}');
     expect(pageSource).toContain('persistentRunId={effectiveRunId}');
+    expect(pageSource).toContain('trendEnabled={overviewTrendEnabled}');
     expect(pageSource).toContain('runId: effectiveRunId');
 
     expect(headerSource).toContain('Overview stays ASIN + date-range driven.');
     expect(headerSource).toContain('Targets stays the persisted run-review');
     expect(headerSource).toContain('surface, and any supported handoff still stages into Ads Workspace.');
+    expect(headerSource).toContain('Trend display');
+    expect(headerSource).toContain('Selected date range defines the current analysis window.');
+    expect(headerSource).toContain('auto-derived as the equal-length range immediately before it.');
+    expect(headerSource).toContain('Trend mode only shows');
+    expect(headerSource).toContain('the trend for that selected window');
+    expect(headerSource).toContain('applies immediately.');
     expect(headerSource).toContain('Run context');
     expect(headerSource).toContain('Latest completed run');
     expect(headerSource).toContain('Open latest in Targets');
     expect(headerSource).toContain('Run now');
     expect(headerSource).toContain('success_view');
+    expect(headerSource).toContain("label: 'On', enabled: true");
+    expect(headerSource).toContain("label: 'Off', enabled: false");
+    expect(headerSource).toContain("name=\"trend\" value={props.trendEnabled ? 'on' : 'off'}");
     expect(headerSource).toContain('Creates a new persisted run');
   });
 

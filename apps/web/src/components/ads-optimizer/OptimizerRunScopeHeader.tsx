@@ -22,6 +22,8 @@ type OptimizerRunScopeHeaderProps = {
   view: AdsOptimizerView;
   utility: AdsOptimizerUtility | null;
   persistentRunId: string | null;
+  trendEnabled: boolean;
+  trendMode: string;
   outcomeHorizon: AdsOptimizerOutcomeReviewHorizon;
   outcomeMetric: AdsOptimizerOutcomeReviewMetric;
   returnTo: string;
@@ -46,6 +48,28 @@ const buildTargetsHref = (run: AdsOptimizerRun) =>
     view: 'targets',
     runId: run.run_id,
   });
+
+const buildTrendToggleHref = (
+  props: OptimizerRunScopeHeaderProps,
+  nextTrendEnabled: boolean
+) => {
+  const href = buildAdsOptimizerHref({
+    asin: props.asin,
+    start: props.start,
+    end: props.end,
+    view: props.view,
+    utility: props.utility,
+    runId: props.persistentRunId,
+    horizon: props.outcomeHorizon,
+    metric: props.outcomeMetric,
+  });
+  const url = new URL(href, 'https://optimizer.local');
+  url.searchParams.set('trend', nextTrendEnabled ? 'on' : 'off');
+  if (props.trendMode !== '30') {
+    url.searchParams.set('trend_mode', props.trendMode);
+  }
+  return `${url.pathname}?${url.searchParams.toString()}`;
+};
 
 export default function OptimizerRunScopeHeader(props: OptimizerRunScopeHeaderProps) {
   const runDisabled = props.asin === 'all';
@@ -85,6 +109,9 @@ export default function OptimizerRunScopeHeader(props: OptimizerRunScopeHeaderPr
           />
           <MetricChip label="Primary view" value={props.view === 'targets' ? 'Targets' : 'Overview'} />
           {props.persistentRunId ? <MetricChip label="Pinned run" value={props.persistentRunId} /> : null}
+          {props.view === 'overview' && props.utility === null ? (
+            <MetricChip label="Trend" value={props.trendEnabled ? 'On' : 'Off'} />
+          ) : null}
         </div>
       </div>
 
@@ -95,6 +122,10 @@ export default function OptimizerRunScopeHeader(props: OptimizerRunScopeHeaderPr
         >
           <input type="hidden" name="view" value={props.view} />
           {props.utility ? <input type="hidden" name="utility" value={props.utility} /> : null}
+          <input type="hidden" name="trend" value={props.trendEnabled ? 'on' : 'off'} />
+          {props.trendMode !== '30' ? (
+            <input type="hidden" name="trend_mode" value={props.trendMode} />
+          ) : null}
           {props.utility === 'outcomes' ? (
             <>
               <input type="hidden" name="horizon" value={props.outcomeHorizon} />
@@ -141,6 +172,36 @@ export default function OptimizerRunScopeHeader(props: OptimizerRunScopeHeaderPr
             Apply scope
           </button>
         </form>
+
+        {props.view === 'overview' && props.utility === null ? (
+          <div className="rounded-2xl border border-border bg-surface p-4">
+            <div className="text-xs uppercase tracking-[0.3em] text-muted">Trend display</div>
+            <div className="mt-2 text-sm text-muted">
+              Selected date range defines the current analysis window. The previous period is
+              auto-derived as the equal-length range immediately before it. Trend mode only shows
+              the trend for that selected window and applies immediately.
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[
+                { label: 'On', enabled: true },
+                { label: 'Off', enabled: false },
+              ].map((item) => (
+                <a
+                  key={item.label}
+                  href={buildTrendToggleHref(props, item.enabled)}
+                  aria-current={props.trendEnabled === item.enabled ? 'page' : undefined}
+                  className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+                    props.trendEnabled === item.enabled
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-surface text-foreground hover:border-primary/40 hover:text-primary'
+                  }`}
+                >
+                  {item.label}
+                </a>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="rounded-2xl border border-border bg-surface p-4">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">Run context</div>
@@ -202,6 +263,7 @@ export default function OptimizerRunScopeHeader(props: OptimizerRunScopeHeaderPr
             <input type="hidden" name="asin" value={props.asin} />
             <input type="hidden" name="start" value={props.start} />
             <input type="hidden" name="end" value={props.end} />
+            <input type="hidden" name="success_trend" value={props.trendEnabled ? 'on' : 'off'} />
             <input type="hidden" name="success_view" value="targets" />
             {runDisabled ? (
               <div className="rounded-xl border border-dashed border-border bg-surface-2 px-4 py-3 text-sm text-muted">

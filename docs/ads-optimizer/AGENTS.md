@@ -167,6 +167,7 @@ For every phase:
 - Ads Workspace remains the only staging/execution boundary.
 - Keep current-versus-proposed values visible anywhere recommendations change something.
 - Keep missing-data behavior explicit and honest.
+- The V2 Overview ranking ladder uses page 1 numeric splits (`1-2`, `3-5`, `6-10`, `11-20`, `21-45`) and then page-based buckets (`Page 2` through `Page 7`) with signed count deltas only.
 
 ## When in doubt
 Choose the safer option that:

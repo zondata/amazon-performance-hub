@@ -5,6 +5,7 @@ type OptimizerOverviewPanelProps = {
   asin: string;
   start: string;
   end: string;
+  trendEnabled: boolean;
   data: AdsOptimizerOverviewData | null;
 };
 
@@ -22,9 +23,20 @@ const formatNumber = (value?: number | null) => {
   return value.toLocaleString('en-US');
 };
 
+const formatSignedCount = (value?: number | null) => {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  if (value === 0) return '0';
+  return `${value > 0 ? '+' : ''}${value.toLocaleString('en-US')}`;
+};
+
 const formatPercent = (value?: number | null) => {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
   return `${(value * 100).toFixed(1)}%`;
+};
+
+const formatSignedNumber = (value?: number | null, digits = 1) => {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}`;
 };
 
 const coverageBadgeClass = (status: AdsOptimizerOverviewData['visibility']['rankingCoverage']['status']) => {
@@ -60,6 +72,25 @@ const MetricCard = (props: { label: string; value: string; detail?: string }) =>
     {props.detail ? <div className="mt-1 text-sm text-muted">{props.detail}</div> : null}
   </div>
 );
+
+const buildDeltaDetail = (
+  metric:
+    | NonNullable<AdsOptimizerOverviewData['comparison']>[keyof NonNullable<
+        AdsOptimizerOverviewData['comparison']
+      >]
+    | undefined,
+  formatter: (value?: number | null) => string
+) => {
+  if (!metric) return undefined;
+  if (metric.current === null || metric.previous === null) {
+    return metric.detail;
+  }
+  const deltaText =
+    metric.delta === null
+      ? 'Δ unavailable'
+      : `${formatSignedNumber(metric.delta)} (${metric.deltaPct === null ? 'Δ% —' : `${formatSignedNumber(metric.deltaPct * 100)}%`})`;
+  return `Prev ${formatter(metric.previous)} · ${deltaText}`;
+};
 
 const CoverageCard = (props: {
   label: string;
@@ -153,12 +184,58 @@ export default function OptimizerOverviewPanel(props: OptimizerOverviewPanelProp
           roles, and read-only recommendations. Execution handoff or staging into Ads Workspace is
           still not active in this phase.
         </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <MetricCard
+            label="Current window"
+            value={
+              data.window
+                ? formatUiDateRange(data.window.current.start, data.window.current.end)
+                : formatUiDateRange(props.start, props.end)
+            }
+            detail={
+              data.window
+                ? `${formatNumber(data.window.current.days)} day(s) in the active Overview window.`
+                : undefined
+            }
+          />
+          <MetricCard
+            label="Previous window"
+            value={
+              data.window
+                ? formatUiDateRange(data.window.previous.start, data.window.previous.end)
+                : '—'
+            }
+            detail="Equal-length prior window used for current-vs-previous comparisons."
+          />
+          <MetricCard
+            label="Trend mode"
+            value={props.trendEnabled ? 'On' : 'Off'}
+            detail={
+              props.trendEnabled
+                ? data.trend?.detail ??
+                  'Trend display is on for the selected analysis window.'
+                : 'Trend display is off. Current vs previous comparison still uses the selected date range and equal-length prior period.'
+            }
+          />
+        </div>
+        <div className="mt-4 rounded-xl border border-border bg-surface px-4 py-4 text-sm text-muted">
+          Selected date range defines the current analysis window:{' '}
+          {data.window
+            ? formatUiDateRange(data.window.current.start, data.window.current.end)
+            : formatUiDateRange(props.start, props.end)}
+          . The previous period is auto-derived as the equal-length range immediately before it.
+          Trend mode only shows the trend for that selected window.
+        </div>
       </section>
 
       <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="text-xs uppercase tracking-[0.3em] text-muted">Economics inputs</div>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <MetricCard label="Sales" value={formatCurrency(data.economics.sales)} />
+          <MetricCard
+            label="Sales"
+            value={formatCurrency(data.economics.sales)}
+            detail={buildDeltaDetail(data.comparison?.sales, formatCurrency)}
+          />
           <MetricCard
             label="Orders"
             value={formatNumber(data.economics.orders)}
@@ -167,12 +244,18 @@ export default function OptimizerOverviewPanel(props: OptimizerOverviewPanelProp
           <MetricCard
             label="Ad spend"
             value={formatCurrency(data.economics.adSpend)}
-            detail={`Ad sales ${formatCurrency(data.economics.adSales)}`}
+            detail={
+              buildDeltaDetail(data.comparison?.adSpend, formatCurrency) ??
+              `Ad sales ${formatCurrency(data.economics.adSales)}`
+            }
           />
           <MetricCard
             label="TACOS"
             value={formatPercent(data.economics.tacos)}
-            detail={`Average price ${formatCurrency(data.economics.averagePrice)}`}
+            detail={
+              buildDeltaDetail(data.comparison?.tacos, formatPercent) ??
+              `Average price ${formatCurrency(data.economics.averagePrice)}`
+            }
           />
           <MetricCard
             label="Cost coverage"
@@ -191,7 +274,43 @@ export default function OptimizerOverviewPanel(props: OptimizerOverviewPanelProp
           <MetricCard
             label="Contribution After Ads"
             value={formatCurrency(data.economics.contributionAfterAds)}
-            detail="Product-level only. No target allocation is applied in Phase 3."
+            detail={
+              buildDeltaDetail(data.comparison?.contributionAfterAds, formatCurrency) ??
+              'Product-level only. No target allocation is applied in Phase 3.'
+            }
+          />
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <div className="text-xs uppercase tracking-[0.3em] text-muted">
+          Traffic and conversion inputs
+        </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <MetricCard
+            label="Sessions"
+            value={formatNumber(data.traffic?.sessions.current)}
+            detail={buildDeltaDetail(data.traffic?.sessions, formatNumber)}
+          />
+          <MetricCard
+            label="SP impressions"
+            value={formatNumber(data.traffic?.spImpressions.current)}
+            detail={buildDeltaDetail(data.traffic?.spImpressions, formatNumber)}
+          />
+          <MetricCard
+            label="SQP demand"
+            value={formatNumber(data.traffic?.sqpDemand.current)}
+            detail={data.traffic?.sqpDemand.detail}
+          />
+          <MetricCard
+            label="Unit session %"
+            value={formatPercent(data.conversion?.unitSessionPercentage.current)}
+            detail={buildDeltaDetail(data.conversion?.unitSessionPercentage, formatPercent)}
+          />
+          <MetricCard
+            label="Orders / session"
+            value={formatPercent(data.conversion?.ordersPerSession.current)}
+            detail={buildDeltaDetail(data.conversion?.ordersPerSession, formatPercent)}
           />
         </div>
       </section>
@@ -234,11 +353,69 @@ export default function OptimizerOverviewPanel(props: OptimizerOverviewPanelProp
             }
           />
         </div>
+        {data.visibility.rankingLadder ? (
+          <div className="mt-4 rounded-xl border border-border bg-surface p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted">Ranking ladder</div>
+                <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                  Current · Δ vs prev
+                </div>
+              </div>
+              <div
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${coverageBadgeClass(
+                  data.visibility.rankingLadder.status
+                )}`}
+              >
+                {data.visibility.rankingLadder.status}
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {data.visibility.rankingLadder.bands.map((band) => (
+                <div
+                  key={band.label}
+                  className="min-w-[150px] flex-1 rounded-xl border border-border bg-surface-2 px-3 py-2"
+                >
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    {band.label}
+                  </div>
+                  <div className="mt-2 flex items-baseline justify-between gap-3">
+                    <div className="text-lg font-semibold text-foreground">
+                      {formatNumber(band.currentCount)}
+                    </div>
+                    <div className="text-sm font-semibold text-muted">
+                      {formatSignedCount(band.deltaCount)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-sm text-muted">{data.visibility.rankingLadder.detail}</div>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="text-xs uppercase tracking-[0.3em] text-muted">Coverage notes</div>
-        {data.warnings.length === 0 ? (
+        {data.coverageNotes && data.coverageNotes.length > 0 ? (
+          <ul className="mt-4 space-y-3">
+            {data.coverageNotes.map((note) => (
+              <li
+                key={`${note.source}-${note.message}`}
+                className={`rounded-lg border px-4 py-3 text-sm ${
+                  note.status === 'missing'
+                    ? 'border-rose-200 bg-rose-50 text-rose-800'
+                    : note.status === 'partial'
+                      ? 'border-amber-200 bg-amber-50 text-amber-800'
+                      : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                }`}
+              >
+                <span className="font-semibold uppercase tracking-wide">{note.source}</span> ·{' '}
+                {note.message}
+              </li>
+            ))}
+          </ul>
+        ) : data.warnings.length === 0 ? (
           <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-800">
             Required Phase 3 inputs were available for this ASIN without any explicit coverage gaps.
           </div>

@@ -19,7 +19,11 @@ import {
   seedAdsOptimizerStarterVersionsAction,
 } from '@/app/ads/optimizer/actions';
 import { isAdsOptimizerEnabled } from '@/lib/ads-optimizer/featureFlag';
-import { getAdsOptimizerOverviewData } from '@/lib/ads-optimizer/overview';
+import {
+  getAdsOptimizerOverviewData,
+  normalizeAdsOptimizerOverviewTrendEnabled,
+  normalizeAdsOptimizerOverviewTrendMode,
+} from '@/lib/ads-optimizer/overview';
 import { getAdsOptimizerOutcomeReviewData } from '@/lib/ads-optimizer/outcomeReview';
 import {
   getAdsOptimizerConfigViewData,
@@ -141,6 +145,12 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
   const utility = shell.utility;
   const outcomeHorizon = normalizeAdsOptimizerOutcomeHorizon(paramValue('horizon'));
   const outcomeMetric = normalizeAdsOptimizerOutcomeMetric(paramValue('metric'));
+  const rawOverviewTrend = paramValue('trend');
+  const rawOverviewTrendMode =
+    paramValue('trend_mode') ??
+    (rawOverviewTrend && /^\d+$/.test(rawOverviewTrend) ? rawOverviewTrend : undefined);
+  const overviewTrendEnabled = normalizeAdsOptimizerOverviewTrendEnabled(rawOverviewTrend);
+  const overviewTrendMode = normalizeAdsOptimizerOverviewTrendMode(rawOverviewTrendMode);
   const notice = pickSearchParam(params?.notice);
   const error = pickSearchParam(params?.error);
   const overrideError = paramValue('override_error') === '1';
@@ -152,6 +162,8 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           asin,
           start,
           end,
+          trendEnabled: overviewTrendEnabled,
+          trendMode: overviewTrendMode,
         })
       : null;
   const configData = utility === 'config' ? await getAdsOptimizerConfigViewData() : null;
@@ -211,49 +223,65 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
     view === 'targets' ? targetsData?.run?.run_id ?? requestedRunId : requestedRunId;
   const asinOptions = await fetchAsinOptions(env.accountId, env.marketplace);
   const selectedAsin = asinOptions.find((option) => option.asin === effectiveAsin) ?? null;
+  const withOverviewTrendParams = (href: string) => {
+    const url = new URL(href, 'http://localhost');
+    url.searchParams.set('trend', overviewTrendEnabled ? 'on' : 'off');
+    if (rawOverviewTrendMode) {
+      url.searchParams.set('trend_mode', overviewTrendMode);
+    }
+    return `${url.pathname}?${url.searchParams.toString()}`;
+  };
   const viewTabs = ADS_OPTIMIZER_VIEWS.map((item) => ({
     label: item.label,
     value: item.value,
-    href: buildAdsOptimizerHref({
-      start: effectiveStart,
-      end: effectiveEnd,
-      asin: effectiveAsin,
-      view: item.value,
-      runId: effectiveRunId,
-    }),
+    href: withOverviewTrendParams(
+      buildAdsOptimizerHref({
+        start: effectiveStart,
+        end: effectiveEnd,
+        asin: effectiveAsin,
+        view: item.value,
+        runId: effectiveRunId,
+      })
+    ),
   }));
   const utilityLinks = ADS_OPTIMIZER_UTILITIES.map((item) => ({
     label: item.label,
     value: item.value,
-    href: buildAdsOptimizerHref({
+    href: withOverviewTrendParams(
+      buildAdsOptimizerHref({
+        start: effectiveStart,
+        end: effectiveEnd,
+        asin: effectiveAsin,
+        view: item.parentView,
+        utility: item.value,
+        runId: effectiveRunId,
+        horizon: item.value === 'outcomes' ? outcomeHorizon : null,
+        metric: item.value === 'outcomes' ? outcomeMetric : null,
+      })
+    ),
+  }));
+  const emptyState = EMPTY_STATE_COPY[(utility ?? view) as AdsOptimizerLegacyView];
+  const returnTo = withOverviewTrendParams(
+    buildAdsOptimizerHref({
       start: effectiveStart,
       end: effectiveEnd,
       asin: effectiveAsin,
-      view: item.parentView,
-      utility: item.value,
+      view,
+      utility,
       runId: effectiveRunId,
-      horizon: item.value === 'outcomes' ? outcomeHorizon : null,
-      metric: item.value === 'outcomes' ? outcomeMetric : null,
-    }),
-  }));
-  const emptyState = EMPTY_STATE_COPY[(utility ?? view) as AdsOptimizerLegacyView];
-  const returnTo = buildAdsOptimizerHref({
-    start: effectiveStart,
-    end: effectiveEnd,
-    asin: effectiveAsin,
-    view,
-    utility,
-    runId: effectiveRunId,
-    horizon: utility === 'outcomes' ? outcomeHorizon : null,
-    metric: utility === 'outcomes' ? outcomeMetric : null,
-  });
-  const clearUtilityHref = buildAdsOptimizerHref({
-    start: effectiveStart,
-    end: effectiveEnd,
-    asin: effectiveAsin,
-    view,
-    runId: effectiveRunId,
-  });
+      horizon: utility === 'outcomes' ? outcomeHorizon : null,
+      metric: utility === 'outcomes' ? outcomeMetric : null,
+    })
+  );
+  const clearUtilityHref = withOverviewTrendParams(
+    buildAdsOptimizerHref({
+      start: effectiveStart,
+      end: effectiveEnd,
+      asin: effectiveAsin,
+      view,
+      runId: effectiveRunId,
+    })
+  );
   const phaseBadge =
     utility === 'config'
       ? 'Live versioned config'
@@ -280,6 +308,8 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
         view={view}
         utility={utility}
         persistentRunId={effectiveRunId}
+        trendEnabled={overviewTrendEnabled}
+        trendMode={overviewTrendMode}
         outcomeHorizon={outcomeHorizon}
         outcomeMetric={outcomeMetric}
         returnTo={returnTo}
@@ -359,7 +389,13 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           data={outcomeReviewData}
         />
       ) : view === 'overview' ? (
-        <OptimizerOverviewPanel asin={asin} start={start} end={end} data={overviewData} />
+        <OptimizerOverviewPanel
+          asin={asin}
+          start={start}
+          end={end}
+          trendEnabled={overviewTrendEnabled}
+          data={overviewData}
+        />
       ) : view === 'targets' ? (
         <OptimizerTargetsPanel
           asin={effectiveAsin}

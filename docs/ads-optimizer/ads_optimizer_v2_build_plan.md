@@ -306,11 +306,11 @@ economics, ranking, traffic, conversion, previous-period comparison, and trend m
   - [ ] percent delta where safe
   - [ ] metric-aware good/bad semantics
 - [ ] Add a **ranking ladder** for organic bands:
-  - [ ] `1-5`
-  - [ ] `6-10`
-  - [ ] `11-45`
-  - [ ] `46-90`
-  - [ ] `>90`
+  - [ ] page 1 numeric splits: `1-2`, `3-5`, `6-10`, `11-20`, `21-45`
+  - [ ] page-based buckets after page 1: `Page 2`, `Page 3`, `Page 4`, `Page 5`, `Page 6`, `Page 7`
+  - [ ] optional `Beyond tracked range` only when the source distinguishes it honestly
+  - [ ] do not fake `Not ranked` when the source only tells us the tracked range ceiling
+  - [ ] show bucket label, current count, and signed count delta vs previous period only
 - [ ] Add a compact **traffic** block:
   - [ ] sessions
   - [ ] total SP impressions
@@ -332,6 +332,7 @@ economics, ranking, traffic, conversion, previous-period comparison, and trend m
 - Prefer extending the Overview loader with a page-specific view model rather than pushing UI formatting into the component.
 - Reuse existing sales/ranking/SQP sources before adding any new query path.
 - Prefer one page-level trend control instead of per-card trend toggles.
+- Treat one Amazon search-results page as `45` organic positions when building page-based ladder buckets.
 
 ### Tests to add or update
 
@@ -385,6 +386,11 @@ Turn Overview into a real V2 operator command center.
   - [ ] traffic
   - [ ] conversion
   - [ ] notes / coverage / warnings
+- [ ] Keep the ranking ladder on the shared V2 definition:
+  - [ ] page 1 numeric splits (`1-2`, `3-5`, `6-10`, `11-20`, `21-45`)
+  - [ ] page-based buckets for `Page 2` through `Page 7`
+  - [ ] display only bucket label, current count, and signed count delta vs previous period
+  - [ ] do not add average rank or percentages
 - [ ] Add one **global trend mode** control for the page.
 - [ ] Keep layout clean on laptop widths.
 - [ ] Use metric-aware color handling.
