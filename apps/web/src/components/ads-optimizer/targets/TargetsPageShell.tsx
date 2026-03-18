@@ -1,23 +1,50 @@
 'use client';
 
-import { Fragment, type ReactNode, useMemo, useState } from 'react';
+import {
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import Link from 'next/link';
 
 import { readAdsOptimizerRunEffectiveVersionContext } from '@/lib/ads-optimizer/effectiveVersion';
 import type { AdsOptimizerRunComparisonView } from '@/lib/ads-optimizer/comparison';
 import type { AdsOptimizerTargetRole } from '@/lib/ads-optimizer/role';
 import type { AdsOptimizerTargetReviewRow } from '@/lib/ads-optimizer/runtime';
+import {
+  resolveVisibleExpandedTargetSnapshotId,
+  toggleExpandedTargetSnapshotId,
+} from '@/lib/ads-optimizer/targetInlineExpansion';
 import type { AdsOptimizerRun } from '@/lib/ads-optimizer/runtimeTypes';
 import type { AdsOptimizerProductRunState } from '@/lib/ads-optimizer/state';
 import {
-  buildAdsOptimizerTargetRowSummaries,
-  filterAdsOptimizerTargetRowSummaries,
-  getDefaultAdsOptimizerTargetQueueSortDirection,
+  buildAdsOptimizerTargetRowTableSummaries,
+  filterAdsOptimizerTargetRowTableSummaries,
+  getDefaultAdsOptimizerTargetTableSortDirection,
   type AdsOptimizerTargetExceptionFilterValue,
   type AdsOptimizerTargetFilterValue,
-  type AdsOptimizerTargetQueueSort,
-  type AdsOptimizerTargetQueueSortDirection,
-} from '@/lib/ads-optimizer/targetRowSummary';
+  type AdsOptimizerTargetTableSort,
+  type AdsOptimizerTargetTableSortDirection,
+} from '@/lib/ads-optimizer/targetRowTableSummary';
+import {
+  buildAdsOptimizerPlacementEvidenceRows,
+  buildAdsOptimizerSearchTermEvidenceRows,
+  buildAdsOptimizerSearchTermsEmptyState,
+} from '@/lib/ads-optimizer/targetDecisionSurface';
+import {
+  ADS_OPTIMIZER_TARGET_TABLE_COLUMNS,
+  ADS_OPTIMIZER_TARGET_TABLE_LAYOUT_STORAGE_KEY,
+  applyAdsOptimizerTargetTableColumnResizeDelta,
+  getDefaultAdsOptimizerTargetTableLayoutPrefs,
+  getAdsOptimizerTargetTableColumnConfig,
+  parseAdsOptimizerTargetTableLayoutPrefs,
+  serializeAdsOptimizerTargetTableLayoutPrefs,
+  toggleAdsOptimizerTargetTableFrozenColumn,
+  type AdsOptimizerTargetTableColumnKey,
+  type AdsOptimizerTargetTableLayoutPrefs,
+} from '@/lib/ads-optimizer/targetTableLayoutPrefs';
 import type { AdsOptimizerRecommendationOverride } from '@/lib/ads-optimizer/types';
 import {
   formatUiDateRange,
@@ -56,19 +83,6 @@ type WorkspaceSupportedActionType =
   | 'update_target_bid'
   | 'update_target_state'
   | 'update_placement_modifier';
-type DrawerInspectionEngineId =
-  | 'action-plan'
-  | 'guardrails'
-  | 'portfolio-caps'
-  | 'target-state'
-  | 'role-history'
-  | 'query-diagnostics'
-  | 'placement-diagnostics'
-  | 'run-comparison'
-  | 'rollback-guidance'
-  | 'raw-metrics'
-  | 'derived-metrics';
-type DrawerInspectionSelection = DrawerInspectionEngineId | 'all' | null;
 type ProposedChangeCard =
   | {
       key: string;
@@ -86,10 +100,11 @@ type ProposedChangeCard =
       reviewOnly: true;
       detail: string;
     };
-type DrawerInspectionSection = {
-  id: DrawerInspectionEngineId;
-  label: string;
-  render: () => ReactNode;
+type ActiveColumnResize = {
+  key: AdsOptimizerTargetTableColumnKey;
+  pointerId: number;
+  startClientX: number;
+  startWidth: number;
 };
 
 const GLOBAL_METHODOLOGY_NOTES = [
@@ -305,15 +320,6 @@ const ExceptionSeverityBadge = (props: { severity: 'high' | 'medium' | 'low' }) 
   </span>
 );
 
-const DetailSection = (props: { label: string; children: ReactNode }) => (
-  <section className="rounded-xl border border-border bg-surface px-4 py-4">
-    <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-muted">
-      {props.label}
-    </div>
-    <div className="mt-3 text-sm text-foreground">{props.children}</div>
-  </section>
-);
-
 const CollapsibleSummaryPanel = (props: {
   label: string;
   summary: ReactNode;
@@ -367,41 +373,59 @@ const JsonBlock = (props: { value: Record<string, unknown> | null }) => {
   );
 };
 
-const QueryCandidateList = (props: {
+const EvidenceTag = (props: { label: string; tone?: 'neutral' | 'good' | 'warn' | 'action' }) => {
+  const className =
+    props.tone === 'good'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+      : props.tone === 'warn'
+        ? 'border-amber-200 bg-amber-50 text-amber-800'
+        : props.tone === 'action'
+          ? 'border-sky-200 bg-sky-50 text-sky-800'
+          : 'border-border bg-surface text-muted';
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${className}`}
+    >
+      {props.label}
+    </span>
+  );
+};
+
+const SectionDisclosureCard = (props: {
+  id: string;
   label: string;
-  candidates: Array<{
-    searchTerm: string;
-    sameText: boolean;
-    clicks: number;
-    orders: number;
-    spend: number;
-    sales: number;
-  }>;
-  emptyLabel: string;
-}) => (
-  <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-    <div className="text-xs uppercase tracking-wide text-muted">{props.label}</div>
-    {props.candidates.length > 0 ? (
-      <div className="mt-3 space-y-2">
-        {props.candidates.map((candidate, index) => (
-          <div
-            key={`${props.label}:${candidate.searchTerm}:${index}`}
-            className="rounded-lg border border-border bg-surface px-3 py-3"
-          >
-            <div className="font-semibold text-foreground">{candidate.searchTerm}</div>
-            <div className="mt-1 text-xs text-muted">
-              same_text={String(candidate.sameText)} · clicks {formatNumber(candidate.clicks)} ·
-              orders {formatNumber(candidate.orders)} · spend {formatCurrency(candidate.spend)} ·
-              sales {formatCurrency(candidate.sales)}
-            </div>
-          </div>
-        ))}
-      </div>
-    ) : (
-      <div className="mt-2 text-sm text-muted">{props.emptyLabel}</div>
-    )}
-  </div>
-);
+  summary: ReactNode;
+  defaultExpanded: boolean;
+  children: ReactNode;
+}) => {
+  const [expanded, setExpanded] = useState(props.defaultExpanded);
+
+  return (
+    <section className="rounded-xl border border-border bg-surface px-4 py-4">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={props.id}
+        className="flex w-full items-start justify-between gap-3 text-left"
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <div className="min-w-0">
+          <div className="text-xs uppercase tracking-[0.3em] text-muted">{props.label}</div>
+          <div className="mt-2 text-sm text-muted">{props.summary}</div>
+        </div>
+        <div className="rounded-lg border border-border bg-surface-2 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          {expanded ? 'Collapse' : 'Expand'}
+        </div>
+      </button>
+      {expanded ? (
+        <div id={props.id} className="mt-4">
+          {props.children}
+        </div>
+      ) : null}
+    </section>
+  );
+};
 
 const getRowSpecificExceptions = (row: AdsOptimizerTargetReviewRow) => [...row.coverage.notes];
 
@@ -856,47 +880,49 @@ const buildTopList = (rows: AdsOptimizerTargetReviewRow[], kind: 'risk' | 'oppor
     .slice(0, 3);
 
 export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
-  const [selectedTargetSnapshotId, setSelectedTargetSnapshotId] = useState<string | null>(
-    props.rows[0]?.targetSnapshotId ?? null
-  );
+  const [selectedTargetSnapshotId, setSelectedTargetSnapshotId] = useState<string | null>(null);
   const [selectedForHandoff, setSelectedForHandoff] = useState<string[]>([]);
   const [roleFilter, setRoleFilter] = useState<AdsOptimizerTargetFilterValue>('all');
-  const [efficiencyFilter, setEfficiencyFilter] = useState<AdsOptimizerTargetFilterValue>('all');
   const [tierFilter, setTierFilter] = useState<AdsOptimizerTargetFilterValue>('all');
-  const [confidenceFilter, setConfidenceFilter] = useState<AdsOptimizerTargetFilterValue>('all');
+  const [trendFilter, setTrendFilter] = useState<AdsOptimizerTargetFilterValue>('all');
   const [spendDirectionFilter, setSpendDirectionFilter] =
     useState<AdsOptimizerTargetFilterValue>('all');
   const [exceptionFilter, setExceptionFilter] =
     useState<AdsOptimizerTargetExceptionFilterValue>('all');
-  const [sortBy, setSortBy] = useState<AdsOptimizerTargetQueueSort>('priority');
-  const [sortDirection, setSortDirection] = useState<AdsOptimizerTargetQueueSortDirection>('asc');
-  const [selectedInspectionEngineState, setSelectedInspectionEngineState] = useState<{
-    targetSnapshotId: string | null;
-    engine: DrawerInspectionSelection;
-  }>({
-    targetSnapshotId: null,
-    engine: null,
-  });
-  const rowSummaries = useMemo(() => buildAdsOptimizerTargetRowSummaries(props.rows), [props.rows]);
+  const [sortBy, setSortBy] = useState<AdsOptimizerTargetTableSort>('priority');
+  const [sortDirection, setSortDirection] = useState<AdsOptimizerTargetTableSortDirection>('asc');
+  const [tableLayoutPrefs, setTableLayoutPrefs] = useState<AdsOptimizerTargetTableLayoutPrefs>(
+    () => getDefaultAdsOptimizerTargetTableLayoutPrefs()
+  );
+  const [hasLoadedTableLayoutPrefs, setHasLoadedTableLayoutPrefs] = useState(false);
+  const [activeColumnResize, setActiveColumnResize] = useState<ActiveColumnResize | null>(null);
+  const rowSummaries = useMemo(
+    () => buildAdsOptimizerTargetRowTableSummaries(props.rows),
+    [props.rows]
+  );
   const rowLookup = useMemo(
     () => new Map(props.rows.map((row) => [row.targetSnapshotId, row])),
     [props.rows]
   );
   const filteredRowSummaries = useMemo(
     () =>
-      filterAdsOptimizerTargetRowSummaries(rowSummaries, {
+      filterAdsOptimizerTargetRowTableSummaries(rowSummaries, {
         role: roleFilter,
-        efficiency: efficiencyFilter,
+        efficiency: 'all',
         tier: tierFilter,
-        confidence: confidenceFilter,
+        confidence: 'all',
         spendDirection: spendDirectionFilter,
         exceptions: exceptionFilter,
         sortBy,
         sortDirection,
-      }),
+      }).filter((summary) =>
+        trendFilter === 'all'
+          ? true
+          : trendFilter === 'missing'
+            ? summary.filters.trendContext === null
+            : summary.filters.trendContext === trendFilter
+      ),
     [
-      confidenceFilter,
-      efficiencyFilter,
       exceptionFilter,
       roleFilter,
       rowSummaries,
@@ -904,25 +930,116 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
       sortDirection,
       spendDirectionFilter,
       tierFilter,
+      trendFilter,
     ]
   );
   const filteredRows = filteredRowSummaries
     .map((summary) => rowLookup.get(summary.targetSnapshotId) ?? null)
     .filter((row): row is AdsOptimizerTargetReviewRow => row !== null);
-  const activeTargetSnapshotId = filteredRows.some(
-    (row) => row.targetSnapshotId === selectedTargetSnapshotId
-  )
-    ? selectedTargetSnapshotId
-    : (filteredRows[0]?.targetSnapshotId ?? null);
-  const selectedInspectionEngine =
-    selectedInspectionEngineState.targetSnapshotId === activeTargetSnapshotId
-      ? selectedInspectionEngineState.engine
-      : null;
+  const activeTargetSnapshotId = resolveVisibleExpandedTargetSnapshotId(
+    selectedTargetSnapshotId,
+    filteredRows.map((row) => row.targetSnapshotId)
+  );
   const activeRow =
     filteredRows.find((row) => row.targetSnapshotId === activeTargetSnapshotId) ?? null;
   const effectiveVersionContext = props.run
     ? readAdsOptimizerRunEffectiveVersionContext(props.run.input_summary_json)
     : null;
+  const isTargetColumnFrozen = tableLayoutPrefs.frozenColumns.includes('target');
+  const targetHeaderClass = isTargetColumnFrozen
+    ? 'sticky left-0 z-30 shadow-[8px_0_12px_-12px_rgba(15,23,42,0.18)]'
+    : '';
+  const headerCellStyle = (key: AdsOptimizerTargetTableColumnKey) => ({
+    width: `${tableLayoutPrefs.widths[key]}px`,
+    minWidth: `${tableLayoutPrefs.widths[key]}px`,
+    maxWidth: `${tableLayoutPrefs.widths[key]}px`,
+  });
+  const tableWidthPx = ADS_OPTIMIZER_TARGET_TABLE_COLUMNS.reduce(
+    (sum, column) => sum + tableLayoutPrefs.widths[column.key],
+    0
+  );
+
+  useEffect(() => {
+    try {
+      setTableLayoutPrefs(
+        parseAdsOptimizerTargetTableLayoutPrefs(
+          window.localStorage.getItem(ADS_OPTIMIZER_TARGET_TABLE_LAYOUT_STORAGE_KEY)
+        )
+      );
+    } catch {
+      setTableLayoutPrefs(getDefaultAdsOptimizerTargetTableLayoutPrefs());
+    } finally {
+      setHasLoadedTableLayoutPrefs(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedTableLayoutPrefs || activeColumnResize) return;
+    try {
+      window.localStorage.setItem(
+        ADS_OPTIMIZER_TARGET_TABLE_LAYOUT_STORAGE_KEY,
+        serializeAdsOptimizerTargetTableLayoutPrefs(tableLayoutPrefs)
+      );
+    } catch {
+      // Ignore localStorage write failures.
+    }
+  }, [activeColumnResize, hasLoadedTableLayoutPrefs, tableLayoutPrefs]);
+
+  useEffect(() => {
+    if (!activeColumnResize) return;
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== activeColumnResize.pointerId) return;
+      const deltaX = event.clientX - activeColumnResize.startClientX;
+      setTableLayoutPrefs((current) =>
+        applyAdsOptimizerTargetTableColumnResizeDelta(
+          current,
+          activeColumnResize.key,
+          activeColumnResize.startWidth,
+          deltaX
+        )
+      );
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+    };
+
+    const stopResize = (event: PointerEvent) => {
+      if (event.pointerId !== activeColumnResize.pointerId) return;
+      setActiveColumnResize(null);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', stopResize);
+    window.addEventListener('pointercancel', stopResize);
+
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', stopResize);
+      window.removeEventListener('pointercancel', stopResize);
+    };
+  }, [activeColumnResize]);
+
+  const expandTargetRow = (targetSnapshotId: string) => {
+    setSelectedTargetSnapshotId(targetSnapshotId);
+  };
+
+  const toggleTargetRow = (targetSnapshotId: string) => {
+    setSelectedTargetSnapshotId((current) =>
+      toggleExpandedTargetSnapshotId(current, targetSnapshotId)
+    );
+  };
+
+  const collapseExpandedTargetRow = () => {
+    setSelectedTargetSnapshotId(null);
+  };
 
   if (props.asin === 'all') {
     return (
@@ -1074,19 +1191,757 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
     });
   };
 
-  const toggleQueueSort = (nextSort: AdsOptimizerTargetQueueSort) => {
-    if (sortBy === nextSort) {
-      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
-      return;
-    }
-    setSortBy(nextSort);
-    setSortDirection(getDefaultAdsOptimizerTargetQueueSortDirection(nextSort));
+  const toggleSortDirection = () => {
+    setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
   };
 
-  const buildSortIndicator = (column: AdsOptimizerTargetQueueSort) => {
-    if (sortBy !== column) return ' ';
-    return sortDirection === 'asc' ? '↑' : '↓';
+  const handleSortByChange = (nextSort: AdsOptimizerTargetTableSort) => {
+    if (nextSort === sortBy) return;
+    setSortBy(nextSort);
+    setSortDirection(getDefaultAdsOptimizerTargetTableSortDirection(nextSort));
   };
+
+  const handleResetColumnWidths = () => {
+    setTableLayoutPrefs(getDefaultAdsOptimizerTargetTableLayoutPrefs());
+  };
+
+  const handleToggleFrozenColumn = (key: AdsOptimizerTargetTableColumnKey) => {
+    setTableLayoutPrefs((current) => toggleAdsOptimizerTargetTableFrozenColumn(current, key));
+  };
+
+  const handleColumnResizePointerDown = (
+    key: AdsOptimizerTargetTableColumnKey,
+    event: ReactPointerEvent<HTMLButtonElement>
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const config = getAdsOptimizerTargetTableColumnConfig(key);
+    setActiveColumnResize({
+      key,
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startWidth: Math.max(config.minWidth, tableLayoutPrefs.widths[key]),
+    });
+  };
+
+  const activeExpandedContent = activeRow
+    ? (() => {
+        const proposedChangeCards = buildProposedChangeCards(activeRow);
+        const manualOverrideCards = buildManualOverrideCards(activeRow);
+        const bidActionEditor = getActionEditorSource(activeRow, 'update_target_bid');
+        const stateActionEditor = getActionEditorSource(activeRow, 'update_target_state');
+        const placementActionEditor = getActionEditorSource(
+          activeRow,
+          'update_placement_modifier'
+        );
+        const currentBidForOverride =
+          readJsonNumber(bidActionEditor.entityContext, 'current_bid') ?? activeRow.raw.cpc;
+        const nextBidForOverride = readJsonNumber(bidActionEditor.proposedChange, 'next_bid');
+        const currentStateForOverride = readJsonString(
+          stateActionEditor.entityContext,
+          'current_state'
+        );
+        const nextStateForOverride = readJsonString(stateActionEditor.proposedChange, 'next_state');
+        const currentPlacementCodeForOverride =
+          readJsonString(placementActionEditor.entityContext, 'placement_code') ??
+          readJsonString(placementActionEditor.proposedChange, 'placement_code') ??
+          activeRow.recommendation?.placementDiagnostics?.currentPlacementCode ??
+          'PLACEMENT_TOP';
+        const currentPlacementPctForOverride =
+          readJsonNumber(placementActionEditor.entityContext, 'current_percentage') ??
+          activeRow.recommendation?.placementDiagnostics?.currentPercentage ??
+          activeRow.placementContext.topOfSearchModifierPct;
+        const nextPlacementPctForOverride = readJsonNumber(
+          placementActionEditor.proposedChange,
+          'next_percentage'
+        );
+        const whyFlaggedNarrative = buildWhyFlaggedNarrative({
+          row: activeRow,
+          productState: props.productState,
+        });
+        const searchTermEvidenceRows = buildAdsOptimizerSearchTermEvidenceRows(activeRow);
+        const searchTermsEmptyState = buildAdsOptimizerSearchTermsEmptyState(activeRow);
+        const placementEvidenceRows = buildAdsOptimizerPlacementEvidenceRows(activeRow);
+        const overrideStatus = getOverrideStatus(activeRow.manualOverride);
+        const overrideSummary = buildOverrideActionSummary(manualOverrideCards);
+        const overrideSectionId = `human-override-panel-${activeRow.targetSnapshotId}`;
+        const metricsDisclosureId = `metrics-panel-${activeRow.targetSnapshotId}`;
+        const advancedDisclosureId = `advanced-panel-${activeRow.targetSnapshotId}`;
+        const portfolioControls = activeRow.recommendation?.portfolioControls ?? null;
+        const advancedSectionCount = [
+          true,
+          Boolean(portfolioControls),
+          true,
+          activeRow.roleHistory.length > 0,
+          targetComparisonChanges.length > 0,
+          targetRollbackGuidance.length > 0,
+          true,
+        ].filter(Boolean).length;
+
+        return (
+          <TargetExpandedPanel
+            targetSnapshotId={activeRow.targetSnapshotId}
+            onCollapse={collapseExpandedTargetRow}
+          >
+            <div className="space-y-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="text-lg font-semibold text-foreground">{activeRow.targetText}</div>
+                  <div className="mt-1 text-sm text-muted">
+                    {activeRow.typeLabel ?? 'Target'} · {activeRow.matchType ?? '—'} ·{' '}
+                    {activeRow.targetId}
+                  </div>
+                  <div className="mt-1 text-sm text-muted">
+                    {activeRow.campaignName ?? activeRow.campaignId} /{' '}
+                    {activeRow.adGroupName ?? activeRow.adGroupId}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <RolePill
+                      value={activeRow.role.currentRole.value}
+                      label={`Current ${activeRow.role.currentRole.label}`}
+                    />
+                    <RolePill
+                      value={activeRow.role.desiredRole.value}
+                      label={`Next ${activeRow.role.desiredRole.label}`}
+                    />
+                    <StatePill
+                      kind="efficiency"
+                      value={activeRow.state.efficiency.value}
+                      label={activeRow.state.efficiency.label}
+                    />
+                    <StatePill
+                      kind="confidence"
+                      value={activeRow.state.confidence.value}
+                      label={activeRow.state.confidence.label}
+                    />
+                    <StatePill
+                      kind="importance"
+                      value={activeRow.state.importance.value}
+                      label={activeRow.state.importance.label}
+                    />
+                    {activeRow.manualOverride ? (
+                      <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
+                        {buildOverrideBadgeLabel(activeRow.manualOverride)}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    href={buildWorkspaceTargetHref({
+                      asin: props.asin,
+                      start: props.start,
+                      end: props.end,
+                      targetId: activeRow.persistedTargetKey,
+                    })}
+                    className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground"
+                  >
+                    Open in Ads Workspace
+                  </Link>
+                  <form action={props.handoffAction}>
+                    <input type="hidden" name="return_to" value={props.returnTo} />
+                    <input
+                      type="hidden"
+                      name="workspace_return_to"
+                      value={props.workspaceQueueHref}
+                    />
+                    <input type="hidden" name="asin" value={props.asin} />
+                    <input type="hidden" name="start" value={props.start} />
+                    <input type="hidden" name="end" value={props.end} />
+                    <input
+                      type="hidden"
+                      name="target_snapshot_id"
+                      value={activeRow.targetSnapshotId}
+                    />
+                    <button
+                      type="submit"
+                      disabled={getWorkspaceSupportedActions(activeRow).length === 0}
+                      className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Handoff this target
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+              <section className="rounded-xl border border-border bg-surface px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.3em] text-muted">Why flagged</div>
+                {activeCriticalWarnings.length > 0 || activeRowSpecificExceptions.length > 0 ? (
+                  <div
+                    className={`mt-3 rounded-xl border px-4 py-3 text-sm ${
+                      activeCriticalWarnings.length > 0
+                        ? 'border-rose-200 bg-rose-50 text-rose-900'
+                        : 'border-amber-200 bg-amber-50 text-amber-900'
+                    }`}
+                  >
+                    <div className="font-semibold">Coverage and exception callouts</div>
+                    {activeCriticalWarnings.length > 0 ? (
+                      <ul className="mt-2 space-y-1">
+                        {activeCriticalWarnings.map((note) => (
+                          <li key={`${activeRow.targetSnapshotId}:critical:${note}`}>{note}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {activeRowSpecificExceptions.length > 0 ? (
+                      <ul className="mt-2 space-y-1">
+                        {activeRowSpecificExceptions.map((note) => (
+                          <li key={`${activeRow.targetSnapshotId}:exception:${note}`}>{note}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div className="mt-3 text-sm text-foreground">{whyFlaggedNarrative}</div>
+              </section>
+
+              <section className="rounded-xl border border-border bg-surface px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.3em] text-muted">Change plan</div>
+                <div className="mt-3 rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
+                  {formatNumber(getWorkspaceSupportedActions(activeRow).length)} supported workspace
+                  action(s) can be staged from this target.{' '}
+                  {formatNumber(getUnsupportedReviewOnlyActions(activeRow).length)} action(s) remain
+                  review-only inside the optimizer.
+                </div>
+                {proposedChangeCards.length > 0 ? (
+                  <div className="mt-3 grid gap-3">
+                    {proposedChangeCards.map((card) => (
+                      <ProposedChangeSummaryCard key={card.key} card={card} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-xl border border-border bg-surface-2 px-4 py-4 text-sm text-muted">
+                    No concrete changes were proposed for this target in the selected run.
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-xl border border-border bg-surface px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.3em] text-muted">Search terms</div>
+                <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.8fr)_minmax(280px,1fr)]">
+                  <div className="rounded-xl border border-border/70 bg-surface-2 px-3 py-3">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-foreground">
+                          Search-term evidence
+                        </div>
+                        <div className="mt-1 text-sm text-muted">
+                          {activeRow.recommendation?.queryDiagnostics?.note ??
+                            activeRow.searchTermDiagnostics.note ??
+                            'Search-term evidence is limited to persisted top-term diagnostics for this target.'}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <EvidenceTag
+                          label={`${formatNumber(searchTermEvidenceRows.length)} term row(s)`}
+                        />
+                        <EvidenceTag
+                          label={`${formatNumber(
+                            activeRow.demandProxies.sameTextSearchTermCount
+                          )} same-text`}
+                          tone="action"
+                        />
+                      </div>
+                    </div>
+                    {searchTermEvidenceRows.length > 0 ? (
+                      <div className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-border bg-surface">
+                        <table className="min-w-full border-collapse text-left text-sm">
+                          <thead className="sticky top-0 bg-surface">
+                            <tr className="border-b border-border text-[11px] uppercase tracking-wide text-muted">
+                              <th className="px-3 py-2">Term</th>
+                              <th className="px-3 py-2">Evidence</th>
+                              <th className="px-3 py-2">Clicks</th>
+                              <th className="px-3 py-2">Orders</th>
+                              <th className="px-3 py-2">Spend</th>
+                              <th className="px-3 py-2">Sales</th>
+                              <th className="px-3 py-2">STIS</th>
+                              <th className="px-3 py-2">STIR</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {searchTermEvidenceRows.map((term) => (
+                              <tr
+                                key={`${activeRow.targetSnapshotId}:${term.searchTerm}:${term.sameText}`}
+                                className="border-b border-border/60 align-top"
+                              >
+                                <td className="px-3 py-2.5">
+                                  <div className="font-semibold text-foreground">
+                                    {term.searchTerm}
+                                  </div>
+                                  <div className="mt-1 text-[11px] text-muted">
+                                    Impr {formatNumber(term.impressions)}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {term.evidenceTags.map((tag) => (
+                                      <EvidenceTag
+                                        key={`${term.searchTerm}:${tag}`}
+                                        label={tag}
+                                        tone={
+                                          tag === 'Winning'
+                                            ? 'good'
+                                            : tag === 'Losing'
+                                              ? 'warn'
+                                              : tag === 'Promote exact' ||
+                                                  tag === 'Isolate' ||
+                                                  tag === 'Negate'
+                                                ? 'action'
+                                                : 'neutral'
+                                        }
+                                      />
+                                    ))}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2.5 text-foreground">
+                                  {formatNumber(term.clicks)}
+                                </td>
+                                <td className="px-3 py-2.5 text-foreground">
+                                  {formatNumber(term.orders)}
+                                </td>
+                                <td className="px-3 py-2.5 text-foreground">
+                                  {formatCurrency(term.spend)}
+                                </td>
+                                <td className="px-3 py-2.5 text-foreground">
+                                  {formatCurrency(term.sales)}
+                                </td>
+                                <td className="px-3 py-2.5 text-foreground">
+                                  {formatPercent(term.stis)}
+                                </td>
+                                <td className="px-3 py-2.5 text-foreground">
+                                  {term.stir === null ? NOT_CAPTURED : formatNumber(term.stir)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="mt-3 rounded-lg border border-dashed border-border bg-surface px-4 py-4 text-sm text-muted">
+                        {searchTermsEmptyState}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <DetailGrid
+                      items={[
+                        {
+                          label: 'Representative term',
+                          value:
+                            activeRow.searchTermDiagnostics.representativeSearchTerm ??
+                            activeRow.demandProxies.representativeSearchTerm ??
+                            'No representative term',
+                        },
+                        {
+                          label: 'Same-text pinned',
+                          value:
+                            activeRow.recommendation?.queryDiagnostics?.sameTextQueryPinning.searchTerm ??
+                            NOT_CAPTURED,
+                        },
+                        {
+                          label: 'Demand terms',
+                          value: formatNumber(activeRow.demandProxies.searchTermCount),
+                        },
+                        {
+                          label: 'Total term clicks',
+                          value: formatNumber(activeRow.demandProxies.totalSearchTermClicks),
+                        },
+                      ]}
+                    />
+                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
+                      <span className="font-semibold">Search-term diagnosis:</span>{' '}
+                      {activeRow.searchTermDiagnostics.note ??
+                        activeRow.recommendation?.queryDiagnostics?.note ??
+                        'No additional search-term diagnosis was persisted for this target.'}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-border bg-surface px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.3em] text-muted">Placement</div>
+                <div className="mt-3 space-y-3">
+                  <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
+                    Campaign-level context only. Placement evidence should guide operator review,
+                    not be treated as target-owned history.
+                  </div>
+                  <div className="grid gap-3 xl:grid-cols-3">
+                    {placementEvidenceRows.map((placement) => (
+                      <div
+                        key={`${activeRow.targetSnapshotId}:${placement.code}`}
+                        className="rounded-xl border border-border/70 bg-surface-2 px-3 py-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold text-foreground">
+                              {placement.shortLabel} · {placement.label}
+                            </div>
+                            <div className="mt-1 text-[11px] text-muted">
+                              {placement.currentFocus ? 'Current optimizer focus' : 'Context row'}
+                            </div>
+                          </div>
+                          <EvidenceTag
+                            label={placement.recommendationLabel}
+                            tone={placement.currentFocus ? 'action' : 'neutral'}
+                          />
+                        </div>
+                        {placement.hasKpiContext ? (
+                          <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                            <div className="rounded-lg border border-border bg-surface px-3 py-2">
+                              <div className="text-[11px] uppercase tracking-wide text-muted">
+                                Modifier
+                              </div>
+                              <div className="mt-1 text-foreground">
+                                {placement.modifierPct === null
+                                  ? NOT_CAPTURED
+                                  : formatWholePercent(placement.modifierPct)}
+                              </div>
+                            </div>
+                            <div className="rounded-lg border border-border bg-surface px-3 py-2">
+                              <div className="text-[11px] uppercase tracking-wide text-muted">
+                                Clicks
+                              </div>
+                              <div className="mt-1 text-foreground">
+                                {formatNumber(placement.clicks)}
+                              </div>
+                            </div>
+                            <div className="rounded-lg border border-border bg-surface px-3 py-2">
+                              <div className="text-[11px] uppercase tracking-wide text-muted">
+                                Orders
+                              </div>
+                              <div className="mt-1 text-foreground">
+                                {formatNumber(placement.orders)}
+                              </div>
+                            </div>
+                            <div className="rounded-lg border border-border bg-surface px-3 py-2">
+                              <div className="text-[11px] uppercase tracking-wide text-muted">
+                                Spend
+                              </div>
+                              <div className="mt-1 text-foreground">
+                                {formatCurrency(placement.spend)}
+                              </div>
+                            </div>
+                            <div className="rounded-lg border border-border bg-surface px-3 py-2">
+                              <div className="text-[11px] uppercase tracking-wide text-muted">
+                                Sales
+                              </div>
+                              <div className="mt-1 text-foreground">
+                                {formatCurrency(placement.sales)}
+                              </div>
+                            </div>
+                            <div className="rounded-lg border border-border bg-surface px-3 py-2">
+                              <div className="text-[11px] uppercase tracking-wide text-muted">
+                                Impressions
+                              </div>
+                              <div className="mt-1 text-foreground">
+                                {formatNumber(placement.impressions)}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-3 rounded-lg border border-dashed border-border bg-surface px-3 py-3 text-sm text-muted">
+                            No KPI context was captured for this placement in the current target
+                            snapshot.
+                            {placement.modifierPct !== null ? (
+                              <div className="mt-2 text-foreground">
+                                Current modifier {formatWholePercent(placement.modifierPct)}
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+                        <div className="mt-3 text-[11px] leading-5 text-muted">{placement.note}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              <SectionDisclosureCard
+                id={metricsDisclosureId}
+                label="Metrics"
+                summary="Metrics details stay collapsed by default until the operator needs deeper KPI context."
+                defaultExpanded={false}
+              >
+                <div className="grid gap-4 xl:grid-cols-3">
+                  <DetailGrid
+                    items={[
+                      { label: 'Impressions', value: formatNumber(activeRow.raw.impressions) },
+                      { label: 'Clicks', value: formatNumber(activeRow.raw.clicks) },
+                      { label: 'Spend', value: formatCurrency(activeRow.raw.spend) },
+                      { label: 'Orders', value: formatNumber(activeRow.raw.orders) },
+                      { label: 'Sales', value: formatCurrency(activeRow.raw.sales) },
+                      { label: 'ACoS', value: formatPercent(activeRow.raw.acos) },
+                    ]}
+                  />
+                  <DetailGrid
+                    items={[
+                      {
+                        label: 'Contribution after ads',
+                        value: formatCurrency(activeRow.derived.contributionAfterAds),
+                      },
+                      { label: 'Break-even gap', value: formatPercent(activeRow.derived.breakEvenGap) },
+                      {
+                        label: 'Max CPC support gap',
+                        value: formatPercent(activeRow.derived.maxCpcSupportGap),
+                      },
+                      { label: 'Profit dollars', value: formatCurrency(activeRow.derived.profitDollars) },
+                      { label: 'Loss dollars', value: formatCurrency(activeRow.derived.lossDollars) },
+                      {
+                        label: 'Organic context signal',
+                        value:
+                          activeRow.derived.organicContextSignal === null
+                            ? NOT_CAPTURED
+                            : labelize(activeRow.derived.organicContextSignal),
+                      },
+                    ]}
+                  />
+                  <DetailGrid
+                    items={[
+                      { label: 'TOS IS', value: formatPercent(activeRow.raw.tosIs) },
+                      { label: 'STIS', value: formatPercent(activeRow.raw.stis) },
+                      {
+                        label: 'STIR',
+                        value:
+                          activeRow.raw.stir === null ? NOT_CAPTURED : formatNumber(activeRow.raw.stir),
+                      },
+                      { label: 'CTR', value: formatPercent(activeRow.raw.ctr) },
+                      { label: 'CVR', value: formatPercent(activeRow.raw.cvr) },
+                      { label: 'ROAS', value: formatNumber(activeRow.raw.roas) },
+                    ]}
+                  />
+                </div>
+              </SectionDisclosureCard>
+
+              <section className="rounded-xl border border-border bg-surface px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.3em] text-muted">Override</div>
+                <div className="mt-3">
+                  <OverrideDisclosureCard
+                    key={`${activeRow.targetSnapshotId}:${props.overrideError ? 'error' : 'default'}`}
+                    id={overrideSectionId}
+                    label="Manual override"
+                    status={overrideStatus}
+                    summary={overrideSummary}
+                    notePreview={
+                      activeRow.manualOverride?.operator_note ??
+                      'Open to create or replace a staged override bundle.'
+                    }
+                    highlight={Boolean(activeRow.manualOverride)}
+                    defaultExpanded={props.overrideError}
+                  >
+                    <div className="space-y-4">
+                      <div className="text-sm text-foreground">Replace staged actions</div>
+                      <div className="text-sm text-muted">
+                        This override replaces the staged Ads Workspace bundle. The persisted
+                        optimizer proposal above remains visible for audit review.
+                      </div>
+
+                      {activeRow.manualOverride ? (
+                        <div className="space-y-3">
+                          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="rounded-full border border-amber-200 bg-surface px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                                {buildOverrideBadgeLabel(activeRow.manualOverride)}
+                              </div>
+                              <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+                                Override scope
+                              </div>
+                              <div className="text-sm text-foreground">
+                                {labelize(activeRow.manualOverride.override_scope)}
+                              </div>
+                            </div>
+                            <div className="mt-3 text-sm text-foreground">
+                              <span className="font-semibold">Override note:</span>{' '}
+                              {activeRow.manualOverride.operator_note}
+                            </div>
+                            <div className="mt-2 text-xs text-muted">
+                              Created {formatDateTime(activeRow.manualOverride.created_at)} · applied{' '}
+                              {formatNumber(activeRow.manualOverride.apply_count)} time(s)
+                            </div>
+                          </div>
+                          {manualOverrideCards.length > 0 ? (
+                            <div className="grid gap-3">
+                              {manualOverrideCards.map((card) => (
+                                <ProposedChangeSummaryCard key={card.key} card={card} />
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
+                          No active human override is saved for this target.
+                        </div>
+                      )}
+
+                      {activeRow.recommendation ? (
+                        <TargetOverrideForm
+                          row={activeRow}
+                          recommendation={activeRow.recommendation}
+                          productId={props.productId}
+                          returnTo={props.returnTo}
+                          saveRecommendationOverrideAction={props.saveRecommendationOverrideAction}
+                          bidActionEditor={bidActionEditor}
+                          stateActionEditor={stateActionEditor}
+                          placementActionEditor={placementActionEditor}
+                          currentBid={currentBidForOverride}
+                          nextBid={nextBidForOverride}
+                          currentState={currentStateForOverride}
+                          nextState={nextStateForOverride}
+                          currentPlacementCode={currentPlacementCodeForOverride}
+                          currentPlacementPercentage={currentPlacementPctForOverride}
+                          nextPlacementPercentage={nextPlacementPctForOverride}
+                          formatCurrency={formatCurrency}
+                          formatWholePercent={formatWholePercent}
+                          formatPlacementLabel={formatPlacementLabel}
+                          sentenceCase={sentenceCase}
+                        />
+                      ) : (
+                        <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
+                          Product scope or recommendation context is missing, so this target cannot
+                          accept a saved override yet.
+                        </div>
+                      )}
+                    </div>
+                  </OverrideDisclosureCard>
+                </div>
+              </section>
+
+              <SectionDisclosureCard
+                id={advancedDisclosureId}
+                label="Advanced"
+                summary={`${formatNumber(advancedSectionCount)} advanced block(s) remain behind explicit disclosure for comparison, rollback, caps, and supporting JSON.`}
+                defaultExpanded={false}
+              >
+                <div className="space-y-4">
+                  <TargetAdvancedSection label="Action plan">
+                    <DetailGrid
+                      items={[
+                        {
+                          label: 'Status',
+                          value: labelize(activeRow.recommendation?.status ?? 'not_captured'),
+                        },
+                        {
+                          label: 'Spend direction',
+                          value: labelize(activeRow.recommendation?.spendDirection ?? null),
+                        },
+                        {
+                          label: 'Primary action',
+                          value: labelize(activeRow.recommendation?.primaryActionType ?? null),
+                        },
+                        {
+                          label: 'Action count',
+                          value: formatNumber(activeRow.recommendation?.actionCount ?? 0),
+                        },
+                      ]}
+                    />
+                  </TargetAdvancedSection>
+
+                  {portfolioControls ? (
+                    <TargetAdvancedSection label="Portfolio-cap pressure">
+                      <DetailGrid
+                        items={[
+                          {
+                            label: 'Discover rank',
+                            value:
+                              portfolioControls.discoverRank === null
+                                ? NOT_CAPTURED
+                                : `${formatNumber(portfolioControls.discoverRank)} of ${formatNumber(
+                                    portfolioControls.activeDiscoverTargets
+                                  )}`,
+                          },
+                          {
+                            label: 'Learning budget',
+                            value: `${formatCurrency(portfolioControls.learningBudgetUsed)} / ${formatCurrency(
+                              portfolioControls.learningBudgetCap
+                            )}`,
+                          },
+                          {
+                            label: 'Stop-loss cap',
+                            value: `${formatCurrency(portfolioControls.totalStopLossSpend)} / ${formatCurrency(
+                              portfolioControls.totalStopLossCap
+                            )}`,
+                          },
+                          {
+                            label: 'Budget share',
+                            value:
+                              portfolioControls.targetSpendShare === null
+                                ? NOT_CAPTURED
+                                : `${formatPercent(portfolioControls.targetSpendShare)} / ${formatPercent(
+                                    portfolioControls.maxBudgetSharePerTarget
+                                  )}`,
+                          },
+                        ]}
+                      />
+                    </TargetAdvancedSection>
+                  ) : null}
+
+                  <TargetAdvancedSection label="Target state">
+                    <DetailGrid
+                      items={[
+                        { label: 'Efficiency', value: activeRow.state.efficiency.label },
+                        { label: 'Confidence', value: activeRow.state.confidence.label },
+                        { label: 'Importance', value: activeRow.state.importance.label },
+                        { label: 'Current role', value: activeRow.role.currentRole.label },
+                        { label: 'Desired role', value: activeRow.role.desiredRole.label },
+                        { label: 'Previous role', value: activeRow.role.previousRole ?? NOT_CAPTURED },
+                      ]}
+                    />
+                  </TargetAdvancedSection>
+
+                  {activeRow.roleHistory.length > 0 ? (
+                    <TargetAdvancedSection label="Role history">
+                      <div className="space-y-2 text-sm text-foreground">
+                        {activeRow.roleHistory.slice(0, 6).map((entry) => (
+                          <div key={entry.roleTransitionLogId} className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
+                            Run {entry.runId} · rule {entry.transitionRule ?? NOT_CAPTURED} · desired{' '}
+                            {entry.desiredRole ?? NOT_CAPTURED}
+                          </div>
+                        ))}
+                      </div>
+                    </TargetAdvancedSection>
+                  ) : null}
+
+                  {targetComparisonChanges.length > 0 ? (
+                    <TargetAdvancedSection label="Run comparison">
+                      <div className="space-y-2">
+                        {targetComparisonChanges.map((change, index) => (
+                          <div
+                            key={`${activeRow.targetSnapshotId}:comparison:${change.kind}:${index}`}
+                            className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground"
+                          >
+                            <div className="font-semibold">{change.summary}</div>
+                            <div className="mt-1 text-muted">{change.why}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </TargetAdvancedSection>
+                  ) : null}
+
+                  {targetRollbackGuidance.length > 0 ? (
+                    <TargetAdvancedSection label="Rollback guidance">
+                      <div className="space-y-2">
+                        {targetRollbackGuidance.map((entry, index) => (
+                          <div
+                            key={`${activeRow.targetSnapshotId}:rollback:${index}`}
+                            className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground"
+                          >
+                            <div className="font-semibold">{entry.title}</div>
+                            <div className="mt-1 text-muted">{entry.detail}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </TargetAdvancedSection>
+                  ) : null}
+
+                  <TargetAdvancedSection label="Supporting metrics JSON">
+                    <JsonBlock value={activeRow.recommendation?.supportingMetrics ?? null} />
+                  </TargetAdvancedSection>
+                </div>
+              </SectionDisclosureCard>
+            </div>
+          </TargetExpandedPanel>
+        );
+      })()
+    : null;
 
   return (
     <div className="space-y-6">
@@ -1104,17 +1959,14 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
       <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-muted">
-              Optimizer command center
-            </div>
+            <div className="text-xs uppercase tracking-[0.3em] text-muted">Targets review</div>
             <div className="mt-2 text-lg font-semibold text-foreground">
-              Review persisted target outputs without leaving `/ads/optimizer`
+              Inline decision rows for the selected persisted optimizer run
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
-              This Phase 12 surface reads the exact run&apos;s persisted product state, target
-              state, role, diagnostics, comparison cues, rollback guidance, and recommendation
-              snapshots. The optimizer still proposes, while Ads Workspace remains the only place
-              where staged and executable actions live.
+              Review the highest-priority targets inline, keep search-term and placement evidence
+              close to the decision, and stage only supported changes into Ads Workspace after
+              operator review. Ads Workspace remains the only staging and execution boundary.
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1123,7 +1975,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
               SP only V1
             </div>
             <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
-              Review + comparison + handoff
+              Inline V2 review surface
             </div>
           </div>
         </div>
@@ -1189,7 +2041,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
           <div className="rounded-xl border border-border bg-surface px-4 py-3">
             <div className="text-xs uppercase tracking-wide text-muted">How to read it</div>
             <div className="mt-2 space-y-2 text-sm text-foreground">
-              <div>Use the queue to sort and filter targets by priority, role, state, and confidence.</div>
+              <div>Use the inline list to sort and filter targets by priority, role, state, and confidence.</div>
               <div>Coverage rolls up into Ready, Partial, and Missing. Missing can be normal for zero-click search-term diagnostics or suspicious when source data should exist.</div>
               <div>Non-additive diagnostics such as STIS, STIR, TOS IS, and rank are shown only as latest observed values or explicit trend descriptors.</div>
             </div>
@@ -1198,7 +2050,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
             <div className="text-xs uppercase tracking-wide text-muted">What to do next</div>
             <div className="mt-2 space-y-2 text-sm text-foreground">
               <div>Review row-specific exceptions and critical warnings first.</div>
-              <div>Use the drawer to inspect recommendation details, portfolio context, comparison cues, and rollback guidance.</div>
+              <div>Expand the row to inspect recommendation details, portfolio context, comparison cues, and rollback guidance.</div>
               <div>Handoff only the supported actions you want staged into Ads Workspace.</div>
             </div>
           </div>
@@ -1413,7 +2265,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                     key={key}
                     type="button"
                     className="w-full rounded-lg border border-border/70 bg-surface-2 px-3 py-2 text-left transition hover:border-primary/40"
-                    onClick={() => setSelectedTargetSnapshotId(row.targetSnapshotId)}
+                    onClick={() => expandTargetRow(row.targetSnapshotId)}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -1632,7 +2484,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                     className="w-full rounded-lg border border-border/70 bg-surface-2 px-3 py-2 text-left transition hover:border-primary/40"
                     onClick={() => {
                       const match = props.rows.find((row) => row.targetId === entry.targetId);
-                      if (match) setSelectedTargetSnapshotId(match.targetSnapshotId);
+                      if (match) expandTargetRow(match.targetSnapshotId);
                     }}
                   >
                     <div className="line-clamp-1 text-sm font-semibold text-foreground">
@@ -1666,7 +2518,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                   key={`risk-${row.targetSnapshotId}`}
                   type="button"
                   className="flex w-full items-start justify-between rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-left transition hover:border-primary/40"
-                  onClick={() => setSelectedTargetSnapshotId(row.targetSnapshotId)}
+                  onClick={() => expandTargetRow(row.targetSnapshotId)}
                 >
                   <div>
                     <div className="font-semibold text-foreground">{row.targetText}</div>
@@ -1700,7 +2552,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                   key={`opportunity-${row.targetSnapshotId}`}
                   type="button"
                   className="flex w-full items-start justify-between rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-left transition hover:border-primary/40"
-                  onClick={() => setSelectedTargetSnapshotId(row.targetSnapshotId)}
+                  onClick={() => expandTargetRow(row.targetSnapshotId)}
                 >
                   <div>
                     <div className="font-semibold text-foreground">{row.targetText}</div>
@@ -1723,1636 +2575,156 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
         </TargetAdvancedSection>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)] xl:items-stretch">
-        <div className="space-y-4 xl:flex xl:h-[calc(100vh-1.5rem)] xl:min-h-0 xl:flex-col">
-          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm xl:flex xl:h-full xl:min-h-0 xl:flex-col xl:overflow-hidden">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <div className="text-xs uppercase tracking-[0.3em] text-muted">Target queue</div>
-                <div className="mt-2 text-sm text-muted">
-                  Priority sorting still opens as the default queue order from the exact run. You
-                  can now sort directly from the sticky table headers while keeping filters scoped
-                  to this ASIN and date window.
-                </div>
-                <div className="mt-3">
-                  <InlineHelp title="Coverage">
-                    Ready means the needed target inputs were captured. Partial means some context
-                    exists but a needed supporting input was incomplete. Missing can be normal for
-                    zero-click search-term diagnostics or suspicious when a source-day diagnostic
-                    should have been present.
-                  </InlineHelp>
-                </div>
-                <div className="mt-3">
-                  <InlineHelp title="Reason-code badges">
-                    Badges summarize the main persisted reason codes for a row. Use them as a quick
-                    triage aid, then open the drawer for the full recommendation, state, and
-                    comparison details behind those badges.
-                  </InlineHelp>
-                </div>
-              </div>
-              <Link href={props.historyHref} className="text-sm font-semibold text-primary">
-                Go to History
-              </Link>
+      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-[0.3em] text-muted">Targets review</div>
+            <div className="mt-2 text-sm text-muted">
+              Review persisted optimizer target decisions inline. Expand a row to inspect why it
+              was flagged, the full change plan, search-term and placement evidence, override
+              state, and advanced trust detail without leaving the list.
             </div>
-
-            <div className="mt-4 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col">
-              <div>
-                <TargetsToolbar
-                  roleFilter={roleFilter}
-                  efficiencyFilter={efficiencyFilter}
-                  tierFilter={tierFilter}
-                  confidenceFilter={confidenceFilter}
-                  spendDirectionFilter={spendDirectionFilter}
-                  exceptionFilter={exceptionFilter}
-                  sortBy={sortBy}
-                  sortDirection={sortDirection}
-                  filteredRowCount={filteredRows.length}
-                  totalRowCount={props.rows.length}
-                  persistedRecommendationRows={persistedRecommendationRows}
-                  stageableRowCount={stageableRows.length}
-                  selectedCount={selectedForHandoff.length}
-                  selectedActionCount={selectedStageableActionCount}
-                  visibleStageableCount={visibleStageableRows.length}
-                  selectedTargetSnapshotIds={selectedForHandoff}
-                  allVisibleStageableSelected={allVisibleStageableSelected}
-                  historyHref={props.historyHref}
-                  workspaceQueueHref={props.workspaceQueueHref}
-                  returnTo={props.returnTo}
-                  asin={props.asin}
-                  start={props.start}
-                  end={props.end}
-                  handoffAction={props.handoffAction}
-                  onRoleFilterChange={setRoleFilter}
-                  onEfficiencyFilterChange={setEfficiencyFilter}
-                  onTierFilterChange={setTierFilter}
-                  onConfidenceFilterChange={setConfidenceFilter}
-                  onSpendDirectionFilterChange={setSpendDirectionFilter}
-                  onExceptionFilterChange={setExceptionFilter}
-                  onToggleAllVisibleStageable={toggleAllVisibleStageable}
-                />
-              </div>
-
-              {filteredRows.length === 0 ? (
-                <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
-                  No target rows match the current optimizer queue filters.
-                </div>
-              ) : (
-                <div className="mt-3 xl:min-h-0 xl:flex-1 xl:overflow-auto xl:overscroll-contain">
-                  <table className="min-w-[1800px] table-auto border-collapse text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
-                          <input
-                            type="checkbox"
-                            aria-label="Select all visible stageable optimizer rows"
-                            checked={allVisibleStageableSelected}
-                            disabled={visibleStageableRows.length === 0}
-                            onChange={(event) => toggleAllVisibleStageable(event.target.checked)}
-                          />
-                        </th>
-                        <th className="sticky top-0 left-0 z-30 border-b border-border bg-surface px-3 py-2 shadow-sm">
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
-                            onClick={() => toggleQueueSort('target')}
-                          >
-                            <span>Target</span>
-                            <span className="text-[11px] text-muted">{buildSortIndicator('target')}</span>
-                          </button>
-                        </th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
-                            onClick={() => toggleQueueSort('priority')}
-                          >
-                            <span>Priority</span>
-                            <span className="text-[11px] text-muted">
-                              {buildSortIndicator('priority')}
-                            </span>
-                          </button>
-                        </th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
-                            onClick={() => toggleQueueSort('recommendations')}
-                          >
-                            <span>Recommendations</span>
-                            <span className="text-[11px] text-muted">
-                              {buildSortIndicator('recommendations')}
-                            </span>
-                          </button>
-                        </th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
-                            onClick={() => toggleQueueSort('workspace_actions')}
-                          >
-                            <span>Workspace actions</span>
-                            <span className="text-[11px] text-muted">
-                              {buildSortIndicator('workspace_actions')}
-                            </span>
-                          </button>
-                        </th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
-                            onClick={() => toggleQueueSort('current_role')}
-                          >
-                            <span>Current role</span>
-                            <span className="text-[11px] text-muted">
-                              {buildSortIndicator('current_role')}
-                            </span>
-                          </button>
-                        </th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
-                            onClick={() => toggleQueueSort('efficiency')}
-                          >
-                            <span>Efficiency</span>
-                            <span className="text-[11px] text-muted">
-                              {buildSortIndicator('efficiency')}
-                            </span>
-                          </button>
-                        </th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
-                            onClick={() => toggleQueueSort('confidence')}
-                          >
-                            <span>Confidence</span>
-                            <span className="text-[11px] text-muted">
-                              {buildSortIndicator('confidence')}
-                            </span>
-                          </button>
-                        </th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
-                            onClick={() => toggleQueueSort('tier')}
-                          >
-                            <span>Tier</span>
-                            <span className="text-[11px] text-muted">{buildSortIndicator('tier')}</span>
-                          </button>
-                        </th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
-                            onClick={() => toggleQueueSort('spend_direction')}
-                          >
-                            <span>Spend direction</span>
-                            <span className="text-[11px] text-muted">
-                              {buildSortIndicator('spend_direction')}
-                            </span>
-                          </button>
-                        </th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 font-semibold text-foreground transition hover:text-primary"
-                            onClick={() => toggleQueueSort('exceptions')}
-                          >
-                            <span>Exceptions</span>
-                            <span className="text-[11px] text-muted">
-                              {buildSortIndicator('exceptions')}
-                            </span>
-                          </button>
-                        </th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Reason-code badges</th>
-                        <th className="sticky top-0 z-20 border-b border-border bg-surface px-3 py-2 shadow-sm">Coverage</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredRowSummaries.map((summary) => {
-                        const row = rowLookup.get(summary.targetSnapshotId);
-                        if (!row) return null;
-
-                        return (
-                          <TargetSummaryRow
-                            key={summary.rowId}
-                            row={row}
-                            summary={summary}
-                            isActive={summary.targetSnapshotId === activeTargetSnapshotId}
-                            isSelected={selectedForHandoff.includes(summary.targetSnapshotId)}
-                            isStageable={summary.handoff.stageable}
-                            onSelect={() => setSelectedTargetSnapshotId(summary.targetSnapshotId)}
-                            onToggleSelect={(checked) =>
-                              toggleSelectedRow(summary.targetSnapshotId, checked)
-                            }
-                          />
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+            <div className="mt-3">
+              <InlineHelp title="Coverage">
+                Ready means the needed target inputs were captured. Partial means some context
+                exists but a needed supporting input was incomplete. Missing can be normal for
+                zero-click search-term diagnostics or suspicious when a source-day diagnostic
+                should have been present.
+              </InlineHelp>
             </div>
-          </section>
+            <div className="mt-3">
+              <InlineHelp title="Reason-code badges">
+                Badges summarize the main persisted reason codes for a row. Use them as a quick
+                triage aid, then expand the row for the full recommendation, state, and comparison
+                details behind those badges.
+              </InlineHelp>
+            </div>
+          </div>
+          <Link href={props.historyHref} className="text-sm font-semibold text-primary">
+            Go to History
+          </Link>
         </div>
 
-        <TargetExpandedPanel
-          drawerId={activeRow ? `target-detail-drawer-${activeRow.targetSnapshotId}` : undefined}
-          activeRow={activeRow}
-        >
-          {activeRow ? (
-              (() => {
-                const proposedChangeCards = buildProposedChangeCards(activeRow);
-                const manualOverrideCards = buildManualOverrideCards(activeRow);
-                const bidActionEditor = getActionEditorSource(activeRow, 'update_target_bid');
-                const stateActionEditor = getActionEditorSource(activeRow, 'update_target_state');
-                const placementActionEditor = getActionEditorSource(
-                  activeRow,
-                  'update_placement_modifier'
-                );
-                const currentBidForOverride =
-                  readJsonNumber(bidActionEditor.entityContext, 'current_bid') ?? activeRow.raw.cpc;
-                const nextBidForOverride = readJsonNumber(
-                  bidActionEditor.proposedChange,
-                  'next_bid'
-                );
-                const currentStateForOverride = readJsonString(
-                  stateActionEditor.entityContext,
-                  'current_state'
-                );
-                const nextStateForOverride = readJsonString(
-                  stateActionEditor.proposedChange,
-                  'next_state'
-                );
-                const currentPlacementCodeForOverride =
-                  readJsonString(placementActionEditor.entityContext, 'placement_code') ??
-                  readJsonString(placementActionEditor.proposedChange, 'placement_code') ??
-                  activeRow.recommendation?.placementDiagnostics?.currentPlacementCode ??
-                  'PLACEMENT_TOP';
-                const currentPlacementPctForOverride =
-                  readJsonNumber(placementActionEditor.entityContext, 'current_percentage') ??
-                  activeRow.recommendation?.placementDiagnostics?.currentPercentage ??
-                  activeRow.placementContext.topOfSearchModifierPct;
-                const nextPlacementPctForOverride = readJsonNumber(
-                  placementActionEditor.proposedChange,
-                  'next_percentage'
-                );
-                const whyFlaggedNarrative = buildWhyFlaggedNarrative({
-                  row: activeRow,
-                  productState: props.productState,
-                });
-                const portfolioControls = activeRow.recommendation?.portfolioControls ?? null;
-                const hasPortfolioConstraint = Boolean(
-                  portfolioControls &&
-                    (portfolioControls.reasonCodes.length > 0 ||
-                      portfolioControls.discoverCapBlocked ||
-                      portfolioControls.learningBudgetExceeded ||
-                      portfolioControls.stopLossCapExceeded ||
-                      portfolioControls.budgetShareExceeded)
-                );
-                const hasMaterialGuardrailDriver =
-                  activeRow.role.guardrails.flags.requiresManualApproval ||
-                  activeRow.role.guardrails.flags.autoPauseEligible ||
-                  activeRow.role.guardrails.flags.transitionLocked ||
-                  activeRow.role.guardrails.notes.length > 0 ||
-                  (activeRow.recommendation?.unsupportedActionBlocks.length ?? 0) > 0 ||
-                  activeRow.recommendation?.manualReviewRequired === true;
-                const hasMaterialQueryDriver =
-                  activeRow.searchTermDiagnostics.topTerms.length > 0 ||
-                  activeRow.demandProxies.searchTermCount > 0 ||
-                  (activeRow.recommendation?.queryDiagnostics?.sameTextQueryPinning.status ?? 'not_observed') !==
-                    'not_observed' ||
-                  (activeRow.recommendation?.queryDiagnostics?.promoteToExactCandidates.length ?? 0) > 0 ||
-                  (activeRow.recommendation?.queryDiagnostics?.isolateCandidates.length ?? 0) > 0 ||
-                  (activeRow.recommendation?.queryDiagnostics?.negativeCandidates.length ?? 0) > 0;
-                const hasMaterialPlacementDriver =
-                  activeRow.placementContext.topOfSearchModifierPct !== null ||
-                  activeRow.placementContext.impressions !== null ||
-                  activeRow.placementContext.spend !== null ||
-                  (activeRow.recommendation?.placementDiagnostics?.biasRecommendation ?? 'unknown') !==
-                    'unknown' ||
-                  (activeRow.recommendation?.placementDiagnostics?.reasonCodes.length ?? 0) > 0;
-                const hasDerivedMetrics =
-                  activeRow.derived.contributionAfterAds !== null ||
-                  activeRow.derived.breakEvenGap !== null ||
-                  activeRow.derived.maxCpcSupportGap !== null ||
-                  activeRow.derived.lossDollars !== null ||
-                  activeRow.derived.profitDollars !== null ||
-                  activeRow.derived.clickVelocity !== null ||
-                  activeRow.derived.impressionVelocity !== null ||
-                  activeRow.derived.organicContextSignal !== null;
+        <div className="mt-4">
+          <TargetsToolbar
+            roleFilter={roleFilter}
+            tierFilter={tierFilter}
+            trendFilter={trendFilter}
+            spendDirectionFilter={spendDirectionFilter}
+            exceptionFilter={exceptionFilter}
+            sortBy={sortBy}
+            sortDirection={sortDirection}
+            filteredRowCount={filteredRows.length}
+            totalRowCount={props.rows.length}
+            persistedRecommendationRows={persistedRecommendationRows}
+            stageableRowCount={stageableRows.length}
+            selectedCount={selectedForHandoff.length}
+            selectedActionCount={selectedStageableActionCount}
+            visibleStageableCount={visibleStageableRows.length}
+            selectedTargetSnapshotIds={selectedForHandoff}
+            allVisibleStageableSelected={allVisibleStageableSelected}
+            frozenColumns={tableLayoutPrefs.frozenColumns}
+            historyHref={props.historyHref}
+            workspaceQueueHref={props.workspaceQueueHref}
+            returnTo={props.returnTo}
+            asin={props.asin}
+            start={props.start}
+            end={props.end}
+            handoffAction={props.handoffAction}
+            onRoleFilterChange={setRoleFilter}
+            onTierFilterChange={setTierFilter}
+            onTrendFilterChange={setTrendFilter}
+            onSpendDirectionFilterChange={setSpendDirectionFilter}
+            onExceptionFilterChange={setExceptionFilter}
+            onSortByChange={handleSortByChange}
+            onToggleSortDirection={toggleSortDirection}
+            onToggleAllVisibleStageable={toggleAllVisibleStageable}
+            onResetColumnWidths={handleResetColumnWidths}
+            onToggleFrozenColumn={handleToggleFrozenColumn}
+          />
+        </div>
 
-                const drawerSections: DrawerInspectionSection[] = [
-                  {
-                    id: 'action-plan',
-                    label: 'Action plan',
-                    render: () => (
-                      <DetailSection label="Action plan">
-                        {activeRow.recommendation ? (
-                          <div className="space-y-3">
-                            <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-                              <div className="text-xs uppercase tracking-wide text-muted">
-                                Workspace handoff status
-                              </div>
-                              <div className="mt-2 text-sm text-foreground">
-                                {formatNumber(getWorkspaceSupportedActions(activeRow).length)} supported
-                                workspace action(s) can be staged from this target.{' '}
-                                {formatNumber(getUnsupportedReviewOnlyActions(activeRow).length)} action(s)
-                                remain review-only inside the optimizer.
-                              </div>
-                            </div>
+        {filteredRows.length === 0 ? (
+          <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
+            No target rows match the current inline review filters.
+          </div>
+        ) : (
+          <div
+            className="mt-4 overflow-x-auto overflow-y-visible"
+            data-aph-hscroll
+            data-aph-hscroll-axis="x"
+          >
+            <table
+              className="min-w-full table-fixed border-collapse text-left text-sm"
+              style={{ width: `${tableWidthPx}px`, minWidth: '100%' }}
+            >
+              <colgroup>
+                {ADS_OPTIMIZER_TARGET_TABLE_COLUMNS.map((column) => (
+                  <col key={column.key} style={headerCellStyle(column.key)} />
+                ))}
+              </colgroup>
+              <thead>
+                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
+                  {ADS_OPTIMIZER_TARGET_TABLE_COLUMNS.map((column) => {
+                    const isTargetColumn = column.key === 'target';
+                    return (
+                      <th
+                        key={column.key}
+                        className={`relative overflow-hidden border-b border-border bg-surface py-2 font-semibold whitespace-nowrap ${
+                          isTargetColumn ? `${targetHeaderClass} pl-4 pr-5` : 'px-3 pr-5'
+                        }`}
+                        style={headerCellStyle(column.key)}
+                      >
+                        <div className="truncate">{column.label}</div>
+                        <button
+                          type="button"
+                          data-column-resize-handle={column.key}
+                          className="group absolute inset-y-0 right-[-6px] z-40 flex w-3 cursor-col-resize touch-none select-none items-center justify-center bg-transparent p-0"
+                          aria-label={`Resize ${column.label} column`}
+                          title={`Resize ${column.label} column`}
+                          onPointerDown={(event) =>
+                            handleColumnResizePointerDown(column.key, event)
+                          }
+                        >
+                          <span className="h-6 w-px rounded-full bg-border transition group-hover:bg-primary/60" />
+                        </button>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRowSummaries.map((summary) => {
+                  const row = rowLookup.get(summary.targetSnapshotId);
+                  if (!row) return null;
 
-                            <DetailGrid
-                              items={[
-                                { label: 'Status', value: labelize(activeRow.recommendation.status) },
-                                {
-                                  label: 'Spend direction',
-                                  value: labelize(activeRow.recommendation.spendDirection),
-                                },
-                                {
-                                  label: 'Primary action',
-                                  value: labelize(activeRow.recommendation.primaryActionType),
-                                },
-                                {
-                                  label: 'Action count',
-                                  value: formatNumber(activeRow.recommendation.actionCount),
-                                },
-                                {
-                                  label: 'Execution boundary',
-                                  value: activeRow.recommendation.executionBoundary ?? NOT_CAPTURED,
-                                },
-                                {
-                                  label: 'Workspace handoff',
-                                  value: activeRow.recommendation.workspaceHandoff ?? NOT_CAPTURED,
-                                },
-                                {
-                                  label: 'Writes execution tables',
-                                  value:
-                                    activeRow.recommendation.writesExecutionTables === null
-                                      ? NOT_CAPTURED
-                                      : String(activeRow.recommendation.writesExecutionTables),
-                                },
-                                {
-                                  label: 'Manual review required',
-                                  value:
-                                    activeRow.recommendation.manualReviewRequired === null
-                                      ? NOT_CAPTURED
-                                      : String(activeRow.recommendation.manualReviewRequired),
-                                },
-                              ]}
-                            />
-
-                            <div className="space-y-2">
-                              <div className="text-xs uppercase tracking-wide text-muted">
-                                Coverage flags
-                              </div>
-                              <div className="flex flex-wrap gap-1.5">
-                                {activeRow.recommendation.coverageFlags.length > 0 ? (
-                                  activeRow.recommendation.coverageFlags.map((flag) => (
-                                    <ReasonCodeBadge
-                                      key={`${activeRow.targetSnapshotId}:${flag}`}
-                                      code={flag}
-                                    />
-                                  ))
-                                ) : (
-                                  <div className="text-sm text-muted">
-                                    No coverage flags were persisted.
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="space-y-2">
-                              <div className="text-xs uppercase tracking-wide text-muted">
-                                Confidence notes
-                              </div>
-                              {activeRow.recommendation.confidenceNotes.length > 0 ? (
-                                <ul className="space-y-1 text-sm text-foreground">
-                                  {activeRow.recommendation.confidenceNotes.map((note) => (
-                                    <li key={`${activeRow.targetSnapshotId}:${note}`}>{note}</li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <div className="text-sm text-muted">
-                                  No confidence notes were persisted.
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="space-y-2">
-                              <div className="text-xs uppercase tracking-wide text-muted">
-                                Exception signals
-                              </div>
-                              {activeRow.recommendation.exceptionSignals.length > 0 ? (
-                                <div className="space-y-2">
-                                  {activeRow.recommendation.exceptionSignals.map((signal, index) => (
-                                    <div
-                                      key={`${activeRow.targetSnapshotId}:exception-detail:${signal.type}:${index}`}
-                                      className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
-                                    >
-                                      <div className="flex items-start justify-between gap-3">
-                                        <div className="font-semibold text-foreground">
-                                          {signal.title}
-                                        </div>
-                                        <ExceptionSeverityBadge severity={signal.severity} />
-                                      </div>
-                                      <div className="mt-2 text-sm text-foreground">
-                                        {signal.detail}
-                                      </div>
-                                      <div className="mt-2 flex flex-wrap gap-1.5">
-                                        {signal.reasonCodes.map((code) => (
-                                          <ReasonCodeBadge
-                                            key={`${activeRow.targetSnapshotId}:exception-reason:${signal.type}:${code}`}
-                                            code={code}
-                                          />
-                                        ))}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="text-sm text-muted">
-                                  No exception signals were persisted for this target.
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="space-y-2">
-                              <div className="text-xs uppercase tracking-wide text-muted">
-                                Unsupported action blocks
-                              </div>
-                              <div className="flex flex-wrap gap-1.5">
-                                {activeRow.recommendation.unsupportedActionBlocks.length > 0 ? (
-                                  activeRow.recommendation.unsupportedActionBlocks.map((code) => (
-                                    <ReasonCodeBadge
-                                      key={`${activeRow.targetSnapshotId}:${code}`}
-                                      code={code}
-                                    />
-                                  ))
-                                ) : (
-                                  <div className="text-sm text-muted">
-                                    No unsupported action blocks were persisted for this target.
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="space-y-3">
-                              <div className="text-xs uppercase tracking-wide text-muted">
-                                Recommended read-only actions
-                              </div>
-                              {activeRow.recommendation.actions.length > 0 ? (
-                                activeRow.recommendation.actions.map((action, index) => (
-                                  <div
-                                    key={`${activeRow.targetSnapshotId}:${action.actionType}:${index}`}
-                                    className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
-                                  >
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div className="font-semibold text-foreground">
-                                        {labelize(action.actionType)}
-                                      </div>
-                                      <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-                                        Priority {action.priority ?? '—'}
-                                      </div>
-                                    </div>
-                                    <div className="mt-2 flex flex-wrap gap-1.5">
-                                      {action.reasonCodes.map((code) => (
-                                        <ReasonCodeBadge
-                                          key={`${activeRow.targetSnapshotId}:${action.actionType}:${code}`}
-                                          code={code}
-                                        />
-                                      ))}
-                                    </div>
-                                    <div className="mt-3 grid gap-3">
-                                      <div>
-                                        <div className="mb-1 text-xs uppercase tracking-wide text-muted">
-                                          Proposed change
-                                        </div>
-                                        <JsonBlock value={action.proposedChange} />
-                                      </div>
-                                      <div>
-                                        <div className="mb-1 text-xs uppercase tracking-wide text-muted">
-                                          Entity context
-                                        </div>
-                                        <JsonBlock value={action.entityContext} />
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))
-                              ) : (
-                                <div className="text-sm text-muted">
-                                  No concrete actions were persisted for this target. The review cadence
-                                  or coverage notes may still explain the monitor posture.
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-sm text-muted">
-                            No recommendation snapshot was found for this target in the selected run.
-                          </div>
-                        )}
-                      </DetailSection>
-                    ),
-                  },
-                  {
-                    id: 'portfolio-caps',
-                    label: 'Portfolio caps',
-                    render: () => (
-                      <DetailSection label="Portfolio caps">
-                        {activeRow.recommendation?.portfolioControls ? (
-                          <div className="space-y-3">
-                            <DetailGrid
-                              items={[
-                                {
-                                  label: 'Discover rank',
-                                  value:
-                                    activeRow.recommendation.portfolioControls.discoverRank === null
-                                      ? 'Not a Discover target'
-                                      : `${formatNumber(activeRow.recommendation.portfolioControls.discoverRank)} of ${formatNumber(
-                                          activeRow.recommendation.portfolioControls.activeDiscoverTargets
-                                        )}`,
-                                },
-                                {
-                                  label: 'Discover cap blocked',
-                                  value: String(
-                                    activeRow.recommendation.portfolioControls.discoverCapBlocked
-                                  ),
-                                },
-                                {
-                                  label: 'Learning budget',
-                                  value: `${formatCurrency(activeRow.recommendation.portfolioControls.learningBudgetUsed)} / ${formatCurrency(
-                                    activeRow.recommendation.portfolioControls.learningBudgetCap
-                                  )}`,
-                                },
-                                {
-                                  label: 'Learning budget exceeded',
-                                  value: String(
-                                    activeRow.recommendation.portfolioControls.learningBudgetExceeded
-                                  ),
-                                },
-                                {
-                                  label: 'Stop-loss spend',
-                                  value: `${formatCurrency(activeRow.recommendation.portfolioControls.totalStopLossSpend)} / ${formatCurrency(
-                                    activeRow.recommendation.portfolioControls.totalStopLossCap
-                                  )}`,
-                                },
-                                {
-                                  label: 'Stop-loss cap exceeded',
-                                  value: String(
-                                    activeRow.recommendation.portfolioControls.stopLossCapExceeded
-                                  ),
-                                },
-                                {
-                                  label: 'Target spend share',
-                                  value: formatPercent(
-                                    activeRow.recommendation.portfolioControls.targetSpendShare
-                                  ),
-                                },
-                                {
-                                  label: 'Budget share ceiling',
-                                  value: formatPercent(
-                                    activeRow.recommendation.portfolioControls.maxBudgetSharePerTarget
-                                  ),
-                                },
-                              ]}
-                            />
-                            <div className="flex flex-wrap gap-1.5">
-                              {activeRow.recommendation.portfolioControls.reasonCodes.length > 0 ? (
-                                activeRow.recommendation.portfolioControls.reasonCodes.map((code) => (
-                                  <ReasonCodeBadge
-                                    key={`${activeRow.targetSnapshotId}:portfolio:${code}`}
-                                    code={code}
-                                  />
-                                ))
-                              ) : (
-                                <div className="text-sm text-muted">
-                                  No ASIN-level portfolio caps were breached for this target.
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-sm text-muted">
-                            Portfolio controls were not captured for this target in the selected run.
-                          </div>
-                        )}
-                      </DetailSection>
-                    ),
-                  },
-                  {
-                    id: 'run-comparison',
-                    label: 'Run comparison',
-                    render: () => (
-                      <DetailSection label="Run comparison">
-                        {props.comparison ? (
-                          targetComparisonChanges.length > 0 ? (
-                            <div className="space-y-3">
-                              <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-muted">
-                                These target cues include state, role, recommendation, exception, and
-                                portfolio-control changes versus the prior comparable run for this exact
-                                ASIN/date scope.
-                              </div>
-                              {targetComparisonChanges.map((change, index) => (
-                                <div
-                                  key={`${activeRow.targetSnapshotId}:comparison:${change.kind}:${index}`}
-                                  className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
-                                >
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="font-semibold text-foreground">
-                                      {change.summary}
-                                    </div>
-                                    <ExceptionSeverityBadge severity={change.severity} />
-                                  </div>
-                                  <div className="mt-2 text-sm text-foreground">{change.why}</div>
-                                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                                    <div className="rounded-lg border border-border bg-surface px-3 py-3">
-                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                                        Previous
-                                      </div>
-                                      <div className="mt-1 text-sm text-foreground">
-                                        {change.previousValue ?? '—'}
-                                      </div>
-                                    </div>
-                                    <div className="rounded-lg border border-border bg-surface px-3 py-3">
-                                      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                                        Current
-                                      </div>
-                                      <div className="mt-1 text-sm text-foreground">
-                                        {change.currentValue ?? '—'}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-sm text-muted">
-                              This target did not have any material comparison changes versus the prior
-                              comparable run.
-                            </div>
-                          )
-                        ) : (
-                          <div className="text-sm text-muted">
-                            No prior comparable run exists for this exact ASIN/date scope.
-                          </div>
-                        )}
-                      </DetailSection>
-                    ),
-                  },
-                  {
-                    id: 'rollback-guidance',
-                    label: 'Rollback guidance',
-                    render: () => (
-                      <DetailSection label="Rollback guidance">
-                        {targetRollbackGuidance.length > 0 ? (
-                          <div className="space-y-3">
-                            {targetRollbackGuidance.map((entry, index) => (
-                              <div
-                                key={`${activeRow.targetSnapshotId}:rollback:${entry.title}:${index}`}
-                                className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
-                              >
-                                <div className="font-semibold text-foreground">{entry.title}</div>
-                                <div className="mt-2 text-sm text-foreground">{entry.detail}</div>
-                                <div className="mt-2 flex flex-wrap gap-1.5">
-                                  {entry.cautionFlags.map((flag) => (
-                                    <ReasonCodeBadge
-                                      key={`${activeRow.targetSnapshotId}:rollback-flag:${flag}`}
-                                      code={flag}
-                                    />
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-sm text-muted">
-                            No target-specific rollback guidance was generated for this row.
-                          </div>
-                        )}
-                      </DetailSection>
-                    ),
-                  },
-                  {
-                    id: 'raw-metrics',
-                    label: 'Raw metrics',
-                    render: () => (
-                      <DetailSection label="Raw metrics">
-                        <div className="space-y-3">
-                          <DetailGrid
-                            items={[
-                              { label: 'Impressions', value: formatNumber(activeRow.raw.impressions) },
-                              { label: 'Clicks', value: formatNumber(activeRow.raw.clicks) },
-                              { label: 'Spend', value: formatCurrency(activeRow.raw.spend) },
-                              { label: 'Orders', value: formatNumber(activeRow.raw.orders) },
-                              { label: 'Sales', value: formatCurrency(activeRow.raw.sales) },
-                              { label: 'CPC', value: formatCurrency(activeRow.raw.cpc) },
-                              { label: 'CTR', value: formatPercent(activeRow.raw.ctr) },
-                              { label: 'CVR', value: formatPercent(activeRow.raw.cvr) },
-                              { label: 'ACoS', value: formatPercent(activeRow.raw.acos) },
-                              {
-                                label: 'ROAS',
-                                value:
-                                  activeRow.raw.roas === null ? '—' : activeRow.raw.roas.toFixed(2),
-                              },
-                              {
-                                label: 'Latest observed TOS IS',
-                                value: formatPercent(activeRow.raw.tosIs),
-                              },
-                              {
-                                label: 'Latest observed STIS',
-                                value: formatPercent(activeRow.raw.stis),
-                              },
-                              {
-                                label: 'Latest observed STIR',
-                                value: formatNumber(activeRow.raw.stir),
-                              },
-                            ]}
-                          />
-                          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-muted">
-                            {activeRow.nonAdditiveDiagnostics.note ??
-                              'Non-additive diagnostics stay point-in-time only. Use the latest observed value and explicit trend cues instead of treating them like additive totals.'}
-                          </div>
-                        </div>
-                      </DetailSection>
-                    ),
-                  },
-                  {
-                    id: 'derived-metrics',
-                    label: 'Derived metrics',
-                    render: () => (
-                      <DetailSection label="Derived metrics">
-                        <DetailGrid
-                          items={[
-                            {
-                              label: 'Contribution after ads',
-                              value: formatCurrency(activeRow.derived.contributionAfterAds),
-                            },
-                            {
-                              label: 'Break-even gap',
-                              value: formatPercent(activeRow.derived.breakEvenGap),
-                            },
-                            {
-                              label: 'Max CPC support gap',
-                              value: formatCurrency(activeRow.derived.maxCpcSupportGap),
-                            },
-                            {
-                              label: 'Loss dollars',
-                              value: formatCurrency(activeRow.derived.lossDollars),
-                            },
-                            {
-                              label: 'Profit dollars',
-                              value: formatCurrency(activeRow.derived.profitDollars),
-                            },
-                            {
-                              label: 'Click velocity',
-                              value:
-                                activeRow.derived.clickVelocity === null
-                                  ? '—'
-                                  : activeRow.derived.clickVelocity.toFixed(1),
-                            },
-                            {
-                              label: 'Impression velocity',
-                              value:
-                                activeRow.derived.impressionVelocity === null
-                                  ? '—'
-                                  : activeRow.derived.impressionVelocity.toFixed(1),
-                            },
-                            {
-                              label: 'Organic context signal',
-                              value:
-                                activeRow.derived.organicContextSignal === null
-                                  ? '—'
-                                  : labelize(activeRow.derived.organicContextSignal),
-                            },
-                          ]}
-                        />
-                      </DetailSection>
-                    ),
-                  },
-                  {
-                    id: 'target-state',
-                    label: 'Target state',
-                    render: () => (
-                      <DetailSection label="Target state">
-                        <div className="space-y-3">
-                          <DetailGrid
-                            items={[
-                              { label: 'Efficiency', value: activeRow.state.efficiency.label },
-                              { label: 'Confidence', value: activeRow.state.confidence.label },
-                              { label: 'Importance', value: activeRow.state.importance.label },
-                              {
-                                label: 'Opportunity score',
-                                value: formatNumber(activeRow.state.opportunityScore),
-                              },
-                              { label: 'Risk score', value: formatNumber(activeRow.state.riskScore) },
-                            ]}
-                          />
-                          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-                            <div className="text-xs uppercase tracking-wide text-muted">
-                              State breakdown
-                            </div>
-                            <div className="mt-2 space-y-2 text-sm text-foreground">
-                              <div>
-                                <span className="font-semibold">Efficiency:</span>{' '}
-                                {activeRow.state.efficiency.detail}
-                              </div>
-                              <div>
-                                <span className="font-semibold">Confidence:</span>{' '}
-                                {activeRow.state.confidence.detail}
-                              </div>
-                              <div>
-                                <span className="font-semibold">Tier:</span>{' '}
-                                {activeRow.state.importance.detail}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {[
-                              ...activeRow.state.summaryReasonCodes,
-                              ...activeRow.state.opportunityReasonCodes,
-                              ...activeRow.state.riskReasonCodes,
-                            ].length > 0 ? (
-                              [
-                                ...activeRow.state.summaryReasonCodes,
-                                ...activeRow.state.opportunityReasonCodes,
-                                ...activeRow.state.riskReasonCodes,
-                              ].map((code, index) => (
-                                <ReasonCodeBadge
-                                  key={`${activeRow.targetSnapshotId}:state:${code}:${index}`}
-                                  code={code}
-                                />
-                              ))
-                            ) : (
-                              <div className="text-sm text-muted">
-                                No state reason codes were captured.
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </DetailSection>
-                    ),
-                  },
-                  {
-                    id: 'role-history',
-                    label: 'Role history',
-                    render: () => (
-                      <DetailSection label="Role history">
-                        <div className="space-y-3">
-                          <DetailGrid
-                            items={[
-                              { label: 'Desired role', value: activeRow.role.desiredRole.label },
-                              { label: 'Current role', value: activeRow.role.currentRole.label },
-                              {
-                                label: 'Previous role',
-                                value: activeRow.role.previousRole ?? NOT_CAPTURED,
-                              },
-                              { label: 'Transition rule', value: activeRow.role.transitionRule },
-                            ]}
-                          />
-                          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-                            <div className="text-xs uppercase tracking-wide text-muted">
-                              Recent role transitions
-                            </div>
-                            {activeRow.roleHistory.length > 0 ? (
-                              <div className="mt-3 space-y-3">
-                                {activeRow.roleHistory.slice(0, 6).map((entry) => (
-                                  <div
-                                    key={entry.roleTransitionLogId}
-                                    className="rounded-lg border border-border bg-surface px-3 py-3"
-                                  >
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div className="font-semibold text-foreground">
-                                        {entry.fromRole ?? 'None'} → {entry.toRole ?? 'None'}
-                                      </div>
-                                      <div className="text-xs text-muted">
-                                        {formatDateTime(entry.createdAt)}
-                                      </div>
-                                    </div>
-                                    <div className="mt-1 text-xs text-muted">
-                                      Run {entry.runId} · rule {entry.transitionRule ?? NOT_CAPTURED} ·
-                                      desired {entry.desiredRole ?? NOT_CAPTURED}
-                                    </div>
-                                    <div className="mt-2 flex flex-wrap gap-1.5">
-                                      {[
-                                        ...entry.transitionReasonCodes,
-                                        ...entry.roleReasonCodes,
-                                        ...entry.guardrailReasonCodes,
-                                      ].map((code, index) => (
-                                        <ReasonCodeBadge
-                                          key={`${entry.roleTransitionLogId}:${code}:${index}`}
-                                          code={code}
-                                        />
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="mt-2 text-sm text-muted">
-                                No role transition log rows were recorded yet for this target.
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </DetailSection>
-                    ),
-                  },
-                  {
-                    id: 'guardrails',
-                    label: 'Guardrails',
-                    render: () => (
-                      <DetailSection label="Guardrails">
-                        <div className="space-y-3">
-                          <DetailGrid
-                            items={[
-                              {
-                                label: 'No-sale spend cap',
-                                value: formatCurrency(
-                                  activeRow.role.guardrails.categories.noSaleSpendCap
-                                ),
-                              },
-                              {
-                                label: 'No-sale click cap',
-                                value: formatNumber(activeRow.role.guardrails.categories.noSaleClickCap),
-                              },
-                              {
-                                label: 'Max loss per cycle',
-                                value: formatCurrency(
-                                  activeRow.role.guardrails.categories.maxLossPerCycle
-                                ),
-                              },
-                              {
-                                label: 'Max bid increase %',
-                                value:
-                                  activeRow.role.guardrails.categories.maxBidIncreasePerCyclePct ===
-                                  null
-                                    ? '—'
-                                    : `${activeRow.role.guardrails.categories.maxBidIncreasePerCyclePct}%`,
-                              },
-                              {
-                                label: 'Max bid decrease %',
-                                value:
-                                  activeRow.role.guardrails.categories.maxBidDecreasePerCyclePct ===
-                                  null
-                                    ? '—'
-                                    : `${activeRow.role.guardrails.categories.maxBidDecreasePerCyclePct}%`,
-                              },
-                              {
-                                label: 'Placement bias increase %',
-                                value:
-                                  activeRow.role.guardrails.categories
-                                    .maxPlacementBiasIncreasePerCyclePct === null
-                                    ? '—'
-                                    : `${activeRow.role.guardrails.categories.maxPlacementBiasIncreasePerCyclePct}%`,
-                              },
-                              {
-                                label: 'Rank push time limit',
-                                value:
-                                  activeRow.role.guardrails.categories.rankPushTimeLimitDays === null
-                                    ? '—'
-                                    : `${activeRow.role.guardrails.categories.rankPushTimeLimitDays} days`,
-                              },
-                              {
-                                label: 'Manual approval threshold',
-                                value: labelize(
-                                  activeRow.role.guardrails.categories.manualApprovalThreshold
-                                ),
-                              },
-                              {
-                                label: 'Auto-pause threshold',
-                                value: formatCurrency(
-                                  activeRow.role.guardrails.categories.autoPauseThreshold
-                                ),
-                              },
-                              {
-                                label: 'Min bid floor',
-                                value: formatCurrency(activeRow.role.guardrails.categories.minBidFloor),
-                              },
-                              {
-                                label: 'Max bid ceiling',
-                                value: formatCurrency(
-                                  activeRow.role.guardrails.categories.maxBidCeiling
-                                ),
-                              },
-                            ]}
-                          />
-                          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-                            <div className="text-xs uppercase tracking-wide text-muted">
-                              Guardrail flags
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              <ReasonCodeBadge
-                                code={`requires_manual_approval=${String(activeRow.role.guardrails.flags.requiresManualApproval)}`}
-                              />
-                              <ReasonCodeBadge
-                                code={`auto_pause_eligible=${String(activeRow.role.guardrails.flags.autoPauseEligible)}`}
-                              />
-                              <ReasonCodeBadge
-                                code={`bid_changes_allowed=${String(activeRow.role.guardrails.flags.bidChangesAllowed)}`}
-                              />
-                              <ReasonCodeBadge
-                                code={`placement_changes_allowed=${String(activeRow.role.guardrails.flags.placementChangesAllowed)}`}
-                              />
-                              <ReasonCodeBadge
-                                code={`transition_locked=${String(activeRow.role.guardrails.flags.transitionLocked)}`}
-                              />
-                            </div>
-                            {activeRow.role.guardrails.notes.length > 0 ? (
-                              <ul className="mt-3 space-y-1 text-sm text-foreground">
-                                {activeRow.role.guardrails.notes.map((note) => (
-                                  <li key={`${activeRow.targetSnapshotId}:guardrail-note:${note}`}>
-                                    {note}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <div className="mt-3 text-sm text-muted">
-                                No additional guardrail notes were persisted.
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </DetailSection>
-                    ),
-                  },
-                  {
-                    id: 'query-diagnostics',
-                    label: 'Query diagnostics',
-                    render: () => (
-                      <DetailSection label="Query diagnostics">
-                        <div className="space-y-3">
-                          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-                            <div className="text-xs uppercase tracking-wide text-muted">
-                              Same-text query pinning
-                            </div>
-                            {activeRow.recommendation?.queryDiagnostics ? (
-                              <div className="mt-3 space-y-3">
-                                <DetailGrid
-                                  items={[
-                                    {
-                                      label: 'Pinning status',
-                                      value: labelize(
-                                        activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
-                                          .status
-                                      ),
-                                    },
-                                    {
-                                      label: 'Pinned query',
-                                      value:
-                                        activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
-                                          .searchTerm ?? 'Not observed',
-                                    },
-                                    {
-                                      label: 'Click share',
-                                      value: formatPercent(
-                                        activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
-                                          .clickShare
-                                      ),
-                                    },
-                                    {
-                                      label: 'Order share proxy',
-                                      value: formatPercent(
-                                        activeRow.recommendation.queryDiagnostics.sameTextQueryPinning
-                                          .orderShareProxy
-                                      ),
-                                    },
-                                  ]}
-                                />
-                                <div className="text-sm text-muted">
-                                  {activeRow.recommendation.queryDiagnostics.note}
-                                </div>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {activeRow.recommendation.queryDiagnostics.sameTextQueryPinning.reasonCodes.map(
-                                    (code) => (
-                                      <ReasonCodeBadge
-                                        key={`${activeRow.targetSnapshotId}:pinning:${code}`}
-                                        code={code}
-                                      />
-                                    )
-                                  )}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="mt-2 text-sm text-muted">
-                                Same-text query diagnostics were not captured for this target.
-                              </div>
-                            )}
-                          </div>
-
-                          <DetailGrid
-                            items={[
-                              {
-                                label: 'Representative query',
-                                value:
-                                  activeRow.searchTermDiagnostics.representativeSearchTerm ??
-                                  NOT_CAPTURED,
-                              },
-                              {
-                                label: 'Representative same-text',
-                                value:
-                                  activeRow.searchTermDiagnostics.representativeSameText === null
-                                    ? NOT_CAPTURED
-                                    : String(activeRow.searchTermDiagnostics.representativeSameText),
-                              },
-                              {
-                                label: 'Search term count',
-                                value: formatNumber(activeRow.demandProxies.searchTermCount),
-                              },
-                              {
-                                label: 'Same-text query count',
-                                value: formatNumber(activeRow.demandProxies.sameTextSearchTermCount),
-                              },
-                              {
-                                label: 'Search term impressions',
-                                value: formatNumber(activeRow.demandProxies.totalSearchTermImpressions),
-                              },
-                              {
-                                label: 'Search term clicks',
-                                value: formatNumber(activeRow.demandProxies.totalSearchTermClicks),
-                              },
-                            ]}
-                          />
-                          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-                            <div className="text-xs uppercase tracking-wide text-muted">
-                              Top query rows
-                            </div>
-                            {activeRow.searchTermDiagnostics.note ? (
-                              <div className="mt-2 text-sm text-muted">
-                                {activeRow.searchTermDiagnostics.note}
-                              </div>
-                            ) : null}
-                            {activeRow.searchTermDiagnostics.topTerms.length > 0 ? (
-                              <div className="mt-3 space-y-2">
-                                {activeRow.searchTermDiagnostics.topTerms.map((term, index) => (
-                                  <div
-                                    key={`${activeRow.targetSnapshotId}:term:${term.searchTerm}:${index}`}
-                                    className="rounded-lg border border-border bg-surface px-3 py-3"
-                                  >
-                                    <div className="font-semibold text-foreground">
-                                      {term.searchTerm}
-                                    </div>
-                                    <div className="mt-1 text-xs text-muted">
-                                      same_text={String(term.sameText)} · clicks{' '}
-                                      {formatNumber(term.clicks)} · orders{' '}
-                                      {formatNumber(term.orders)} · spend{' '}
-                                      {formatCurrency(term.spend)} · sales{' '}
-                                      {formatCurrency(term.sales)}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="mt-2 text-sm text-muted">
-                                No search-term diagnostics were captured for this target in the selected run.
-                              </div>
-                            )}
-                          </div>
-
-                          {activeRow.recommendation?.queryDiagnostics ? (
-                            <div className="grid gap-3">
-                              <QueryCandidateList
-                                label="Promote-to-exact candidates"
-                                candidates={
-                                  activeRow.recommendation.queryDiagnostics.promoteToExactCandidates
-                                }
-                                emptyLabel="No promote-to-exact candidates were persisted."
-                              />
-                              <QueryCandidateList
-                                label="Isolate candidates"
-                                candidates={activeRow.recommendation.queryDiagnostics.isolateCandidates}
-                                emptyLabel="No isolate candidates were persisted."
-                              />
-                              <QueryCandidateList
-                                label="Negative candidates"
-                                candidates={activeRow.recommendation.queryDiagnostics.negativeCandidates}
-                                emptyLabel="No negative candidates were persisted."
-                              />
-                            </div>
-                          ) : null}
-                        </div>
-                      </DetailSection>
-                    ),
-                  },
-                  {
-                    id: 'placement-diagnostics',
-                    label: 'Placement diagnostics',
-                    render: () => (
-                      <DetailSection label="Placement diagnostics">
-                        <div className="space-y-3">
-                          <DetailGrid
-                            items={[
-                              {
-                                label: 'Top of search modifier',
-                                value:
-                                  activeRow.placementContext.topOfSearchModifierPct === null
-                                    ? '—'
-                                    : `${activeRow.placementContext.topOfSearchModifierPct}%`,
-                              },
-                              {
-                                label: 'Placement impressions',
-                                value: formatNumber(activeRow.placementContext.impressions),
-                              },
-                              {
-                                label: 'Placement clicks',
-                                value: formatNumber(activeRow.placementContext.clicks),
-                              },
-                              {
-                                label: 'Placement orders',
-                                value: formatNumber(activeRow.placementContext.orders),
-                              },
-                              {
-                                label: 'Placement spend',
-                                value: formatCurrency(activeRow.placementContext.spend),
-                              },
-                              {
-                                label: 'Placement sales',
-                                value: formatCurrency(activeRow.placementContext.sales),
-                              },
-                              {
-                                label: 'Bias recommendation',
-                                value: labelize(
-                                  activeRow.recommendation?.placementDiagnostics?.biasRecommendation ??
-                                    null
-                                ),
-                              },
-                              {
-                                label: 'Context scope',
-                                value:
-                                  activeRow.recommendation?.placementDiagnostics?.contextScope ??
-                                  NOT_CAPTURED,
-                              },
-                            ]}
-                          />
-                          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
-                            {activeRow.recommendation?.placementDiagnostics?.note ??
-                              activeRow.placementContext.note ??
-                              'Placement diagnostics were not captured for this target in the selected run.'}
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {activeRow.recommendation?.placementDiagnostics?.reasonCodes.length ? (
-                              activeRow.recommendation.placementDiagnostics.reasonCodes.map((code) => (
-                                <ReasonCodeBadge
-                                  key={`${activeRow.targetSnapshotId}:placement:${code}`}
-                                  code={code}
-                                />
-                              ))
-                            ) : (
-                              <div className="text-sm text-muted">
-                                No placement-diagnostic reason codes were persisted.
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </DetailSection>
-                    ),
-                  },
-                ];
-
-                const engineChips: Array<{ id: DrawerInspectionSelection; label: string }> = [];
-                engineChips.push({ id: 'action-plan', label: 'Action plan' });
-                if (hasMaterialGuardrailDriver) {
-                  engineChips.push({ id: 'guardrails', label: 'Guardrails' });
-                }
-                if (hasPortfolioConstraint) {
-                  engineChips.push({ id: 'portfolio-caps', label: 'Portfolio caps' });
-                }
-                engineChips.push({ id: 'target-state', label: 'Target state' });
-                if (
-                  activeRow.roleHistory.length > 0 ||
-                  activeRow.role.previousRole !== null ||
-                  activeRow.role.currentRole.label !== activeRow.role.desiredRole.label
-                ) {
-                  engineChips.push({ id: 'role-history', label: 'Role history' });
-                }
-                if (hasMaterialQueryDriver) {
-                  engineChips.push({ id: 'query-diagnostics', label: 'Query diagnostics' });
-                }
-                if (hasMaterialPlacementDriver) {
-                  engineChips.push({ id: 'placement-diagnostics', label: 'Placement diagnostics' });
-                }
-                if (targetComparisonChanges.length > 0) {
-                  engineChips.push({ id: 'run-comparison', label: 'Run comparison' });
-                }
-                if (targetRollbackGuidance.length > 0) {
-                  engineChips.push({ id: 'rollback-guidance', label: 'Rollback guidance' });
-                }
-                engineChips.push({ id: 'raw-metrics', label: 'Raw metrics' });
-                if (hasDerivedMetrics) {
-                  engineChips.push({ id: 'derived-metrics', label: 'Derived metrics' });
-                }
-                engineChips.push({ id: 'all', label: 'All engines' });
-
-                const inspectionSections =
-                  selectedInspectionEngine === null
-                    ? []
-                    : selectedInspectionEngine === 'all'
-                      ? drawerSections
-                      : drawerSections.filter((section) => section.id === selectedInspectionEngine);
-
-                return (
-                  <div className="mt-3 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col">
-                    <div className="border-b border-border bg-surface pb-4 xl:sticky xl:top-0 xl:z-20">
-                      <div className="space-y-4 px-0 xl:px-0 xl:pt-1">
-                        <div>
-                          <div className="text-lg font-semibold text-foreground">
-                            {activeRow.targetText}
-                          </div>
-                          <div className="mt-1 text-sm text-muted">
-                            {activeRow.typeLabel ?? 'Target'} · {activeRow.matchType ?? '—'} ·{' '}
-                            {activeRow.targetId}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <Link
-                            href={buildWorkspaceTargetHref({
-                              asin: props.asin,
-                              start: props.start,
-                              end: props.end,
-                              targetId: activeRow.persistedTargetKey,
-                            })}
-                            className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground"
-                          >
-                            Open in Ads Workspace
-                          </Link>
-                          <form action={props.handoffAction}>
-                            <input type="hidden" name="return_to" value={props.returnTo} />
-                            <input
-                              type="hidden"
-                              name="workspace_return_to"
-                              value={props.workspaceQueueHref}
-                            />
-                            <input type="hidden" name="asin" value={props.asin} />
-                            <input type="hidden" name="start" value={props.start} />
-                            <input type="hidden" name="end" value={props.end} />
-                            <input
-                              type="hidden"
-                              name="target_snapshot_id"
-                              value={activeRow.targetSnapshotId}
-                            />
-                            <button
-                              type="submit"
-                              disabled={getWorkspaceSupportedActions(activeRow).length === 0}
-                              className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              Handoff this target
-                            </button>
-                          </form>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <RolePill
-                            value={activeRow.role.currentRole.value}
-                            label={`Current ${activeRow.role.currentRole.label}`}
-                          />
-                          <RolePill
-                            value={activeRow.role.desiredRole.value}
-                            label={`Desired ${activeRow.role.desiredRole.label}`}
-                          />
-                          <StatePill
-                            kind="efficiency"
-                            value={activeRow.state.efficiency.value}
-                            label={activeRow.state.efficiency.label}
-                          />
-                          <StatePill
-                            kind="confidence"
-                            value={activeRow.state.confidence.value}
-                            label={activeRow.state.confidence.label}
-                          />
-                          <StatePill
-                            kind="importance"
-                            value={activeRow.state.importance.value}
-                            label={activeRow.state.importance.label}
-                          />
-                          {activeRow.manualOverride ? (
-                            <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
-                              {buildOverrideBadgeLabel(activeRow.manualOverride)}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain">
-                      <div className="space-y-6">
-                        {activeCriticalWarnings.length > 0 || activeRowSpecificExceptions.length > 0 ? (
-                          <div
-                            className={`rounded-xl border px-4 py-3 text-sm ${
-                              activeCriticalWarnings.length > 0
-                                ? 'border-rose-200 bg-rose-50 text-rose-900'
-                                : 'border-amber-200 bg-amber-50 text-amber-900'
-                            }`}
-                          >
-                            <div className="font-semibold">Row-specific exceptions</div>
-                            {activeCriticalWarnings.length > 0 ? (
-                              <div className="mt-3">
-                                <div className="font-semibold">Critical warnings</div>
-                                <ul className="mt-2 space-y-1">
-                                  {activeCriticalWarnings.map((note) => (
-                                    <li key={`${activeRow.targetSnapshotId}:critical:${note}`}>
-                                      {note}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            ) : null}
-                            {activeRowSpecificExceptions.length > 0 ? (
-                              <div className={activeCriticalWarnings.length > 0 ? 'mt-3' : 'mt-2'}>
-                                <div className="font-semibold">Exceptions</div>
-                                <ul className="mt-2 space-y-1">
-                                  {activeRowSpecificExceptions.map((note) => (
-                                    <li key={`${activeRow.targetSnapshotId}:exception:${note}`}>
-                                      {note}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                        <div className="space-y-3">
-                          <div className="text-xs uppercase tracking-[0.3em] text-muted">
-                            Proposed changes
-                          </div>
-                          {proposedChangeCards.length > 0 ? (
-                            <div className="grid gap-3">
-                              {proposedChangeCards.map((card) => (
-                                <ProposedChangeSummaryCard key={card.key} card={card} />
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="rounded-xl border border-border bg-surface px-4 py-4 text-sm text-muted">
-                              No concrete changes were proposed for this target in the selected run.
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="rounded-xl border border-border bg-surface px-4 py-4">
-                          {(() => {
-                            const overrideStatus = getOverrideStatus(activeRow.manualOverride);
-                            const overrideSummary = buildOverrideActionSummary(manualOverrideCards);
-                            const overrideSectionId = `human-override-panel-${activeRow.targetSnapshotId}`;
-
-                            return (
-                              <OverrideDisclosureCard
-                                key={`${activeRow.targetSnapshotId}:${props.overrideError ? 'error' : 'default'}`}
-                                id={overrideSectionId}
-                                label="Human override"
-                                status={overrideStatus}
-                                summary={overrideSummary}
-                                notePreview={
-                                  activeRow.manualOverride?.operator_note ??
-                                  'Open to create or replace a staged override bundle.'
-                                }
-                                highlight={Boolean(activeRow.manualOverride)}
-                                defaultExpanded={props.overrideError}
-                              >
-                                <div className="space-y-4">
-                                    <div className="text-sm text-foreground">
-                                      Replace staged actions
-                                    </div>
-                                    <div className="text-sm text-muted">
-                                      This override replaces the staged Ads Workspace bundle. The
-                                      persisted optimizer proposal above remains visible for audit
-                                      review.
-                                    </div>
-
-                                    {activeRow.manualOverride ? (
-                                      <div className="space-y-3">
-                                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-                                          <div className="flex flex-wrap items-center gap-2">
-                                            <div className="rounded-full border border-amber-200 bg-surface px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
-                                              {buildOverrideBadgeLabel(activeRow.manualOverride)}
-                                            </div>
-                                            <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-                                              Override scope
-                                            </div>
-                                            <div className="text-sm text-foreground">
-                                              {labelize(activeRow.manualOverride.override_scope)}
-                                            </div>
-                                          </div>
-                                          <div className="mt-3 text-sm text-foreground">
-                                            <span className="font-semibold">Override note:</span>{' '}
-                                            {activeRow.manualOverride.operator_note}
-                                          </div>
-                                          <div className="mt-2 text-xs text-muted">
-                                            Created {formatDateTime(activeRow.manualOverride.created_at)}{' '}
-                                            · applied{' '}
-                                            {formatNumber(activeRow.manualOverride.apply_count)} time(s)
-                                          </div>
-                                        </div>
-                                        {manualOverrideCards.length > 0 ? (
-                                          <div className="grid gap-3">
-                                            {manualOverrideCards.map((card) => (
-                                              <ProposedChangeSummaryCard key={card.key} card={card} />
-                                            ))}
-                                          </div>
-                                        ) : null}
-                                      </div>
-                                    ) : (
-                                      <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
-                                        No active human override is saved for this target.
-                                      </div>
-                                    )}
-
-                                    {activeRow.recommendation ? (
-                                      <TargetOverrideForm
-                                        row={activeRow}
-                                        recommendation={activeRow.recommendation}
-                                        productId={props.productId}
-                                        returnTo={props.returnTo}
-                                        saveRecommendationOverrideAction={
-                                          props.saveRecommendationOverrideAction
-                                        }
-                                        bidActionEditor={bidActionEditor}
-                                        stateActionEditor={stateActionEditor}
-                                        placementActionEditor={placementActionEditor}
-                                        currentBid={currentBidForOverride}
-                                        nextBid={nextBidForOverride}
-                                        currentState={currentStateForOverride}
-                                        nextState={nextStateForOverride}
-                                        currentPlacementCode={currentPlacementCodeForOverride}
-                                        currentPlacementPercentage={currentPlacementPctForOverride}
-                                        nextPlacementPercentage={nextPlacementPctForOverride}
-                                        formatCurrency={formatCurrency}
-                                        formatWholePercent={formatWholePercent}
-                                        formatPlacementLabel={formatPlacementLabel}
-                                        sentenceCase={sentenceCase}
-                                      />
-                                    ) : (
-                                      <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
-                                        Product scope or recommendation context is missing, so this
-                                        target cannot accept a saved override yet.
-                                      </div>
-                                    )}
-                                </div>
-                              </OverrideDisclosureCard>
-                            );
-                          })()}
-                        </div>
-
-                        <div className="rounded-xl border border-border bg-surface px-4 py-4">
-                          <div className="text-xs uppercase tracking-[0.3em] text-muted">
-                            Why this target is flagged
-                          </div>
-                          <div className="mt-3 text-sm text-foreground">
-                            {whyFlaggedNarrative}
-                          </div>
-                        </div>
-
-                        <div className="space-y-3">
-                          <div className="text-xs uppercase tracking-[0.3em] text-muted">
-                            Decision engines
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {engineChips.map((chip) => {
-                              const isActiveChip = selectedInspectionEngine === chip.id;
-                              return (
-                                <button
-                                  key={`${activeRow.targetSnapshotId}:engine:${chip.id}`}
-                                  type="button"
-                                  aria-pressed={isActiveChip}
-                                  className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
-                                    isActiveChip
-                                      ? 'border-primary bg-primary text-primary-foreground'
-                                      : 'border-border bg-surface text-foreground hover:border-primary/40 hover:text-primary'
-                                  }`}
-                                  onClick={() =>
-                                    setSelectedInspectionEngineState({
-                                      targetSnapshotId: activeRow.targetSnapshotId,
-                                      engine: chip.id,
-                                    })
-                                  }
-                                >
-                                  {chip.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {selectedInspectionEngine === null ? (
-                          <div className="rounded-xl border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
-                            Select an engine above to inspect its details.
-                          </div>
-                        ) : (
-                          <div className="space-y-4">
-                            {inspectionSections.map((section) => (
-                              <Fragment key={`inspection-${section.id}`}>{section.render()}</Fragment>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()
-          ) : null}
-        </TargetExpandedPanel>
+                  return (
+                    <TargetSummaryRow
+                      key={summary.rowId}
+                      row={row}
+                      summary={summary}
+                      isActive={summary.targetSnapshotId === activeTargetSnapshotId}
+                      isSelected={selectedForHandoff.includes(summary.targetSnapshotId)}
+                      isStageable={summary.handoff.stageable}
+                      columnWidths={tableLayoutPrefs.widths}
+                      isTargetColumnFrozen={isTargetColumnFrozen}
+                      expandedContent={
+                        summary.targetSnapshotId === activeTargetSnapshotId
+                          ? activeExpandedContent
+                          : null
+                      }
+                      colSpan={7}
+                      onSelect={() => toggleTargetRow(summary.targetSnapshotId)}
+                      onToggleSelect={(checked) =>
+                        toggleSelectedRow(summary.targetSnapshotId, checked)
+                      }
+                    />
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );

@@ -78,9 +78,9 @@ const EMPTY_STATE_COPY: Record<
   },
   targets: {
     eyebrow: 'Targets scope',
-    title: 'Select one ASIN and capture a run to review the target queue.',
+    title: 'Select one ASIN and capture a run to review target decisions inline.',
     body:
-      'Phase 12 reads persisted target profile, state, role, diagnostics, comparison cues, and recommendation snapshots into an ASIN command center, target queue, and trust layer. Supported actions can be handed off into Ads Workspace draft staging, but execution still stays there.',
+      'Phase 12 reads persisted target profile, state, role, diagnostics, comparison cues, and recommendation snapshots into an ASIN command center, inline target review surface, and trust layer. Supported actions can be handed off into Ads Workspace draft staging, but execution still stays there.',
   },
   outcomes: {
     eyebrow: 'Outcome review scope',
@@ -294,7 +294,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
       : view === 'overview'
         ? 'Read-only optimizer active'
         : view === 'targets'
-          ? 'Review + comparison queue'
+          ? 'Inline target review'
           : 'Recommendation shell only';
 
   return (

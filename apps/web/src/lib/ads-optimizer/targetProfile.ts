@@ -75,6 +75,10 @@ type NonAdditiveTrend = {
   observedDays: number;
   latestObservedDate: string | null;
 };
+type RankingObservation = {
+  observedDate: string | null;
+  rank: number | null;
+};
 type CurrentSnapshotData = Awaited<ReturnType<typeof fetchCurrentSpData>>;
 
 export type AdsOptimizerTargetProfileRow = {
@@ -137,6 +141,11 @@ export type AdsOptimizerTargetProfileSnapshotView = {
     tosIs: NonAdditiveTrend;
     stis: NonAdditiveTrend;
     stir: NonAdditiveTrend;
+  };
+  rankingContext?: {
+    note: string | null;
+    organicObservedRanks: RankingObservation[];
+    sponsoredObservedRanks: RankingObservation[];
   };
   demandProxies: {
     searchTermCount: number;
@@ -1188,6 +1197,7 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
   const demandProxies = asJsonObject(payload.demand_proxies);
   const placementContext = asJsonObject(payload.placement_context);
   const searchTermDiagnostics = asJsonObject(payload.search_term_diagnostics);
+  const rankingContext = asJsonObject(payload.ranking_context);
   const coverage = asJsonObject(payload.coverage);
   const statuses = asJsonObject(coverage?.statuses);
   const topTermsRaw = Array.isArray(searchTermDiagnostics?.top_terms)
@@ -1214,6 +1224,16 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
         readNestedString(nonAdditive, `${latestKey}_observed_date`) ??
         null,
     };
+  };
+  const readRankingObservations = (key: string): RankingObservation[] => {
+    const raw = Array.isArray(rankingContext?.[key]) ? rankingContext[key] : [];
+    return raw
+      .map((entry) => asJsonObject(entry))
+      .filter((entry): entry is JsonObject => entry !== null)
+      .map((entry) => ({
+        observedDate: readNestedString(entry, 'observed_date'),
+        rank: readNestedNumber(entry, 'rank'),
+      }));
   };
 
   const coverageNotes = coverageNotesRaw.filter((entry): entry is string => typeof entry === 'string');
@@ -1320,6 +1340,11 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
         'latest_observed_stir',
         'representative_stir_latest'
       ),
+    },
+    rankingContext: {
+      note: readNestedString(rankingContext, 'note'),
+      organicObservedRanks: readRankingObservations('organic_observed_ranks'),
+      sponsoredObservedRanks: readRankingObservations('sponsored_observed_ranks'),
     },
     demandProxies: {
       searchTermCount: numberValue(demandProxies?.search_term_count as number | null | undefined),
@@ -1488,6 +1513,28 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
     },
   };
 };
+
+export const mapTargetProfileRowToSnapshotView = (
+  row: AdsOptimizerTargetProfileRow,
+  context?: {
+    targetSnapshotId?: string;
+    runId?: string;
+    createdAt?: string;
+  }
+): AdsOptimizerTargetProfileSnapshotView =>
+  mapTargetSnapshotToProfileView({
+    target_snapshot_id:
+      context?.targetSnapshotId ??
+      `profile:${row.targetId}:${row.asin}:${row.campaignId}:${row.adGroupId || 'root'}`,
+    run_id: context?.runId ?? '__ads_optimizer_profile_row__',
+    created_at: context?.createdAt ?? '',
+    asin: row.asin,
+    campaign_id: row.campaignId,
+    ad_group_id: row.adGroupId,
+    target_id: row.targetId,
+    coverage_note: row.coverageNote,
+    snapshot_payload_json: row.snapshotPayload,
+  });
 
 export const loadAdsOptimizerTargetProfiles = async (args: {
   asin: string;

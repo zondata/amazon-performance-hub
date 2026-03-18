@@ -17,6 +17,7 @@ import {
   type AdsOptimizerRunComparisonView,
 } from './comparison';
 import {
+  buildAdsOptimizerOverviewComparisonWindow,
   getAdsOptimizerOverviewData,
   recommendAdsOptimizerObjective,
   type AdsOptimizerOverviewData,
@@ -59,6 +60,7 @@ import type { AdsOptimizerRun, JsonObject } from './runtimeTypes';
 import type { AdsOptimizerRecommendationOverride } from './types';
 import {
   loadAdsOptimizerTargetProfiles,
+  mapTargetProfileRowToSnapshotView,
   mapTargetSnapshotToProfileView,
   type AdsOptimizerTargetProfileSnapshotView,
 } from './targetProfile';
@@ -151,6 +153,7 @@ export type AdsOptimizerTargetReviewRow = AdsOptimizerTargetProfileSnapshotView 
   persistedTargetKey: string;
   recommendation: AdsOptimizerRecommendationSnapshotView | null;
   manualOverride?: AdsOptimizerRecommendationOverride | null;
+  previousComparable?: AdsOptimizerTargetProfileSnapshotView | null;
   roleHistory: AdsOptimizerTargetRoleHistoryEntry[];
   queue: {
     priority: number | null;
@@ -1014,6 +1017,11 @@ export const getAdsOptimizerTargetsViewData = async (args: {
     };
   }
 
+  const comparisonWindow = buildAdsOptimizerOverviewComparisonWindow({
+    start: exactRun.date_start,
+    end: exactRun.date_end,
+  });
+
   const comparableRuns = (
     exactRun.selected_asin === args.asin && requestedRunId === null
       ? completedRuns
@@ -1037,6 +1045,7 @@ export const getAdsOptimizerTargetsViewData = async (args: {
     roleTransitionLogs,
     previousSnapshots,
     previousRecommendationSnapshots,
+    previousPeriodTargetProfiles,
     currentVersion,
     previousVersion,
     handoffAuditByRunId,
@@ -1054,6 +1063,14 @@ export const getAdsOptimizerTargetsViewData = async (args: {
     previousComparableRun
       ? listAdsOptimizerRecommendationSnapshotsByRun(previousComparableRun.run_id)
       : Promise.resolve([]),
+    loadAdsOptimizerTargetProfiles({
+      asin: exactRun.selected_asin,
+      start: comparisonWindow.previous.start,
+      end: comparisonWindow.previous.end,
+    }).catch(() => ({
+      rows: [],
+      zeroTargetDiagnostics: null,
+    })),
     getRulePackVersion(exactRun.rule_pack_version_id),
     previousComparableRun ? getRulePackVersion(previousComparableRun.rule_pack_version_id) : Promise.resolve(null),
     loadOptimizerWorkspaceHandoffAudit(
@@ -1106,11 +1123,25 @@ export const getAdsOptimizerTargetsViewData = async (args: {
         roleHistoryByTargetId: new Map(),
       })
     : [];
+  const previousRowsByKey = new Map(
+    previousPeriodTargetProfiles.rows.map((row) => [
+      row.targetId,
+      mapTargetProfileRowToSnapshotView(row, {
+        targetSnapshotId: `previous-period:${row.targetId}`,
+        runId: `previous-period:${comparisonWindow.previous.start}:${comparisonWindow.previous.end}`,
+        createdAt: exactRun.created_at,
+      }),
+    ] as const)
+  );
+  const currentRows = rows.map((row) => ({
+    ...row,
+    previousComparable: previousRowsByKey.get(row.persistedTargetKey) ?? null,
+  }));
   const comparison = previousComparableRun
     ? buildAdsOptimizerRunComparison({
         currentRun: exactRun,
         previousRun: previousComparableRun,
-        currentRows: rows.map(toComparisonRow),
+        currentRows: currentRows.map(toComparisonRow),
         previousRows: previousRows.map(toComparisonRow),
         currentVersion: {
           versionLabel: exactRun.rule_pack_version_label,
@@ -1152,7 +1183,7 @@ export const getAdsOptimizerTargetsViewData = async (args: {
       ? readAdsOptimizerProductRunState(productSnapshots[0].snapshot_payload_json)
       : null,
     comparison,
-    rows,
+    rows: currentRows,
     requestedRunId,
     resolvedContextSource,
     runLookupError,

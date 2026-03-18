@@ -110,7 +110,7 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     expect(source).toContain('Product archetype');
     expect(source).toContain('Strategy profile');
     expect(source).toContain('Persisted from the effective rule-pack version used for this run.');
-    expect(source).toContain('buildAdsOptimizerTargetRowSummaries');
+    expect(source).toContain('buildAdsOptimizerTargetRowTableSummaries');
   });
 
   it('stores recommendation snapshots as read-only Phase 11 recommendation sets', () => {
@@ -128,6 +128,9 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     const runtimeSource = fs.readFileSync(runtimePath, 'utf-8');
 
     expect(runtimeSource).toContain('previousComparableRun');
+    expect(runtimeSource).toContain('buildAdsOptimizerOverviewComparisonWindow');
+    expect(runtimeSource).toContain('loadAdsOptimizerTargetProfiles');
+    expect(runtimeSource).toContain('mapTargetProfileRowToSnapshotView');
     expect(runtimeSource).toContain('buildAdsOptimizerRunComparison');
     expect(runtimeSource).toContain('getRulePackVersion');
     expect(runtimeSource).toContain('resolveAdsOptimizerRuntimeContextForAsin');

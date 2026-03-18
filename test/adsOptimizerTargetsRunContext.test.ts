@@ -9,6 +9,16 @@ const repoState = vi.hoisted(() => ({
   listRoleTransitionLogsByAsin: vi.fn(),
 }));
 
+const overviewState = vi.hoisted(() => ({
+  buildComparisonWindow: vi.fn(),
+}));
+
+const targetProfileState = vi.hoisted(() => ({
+  loadTargetProfiles: vi.fn(),
+  mapTargetSnapshotToProfileView: vi.fn(),
+  mapTargetProfileRowToSnapshotView: vi.fn(),
+}));
+
 vi.mock('../apps/web/src/lib/env', () => ({
   env: {
     supabaseUrl: 'https://example.supabase.co',
@@ -47,6 +57,7 @@ vi.mock('../apps/web/src/lib/ads-optimizer/comparison', () => ({
 
 vi.mock('../apps/web/src/lib/ads-optimizer/overview', () => ({
   getAdsOptimizerOverviewData: vi.fn(),
+  buildAdsOptimizerOverviewComparisonWindow: overviewState.buildComparisonWindow,
 }));
 
 vi.mock('../apps/web/src/lib/ads-optimizer/role', () => ({
@@ -67,8 +78,9 @@ vi.mock('../apps/web/src/lib/ads-optimizer/state', () => ({
 }));
 
 vi.mock('../apps/web/src/lib/ads-optimizer/targetProfile', () => ({
-  loadAdsOptimizerTargetProfiles: vi.fn(),
-  mapTargetSnapshotToProfileView: vi.fn(),
+  loadAdsOptimizerTargetProfiles: targetProfileState.loadTargetProfiles,
+  mapTargetSnapshotToProfileView: targetProfileState.mapTargetSnapshotToProfileView,
+  mapTargetProfileRowToSnapshotView: targetProfileState.mapTargetProfileRowToSnapshotView,
 }));
 
 vi.mock('../apps/web/src/lib/ads-workspace/repoChangeSets', () => ({
@@ -108,6 +120,186 @@ const makeRun = () => ({
   completed_at: '2026-03-10T00:05:00Z',
 });
 
+const makeProfileView = (overrides: Record<string, unknown> = {}) => ({
+  targetSnapshotId: 'snap-1',
+  runId: 'run-1',
+  createdAt: '2026-03-10T00:00:00Z',
+  asin: 'B001TEST',
+  campaignId: 'cmp-1',
+  campaignName: 'Core Campaign',
+  adGroupId: 'ag-1',
+  adGroupName: 'Exact Group',
+  targetId: 'target-1',
+  targetText: 'hero exact',
+  matchType: 'EXACT',
+  typeLabel: 'Keyword',
+  raw: {
+    impressions: 500,
+    clicks: 20,
+    spend: 120,
+    orders: 4,
+    sales: 300,
+    cpc: 6,
+    ctr: 0.04,
+    cvr: 0.2,
+    acos: 0.4,
+    roas: 2.5,
+    tosIs: null,
+    stis: null,
+    stir: null,
+  },
+  derived: {
+    contributionAfterAds: 42,
+    breakEvenGap: 0.02,
+    maxCpcSupportGap: null,
+    lossDollars: null,
+    profitDollars: 42,
+    clickVelocity: null,
+    impressionVelocity: null,
+    organicLeverageProxy: null,
+    organicContextSignal: null,
+  },
+  nonAdditiveDiagnostics: {
+    note: null,
+    representativeSearchTerm: null,
+    tosIs: {
+      latestValue: null,
+      previousValue: null,
+      delta: null,
+      direction: null,
+      observedDays: 0,
+      latestObservedDate: null,
+    },
+    stis: {
+      latestValue: null,
+      previousValue: null,
+      delta: null,
+      direction: null,
+      observedDays: 0,
+      latestObservedDate: null,
+    },
+    stir: {
+      latestValue: null,
+      previousValue: null,
+      delta: null,
+      direction: null,
+      observedDays: 0,
+      latestObservedDate: null,
+    },
+  },
+  rankingContext: {
+    note: null,
+    organicObservedRanks: [],
+    sponsoredObservedRanks: [],
+  },
+  demandProxies: {
+    searchTermCount: 0,
+    sameTextSearchTermCount: 0,
+    totalSearchTermImpressions: 0,
+    totalSearchTermClicks: 0,
+    representativeSearchTerm: null,
+    representativeClickShare: null,
+  },
+  placementContext: {
+    topOfSearchModifierPct: null,
+    impressions: null,
+    clicks: null,
+    orders: null,
+    units: null,
+    sales: null,
+    spend: null,
+    note: null,
+  },
+  searchTermDiagnostics: {
+    representativeSearchTerm: null,
+    representativeSameText: null,
+    note: null,
+    topTerms: [],
+  },
+  coverage: {
+    observedStart: '2026-03-01',
+    observedEnd: '2026-03-10',
+    daysObserved: 10,
+    statuses: {
+      tosIs: 'missing',
+      stis: 'missing',
+      stir: 'missing',
+      placementContext: 'missing',
+      searchTerms: 'missing',
+      breakEvenInputs: 'ready',
+    },
+    notes: [],
+    criticalWarnings: [],
+  },
+  state: {
+    efficiency: {
+      value: 'profitable',
+      label: 'Profitable',
+      detail: 'Ready',
+      coverageStatus: 'ready',
+      reasonCodes: [],
+    },
+    confidence: {
+      value: 'confirmed',
+      label: 'Confirmed',
+      detail: 'Ready',
+      coverageStatus: 'ready',
+      reasonCodes: [],
+    },
+    importance: {
+      value: 'tier_1_dominant',
+      label: 'Tier 1 dominant',
+      detail: 'Ready',
+      coverageStatus: 'ready',
+      reasonCodes: [],
+    },
+    opportunityScore: 10,
+    riskScore: 5,
+    opportunityReasonCodes: [],
+    riskReasonCodes: [],
+    summaryReasonCodes: [],
+  },
+  role: {
+    desiredRole: {
+      value: 'Harvest',
+      label: 'Harvest',
+      detail: 'Ready',
+      coverageStatus: 'ready',
+      reasonCodes: [],
+    },
+    currentRole: {
+      value: 'Harvest',
+      label: 'Harvest',
+      detail: 'Ready',
+      coverageStatus: 'ready',
+      reasonCodes: [],
+    },
+    previousRole: 'Harvest',
+    transitionRule: 'hold',
+    transitionReasonCodes: [],
+    summaryReasonCodes: [],
+    guardrails: {
+      flags: {
+        requiresManualApproval: false,
+        autoPauseEligible: false,
+        transitionLocked: false,
+      },
+    },
+  },
+  ...overrides,
+});
+
+const makeTargetProfileRow = (overrides: Record<string, unknown> = {}) => ({
+  asin: 'B001TEST',
+  campaignId: 'cmp-1',
+  adGroupId: 'ag-1',
+  targetId: 'target-1',
+  sourceScope: 'asin_via_sp_advertised_product_membership',
+  coverageNote: null,
+  snapshotPayload: {},
+  ...overrides,
+});
+
 describe('ads optimizer targets run context', () => {
   beforeEach(() => {
     repoState.getRunById.mockReset();
@@ -121,6 +313,22 @@ describe('ads optimizer targets run context', () => {
     repoState.listTargetSnapshotsByRun.mockResolvedValue([]);
     repoState.listRecommendationSnapshotsByRun.mockResolvedValue([]);
     repoState.listRoleTransitionLogsByAsin.mockResolvedValue([]);
+    overviewState.buildComparisonWindow.mockReset();
+    overviewState.buildComparisonWindow.mockImplementation(({ start, end }) => ({
+      current: { start, end, days: 10 },
+      previous: {
+        start: '2026-02-19',
+        end: '2026-02-28',
+        days: 10,
+      },
+    }));
+    targetProfileState.loadTargetProfiles.mockReset();
+    targetProfileState.loadTargetProfiles.mockResolvedValue({
+      rows: [],
+      zeroTargetDiagnostics: null,
+    });
+    targetProfileState.mapTargetSnapshotToProfileView.mockReset();
+    targetProfileState.mapTargetProfileRowToSnapshotView.mockReset();
   });
 
   it('prefers runId over incoming ASIN/date values and loads that persisted run', async () => {
@@ -178,5 +386,175 @@ describe('ads optimizer targets run context', () => {
     expect(result.matchingWindowRun?.run_id).toBe('run-1');
     expect(result.latestCompletedRun?.run_id).toBe('run-1');
     expect(result.requestedRunError).toBeNull();
+  });
+
+  it('populates displayed previous values from the Overview-aligned previous period even without a prior completed run', async () => {
+    const run = makeRun();
+    repoState.listRuns.mockResolvedValue([run]);
+    repoState.listTargetSnapshotsByRun.mockResolvedValue([
+      {
+        target_snapshot_id: 'snap-1',
+        run_id: 'run-1',
+        created_at: '2026-03-10T00:00:00Z',
+        asin: 'B001TEST',
+        campaign_id: 'cmp-1',
+        ad_group_id: 'ag-1',
+        target_id: 'target-1',
+        coverage_note: null,
+        snapshot_payload_json: {},
+      },
+    ]);
+    targetProfileState.mapTargetSnapshotToProfileView.mockReturnValue(
+      makeProfileView({
+        raw: {
+          ...makeProfileView().raw,
+          spend: 120,
+          sales: 300,
+          orders: 4,
+          acos: 0.4,
+        },
+        derived: {
+          ...makeProfileView().derived,
+          profitDollars: 42,
+          contributionAfterAds: 42,
+          breakEvenGap: 0.02,
+        },
+      })
+    );
+    targetProfileState.loadTargetProfiles.mockResolvedValue({
+      rows: [makeTargetProfileRow()],
+      zeroTargetDiagnostics: null,
+    });
+    targetProfileState.mapTargetProfileRowToSnapshotView.mockReturnValue(
+      makeProfileView({
+        targetSnapshotId: 'previous-period:target-1',
+        runId: 'previous-period:2026-02-19:2026-02-28',
+        raw: {
+          ...makeProfileView().raw,
+          spend: 80,
+          sales: 200,
+          orders: 3,
+          acos: 0.5,
+        },
+        derived: {
+          ...makeProfileView().derived,
+          profitDollars: 20,
+          contributionAfterAds: 20,
+          breakEvenGap: 0.01,
+        },
+        rankingContext: {
+          note: null,
+          organicObservedRanks: [],
+          sponsoredObservedRanks: [],
+        },
+      })
+    );
+
+    const result = await getAdsOptimizerTargetsViewData({
+      asin: 'B001TEST',
+      start: '2026-03-01',
+      end: '2026-03-10',
+    });
+
+    expect(overviewState.buildComparisonWindow).toHaveBeenCalledWith({
+      start: '2026-03-01',
+      end: '2026-03-10',
+    });
+    expect(targetProfileState.loadTargetProfiles).toHaveBeenCalledWith({
+      asin: 'B001TEST',
+      start: '2026-02-19',
+      end: '2026-02-28',
+    });
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]?.previousComparable?.raw.spend).toBe(80);
+    expect(result.rows[0]?.previousComparable?.raw.sales).toBe(200);
+    expect(result.rows[0]?.previousComparable?.raw.orders).toBe(3);
+    expect(result.rows[0]?.previousComparable?.raw.acos).toBe(0.5);
+    expect(result.rows[0]?.previousComparable?.derived.profitDollars).toBe(20);
+  });
+
+  it('does not use a prior completed same-window run as the displayed previous comparison for collapsed rows', async () => {
+    const run = makeRun();
+    const priorCompletedSameWindowRun = {
+      ...makeRun(),
+      run_id: 'run-0',
+      created_at: '2026-03-09T00:00:00Z',
+    };
+    repoState.listRuns.mockResolvedValue([run, priorCompletedSameWindowRun]);
+    repoState.listTargetSnapshotsByRun.mockImplementation(async (runId: string) => {
+      if (runId === 'run-1') {
+        return [
+          {
+            target_snapshot_id: 'snap-1',
+            run_id: 'run-1',
+            created_at: '2026-03-10T00:00:00Z',
+            asin: 'B001TEST',
+            campaign_id: 'cmp-1',
+            ad_group_id: 'ag-1',
+            target_id: 'target-1',
+            coverage_note: null,
+            snapshot_payload_json: {},
+          },
+        ];
+      }
+      return [
+        {
+          target_snapshot_id: 'snap-0',
+          run_id: 'run-0',
+          created_at: '2026-03-09T00:00:00Z',
+          asin: 'B001TEST',
+          campaign_id: 'cmp-1',
+          ad_group_id: 'ag-1',
+          target_id: 'target-1',
+          coverage_note: null,
+          snapshot_payload_json: {},
+        },
+      ];
+    });
+    targetProfileState.mapTargetSnapshotToProfileView
+      .mockReturnValueOnce(
+        makeProfileView({
+          targetSnapshotId: 'snap-1',
+          runId: 'run-1',
+          raw: {
+            ...makeProfileView().raw,
+            spend: 120,
+          },
+        })
+      )
+      .mockReturnValueOnce(
+        makeProfileView({
+          targetSnapshotId: 'snap-0',
+          runId: 'run-0',
+          raw: {
+            ...makeProfileView().raw,
+            spend: 999,
+          },
+        })
+      );
+    targetProfileState.loadTargetProfiles.mockResolvedValue({
+      rows: [makeTargetProfileRow()],
+      zeroTargetDiagnostics: null,
+    });
+    targetProfileState.mapTargetProfileRowToSnapshotView.mockReturnValue(
+      makeProfileView({
+        targetSnapshotId: 'previous-period:target-1',
+        runId: 'previous-period:2026-02-19:2026-02-28',
+        raw: {
+          ...makeProfileView().raw,
+          spend: 80,
+        },
+      })
+    );
+
+    const result = await getAdsOptimizerTargetsViewData({
+      asin: 'B001TEST',
+      start: '2026-03-01',
+      end: '2026-03-10',
+    });
+
+    expect(repoState.listTargetSnapshotsByRun).toHaveBeenCalledWith('run-0');
+    expect(result.rows[0]?.previousComparable?.raw.spend).toBe(80);
+    expect(result.rows[0]?.previousComparable?.raw.spend).not.toBe(999);
   });
 });

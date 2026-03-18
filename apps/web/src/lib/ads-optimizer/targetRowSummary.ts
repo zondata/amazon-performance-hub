@@ -86,6 +86,12 @@ export type AdsOptimizerTargetRowSummary = {
     label: string;
     detail: string;
   };
+  trend: {
+    value: string | null;
+    label: string;
+    detail: string;
+    status: 'ready' | 'missing';
+  };
   contribution: {
     value: number | null;
     label: string;
@@ -267,6 +273,44 @@ const buildOrganicRankSummary = (row: TargetReviewRowLike) => {
   };
 };
 
+const buildTrendSummary = (row: TargetReviewRowLike) => {
+  const signal = row.derived.organicContextSignal;
+  if (signal === 'same_text_visibility_context') {
+    return {
+      value: signal,
+      label: 'Same-text visibility',
+      detail:
+        'Trend context is based on same-text search-term visibility only, not target-owned rank.',
+      status: 'ready' as const,
+    };
+  }
+  if (signal === 'search_term_visibility_context') {
+    return {
+      value: signal,
+      label: 'Search-term visibility',
+      detail:
+        'Trend context is based on search-term visibility only, not target-owned rank.',
+      status: 'ready' as const,
+    };
+  }
+  if (signal === 'top_of_search_visibility_context') {
+    return {
+      value: signal,
+      label: 'Top-of-search visibility',
+      detail:
+        'Trend context is based on top-of-search visibility only, not target-owned rank.',
+      status: 'ready' as const,
+    };
+  }
+
+  return {
+    value: null,
+    label: 'Trend unavailable',
+    detail: 'No safe organic visibility trend context was captured for this target in the run.',
+    status: 'missing' as const,
+  };
+};
+
 const buildContributionSummary = (row: TargetReviewRowLike) => {
   const value = row.derived.contributionAfterAds;
   if (value === null) {
@@ -417,6 +461,7 @@ export const buildAdsOptimizerTargetRowSummary = (
           : `${row.role.currentRole.label} → ${row.role.desiredRole.label}`,
     },
     organicRank: buildOrganicRankSummary(row),
+    trend: buildTrendSummary(row),
     contribution: buildContributionSummary(row),
     change: {
       priority: row.queue.priority,

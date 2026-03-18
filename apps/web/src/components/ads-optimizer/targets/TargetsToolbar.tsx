@@ -1,34 +1,29 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 
+import {
+  type AdsOptimizerTargetTableColumnKey,
+} from '@/lib/ads-optimizer/targetTableLayoutPrefs';
 import type {
   AdsOptimizerTargetExceptionFilterValue,
   AdsOptimizerTargetFilterValue,
-  AdsOptimizerTargetQueueSort,
-  AdsOptimizerTargetQueueSortDirection,
-} from '@/lib/ads-optimizer/targetRowSummary';
-
-const labelize = (value: string | null) =>
-  value
-    ? value
-        .split(/[_\s]+/)
-        .map((part) => (part ? part[0]!.toUpperCase() + part.slice(1) : part))
-        .join(' ')
-    : 'Not captured';
+  AdsOptimizerTargetTableSort,
+  AdsOptimizerTargetTableSortDirection,
+} from '@/lib/ads-optimizer/targetRowTableSummary';
 
 const formatNumber = (value: number) =>
   value.toLocaleString('en-US', { maximumFractionDigits: 0 });
 
 type TargetsToolbarProps = {
   roleFilter: AdsOptimizerTargetFilterValue;
-  efficiencyFilter: AdsOptimizerTargetFilterValue;
   tierFilter: AdsOptimizerTargetFilterValue;
-  confidenceFilter: AdsOptimizerTargetFilterValue;
+  trendFilter: AdsOptimizerTargetFilterValue;
   spendDirectionFilter: AdsOptimizerTargetFilterValue;
   exceptionFilter: AdsOptimizerTargetExceptionFilterValue;
-  sortBy: AdsOptimizerTargetQueueSort;
-  sortDirection: AdsOptimizerTargetQueueSortDirection;
+  sortBy: AdsOptimizerTargetTableSort;
+  sortDirection: AdsOptimizerTargetTableSortDirection;
   filteredRowCount: number;
   totalRowCount: number;
   persistedRecommendationRows: number;
@@ -38,6 +33,7 @@ type TargetsToolbarProps = {
   visibleStageableCount: number;
   selectedTargetSnapshotIds: string[];
   allVisibleStageableSelected: boolean;
+  frozenColumns: AdsOptimizerTargetTableColumnKey[];
   historyHref: string;
   workspaceQueueHref: string;
   returnTo: string;
@@ -46,18 +42,24 @@ type TargetsToolbarProps = {
   end: string;
   handoffAction: (formData: FormData) => Promise<void>;
   onRoleFilterChange: (value: AdsOptimizerTargetFilterValue) => void;
-  onEfficiencyFilterChange: (value: AdsOptimizerTargetFilterValue) => void;
   onTierFilterChange: (value: AdsOptimizerTargetFilterValue) => void;
-  onConfidenceFilterChange: (value: AdsOptimizerTargetFilterValue) => void;
+  onTrendFilterChange: (value: AdsOptimizerTargetFilterValue) => void;
   onSpendDirectionFilterChange: (value: AdsOptimizerTargetFilterValue) => void;
   onExceptionFilterChange: (value: AdsOptimizerTargetExceptionFilterValue) => void;
+  onSortByChange: (value: AdsOptimizerTargetTableSort) => void;
+  onToggleSortDirection: () => void;
   onToggleAllVisibleStageable: (checked: boolean) => void;
+  onResetColumnWidths: () => void;
+  onToggleFrozenColumn: (key: AdsOptimizerTargetTableColumnKey) => void;
 };
 
 export default function TargetsToolbar(props: TargetsToolbarProps) {
+  const [showColumnMenu, setShowColumnMenu] = useState(false);
+  const targetFrozen = props.frozenColumns.includes('target');
+
   return (
     <>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
           Role
           <select
@@ -76,22 +78,6 @@ export default function TargetsToolbar(props: TargetsToolbarProps) {
         </label>
 
         <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-          Efficiency
-          <select
-            value={props.efficiencyFilter}
-            onChange={(event) => props.onEfficiencyFilterChange(event.target.value)}
-            className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-          >
-            <option value="all">All efficiency</option>
-            <option value="profitable">Profitable</option>
-            <option value="break_even">Break Even</option>
-            <option value="converting_but_loss_making">Loss Making</option>
-            <option value="learning_no_sale">Learning No Sale</option>
-            <option value="no_data">No Data</option>
-          </select>
-        </label>
-
-        <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
           Tier
           <select
             value={props.tierFilter}
@@ -106,16 +92,17 @@ export default function TargetsToolbar(props: TargetsToolbarProps) {
         </label>
 
         <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-          Confidence
+          Trend state
           <select
-            value={props.confidenceFilter}
-            onChange={(event) => props.onConfidenceFilterChange(event.target.value)}
+            value={props.trendFilter}
+            onChange={(event) => props.onTrendFilterChange(event.target.value)}
             className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
           >
-            <option value="all">All confidence</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="directional">Directional</option>
-            <option value="insufficient">Insufficient</option>
+            <option value="all">All trend states</option>
+            <option value="same_text_visibility_context">Same-text visibility</option>
+            <option value="search_term_visibility_context">Search-term visibility</option>
+            <option value="top_of_search_visibility_context">Top-of-search visibility</option>
+            <option value="missing">Unavailable</option>
           </select>
         </label>
 
@@ -154,18 +141,93 @@ export default function TargetsToolbar(props: TargetsToolbarProps) {
         </label>
       </div>
 
-      <div className="mt-3 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-muted">
-        Active sort: <span className="font-semibold text-foreground">{labelize(props.sortBy)}</span>{' '}
-        <span className="font-semibold text-foreground">
-          {props.sortDirection === 'asc' ? '↑' : '↓'}
-        </span>
-      </div>
-
-      <div className="mt-3 rounded-xl border border-border bg-surface-2 px-4 py-2.5 text-sm text-muted">
-        Showing {formatNumber(props.filteredRowCount)} of {formatNumber(props.totalRowCount)}{' '}
-        persisted target rows. {formatNumber(props.persistedRecommendationRows)} recommendation
-        snapshots were loaded from the exact run, and {formatNumber(props.stageableRowCount)} row(s)
-        currently contain Ads Workspace-supported actions.
+      <div className="mt-3 rounded-xl border border-border bg-surface px-4 py-3">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
+              Sort by
+              <select
+                value={props.sortBy}
+                onChange={(event) =>
+                  props.onSortByChange(event.target.value as AdsOptimizerTargetTableSort)
+                }
+                className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              >
+                <option value="priority">Priority</option>
+                <option value="target">Target</option>
+                <option value="recommendations">Change plan</option>
+                <option value="workspace_actions">Workspace actions</option>
+                <option value="efficiency">Efficiency</option>
+                <option value="exceptions">Exceptions</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground"
+              onClick={props.onToggleSortDirection}
+            >
+              {props.sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground"
+              aria-expanded={showColumnMenu}
+              aria-controls="targets-adjust-columns-panel"
+              onClick={() => setShowColumnMenu((current) => !current)}
+            >
+              Adjust columns
+            </button>
+          </div>
+          <div className="text-sm text-muted xl:text-right">
+            Showing {formatNumber(props.filteredRowCount)} of {formatNumber(props.totalRowCount)}{' '}
+            persisted target rows. {formatNumber(props.persistedRecommendationRows)} recommendation
+            snapshots were loaded from the exact run, and {formatNumber(props.stageableRowCount)}{' '}
+            row(s) currently contain Ads Workspace-supported actions.
+          </div>
+        </div>
+        {showColumnMenu ? (
+          <div
+            id="targets-adjust-columns-panel"
+            className="mt-4 rounded-xl border border-border/70 bg-surface-2 px-4 py-4"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.25em] text-muted">
+                  Collapsed table options
+                </div>
+                <div className="mt-1 text-sm text-muted">
+                  Drag header borders to resize columns. Saved widths become this
+                  browser&apos;s default for the collapsed table.
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="text-xs text-muted">
+                Resize is available on every collapsed-table header: Target, State, Economics,
+                Contribution, Ranking, Role, and Change summary.
+              </div>
+              <div className="flex flex-wrap gap-2 lg:justify-end">
+                <button
+                  type="button"
+                  className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground"
+                  onClick={props.onResetColumnWidths}
+                >
+                  Reset widths
+                </button>
+                <label className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={targetFrozen}
+                    onChange={() => props.onToggleFrozenColumn('target')}
+                    aria-label="Freeze Target column"
+                    className="h-4 w-4"
+                  />
+                  <span className="font-semibold">Freeze Target column</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-3 rounded-xl border border-border bg-surface px-4 py-3">
@@ -209,7 +271,7 @@ export default function TargetsToolbar(props: TargetsToolbarProps) {
               href={props.workspaceQueueHref}
               className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground"
             >
-              Open Queue Review
+              Open Ads Workspace
             </Link>
             <Link href={props.historyHref} className="rounded-lg px-3 py-2 text-sm font-semibold text-primary">
               Go to History

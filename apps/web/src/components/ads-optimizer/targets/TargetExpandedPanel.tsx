@@ -2,27 +2,31 @@
 
 import type { ReactNode } from 'react';
 
-import type { AdsOptimizerTargetReviewRow } from '@/lib/ads-optimizer/runtime';
-
 type TargetExpandedPanelProps = {
-  drawerId?: string;
-  activeRow: AdsOptimizerTargetReviewRow | null;
+  targetSnapshotId: string;
+  onCollapse?: () => void;
   children: ReactNode;
 };
 
 export default function TargetExpandedPanel(props: TargetExpandedPanelProps) {
   return (
-    <aside id={props.drawerId} className="xl:sticky xl:top-4 xl:self-stretch xl:h-[calc(100vh-1.5rem)] xl:min-h-0">
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm xl:flex xl:h-full xl:flex-col xl:overflow-hidden">
-        <div className="text-xs uppercase tracking-[0.3em] text-muted">Target detail drawer</div>
-        {props.activeRow ? (
-          props.children
-        ) : (
-          <div className="mt-3 text-sm text-muted">
-            Select one queue row to open the target detail drawer.
-          </div>
-        )}
-      </section>
-    </aside>
+    <div
+      id={`target-inline-panel-${props.targetSnapshotId}`}
+      className="rounded-2xl border border-border bg-surface/90 p-5 shadow-sm"
+    >
+      {props.onCollapse ? (
+        <div className="mb-4 flex justify-end">
+          <button
+            type="button"
+            className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-foreground transition hover:border-primary/40 hover:text-primary"
+            aria-label="Collapse expanded target details"
+            onClick={props.onCollapse}
+          >
+            Collapse details
+          </button>
+        </div>
+      ) : null}
+      {props.children}
+    </div>
   );
 }

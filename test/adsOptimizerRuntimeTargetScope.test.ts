@@ -78,6 +78,10 @@ vi.mock('../apps/web/src/lib/supabaseAdmin', () => ({
 }));
 
 vi.mock('../apps/web/src/lib/ads-optimizer/overview', () => ({
+  buildAdsOptimizerOverviewComparisonWindow: ({ start, end }: { start: string; end: string }) => ({
+    current: { start, end, days: 1 },
+    previous: { start, end, days: 1 },
+  }),
   getAdsOptimizerOverviewData: async () => ({
     product: {
       asin: 'B001TEST',
