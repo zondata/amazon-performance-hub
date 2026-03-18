@@ -15,7 +15,7 @@ const panelPath = path.join(
 );
 const targetsPanelPath = path.join(
   process.cwd(),
-  'apps/web/src/components/ads-optimizer/OptimizerTargetsPanel.tsx'
+  'apps/web/src/components/ads-optimizer/targets/TargetsPageShell.tsx'
 );
 const runtimePath = path.join(
   process.cwd(),
@@ -110,6 +110,7 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     expect(source).toContain('Product archetype');
     expect(source).toContain('Strategy profile');
     expect(source).toContain('Persisted from the effective rule-pack version used for this run.');
+    expect(source).toContain('buildAdsOptimizerTargetRowSummaries');
   });
 
   it('stores recommendation snapshots as read-only Phase 11 recommendation sets', () => {

@@ -8,6 +8,26 @@ const panelPath = path.join(
   process.cwd(),
   'apps/web/src/components/ads-optimizer/OptimizerTargetsPanel.tsx'
 );
+const shellPath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads-optimizer/targets/TargetsPageShell.tsx'
+);
+const toolbarPath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads-optimizer/targets/TargetsToolbar.tsx'
+);
+const summaryRowPath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads-optimizer/targets/TargetSummaryRow.tsx'
+);
+const expandedPanelPath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads-optimizer/targets/TargetExpandedPanel.tsx'
+);
+const overrideFormPath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads-optimizer/targets/TargetOverrideForm.tsx'
+);
 const runtimePath = path.join(
   process.cwd(),
   'apps/web/src/lib/ads-optimizer/runtime.ts'
@@ -29,116 +49,37 @@ describe('ads optimizer phase 9 target review wiring', () => {
     expect(source).toContain('runId: requestedRunId');
   });
 
-  it('keeps the targets panel honest about phase 12 review + trust + handoff behavior', () => {
-    const source = fs.readFileSync(panelPath, 'utf-8');
+  it('splits the targets review UI into a stable wrapper plus V2 shell/subcomponents', () => {
+    const wrapperSource = fs.readFileSync(panelPath, 'utf-8');
+    const shellSource = fs.readFileSync(shellPath, 'utf-8');
+    const toolbarSource = fs.readFileSync(toolbarPath, 'utf-8');
+    const summaryRowSource = fs.readFileSync(summaryRowPath, 'utf-8');
+    const expandedPanelSource = fs.readFileSync(expandedPanelPath, 'utf-8');
+    const overrideFormSource = fs.readFileSync(overrideFormPath, 'utf-8');
 
-    expect(source).toContain("'use client';");
-    expect(source).toContain('useState');
-    expect(source).toContain('Optimizer command center');
-    expect(source).toContain('Target queue');
-    expect(source).toContain('Target detail drawer');
-    expect(source).toContain('Review persisted target outputs without leaving');
-    expect(source).toContain('Persisted run review');
-    expect(source).toContain('This Targets view is pinned to run');
-    expect(source).toContain('read_only_recommendation_only');
-    expect(source).toContain('Workspace handoff');
-    expect(source).toContain('Review + comparison + handoff');
-    expect(source).toContain('Handoff selected to Ads Workspace');
-    expect(source).toContain('Handoff this target');
-    expect(source).toContain('Open in Ads Workspace');
-    expect(source).toContain('Select visible stageable');
-    expect(source).toContain('Select all visible stageable optimizer rows');
-    expect(source).toContain('getWorkspaceSupportedActions');
-    expect(source).toContain('buildWorkspaceTargetHref');
-    expect(source).toContain('No persisted optimizer review run exists for this ASIN/date range yet.');
-    expect(source).toContain('How to read the Targets page');
-    expect(source).toContain('Global methodology notes');
-    expect(source).toContain('Actionable warnings');
-    expect(source).toContain('Review coverage buckets');
-    expect(source).toContain('Missing (normal):');
-    expect(source).toContain('Missing (suspicious):');
-    expect(source).toContain('Priority sorting still opens as the default queue order');
-    expect(source).toContain('Portfolio controls');
-    expect(source).toContain('Portfolio caps');
-    expect(source).toContain('Reason-code badges');
-    expect(source).toContain('Exception queue');
-    expect(source).toContain('Run comparison');
-    expect(source).toContain('Portfolio control changes');
-    expect(source).toContain('Portfolio control changes vs prior comparable run');
-    expect(source).toContain('Nothing material changed versus the prior comparable run.');
-    expect(source).toContain('Rollback / reversal guidance');
-    expect(source).toContain('portfolio-control changes versus the prior comparable run');
-    expect(source).toContain('Rollback guidance');
-    expect(source).toContain('Expand details');
-    expect(source).toContain('Recent role transitions');
-    expect(source).toContain('Recommended read-only actions');
-    expect(source).toContain('Critical warnings');
-    expect(source).toContain('Row-specific exceptions');
-    expect(source).toContain('Proposed changes');
-    expect(source).toContain('Human override');
-    expect(source).toContain('No saved override bundle.');
-    expect(source).toContain('Open to create or replace a staged override bundle.');
-    expect(source).toContain('Expand');
-    expect(source).toContain('Collapse');
-    expect(source).toContain('OverrideDisclosureCard');
-    expect(source).toContain('defaultExpanded={props.overrideError}');
-    expect(source).toContain('getOverrideStatus');
-    expect(source).toContain('buildOverrideActionSummary');
-    expect(source).toContain('Replace staged actions');
-    expect(source).toContain('Override note:');
-    expect(source).toContain('Override scope');
-    expect(source).toContain('Save override bundle');
-    expect(source).toContain('This override replaces the staged Ads Workspace bundle');
-    expect(source).toContain('replacement_action_bundle_json');
-    expect(source).toContain('Why this target is flagged');
-    expect(source).toContain('Decision engines');
-    expect(source).toContain('Select an engine above to inspect its details.');
-    expect(source).toContain('No concrete changes were proposed for this target in the selected run.');
-    expect(source).toContain('Action plan');
-    expect(source).toContain('All engines');
-    expect(source).toContain('ProposedChangeSummaryCard');
-    expect(source).toContain('selectedInspectionEngine');
-    expect(source).toContain('buildProposedChangeCards');
-    expect(source).toContain('buildWhyFlaggedNarrative');
-    expect(source).toContain("inspection-${section.id}");
-    expect(source).toContain('Organic context signal');
-    expect(source).toContain('xl:overscroll-contain');
-    expect(source).toContain('xl:h-[calc(100vh-1.5rem)]');
-    expect(source).toContain('Same-text query pinning');
-    expect(source).toContain('Promote-to-exact candidates');
-    expect(source).toContain('Query diagnostics');
-    expect(source).toContain('Placement diagnostics');
-    expect(source).toContain('Active sort:');
-    expect(source).toContain('toggleQueueSort');
-    expect(source).toContain('buildSortIndicator');
-    expect(source).toContain('sortDirection');
-    expect(source).toContain('All spend directions');
-    expect(source).toContain('All exception states');
-    expect(source).toContain('manual_review_required');
-    expect(source).toContain('ReasonCodeBadge');
-    expect(source).toContain('JsonBlock');
-    expect(source).toContain('buildPriorityLabel');
-    expect(source).toContain('buildTopList');
-    expect(source).toContain('filterRows');
-    expect(source).toContain('getActionEditorSource');
-    expect(source).toContain('buildManualOverrideCards');
-    expect(source).toContain('runLookupError');
-    expect(source).toContain('requestedRunId');
-    expect(source).toContain('resolvedContextSource');
-    expect(source).toContain('aria-expanded={expanded}');
-    expect(source).toContain('Requested persisted optimizer run could not be loaded.');
-    expect(source).toContain('aria-controls={');
-    expect(source).toContain('target-detail-drawer-');
-    expect(source).toContain('xl:overflow-auto xl:overscroll-contain');
-    expect(source).toContain('xl:sticky xl:top-0 xl:z-20');
-    expect(source).toContain('sticky top-0 left-0 z-30 border-b border-border bg-surface');
-    expect(source).toContain("sticky left-0 z-10 px-3 py-2.5");
-    expect(source).toContain('xl:self-stretch xl:h-[calc(100vh-1.5rem)] xl:min-h-0');
-    expect(source).toContain('w-full text-left');
-    expect(source).not.toContain('Detail</th>');
-    expect(source).not.toContain('Queue order');
-    expect(source).not.toContain('data-aph-hscroll');
-    expect(source).not.toContain('const TARGET_TABLE_COL_COUNT = 32;');
+    expect(wrapperSource).toContain('TargetsPageShell');
+    expect(shellSource).toContain('buildAdsOptimizerTargetRowSummaries');
+    expect(shellSource).toContain('filterAdsOptimizerTargetRowSummaries');
+    expect(shellSource).toContain('<TargetsToolbar');
+    expect(shellSource).toContain('<TargetSummaryRow');
+    expect(shellSource).toContain('<TargetExpandedPanel');
+    expect(shellSource).toContain('<TargetOverrideForm');
+    expect(shellSource).toContain('Optimizer command center');
+    expect(shellSource).toContain('Target queue');
+    expect(shellSource).toContain('buildWorkspaceTargetHref');
+    expect(shellSource).toContain('buildWhyFlaggedNarrative');
+    expect(shellSource).toContain("inspection-${section.id}");
+    expect(shellSource).toContain('section.render()');
+    expect(shellSource).toContain('Requested persisted optimizer run could not be loaded.');
+    expect(shellSource).toContain('No persisted optimizer review run exists for this ASIN/date range yet.');
+    expect(toolbarSource).toContain('Select visible stageable');
+    expect(toolbarSource).toContain('Handoff selected to Ads Workspace');
+    expect(summaryRowSource).toContain('data-persisted-target-key');
+    expect(summaryRowSource).toContain('Review coverage buckets');
+    expect(summaryRowSource).toContain('Missing (suspicious):');
+    expect(expandedPanelSource).toContain('Target detail drawer');
+    expect(overrideFormSource).toContain('Save override bundle');
+    expect(overrideFormSource).toContain('Replacement action bundle');
   });
 
   it('pulls exact-window run snapshots plus persisted recommendations and role history', () => {
