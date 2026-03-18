@@ -80,6 +80,9 @@ const buildRow = (
       },
     },
     rankingContext: {
+      contract: 'keyword_query_context',
+      status: 'ready',
+      resolvedKeywordNorm: 'hero exact',
       note: null,
       organicObservedRanks: [
         { observedDate: '2026-03-01', rank: 20 },
@@ -469,10 +472,128 @@ describe('ads optimizer target row table summary', () => {
     expect(classifyAdsOptimizerRankingTrend([]).trendLabel).toBe('No data');
   });
 
+  it('shows Limited data for supported ranking rows with too few observations', () => {
+    const row = buildRow({
+      rankingContext: {
+        contract: 'keyword_query_context',
+        status: 'ready',
+        resolvedKeywordNorm: 'hero exact',
+        note: null,
+        organicObservedRanks: [
+          { observedDate: '2026-03-01', rank: 14 },
+          { observedDate: '2026-03-03', rank: 13 },
+          { observedDate: '2026-03-05', rank: 12 },
+        ],
+        sponsoredObservedRanks: [
+          { observedDate: '2026-03-01', rank: 9 },
+          { observedDate: '2026-03-03', rank: 8 },
+          { observedDate: '2026-03-05', rank: 8 },
+        ],
+      },
+    });
+
+    const summary = buildAdsOptimizerTargetRowTableSummary(row, [row]);
+
+    expect(summary.ranking.organic.latestLabel).toBe('#12');
+    expect(summary.ranking.organic.trendLabel).toBe('Limited data');
+    expect(summary.ranking.sponsored.latestLabel).toBe('#8');
+    expect(summary.ranking.sponsored.trendLabel).toBe('Limited data');
+  });
+
+  it('shows No data / No snapshot for supported ranking rows without any captured observations', () => {
+    const row = buildRow({
+      rankingContext: {
+        contract: 'keyword_query_context',
+        status: 'ready',
+        resolvedKeywordNorm: 'hero exact',
+        note: 'Keyword-query ranking is supported for this positive keyword, but no ranking snapshot was found in the selected ASIN window.',
+        organicObservedRanks: [],
+        sponsoredObservedRanks: [],
+      },
+    });
+
+    const summary = buildAdsOptimizerTargetRowTableSummary(row, [row]);
+
+    expect(summary.ranking.organic.latestLabel).toBe('No data');
+    expect(summary.ranking.organic.trendLabel).toBe('No snapshot');
+    expect(summary.ranking.sponsored.latestLabel).toBe('No data');
+    expect(summary.ranking.sponsored.trendLabel).toBe('No snapshot');
+  });
+
+  it('shows Unsupported with an honest short reason for unsupported ranking rows', () => {
+    const row = buildRow({
+      rankingContext: {
+        contract: 'keyword_query_context',
+        status: 'unsupported',
+        resolvedKeywordNorm: null,
+        note: 'Keyword-query ranking is unsupported for negative keywords.',
+        organicObservedRanks: [],
+        sponsoredObservedRanks: [],
+      },
+    });
+
+    const summary = buildAdsOptimizerTargetRowTableSummary(row, [row]);
+
+    expect(summary.ranking.organic.latestLabel).toBe('Unsupported');
+    expect(summary.ranking.organic.trendLabel).toBe('Negative keyword');
+    expect(summary.ranking.sponsored.latestLabel).toBe('Unsupported');
+    expect(summary.ranking.sponsored.trendLabel).toBe('Negative keyword');
+  });
+
+  it('does not default legacy rows without ranking payload to Unavailable', () => {
+    const row = buildRow({
+      rankingContext: undefined,
+    });
+
+    const summary = buildAdsOptimizerTargetRowTableSummary(row, [row]);
+
+    expect(summary.ranking.organic.latestLabel).toBe('No data');
+    expect(summary.ranking.organic.trendLabel).toBe('No snapshot');
+    expect(summary.ranking.sponsored.latestLabel).toBe('No data');
+    expect(summary.ranking.sponsored.trendLabel).toBe('No snapshot');
+  });
+
+  it('uses captured observations even when a persisted ranking payload is missing status', () => {
+    const row = buildRow({
+      rankingContext: {
+        contract: 'keyword_query_context',
+        status: null,
+        resolvedKeywordNorm: 'hero exact',
+        note: 'Legacy ranking payload without explicit status.',
+        organicObservedRanks: [
+          { observedDate: '2026-03-01', rank: 20 },
+          { observedDate: '2026-03-05', rank: 18 },
+          { observedDate: '2026-03-09', rank: 17 },
+          { observedDate: '2026-03-12', rank: 11 },
+          { observedDate: '2026-03-15', rank: 10 },
+          { observedDate: '2026-03-18', rank: 9 },
+        ],
+        sponsoredObservedRanks: [
+          { observedDate: '2026-03-01', rank: 16 },
+          { observedDate: '2026-03-05', rank: 16 },
+          { observedDate: '2026-03-09', rank: 15 },
+          { observedDate: '2026-03-12', rank: 15 },
+          { observedDate: '2026-03-15', rank: 16 },
+          { observedDate: '2026-03-18', rank: 16 },
+        ],
+      } as AdsOptimizerTargetReviewRow['rankingContext'],
+    });
+
+    const summary = buildAdsOptimizerTargetRowTableSummary(row, [row]);
+
+    expect(summary.ranking.organic.latestLabel).toBe('#9');
+    expect(summary.ranking.organic.trendLabel).toBe('Rising');
+    expect(summary.ranking.sponsored.latestLabel).toBe('#16');
+    expect(summary.ranking.sponsored.trendLabel).toBe('Maintain');
+  });
+
   it('keeps ranking output driven by the current row only when previous comparison data changes', () => {
     const previous = buildRow({
       targetSnapshotId: 'snap-0',
       rankingContext: {
+        contract: 'keyword_query_context',
+        status: 'ready',
+        resolvedKeywordNorm: 'hero exact',
         note: null,
         organicObservedRanks: [
           { observedDate: '2026-03-01', rank: 18 },
@@ -490,6 +611,9 @@ describe('ads optimizer target row table summary', () => {
     });
     const row = buildRow({
       rankingContext: {
+        contract: 'keyword_query_context',
+        status: 'ready',
+        resolvedKeywordNorm: 'hero exact',
         note: null,
         organicObservedRanks: [],
         sponsoredObservedRanks: [],
@@ -500,9 +624,9 @@ describe('ads optimizer target row table summary', () => {
     const summary = buildAdsOptimizerTargetRowTableSummary(row, [row]);
 
     expect(summary.ranking.organic.latestLabel).toBe('No data');
-    expect(summary.ranking.organic.trendLabel).toBe('No data');
+    expect(summary.ranking.organic.trendLabel).toBe('No snapshot');
     expect(summary.ranking.sponsored.latestLabel).toBe('No data');
-    expect(summary.ranking.sponsored.trendLabel).toBe('No data');
+    expect(summary.ranking.sponsored.trendLabel).toBe('No snapshot');
   });
 
   it('renders multi-change summaries compactly and preserves supported handoff actions', () => {

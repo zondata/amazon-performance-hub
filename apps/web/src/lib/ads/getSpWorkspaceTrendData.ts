@@ -5,6 +5,10 @@ import { getProductRankingDaily } from '@/lib/ranking/getProductRankingDaily';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getSpWorkspaceData, type SpWorkspaceLevel } from './getSpWorkspaceData';
 import type { SpTargetsWorkspaceRow } from './spTargetsWorkspaceModel';
+import {
+  resolveTargetRankingContract,
+  type TargetRankingUnsupportedReasonCode,
+} from './targetRankingContract';
 import type { SpCampaignsWorkspaceRow } from './spWorkspaceTablesModel';
 import {
   buildCampaignTrendData,
@@ -63,6 +67,16 @@ const trimString = (value: string | null | undefined) => {
 
 const normalizeText = (value: string | null | undefined) =>
   trimString(value)?.toLowerCase().replace(/\s+/g, ' ') ?? null;
+
+const buildTargetRankSupportNote = (reasonCode: TargetRankingUnsupportedReasonCode) => {
+  if (reasonCode === 'scope_not_trustworthy') {
+    return 'Rank stays null-safe here until a single ASIN is selected.';
+  }
+  if (reasonCode === 'no_mapping') {
+    return 'Rank context is unavailable because no deterministic keyword mapping was resolved for this target.';
+  }
+  return 'Rank context is keyword-only and remains hidden for non-keyword targets.';
+};
 
 const fetchPaged = async <TRow,>(queryBuilder: (from: number, to: number) => Promise<{
   data: TRow[] | null;
@@ -374,17 +388,18 @@ export const getSpWorkspaceTrendData = async ({
       start,
       end,
     });
-    const selectedTargetKeywordNorm = normalizeText(selectedTarget?.target_text);
-    const rankEligible = asinFilter !== 'all' && selectedTarget?.type_label === 'Keyword';
+    const rankContract = resolveTargetRankingContract({
+      scopeTrustworthy: asinFilter !== 'all',
+      currentExpressionText: selectedTarget?.target_text,
+      typeLabel: selectedTarget?.type_label,
+      matchType: selectedTarget?.match_type,
+    });
     let rankRows: SpTrendTargetRankRow[] = [];
-    let rankSupportNote =
-      asinFilter === 'all'
-        ? 'Rank stays null-safe here until a single ASIN is selected.'
-        : selectedTarget?.type_label !== 'Keyword'
-          ? 'Rank context is keyword-only and remains hidden for non-keyword targets.'
-          : 'No rank snapshot was found for this exact keyword in the selected ASIN window.';
+    let rankSupportNote = rankContract.supported
+      ? 'No rank snapshot was found for this exact keyword in the selected ASIN window.'
+      : buildTargetRankSupportNote(rankContract.reasonCode);
 
-    if (rankEligible && selectedTargetKeywordNorm) {
+    if (rankContract.supported) {
       try {
         const rankingRows = await getProductRankingDaily({
           accountId,
@@ -396,7 +411,7 @@ export const getSpWorkspaceTrendData = async ({
         rankRows = rankingRows
           .filter(
             (row) =>
-              normalizeText(row.keyword_norm ?? row.keyword_raw) === selectedTargetKeywordNorm
+              normalizeText(row.keyword_norm ?? row.keyword_raw) === rankContract.resolvedKeywordNorm
           )
           .map((row) => ({
             observed_date: row.observed_date,

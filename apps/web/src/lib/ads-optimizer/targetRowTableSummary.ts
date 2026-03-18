@@ -40,7 +40,17 @@ type ComparisonMetricRow<T = string | number | null> = {
   change: SummaryValue<T>;
 };
 
-type RankTrendLabel = 'Rising' | 'Maintain' | 'Decline' | 'Limited data' | 'No data';
+type RankTrendLabel =
+  | 'Rising'
+  | 'Maintain'
+  | 'Decline'
+  | 'Limited data'
+  | 'No data'
+  | 'No snapshot'
+  | 'Negative keyword'
+  | 'Product target'
+  | 'No keyword map'
+  | 'Ranking unavailable';
 
 type RankingObservation = {
   observedDate: string | null;
@@ -596,8 +606,62 @@ export const classifyAdsOptimizerRankingTrend = (
   return { latestRank, trendLabel: 'Maintain' };
 };
 
-const buildRankingBlock = (observations: RankingObservation[]) => {
-  const result = classifyAdsOptimizerRankingTrend(observations);
+const hasFiniteRankingObservation = (observations: RankingObservation[]) =>
+  observations.some((entry) => entry.rank !== null && Number.isFinite(entry.rank));
+
+const buildRankingReasonLabel = (args: {
+  status: 'ready' | 'unsupported' | 'unavailable' | null;
+  note: string | null;
+}): RankTrendLabel => {
+  if (args.status === 'unavailable') {
+    return 'Ranking unavailable';
+  }
+  if (
+    args.note?.includes('negative keyword') ||
+    args.note?.includes('negative keywords')
+  ) {
+    return 'Negative keyword';
+  }
+  if (args.note?.includes('targeting-expression')) {
+    return 'Product target';
+  }
+  if (args.note?.includes('no deterministic keyword mapping')) {
+    return 'No keyword map';
+  }
+  return 'No keyword map';
+};
+
+const buildRankingSummaryBlock = (args: {
+  observations: RankingObservation[];
+  status: 'ready' | 'unsupported' | 'unavailable' | null;
+  note: string | null;
+}) => {
+  if (args.status === 'unsupported') {
+    return {
+      latestRank: null,
+      latestLabel: 'Unsupported',
+      trendLabel: buildRankingReasonLabel(args),
+    };
+  }
+
+  if (args.status === 'unavailable') {
+    return {
+      latestRank: null,
+      latestLabel: 'Unavailable',
+      trendLabel: buildRankingReasonLabel(args),
+    };
+  }
+
+  const hasObservations = hasFiniteRankingObservation(args.observations);
+  if (!hasObservations) {
+    return {
+      latestRank: null,
+      latestLabel: 'No data',
+      trendLabel: 'No snapshot' as const,
+    };
+  }
+
+  const result = classifyAdsOptimizerRankingTrend(args.observations);
   return {
     latestRank: result.latestRank,
     latestLabel: result.latestRank === null ? 'No data' : formatRankValue(result.latestRank),
@@ -790,8 +854,16 @@ const buildTableSummary = (
     economicsComparison: buildEconomicsComparison(row),
     contribution: buildContributionSummary(row, context.totals, context.ranks),
     ranking: {
-      organic: buildRankingBlock(row.rankingContext?.organicObservedRanks ?? []),
-      sponsored: buildRankingBlock(row.rankingContext?.sponsoredObservedRanks ?? []),
+      organic: buildRankingSummaryBlock({
+        observations: row.rankingContext?.organicObservedRanks ?? [],
+        status: row.rankingContext?.status ?? null,
+        note: row.rankingContext?.note ?? null,
+      }),
+      sponsored: buildRankingSummaryBlock({
+        observations: row.rankingContext?.sponsoredObservedRanks ?? [],
+        status: row.rankingContext?.status ?? null,
+        note: row.rankingContext?.note ?? null,
+      }),
     },
     role: {
       currentValue: row.role.currentRole.value,

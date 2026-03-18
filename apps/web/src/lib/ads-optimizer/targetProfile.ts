@@ -11,8 +11,17 @@ import {
   type SpTargetsWorkspaceChildRow,
   type SpTargetsWorkspaceRow,
 } from '@/lib/ads/spTargetsWorkspaceModel';
+import type {
+  TargetRankingContract,
+  TargetRankingUnsupportedReasonCode,
+} from '@/lib/ads/targetRankingContract';
+import { resolveTargetRankingContract } from '@/lib/ads/targetRankingContract';
 import { normalizeSpAdvertisedAsin } from '@/lib/ads/spAdvertisedAsinScope';
 import { env } from '@/lib/env';
+import {
+  getProductRankingDaily,
+  type ProductRankingRow,
+} from '@/lib/ranking/getProductRankingDaily';
 import { fetchAllRows } from '@/lib/supabaseFetchAll';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
@@ -41,7 +50,7 @@ const PLACEMENT_CONTEXT_NOTE =
   'Placement context remains campaign-level context only. It is not flattened into target-owned facts.';
 const SEARCH_TERM_DIAGNOSTICS_NOTE =
   'Search-term diagnostics are contextual only and do not imply direct attribution beyond the existing SP STIS facts.';
-const TARGET_PROFILE_VERSION = 'phase5_v1';
+const TARGET_PROFILE_VERSION = 'phase5_v2';
 const UNRESOLVED_AD_GROUP_PREFIX = '__ads_optimizer_unresolved_ad_group__';
 
 type SpAdvertisedProductRow = SpScopeAdvertisedProductRow & {
@@ -78,6 +87,15 @@ type NonAdditiveTrend = {
 type RankingObservation = {
   observedDate: string | null;
   rank: number | null;
+};
+type TargetRankingContextStatus = 'ready' | 'unsupported' | 'unavailable';
+type TargetRankingContext = {
+  contract: TargetRankingContract | null;
+  status: TargetRankingContextStatus | null;
+  resolvedKeywordNorm: string | null;
+  note: string | null;
+  organicObservedRanks: RankingObservation[];
+  sponsoredObservedRanks: RankingObservation[];
 };
 type CurrentSnapshotData = Awaited<ReturnType<typeof fetchCurrentSpData>>;
 
@@ -142,11 +160,7 @@ export type AdsOptimizerTargetProfileSnapshotView = {
     stis: NonAdditiveTrend;
     stir: NonAdditiveTrend;
   };
-  rankingContext?: {
-    note: string | null;
-    organicObservedRanks: RankingObservation[];
-    sponsoredObservedRanks: RankingObservation[];
-  };
+  rankingContext?: TargetRankingContext;
   demandProxies: {
     searchTermCount: number;
     sameTextSearchTermCount: number;
@@ -514,6 +528,120 @@ const buildSearchTermDiagnosticTrendsByTarget = (rows: SpSearchTermFactRow[]) =>
   return byTarget;
 };
 
+const buildRankingContextByKeywordNorm = (rows: ProductRankingRow[]) => {
+  const byKeyword = new Map<
+    string,
+    {
+      organicObservedRanks: RankingObservation[];
+      sponsoredObservedRanks: RankingObservation[];
+    }
+  >();
+
+  rows.forEach((row) => {
+    const keywordNorm = normalizeIdentityToken(row.keyword_norm ?? row.keyword_raw);
+    if (!keywordNorm) return;
+
+    const bucket = byKeyword.get(keywordNorm) ?? {
+      organicObservedRanks: [],
+      sponsoredObservedRanks: [],
+    };
+    bucket.organicObservedRanks.push({
+      observedDate: trimString(row.observed_date),
+      rank:
+        typeof row.organic_rank_value === 'number' && Number.isFinite(row.organic_rank_value)
+          ? row.organic_rank_value
+          : null,
+    });
+    bucket.sponsoredObservedRanks.push({
+      observedDate: trimString(row.observed_date),
+      rank:
+        typeof row.sponsored_pos_value === 'number' && Number.isFinite(row.sponsored_pos_value)
+          ? row.sponsored_pos_value
+          : null,
+    });
+    byKeyword.set(keywordNorm, bucket);
+  });
+
+  return byKeyword;
+};
+
+const buildTargetRankingUnsupportedNote = (
+  reasonCode: TargetRankingUnsupportedReasonCode
+) => {
+  if (reasonCode === 'negative_keyword') {
+    return 'Keyword-query ranking is unsupported for negative keywords.';
+  }
+  if (reasonCode === 'keyword_only') {
+    return 'Keyword-query ranking is unsupported for targeting-expression rows.';
+  }
+  if (reasonCode === 'scope_not_trustworthy') {
+    return 'Keyword-query ranking is unsupported because target scope is not trustworthy outside a single-ASIN review context.';
+  }
+  return 'Keyword-query ranking is unsupported because no deterministic keyword mapping was resolved.';
+};
+
+const buildTargetRankingContext = (args: {
+  target: SpTargetsWorkspaceRow;
+  rawIdentity: {
+    rawTargetId: string | null;
+    rawAdGroupId: string | null;
+    targetingRaw: string | null;
+    targetingNorm: string | null;
+  } | null;
+  rankingContextByKeywordNorm: Map<
+    string,
+    {
+      organicObservedRanks: RankingObservation[];
+      sponsoredObservedRanks: RankingObservation[];
+    }
+  >;
+  rankingLoadError: string | null;
+}): TargetRankingContext => {
+  const rankContract = resolveTargetRankingContract({
+    scopeTrustworthy: true,
+    historicalTargetingRaw: args.rawIdentity?.targetingRaw,
+    historicalTargetingNorm: args.rawIdentity?.targetingNorm,
+    currentExpressionText: args.target.composer_context.target.text,
+    typeLabel: args.target.type_label,
+    matchType: args.target.match_type,
+    isNegative: args.target.composer_context.target.is_negative,
+  });
+
+  if (!rankContract.supported) {
+    return {
+      contract: rankContract.contract,
+      status: 'unsupported',
+      resolvedKeywordNorm: null,
+      note: buildTargetRankingUnsupportedNote(rankContract.reasonCode),
+      organicObservedRanks: [],
+      sponsoredObservedRanks: [],
+    };
+  }
+
+  if (args.rankingLoadError) {
+    return {
+      contract: rankContract.contract,
+      status: 'unavailable',
+      resolvedKeywordNorm: rankContract.resolvedKeywordNorm,
+      note: args.rankingLoadError,
+      organicObservedRanks: [],
+      sponsoredObservedRanks: [],
+    };
+  }
+
+  const rankingContext = args.rankingContextByKeywordNorm.get(rankContract.resolvedKeywordNorm);
+  return {
+    contract: rankContract.contract,
+    status: 'ready',
+    resolvedKeywordNorm: rankContract.resolvedKeywordNorm,
+    note: rankingContext
+      ? 'Rank is contextual to the selected ASIN and resolved keyword text. It is not a target-owned performance fact.'
+      : 'Keyword-query ranking is supported for this positive keyword, but no ranking snapshot was found in the selected ASIN window.',
+    organicObservedRanks: rankingContext?.organicObservedRanks ?? [],
+    sponsoredObservedRanks: rankingContext?.sponsoredObservedRanks ?? [],
+  };
+};
+
 const buildTargetCoverageById = (rows: SpTargetFactRow[]) => {
   const byTarget = new Map<
     string,
@@ -797,6 +925,7 @@ const buildTargetProfileViewRow = (args: {
     stis: NonAdditiveTrend;
     stir: NonAdditiveTrend;
   } | null;
+  rankingContext: TargetRankingContext;
   overview: AdsOptimizerOverviewData;
   currentSnapshotDate: string | null;
   currentSnapshotWarning: string | null;
@@ -983,6 +1112,20 @@ const buildTargetProfileViewRow = (args: {
         representative_search_term: representativeSearchTerm?.search_term ?? null,
         note:
           'TOS IS, STIS, and STIR are stored only as latest observed diagnostics plus explicit trend metadata. They are never averaged or synthesized into window-level raw values.',
+      },
+      ranking_context: {
+        contract: args.rankingContext.contract,
+        status: args.rankingContext.status,
+        resolved_keyword_norm: args.rankingContext.resolvedKeywordNorm,
+        note: args.rankingContext.note,
+        organic_observed_ranks: args.rankingContext.organicObservedRanks.map((entry) => ({
+          observed_date: entry.observedDate,
+          rank: entry.rank,
+        })),
+        sponsored_observed_ranks: args.rankingContext.sponsoredObservedRanks.map((entry) => ({
+          observed_date: entry.observedDate,
+          rank: entry.rank,
+        })),
       },
       demand_proxies: {
         search_term_count: searchTermCount,
@@ -1178,6 +1321,11 @@ const readNestedString = (value: JsonObject | null, key: string) =>
 const readNestedBoolean = (value: JsonObject | null, key: string) =>
   typeof value?.[key] === 'boolean' ? (value[key] as boolean) : null;
 
+const readRankingContextStatus = (value: string | null): TargetRankingContextStatus | null =>
+  value === 'ready' || value === 'unsupported' || value === 'unavailable'
+    ? value
+    : null;
+
 export const mapTargetSnapshotToProfileView = (snapshot: {
   target_snapshot_id: string;
   run_id: string;
@@ -1235,6 +1383,23 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
         rank: readNestedNumber(entry, 'rank'),
       }));
   };
+  const rankingContract =
+    readNestedString(rankingContext, 'contract') === 'keyword_query_context'
+      ? 'keyword_query_context'
+      : null;
+  const rankingStatus = readRankingContextStatus(readNestedString(rankingContext, 'status'));
+  const rankingResolvedKeywordNorm = readNestedString(rankingContext, 'resolved_keyword_norm');
+  const rankingNote = readNestedString(rankingContext, 'note');
+  const organicObservedRanks = readRankingObservations('organic_observed_ranks');
+  const sponsoredObservedRanks = readRankingObservations('sponsored_observed_ranks');
+  const hasRankingContextPayload =
+    rankingContext !== null &&
+    (rankingContract !== null ||
+      rankingStatus !== null ||
+      rankingResolvedKeywordNorm !== null ||
+      rankingNote !== null ||
+      organicObservedRanks.length > 0 ||
+      sponsoredObservedRanks.length > 0);
 
   const coverageNotes = coverageNotesRaw.filter((entry): entry is string => typeof entry === 'string');
   const criticalWarnings = criticalWarningsRaw.filter(
@@ -1341,11 +1506,16 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
         'representative_stir_latest'
       ),
     },
-    rankingContext: {
-      note: readNestedString(rankingContext, 'note'),
-      organicObservedRanks: readRankingObservations('organic_observed_ranks'),
-      sponsoredObservedRanks: readRankingObservations('sponsored_observed_ranks'),
-    },
+    rankingContext: hasRankingContextPayload
+      ? {
+          contract: rankingContract,
+          status: rankingStatus,
+          resolvedKeywordNorm: rankingResolvedKeywordNorm,
+          note: rankingNote,
+          organicObservedRanks,
+          sponsoredObservedRanks,
+        }
+      : undefined,
     demandProxies: {
       searchTermCount: numberValue(demandProxies?.search_term_count as number | null | undefined),
       sameTextSearchTermCount: numberValue(
@@ -1693,9 +1863,37 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
             end: args.end,
           }),
     ]);
+  const rankingLoadResult = await getProductRankingDaily({
+    accountId: env.accountId,
+    marketplace: env.marketplace,
+    asin: args.asin,
+    start: args.start,
+    end: args.end,
+  })
+    .then((rows) => ({
+      rows,
+      error: null as string | null,
+    }))
+    .catch((error) => {
+      const message =
+        error instanceof Error ? error.message : 'Unknown ranking source failure.';
+      console.warn('[ads-optimizer][target-profile] keyword-query ranking load failed', {
+        accountId: env.accountId,
+        marketplace: env.marketplace,
+        asin: args.asin,
+        start: args.start,
+        end: args.end,
+        error: message,
+      });
+      return {
+        rows: [] as ProductRankingRow[],
+        error: `Keyword-query ranking is unavailable for this ASIN window: ${message}`,
+      };
+    });
   const searchTermRows = [...searchTermRowsByAdGroup, ...searchTermRowsByCampaignFallback];
 
   const normalizedSearchTermRows = normalizeSearchTermRowsForProfiles(searchTermRows);
+  const rankingContextByKeywordNorm = buildRankingContextByKeywordNorm(rankingLoadResult.rows);
   const coverageByTarget = buildTargetCoverageById(normalizedTargetingRows);
   const tosTrendByTarget = buildTargetTosTrendById(normalizedTargetingRows);
   const searchTermDiagnosticTrendsByTarget = buildSearchTermDiagnosticTrendsByTarget(
@@ -1789,6 +1987,12 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
               };
             })()
           : null,
+        rankingContext: buildTargetRankingContext({
+          target,
+          rawIdentity: rawIdentityByProfileKey.get(target.target_id) ?? null,
+          rankingContextByKeywordNorm,
+          rankingLoadError: rankingLoadResult.error,
+        }),
         overview: overviewData,
         currentSnapshotDate: currentSnapshotResult.data?.snapshotDate ?? null,
         currentSnapshotWarning: currentSnapshotResult.warning,

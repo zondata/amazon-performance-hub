@@ -259,7 +259,7 @@ export default function TargetSummaryRow(props: TargetSummaryRowProps) {
               <div
                 className={`truncate ${valueClass(
                   'current',
-                  summary.ranking.organic.latestLabel === 'No data' ? 'missing' : 'neutral',
+                  summary.ranking.organic.latestRank === null ? 'missing' : 'neutral',
                   summary.ranking.organic.latestLabel
                 )}`}
               >
@@ -276,7 +276,7 @@ export default function TargetSummaryRow(props: TargetSummaryRowProps) {
               <div
                 className={`truncate ${valueClass(
                   'current',
-                  summary.ranking.sponsored.latestLabel === 'No data' ? 'missing' : 'neutral',
+                  summary.ranking.sponsored.latestRank === null ? 'missing' : 'neutral',
                   summary.ranking.sponsored.latestLabel
                 )}`}
               >

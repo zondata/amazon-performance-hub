@@ -1,6 +1,7 @@
 import { mapPlacementModifierKey } from '../logbook/aiPack/aiPackV3Helpers';
 import { buildSpPlacementModifierContexts } from '../ads-workspace/spPlacementModifiers';
 import { normalizeSpAdvertisedAsin } from './spAdvertisedAsinScope';
+import { resolveTargetRankingContract } from './targetRankingContract';
 
 type NumericLike = number | string | null | undefined;
 
@@ -650,24 +651,29 @@ export const buildSpTargetsWorkspaceModel = (params: {
         target.target_id;
       const resolvedMatchType =
         trimString(currentTarget?.match_type) ?? target.match_type_norm;
-      const resolvedTargetKeywordNorm = normalizeText(
-        currentTarget?.expression_raw ?? target.targeting_raw ?? target.targeting_norm
-      );
-      const rankContextEligible =
-        resolvedMatchType !== 'TARGETING_EXPRESSION' && currentTarget?.is_negative !== true;
+      const resolvedTypeLabel = targetTypeLabel(currentTarget, target.match_type_norm);
+      const rankContract = resolveTargetRankingContract({
+        scopeTrustworthy: rankContextTrustworthy,
+        historicalTargetingRaw: target.targeting_raw,
+        historicalTargetingNorm: target.targeting_norm,
+        currentExpressionText: currentTarget?.expression_raw,
+        typeLabel: resolvedTypeLabel,
+        matchType: resolvedMatchType,
+        isNegative: currentTarget?.is_negative,
+      });
       const rankContext =
-        rankContextTrustworthy && rankContextEligible && resolvedTargetKeywordNorm
-          ? (rankContextByKeywordNorm.get(resolvedTargetKeywordNorm) ?? null)
+        rankContract.supported
+          ? (rankContextByKeywordNorm.get(rankContract.resolvedKeywordNorm) ?? null)
           : null;
       const rankContextNote = rankContext
         ? null
-        : !rankContextTrustworthy
-          ? 'single-ASIN only'
-          : !rankContextEligible
-            ? 'keyword only'
-            : resolvedTargetKeywordNorm
-              ? 'no rank snapshot'
-              : 'no deterministic mapping';
+        : rankContract.supported
+          ? 'no rank snapshot'
+          : rankContract.reasonCode === 'scope_not_trustworthy'
+            ? 'single-ASIN only'
+            : rankContract.reasonCode === 'no_mapping'
+              ? 'no deterministic mapping'
+              : 'keyword only';
       const searchTerms = [...(searchTermsByTarget.get(target.target_id)?.values() ?? [])]
         .map((searchTerm) => {
           const sameText =
@@ -714,7 +720,7 @@ export const buildSpTargetsWorkspaceModel = (params: {
         ad_group_id: currentTarget?.ad_group_id ?? currentAdGroup?.ad_group_id ?? target.ad_group_id,
         status: formatState(currentTarget?.state),
         target_text: resolvedTargetText,
-        type_label: targetTypeLabel(currentTarget, target.match_type_norm),
+        type_label: resolvedTypeLabel,
         portfolio_name: target.portfolio_name,
         campaign_name:
           trimString(currentCampaign?.campaign_name_raw) ?? target.campaign_name,

@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const rankingState = vi.hoisted(() => ({
+  rows: [] as Array<Record<string, unknown>>,
+  error: null as Error | null,
+}));
+
 const state = {
   advertisedRows: [] as Array<Record<string, unknown>>,
   targetingRows: [] as Array<Record<string, unknown>>,
@@ -12,6 +17,8 @@ const resetState = () => {
   state.targetingRows = [];
   state.stisRows = [];
   state.placementRows = [];
+  rankingState.rows = [];
+  rankingState.error = null;
 };
 
 const createQuery = (table: string) => {
@@ -200,6 +207,15 @@ vi.mock('../apps/web/src/lib/ads-optimizer/overview', () => ({
   }),
 }));
 
+vi.mock('../apps/web/src/lib/ranking/getProductRankingDaily', () => ({
+  getProductRankingDaily: vi.fn(async () => {
+    if (rankingState.error) {
+      throw rankingState.error;
+    }
+    return rankingState.rows;
+  }),
+}));
+
 import {
   loadAdsOptimizerTargetProfiles,
   mapTargetSnapshotToProfileView,
@@ -303,6 +319,34 @@ describe('ads optimizer phase 5 target profile engine', () => {
         units: 3,
       },
     ];
+    rankingState.rows = [
+      {
+        observed_date: '2026-03-01',
+        keyword_raw: 'blue widget',
+        keyword_norm: 'blue widget',
+        keyword_id: 'kw-1',
+        organic_rank_value: 14,
+        organic_rank_kind: 'rank',
+        organic_rank_raw: '14',
+        sponsored_pos_value: 9,
+        sponsored_pos_kind: 'rank',
+        sponsored_pos_raw: '9',
+        search_volume: 2200,
+      },
+      {
+        observed_date: '2026-03-03',
+        keyword_raw: 'blue widget',
+        keyword_norm: 'blue widget',
+        keyword_id: 'kw-1',
+        organic_rank_value: 11,
+        organic_rank_kind: 'rank',
+        organic_rank_raw: '11',
+        sponsored_pos_value: 8,
+        sponsored_pos_kind: 'rank',
+        sponsored_pos_raw: '8',
+        search_volume: 2200,
+      },
+    ];
 
     const result = await loadAdsOptimizerTargetProfiles({
       asin: 'B001TEST',
@@ -313,7 +357,35 @@ describe('ads optimizer phase 5 target profile engine', () => {
     expect(result.zeroTargetDiagnostics).toBeNull();
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0]?.snapshotPayload.phase).toBe(5);
-    expect(result.rows[0]?.snapshotPayload.target_profile_version).toBe('phase5_v1');
+    expect(result.rows[0]?.snapshotPayload.target_profile_version).toBe('phase5_v2');
+    expect(result.rows[0]?.snapshotPayload.ranking_context).toMatchObject({
+      contract: 'keyword_query_context',
+      status: 'ready',
+      resolved_keyword_norm: 'blue widget',
+      note: 'Rank is contextual to the selected ASIN and resolved keyword text. It is not a target-owned performance fact.',
+    });
+    expect(result.rows[0]?.snapshotPayload.ranking_context).toMatchObject({
+      organic_observed_ranks: [
+        {
+          observed_date: '2026-03-01',
+          rank: 14,
+        },
+        {
+          observed_date: '2026-03-03',
+          rank: 11,
+        },
+      ],
+      sponsored_observed_ranks: [
+        {
+          observed_date: '2026-03-01',
+          rank: 9,
+        },
+        {
+          observed_date: '2026-03-03',
+          rank: 8,
+        },
+      ],
+    });
     expect(result.rows[0]?.snapshotPayload.demand_proxies).toMatchObject({
       search_term_count: 1,
       same_text_search_term_count: 1,
@@ -364,6 +436,65 @@ describe('ads optimizer phase 5 target profile engine', () => {
     expect(result.rows[0]?.snapshotPayload.execution_context.snapshot_date).toBe('2026-03-10');
     expect(result.rows[0]?.snapshotPayload.execution_context.target.current_bid).toBe(1.4);
     expect(result.rows[0]?.snapshotPayload.execution_context.placement.current_percentage).toBe(18);
+  });
+
+  it('continues building target profiles when keyword-query ranking is unavailable', async () => {
+    state.advertisedRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        advertised_asin_norm: 'B001TEST',
+        impressions: 100,
+        clicks: 10,
+        spend: 25,
+        sales: 120,
+        orders: 3,
+        units: 3,
+      },
+    ];
+    state.targetingRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        exported_at: '2026-03-10T00:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        target_id: 'target-1',
+        portfolio_name_raw: 'Portfolio',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: 'Ad Group 1',
+        targeting_raw: 'blue widget',
+        targeting_norm: 'blue widget',
+        match_type_norm: 'exact',
+        impressions: 80,
+        clicks: 8,
+        spend: 20,
+        sales: 90,
+        orders: 2,
+        units: 2,
+        top_of_search_impression_share: 0.34,
+      },
+    ];
+    rankingState.error = new Error('tracker timeout');
+
+    const result = await loadAdsOptimizerTargetProfiles({
+      asin: 'B001TEST',
+      start: '2026-03-01',
+      end: '2026-03-10',
+    });
+
+    expect(result.zeroTargetDiagnostics).toBeNull();
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]?.snapshotPayload.ranking_context).toMatchObject({
+      contract: 'keyword_query_context',
+      status: 'unavailable',
+      resolved_keyword_norm: 'blue widget',
+    });
+    expect((result.rows[0]?.snapshotPayload.ranking_context as Record<string, unknown>).note).toBe(
+      'Keyword-query ranking is unavailable for this ASIN window: tracker timeout'
+    );
   });
 
   it('marks zero-click search-term diagnostics as expected-unavailable instead of true missing', async () => {
@@ -641,6 +772,32 @@ describe('ads optimizer phase 5 target profile engine', () => {
           },
           representative_search_term: 'blue widget',
         },
+        ranking_context: {
+          contract: 'keyword_query_context',
+          status: 'ready',
+          resolved_keyword_norm: 'blue widget',
+          note: 'Rank is contextual to the selected ASIN and resolved keyword text. It is not a target-owned performance fact.',
+          organic_observed_ranks: [
+            {
+              observed_date: '2026-03-01',
+              rank: 14,
+            },
+            {
+              observed_date: '2026-03-03',
+              rank: 11,
+            },
+          ],
+          sponsored_observed_ranks: [
+            {
+              observed_date: '2026-03-01',
+              rank: 9,
+            },
+            {
+              observed_date: '2026-03-03',
+              rank: 8,
+            },
+          ],
+        },
         demand_proxies: {
           search_term_count: 1,
           same_text_search_term_count: 1,
@@ -790,6 +947,32 @@ describe('ads optimizer phase 5 target profile engine', () => {
     expect(row.targetText).toBe('blue widget');
     expect(row.raw.stis).toBe(0.22);
     expect(row.derived.profitDollars).toBe(10.6);
+    expect(row.rankingContext).toMatchObject({
+      contract: 'keyword_query_context',
+      status: 'ready',
+      resolvedKeywordNorm: 'blue widget',
+      note: 'Rank is contextual to the selected ASIN and resolved keyword text. It is not a target-owned performance fact.',
+      organicObservedRanks: [
+        {
+          observedDate: '2026-03-01',
+          rank: 14,
+        },
+        {
+          observedDate: '2026-03-03',
+          rank: 11,
+        },
+      ],
+      sponsoredObservedRanks: [
+        {
+          observedDate: '2026-03-01',
+          rank: 9,
+        },
+        {
+          observedDate: '2026-03-03',
+          rank: 8,
+        },
+      ],
+    });
     expect(row.nonAdditiveDiagnostics.tosIs.latestObservedDate).toBe('2026-03-03');
     expect(row.nonAdditiveDiagnostics.stis.previousValue).toBe(0.18);
     expect(row.nonAdditiveDiagnostics.stir.direction).toBe('down');
@@ -803,6 +986,144 @@ describe('ads optimizer phase 5 target profile engine', () => {
     expect(row.role.previousRole).toBe('Harvest');
     expect(row.role.currentRole.value).toBe('Scale');
     expect(row.role.guardrails.categories.maxBidIncreasePerCyclePct).toBe(9);
+  });
+
+  it('does not coerce legacy snapshots without ranking_context into unavailable ranking state', () => {
+    const row = mapTargetSnapshotToProfileView({
+      target_snapshot_id: 'snapshot-legacy',
+      run_id: 'run-legacy',
+      created_at: '2026-03-10T00:00:00Z',
+      asin: 'B001TEST',
+      campaign_id: 'campaign-1',
+      ad_group_id: 'ad-group-1',
+      target_id: 'target-1',
+      coverage_note: null,
+      snapshot_payload_json: {
+        phase: 5,
+        identity: {
+          campaign_name: 'Campaign 1',
+          ad_group_name: 'Ad Group 1',
+          target_text: 'blue widget',
+          match_type: 'exact',
+          type_label: 'Keyword',
+        },
+        totals: {
+          impressions: 80,
+          clicks: 8,
+          spend: 20,
+          orders: 2,
+          sales: 90,
+          cpc: 2.5,
+          ctr: 0.1,
+          cvr: 0.25,
+          acos: 0.22,
+          roas: 4.5,
+        },
+        coverage: {
+          observed_start: '2026-03-03',
+          observed_end: '2026-03-03',
+          days_observed: 1,
+          statuses: {},
+          notes: [],
+          critical_warnings: [],
+        },
+      },
+    });
+
+    expect(row.rankingContext).toBeUndefined();
+  });
+
+  it('preserves observed ranks when persisted ranking_context is missing status', () => {
+    const row = mapTargetSnapshotToProfileView({
+      target_snapshot_id: 'snapshot-partial-ranking',
+      run_id: 'run-partial-ranking',
+      created_at: '2026-03-10T00:00:00Z',
+      asin: 'B001TEST',
+      campaign_id: 'campaign-1',
+      ad_group_id: 'ad-group-1',
+      target_id: 'target-1',
+      coverage_note: null,
+      snapshot_payload_json: {
+        phase: 5,
+        identity: {
+          campaign_name: 'Campaign 1',
+          ad_group_name: 'Ad Group 1',
+          target_text: 'blue widget',
+          match_type: 'exact',
+          type_label: 'Keyword',
+        },
+        totals: {
+          impressions: 80,
+          clicks: 8,
+          spend: 20,
+          orders: 2,
+          sales: 90,
+          cpc: 2.5,
+          ctr: 0.1,
+          cvr: 0.25,
+          acos: 0.22,
+          roas: 4.5,
+        },
+        ranking_context: {
+          contract: 'keyword_query_context',
+          resolved_keyword_norm: 'blue widget',
+          organic_observed_ranks: [
+            {
+              observed_date: '2026-03-01',
+              rank: 14,
+            },
+            {
+              observed_date: '2026-03-03',
+              rank: 11,
+            },
+          ],
+          sponsored_observed_ranks: [
+            {
+              observed_date: '2026-03-01',
+              rank: 9,
+            },
+            {
+              observed_date: '2026-03-03',
+              rank: 8,
+            },
+          ],
+        },
+        coverage: {
+          observed_start: '2026-03-03',
+          observed_end: '2026-03-03',
+          days_observed: 1,
+          statuses: {},
+          notes: [],
+          critical_warnings: [],
+        },
+      },
+    });
+
+    expect(row.rankingContext).toMatchObject({
+      contract: 'keyword_query_context',
+      status: null,
+      resolvedKeywordNorm: 'blue widget',
+      organicObservedRanks: [
+        {
+          observedDate: '2026-03-01',
+          rank: 14,
+        },
+        {
+          observedDate: '2026-03-03',
+          rank: 11,
+        },
+      ],
+      sponsoredObservedRanks: [
+        {
+          observedDate: '2026-03-01',
+          rank: 9,
+        },
+        {
+          observedDate: '2026-03-03',
+          rank: 8,
+        },
+      ],
+    });
   });
 
   it('does not collapse multiple unresolved target identities into one row', async () => {
