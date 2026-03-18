@@ -4,7 +4,9 @@ import { fetchAvailableSqpWeeks } from '@/lib/sqp/fetchAvailableSqpWeeks';
 import { getProductRankingDaily, type ProductRankingRow } from '@/lib/ranking/getProductRankingDaily';
 import { getSalesDaily, type SalesDailyPoint } from '@/lib/sales/getSalesDaily';
 import { getProductSqpWeekly, type SqpKnownKeywordRow, type SqpWeek } from '@/lib/sqp/getProductSqpWeekly';
+import { getIsoWeekYear } from '@/lib/sqp/formatSqpWeekLabel';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getAdsOptimizerHeroQueryManualOverride } from './heroQueryOverride';
 import {
   buildAdsOptimizerRankingLadder,
   type AdsOptimizerRankingLadderBandLabel,
@@ -50,6 +52,7 @@ export type AdsOptimizerOverviewSqpAlignment =
   | 'nearest_prior'
   | 'fallback_latest'
   | 'missing';
+export type AdsOptimizerHeroQueryMode = 'auto' | 'manual';
 
 export type AdsOptimizerOverviewWindow = {
   start: string;
@@ -82,6 +85,7 @@ export type AdsOptimizerOverviewCoverageNote = {
 
 export type AdsOptimizerOverviewData = {
   product: {
+    productId: string | null;
     asin: string;
     title: string | null;
     shortName: string | null;
@@ -154,6 +158,18 @@ export type AdsOptimizerOverviewData = {
     };
     sessions: AdsOptimizerOverviewMetricDelta;
     spImpressions: AdsOptimizerOverviewMetricDelta;
+    heroQueryDemand: {
+      status: AdsOptimizerCoverageStatus;
+      query: string | null;
+      currentWeekEnd: string | null;
+      previousWeekEnd: string | null;
+      alignment: AdsOptimizerOverviewSqpAlignment;
+      current: number | null;
+      previous: number | null;
+      delta: number | null;
+      deltaPct: number | null;
+      detail: string;
+    };
     sqpDemand: {
       status: AdsOptimizerCoverageStatus;
       currentWeekEnd: string | null;
@@ -202,6 +218,18 @@ export type AdsOptimizerOverviewData = {
       observedDays?: number;
       detail: string;
     };
+    heroQuerySelection: {
+      mode: AdsOptimizerHeroQueryMode;
+      savedManualQuery: string | null;
+      savedManualQueryAvailableInCandidates: boolean;
+      candidates: Array<{
+        query: string;
+        searchVolume: number | null;
+        latestOrganicRank: number | null;
+        latestObservedDate: string | null;
+      }>;
+      detail: string;
+    };
     sqpCoverage: {
       status: AdsOptimizerCoverageStatus;
       selectedWeekEnd: string | null;
@@ -237,6 +265,7 @@ type ProductProfileRow = {
 };
 
 type HeroQueryTrend = AdsOptimizerOverviewData['visibility']['heroQueryTrend'];
+type HeroQueryCandidate = AdsOptimizerOverviewData['visibility']['heroQuerySelection']['candidates'][number];
 
 type ProductStateInput = {
   sales: number;
@@ -518,21 +547,7 @@ export const buildAdsOptimizerOverviewMetricDelta = (args: {
   };
 };
 
-export const buildHeroQueryTrend = (rows: ProductRankingRow[]): HeroQueryTrend => {
-  if (rows.length === 0) {
-    return {
-      status: 'missing',
-      keyword: null,
-      searchVolume: null,
-      latestOrganicRank: null,
-      baselineOrganicRank: null,
-      rankDelta: null,
-      latestObservedDate: null,
-      observedDays: 0,
-      detail: 'No ranking rows were available in the selected window.',
-    };
-  }
-
+const buildHeroQueryCandidates = (rows: ProductRankingRow[]): HeroQueryCandidate[] => {
   const rowsByKeyword = new Map<string, ProductRankingRow[]>();
   rows.forEach((row) => {
     const keyword = row.keyword_norm ?? row.keyword_raw ?? null;
@@ -542,56 +557,112 @@ export const buildHeroQueryTrend = (rows: ProductRankingRow[]): HeroQueryTrend =
     rowsByKeyword.set(keyword, bucket);
   });
 
-  if (rowsByKeyword.size === 0) {
-    return {
-      status: 'partial',
-      keyword: null,
-      searchVolume: null,
-      latestOrganicRank: null,
-      baselineOrganicRank: null,
-      rankDelta: null,
-      latestObservedDate: null,
-      observedDays: 0,
-      detail: 'Ranking rows exist, but keyword identity or rank values were incomplete.',
-    };
-  }
-
   const latestPerKeyword = Array.from(rowsByKeyword.entries())
     .map(([keyword, keywordRows]) => {
       const sorted = [...keywordRows].sort((left, right) =>
         String(right.observed_date ?? '').localeCompare(String(left.observed_date ?? ''))
       );
       const latest = sorted[0] ?? null;
-      return {
-        keyword,
-        latest,
-        searchVolume: latest?.search_volume ?? null,
-      };
+      return { keyword, latest };
     })
     .filter((row) => row.latest !== null);
 
   latestPerKeyword.sort((left, right) => {
-    const volumeDiff = numberValue(right.searchVolume) - numberValue(left.searchVolume);
+    const volumeDiff =
+      numberValue(right.latest?.search_volume ?? null) -
+      numberValue(left.latest?.search_volume ?? null);
     if (volumeDiff !== 0) return volumeDiff;
     return left.keyword.localeCompare(right.keyword);
   });
 
-  const hero = latestPerKeyword[0] ?? null;
-  if (!hero?.latest) {
+  return latestPerKeyword.map(({ keyword, latest }) => ({
+    query: latest?.keyword_raw ?? keyword,
+    searchVolume: latest?.search_volume ?? null,
+    latestOrganicRank: latest?.organic_rank_value ?? null,
+    latestObservedDate: latest?.observed_date ?? null,
+  }));
+};
+
+export const buildHeroQueryTrend = (
+  rows: ProductRankingRow[],
+  preferredQuery?: string | null
+): HeroQueryTrend => {
+  if (rows.length === 0) {
     return {
-      status: 'partial',
-      keyword: null,
+      status: preferredQuery ? 'partial' : 'missing',
+      keyword: preferredQuery ?? null,
       searchVolume: null,
       latestOrganicRank: null,
       baselineOrganicRank: null,
       rankDelta: null,
       latestObservedDate: null,
       observedDays: 0,
-      detail: 'Ranking data was present, but a representative hero query could not be resolved.',
+      detail: preferredQuery
+        ? `Manual hero query "${preferredQuery}" is saved for this ASIN, but no ranking rows were available in the selected window.`
+        : 'No ranking rows were available in the selected window.',
     };
   }
 
-  const keywordRows = [...(rowsByKeyword.get(hero.keyword) ?? [])].sort((left, right) =>
+  const heroQueryCandidates = buildHeroQueryCandidates(rows);
+  if (heroQueryCandidates.length === 0) {
+    return {
+      status: preferredQuery ? 'partial' : 'partial',
+      keyword: preferredQuery ?? null,
+      searchVolume: null,
+      latestOrganicRank: null,
+      baselineOrganicRank: null,
+      rankDelta: null,
+      latestObservedDate: null,
+      observedDays: 0,
+      detail: preferredQuery
+        ? `Manual hero query "${preferredQuery}" is saved, but ranking rows in the selected window did not include usable keyword identity or rank values for it.`
+        : 'Ranking rows exist, but keyword identity or rank values were incomplete.',
+    };
+  }
+
+  const normalizedPreferredQuery = normalizeQueryValue(preferredQuery);
+  const selectedCandidate =
+    normalizedPreferredQuery
+      ? heroQueryCandidates.find(
+          (candidate) => normalizeQueryValue(candidate.query) === normalizedPreferredQuery
+        ) ?? null
+      : null;
+  const hero = selectedCandidate ?? heroQueryCandidates[0] ?? null;
+
+  if (!hero) {
+    return {
+      status: 'partial',
+      keyword: preferredQuery ?? null,
+      searchVolume: null,
+      latestOrganicRank: null,
+      baselineOrganicRank: null,
+      rankDelta: null,
+      latestObservedDate: null,
+      observedDays: 0,
+      detail: preferredQuery
+        ? `Manual hero query "${preferredQuery}" is saved, but a representative hero query could not be resolved from the selected ranking window.`
+        : 'Ranking data was present, but a representative hero query could not be resolved.',
+    };
+  }
+
+  if (normalizedPreferredQuery && selectedCandidate === null) {
+    return {
+      status: 'partial',
+      keyword: preferredQuery ?? null,
+      searchVolume: null,
+      latestOrganicRank: null,
+      baselineOrganicRank: null,
+      rankDelta: null,
+      latestObservedDate: null,
+      observedDays: 0,
+      detail: `Manual hero query "${preferredQuery}" is saved for this ASIN, but it is not present in the current ranking candidates for the selected window.`,
+    };
+  }
+
+  const keywordRows = [...rows].filter((row) => {
+    const rowKeyword = row.keyword_raw ?? row.keyword_norm ?? null;
+    return normalizeQueryValue(rowKeyword) === normalizeQueryValue(hero.query);
+  }).sort((left, right) =>
     String(left.observed_date ?? '').localeCompare(String(right.observed_date ?? ''))
   );
   const firstWithRank = keywordRows.find((row) => row.organic_rank_value !== null) ?? null;
@@ -601,12 +672,12 @@ export const buildHeroQueryTrend = (rows: ProductRankingRow[]): HeroQueryTrend =
   if (!firstWithRank || !latestWithRank) {
     return {
       status: 'partial',
-      keyword: hero.latest.keyword_raw ?? hero.keyword,
-      searchVolume: hero.latest.search_volume ?? null,
+      keyword: hero.query,
+      searchVolume: hero.searchVolume,
       latestOrganicRank: latestWithRank?.organic_rank_value ?? null,
       baselineOrganicRank: firstWithRank?.organic_rank_value ?? null,
       rankDelta: null,
-      latestObservedDate: latestWithRank?.observed_date ?? hero.latest.observed_date ?? null,
+      latestObservedDate: latestWithRank?.observed_date ?? hero.latestObservedDate ?? null,
       observedDays: keywordRows.length,
       detail: 'Hero-query ranking coverage exists, but at least one endpoint rank value is missing.',
     };
@@ -617,12 +688,12 @@ export const buildHeroQueryTrend = (rows: ProductRankingRow[]): HeroQueryTrend =
   if (baselineRank === null || latestRank === null) {
     return {
       status: 'partial',
-      keyword: hero.latest.keyword_raw ?? hero.keyword,
-      searchVolume: hero.latest.search_volume ?? null,
+      keyword: hero.query,
+      searchVolume: hero.searchVolume,
       latestOrganicRank: latestRank,
       baselineOrganicRank: baselineRank,
       rankDelta: null,
-      latestObservedDate: latestWithRank.observed_date ?? hero.latest.observed_date ?? null,
+      latestObservedDate: latestWithRank.observed_date ?? hero.latestObservedDate ?? null,
       observedDays: keywordRows.length,
       detail: 'Hero-query ranking coverage exists, but at least one endpoint rank value is missing.',
     };
@@ -633,12 +704,12 @@ export const buildHeroQueryTrend = (rows: ProductRankingRow[]): HeroQueryTrend =
     rankDelta >= 3 ? 'improved' : rankDelta <= -3 ? 'weakened' : 'held roughly flat';
   return {
     status: keywordRows.length >= 2 ? 'ready' : 'partial',
-    keyword: hero.latest.keyword_raw ?? hero.keyword,
-    searchVolume: hero.latest.search_volume ?? null,
+    keyword: hero.query,
+    searchVolume: hero.searchVolume,
     latestOrganicRank: latestRank,
     baselineOrganicRank: baselineRank,
     rankDelta,
-    latestObservedDate: latestWithRank.observed_date ?? hero.latest.observed_date ?? null,
+    latestObservedDate: latestWithRank.observed_date ?? hero.latestObservedDate ?? null,
     observedDays: keywordRows.length,
     detail:
       keywordRows.length >= 2
@@ -819,24 +890,30 @@ const loadProductMeta = async (args: {
   const typedProduct = (product ?? null) as ProductMetaRow | null;
   if (!typedProduct?.product_id) {
     return {
+      productId: null,
       title: null,
       shortName: null,
       displayName: args.asin,
+      manualHeroQuery: null,
     };
   }
-
-  const { data: profile } = await supabaseAdmin
-    .from('product_profile')
-    .select('profile_json')
-    .eq('product_id', typedProduct.product_id)
-    .maybeSingle();
+  const [{ data: profile }, manualHeroQueryOverride] = await Promise.all([
+    supabaseAdmin
+      .from('product_profile')
+      .select('profile_json')
+      .eq('product_id', typedProduct.product_id)
+      .maybeSingle(),
+    getAdsOptimizerHeroQueryManualOverride(typedProduct.product_id),
+  ]);
 
   const typedProfile = (profile ?? null) as ProductProfileRow | null;
   const shortName = parseShortName(typedProfile?.profile_json ?? null);
   return {
+    productId: typedProduct.product_id,
     title: typedProduct.title ?? null,
     shortName,
     displayName: shortName ?? typedProduct.title ?? args.asin,
+    manualHeroQuery: manualHeroQueryOverride?.query ?? null,
   };
 };
 
@@ -867,7 +944,7 @@ const selectSqpWeekForWindow = (args: {
     return {
       weekEnd: exact.week_end,
       alignment: 'exact',
-      detail: `SQP week ${exact.week_end} exactly matches the window end.`,
+      detail: `${formatSqpWeekEndingLabel(exact.week_end)} exactly matches the window end.`,
     };
   }
 
@@ -877,14 +954,18 @@ const selectSqpWeekForWindow = (args: {
     return {
       weekEnd: nearestPrior.week_end,
       alignment: 'nearest_prior',
-      detail: `SQP uses the nearest available prior week ending ${nearestPrior.week_end} for window end ${args.targetEnd}.`,
+      detail: `SQP uses the nearest available prior week, ${formatSqpWeekEndingLabel(
+        nearestPrior.week_end
+      )}, for window end ${args.targetEnd}.`,
     };
   }
 
   return {
     weekEnd: args.availableWeeks[0]?.week_end ?? null,
     alignment: 'fallback_latest',
-    detail: `All available SQP weeks fall after window end ${args.targetEnd}, so the latest available week is used instead.`,
+    detail: `All available SQP weeks fall after window end ${args.targetEnd}, so ${formatSqpWeekEndingLabel(
+      args.availableWeeks[0]?.week_end ?? null
+    )} is used instead.`,
   };
 };
 
@@ -892,6 +973,34 @@ const sumSqpSearchVolume = (rows: SqpKnownKeywordRow[]): number | null =>
   rows.length > 0
     ? rows.reduce((sum, row) => sum + numberValue(row.search_query_volume), 0)
     : null;
+
+const normalizeQueryValue = (value?: string | null): string | null => {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : null;
+};
+
+const formatSqpWeekEndingLabel = (weekEnd?: string | null): string => {
+  if (!weekEnd) return 'No SQP week available';
+  const { week } = getIsoWeekYear(weekEnd);
+  return week > 0 ? `Week ${week} ending ${weekEnd}` : `Week ending ${weekEnd}`;
+};
+
+const findSqpRowForQuery = (
+  rows: SqpKnownKeywordRow[],
+  query?: string | null
+): SqpKnownKeywordRow | null => {
+  const normalizedQuery = normalizeQueryValue(query);
+  if (!normalizedQuery) return null;
+
+  return (
+    rows.find(
+      (row) =>
+        normalizeQueryValue(row.search_query_norm) === normalizedQuery ||
+        normalizeQueryValue(row.search_query_raw) === normalizedQuery
+    ) ?? null
+  );
+};
 
 export const getAdsOptimizerOverviewData = async (args: {
   accountId: string;
@@ -1007,7 +1116,27 @@ export const getAdsOptimizerOverviewData = async (args: {
     });
   }
 
-  const heroQueryTrend = buildHeroQueryTrend(rankingRows);
+  const heroQueryCandidates = buildHeroQueryCandidates(rankingRows);
+  const savedManualHeroQuery = meta.manualHeroQuery ?? null;
+  const heroQueryTrend = buildHeroQueryTrend(rankingRows, savedManualHeroQuery);
+  const savedManualHeroQueryAvailableInCandidates =
+    savedManualHeroQuery !== null
+      ? heroQueryCandidates.some(
+          (candidate) =>
+            normalizeQueryValue(candidate.query) === normalizeQueryValue(savedManualHeroQuery)
+        )
+      : false;
+  const heroQuerySelection = {
+    mode: savedManualHeroQuery ? ('manual' as const) : ('auto' as const),
+    savedManualQuery: savedManualHeroQuery,
+    savedManualQueryAvailableInCandidates: savedManualHeroQueryAvailableInCandidates,
+    candidates: heroQueryCandidates,
+    detail: savedManualHeroQuery
+      ? savedManualHeroQueryAvailableInCandidates
+        ? 'Manual hero query override is active for this ASIN and is currently present in ranking coverage.'
+        : 'Manual hero query override is active for this ASIN, but the saved query is not present in the current ranking candidates.'
+      : 'Auto hero query uses the highest-search-volume tracked ranking query from the selected ranking window.',
+  };
   const rankingLadder = buildAdsOptimizerRankingLadder({
     currentRows: rankingRows,
     previousRows: previousRankingRows,
@@ -1031,6 +1160,10 @@ export const getAdsOptimizerOverviewData = async (args: {
   const previousSqpRows = previousSqpWeekly.rows as SqpKnownKeywordRow[];
   const currentSqpSearchVolume = sumSqpSearchVolume(currentSqpRows);
   const previousSqpSearchVolume = sumSqpSearchVolume(previousSqpRows);
+  const currentHeroSqpRow = findSqpRowForQuery(currentSqpRows, heroQueryTrend.keyword);
+  const previousHeroSqpRow = findSqpRowForQuery(previousSqpRows, heroQueryTrend.keyword);
+  const currentHeroSqpDemand = currentHeroSqpRow?.search_query_volume ?? null;
+  const previousHeroSqpDemand = previousHeroSqpRow?.search_query_volume ?? null;
   const sqpTopRow =
     currentSqpRows.length > 0
       ? [...currentSqpRows].sort(
@@ -1051,7 +1184,9 @@ export const getAdsOptimizerOverviewData = async (args: {
       message:
         currentSqpWeekly.availableWeeks.length === 0
           ? 'SQP demand coverage is unavailable for this ASIN.'
-          : `SQP demand coverage is partial for week ${currentSqpWeekly.selectedWeekEnd ?? '—'}.`,
+          : `SQP demand coverage is partial for ${formatSqpWeekEndingLabel(
+              currentSqpWeekly.selectedWeekEnd
+            )}.`,
     });
   }
   if (currentSqpSelection.alignment !== 'exact' || previousSqpSelection.alignment !== 'exact') {
@@ -1114,7 +1249,8 @@ export const getAdsOptimizerOverviewData = async (args: {
       ? rankingRows
           .filter(
             (row) =>
-              (row.keyword_norm ?? row.keyword_raw ?? null) === heroQueryTrend.keyword &&
+              normalizeQueryValue(row.keyword_norm ?? row.keyword_raw ?? null) ===
+                normalizeQueryValue(heroQueryTrend.keyword) &&
               row.observed_date !== null &&
               row.observed_date >= trendWindow.start &&
               row.observed_date <= trendWindow.end
@@ -1151,6 +1287,15 @@ export const getAdsOptimizerOverviewData = async (args: {
     }),
   };
 
+  const heroQueryDemandStatus: AdsOptimizerCoverageStatus =
+    sqpCoverageStatus === 'missing'
+      ? 'missing'
+      : heroQueryTrend.keyword === null
+        ? 'missing'
+        : currentHeroSqpDemand !== null && previousHeroSqpDemand !== null
+          ? 'ready'
+          : 'partial';
+
   const traffic = {
     coverage: {
       status: trafficCoverageStatus,
@@ -1168,6 +1313,40 @@ export const getAdsOptimizerOverviewData = async (args: {
       semantics: 'higher_is_better',
       label: 'SP impressions',
     }),
+    heroQueryDemand: {
+      status: heroQueryDemandStatus,
+      query: heroQueryTrend.keyword,
+      currentWeekEnd: currentSqpWeekly.selectedWeekEnd,
+      previousWeekEnd: previousSqpWeekly.selectedWeekEnd,
+      alignment:
+        currentSqpSelection.alignment !== 'exact'
+          ? currentSqpSelection.alignment
+          : previousSqpSelection.alignment,
+      current: currentHeroSqpDemand,
+      previous: previousHeroSqpDemand,
+      delta:
+        currentHeroSqpDemand !== null && previousHeroSqpDemand !== null
+          ? currentHeroSqpDemand - previousHeroSqpDemand
+          : null,
+      deltaPct:
+        currentHeroSqpDemand !== null &&
+        previousHeroSqpDemand !== null &&
+        Math.abs(previousHeroSqpDemand) > 0
+          ? (currentHeroSqpDemand - previousHeroSqpDemand) / Math.abs(previousHeroSqpDemand)
+          : null,
+      detail:
+        sqpCoverageStatus === 'missing'
+          ? 'Hero-query-specific SQP demand is unavailable because no aligned SQP week exists for this ASIN.'
+          : heroQueryTrend.keyword === null
+            ? 'Hero-query-specific SQP demand is unavailable because no hero query was resolved from ranking coverage.'
+            : currentHeroSqpDemand === null
+              ? `Hero-query-specific SQP demand is unavailable for "${heroQueryTrend.keyword}" in ${formatSqpWeekEndingLabel(
+                  currentSqpWeekly.selectedWeekEnd
+                )}. Tracked total SQP demand is still shown separately.`
+              : `Hero-query-specific SQP demand is tied to "${heroQueryTrend.keyword}" in ${formatSqpWeekEndingLabel(
+                  currentSqpWeekly.selectedWeekEnd
+                )}. Previous window uses ${formatSqpWeekEndingLabel(previousSqpWeekly.selectedWeekEnd)}.`,
+    },
     sqpDemand: {
       status: sqpCoverageStatus,
       currentWeekEnd: currentSqpWeekly.selectedWeekEnd,
@@ -1191,8 +1370,10 @@ export const getAdsOptimizerOverviewData = async (args: {
           : null,
       detail:
         sqpCoverageStatus === 'missing'
-          ? 'SQP demand indicator is unavailable for this ASIN.'
-          : `${currentSqpSelection.detail} Previous window uses ${previousSqpSelection.weekEnd ?? 'no SQP week'}.`,
+          ? 'Tracked total SQP demand is unavailable for this ASIN.'
+          : `${currentSqpSelection.detail} Previous window uses ${formatSqpWeekEndingLabel(
+              previousSqpSelection.weekEnd
+            )}.`,
     },
   };
 
@@ -1234,6 +1415,7 @@ export const getAdsOptimizerOverviewData = async (args: {
 
   return {
     product: {
+      productId: meta.productId,
       asin: args.asin,
       title: meta.title,
       shortName: meta.shortName,
@@ -1310,6 +1492,7 @@ export const getAdsOptimizerOverviewData = async (args: {
       },
       rankingLadder,
       heroQueryTrend,
+      heroQuerySelection,
       sqpCoverage: {
         status: sqpCoverageStatus,
         selectedWeekEnd: currentSqpWeekly.selectedWeekEnd,
@@ -1325,7 +1508,9 @@ export const getAdsOptimizerOverviewData = async (args: {
         detail:
           sqpCoverageStatus === 'missing'
             ? 'No SQP weekly coverage was available for this ASIN.'
-            : `${currentSqpSelection.detail} Using SQP week ${currentSqpWeekly.selectedWeekEnd ?? '—'} with ${currentSqpRows.length} tracked query row(s).`,
+            : `${currentSqpSelection.detail} Using ${formatSqpWeekEndingLabel(
+                currentSqpWeekly.selectedWeekEnd
+              )} with ${currentSqpRows.length} tracked query row(s).`,
       },
     },
     coverageNotes,

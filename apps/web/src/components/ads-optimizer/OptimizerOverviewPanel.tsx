@@ -1,5 +1,11 @@
 import type { AdsOptimizerOverviewData } from '@/lib/ads-optimizer/overview';
-import { formatUiDateRange } from '@/lib/time/formatUiDate';
+import OverviewConversionSection from './overview/OverviewConversionSection';
+import OverviewEmptyState from './overview/OverviewEmptyState';
+import OverviewHeaderSummary from './overview/OverviewHeaderSummary';
+import OverviewKpiGrid from './overview/OverviewKpiGrid';
+import OverviewNotesSection from './overview/OverviewNotesSection';
+import OverviewRankingLadder from './overview/OverviewRankingLadder';
+import OverviewTrafficSection from './overview/OverviewTrafficSection';
 
 type OptimizerOverviewPanelProps = {
   asin: string;
@@ -7,428 +13,34 @@ type OptimizerOverviewPanelProps = {
   end: string;
   trendEnabled: boolean;
   data: AdsOptimizerOverviewData | null;
+  returnTo: string;
+  saveHeroQueryAction: (formData: FormData) => Promise<void>;
+  resetHeroQueryAction: (formData: FormData) => Promise<void>;
 };
-
-const formatCurrency = (value?: number | null) => {
-  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  return value.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  });
-};
-
-const formatNumber = (value?: number | null) => {
-  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  return value.toLocaleString('en-US');
-};
-
-const formatSignedCount = (value?: number | null) => {
-  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  if (value === 0) return '0';
-  return `${value > 0 ? '+' : ''}${value.toLocaleString('en-US')}`;
-};
-
-const formatPercent = (value?: number | null) => {
-  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  return `${(value * 100).toFixed(1)}%`;
-};
-
-const formatSignedNumber = (value?: number | null, digits = 1) => {
-  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}`;
-};
-
-const coverageBadgeClass = (status: AdsOptimizerOverviewData['visibility']['rankingCoverage']['status']) => {
-  if (status === 'ready') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
-  if (status === 'partial') return 'border-amber-200 bg-amber-50 text-amber-800';
-  return 'border-border bg-surface-2 text-muted';
-};
-
-const stateBadgeClass = (state: AdsOptimizerOverviewData['state']['value']) => {
-  if (state === 'profitable') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
-  if (state === 'break_even') return 'border-amber-200 bg-amber-50 text-amber-800';
-  if (state === 'loss') return 'border-rose-200 bg-rose-50 text-rose-800';
-  return 'border-border bg-surface-2 text-muted';
-};
-
-const objectiveBadgeClass = (objective: AdsOptimizerOverviewData['objective']['value']) => {
-  if (objective === 'Scale Profit' || objective === 'Harvest Profit') {
-    return 'border-emerald-200 bg-emerald-50 text-emerald-800';
-  }
-  if (objective === 'Rank Growth' || objective === 'Rank Defense') {
-    return 'border-sky-200 bg-sky-50 text-sky-800';
-  }
-  if (objective === 'Break Even') {
-    return 'border-amber-200 bg-amber-50 text-amber-800';
-  }
-  return 'border-border bg-surface-2 text-muted';
-};
-
-const MetricCard = (props: { label: string; value: string; detail?: string }) => (
-  <div className="rounded-xl border border-border bg-surface px-4 py-3">
-    <div className="text-xs uppercase tracking-wide text-muted">{props.label}</div>
-    <div className="mt-2 text-lg font-semibold text-foreground">{props.value}</div>
-    {props.detail ? <div className="mt-1 text-sm text-muted">{props.detail}</div> : null}
-  </div>
-);
-
-const buildDeltaDetail = (
-  metric:
-    | NonNullable<AdsOptimizerOverviewData['comparison']>[keyof NonNullable<
-        AdsOptimizerOverviewData['comparison']
-      >]
-    | undefined,
-  formatter: (value?: number | null) => string
-) => {
-  if (!metric) return undefined;
-  if (metric.current === null || metric.previous === null) {
-    return metric.detail;
-  }
-  const deltaText =
-    metric.delta === null
-      ? 'Δ unavailable'
-      : `${formatSignedNumber(metric.delta)} (${metric.deltaPct === null ? 'Δ% —' : `${formatSignedNumber(metric.deltaPct * 100)}%`})`;
-  return `Prev ${formatter(metric.previous)} · ${deltaText}`;
-};
-
-const CoverageCard = (props: {
-  label: string;
-  status: AdsOptimizerOverviewData['visibility']['rankingCoverage']['status'];
-  headline: string;
-  detail: string;
-}) => (
-  <div className="rounded-xl border border-border bg-surface p-4">
-    <div className="flex items-start justify-between gap-3">
-      <div className="text-xs uppercase tracking-wide text-muted">{props.label}</div>
-      <div
-        className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${coverageBadgeClass(
-          props.status
-        )}`}
-      >
-        {props.status}
-      </div>
-    </div>
-    <div className="mt-3 text-base font-semibold text-foreground">{props.headline}</div>
-    <div className="mt-2 text-sm text-muted">{props.detail}</div>
-  </div>
-);
 
 export default function OptimizerOverviewPanel(props: OptimizerOverviewPanelProps) {
   if (!props.data) {
-    return (
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-        <div className="text-xs uppercase tracking-[0.3em] text-muted">Overview scope</div>
-        <div className="mt-2 text-lg font-semibold text-foreground">
-          Select one ASIN to load the Phase 3 product command-center.
-        </div>
-        <div className="mt-2 max-w-3xl text-sm text-muted">
-          The optimizer overview computes product inputs, product state, and objective for one
-          selected ASIN at a time. Target profiling, scoring, roles, and read-only
-          recommendations are active in the optimizer run flow, but execution handoff is still
-          inactive.
-        </div>
-        <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
-          Scope is currently set to all advertised ASINs. Choose a single ASIN above, then apply
-          the filters to render the command-center for {formatUiDateRange(props.start, props.end)}.
-        </div>
-      </section>
-    );
+    return <OverviewEmptyState start={props.start} end={props.end} />;
   }
 
-  const { data } = props;
-
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-muted">Product command-center</div>
-            <div className="mt-2 text-2xl font-semibold text-foreground">{data.product.displayName}</div>
-            <div className="mt-2 text-sm text-muted">
-              ASIN {data.product.asin} · {formatUiDateRange(props.start, props.end)}
-            </div>
-            {data.product.shortName && data.product.title ? (
-              <div className="mt-1 text-sm text-muted">{data.product.title}</div>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <div
-              className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${stateBadgeClass(
-                data.state.value
-              )}`}
-            >
-              {data.state.label}
-            </div>
-            <div
-              className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${objectiveBadgeClass(
-                data.objective.value
-              )}`}
-            >
-              {data.objective.value}
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border border-border bg-surface px-4 py-4">
-            <div className="text-xs uppercase tracking-wide text-muted">Product state</div>
-            <div className="mt-2 text-sm text-foreground">{data.state.reason}</div>
-          </div>
-          <div className="rounded-xl border border-border bg-surface px-4 py-4">
-            <div className="text-xs uppercase tracking-wide text-muted">Recommended objective</div>
-            <div className="mt-2 text-sm text-foreground">{data.objective.reason}</div>
-          </div>
-        </div>
-        <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-4 text-sm text-sky-800">
-          Product inputs are active here, and optimizer runs now persist target profiles, scoring,
-          roles, and read-only recommendations. Execution handoff or staging into Ads Workspace is
-          still not active in this phase.
-        </div>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <MetricCard
-            label="Current window"
-            value={
-              data.window
-                ? formatUiDateRange(data.window.current.start, data.window.current.end)
-                : formatUiDateRange(props.start, props.end)
-            }
-            detail={
-              data.window
-                ? `${formatNumber(data.window.current.days)} day(s) in the active Overview window.`
-                : undefined
-            }
-          />
-          <MetricCard
-            label="Previous window"
-            value={
-              data.window
-                ? formatUiDateRange(data.window.previous.start, data.window.previous.end)
-                : '—'
-            }
-            detail="Equal-length prior window used for current-vs-previous comparisons."
-          />
-          <MetricCard
-            label="Trend mode"
-            value={props.trendEnabled ? 'On' : 'Off'}
-            detail={
-              props.trendEnabled
-                ? data.trend?.detail ??
-                  'Trend display is on for the selected analysis window.'
-                : 'Trend display is off. Current vs previous comparison still uses the selected date range and equal-length prior period.'
-            }
-          />
-        </div>
-        <div className="mt-4 rounded-xl border border-border bg-surface px-4 py-4 text-sm text-muted">
-          Selected date range defines the current analysis window:{' '}
-          {data.window
-            ? formatUiDateRange(data.window.current.start, data.window.current.end)
-            : formatUiDateRange(props.start, props.end)}
-          . The previous period is auto-derived as the equal-length range immediately before it.
-          Trend mode only shows the trend for that selected window.
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-        <div className="text-xs uppercase tracking-[0.3em] text-muted">Economics inputs</div>
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <MetricCard
-            label="Sales"
-            value={formatCurrency(data.economics.sales)}
-            detail={buildDeltaDetail(data.comparison?.sales, formatCurrency)}
-          />
-          <MetricCard
-            label="Orders"
-            value={formatNumber(data.economics.orders)}
-            detail={`Units ${formatNumber(data.economics.units)}`}
-          />
-          <MetricCard
-            label="Ad spend"
-            value={formatCurrency(data.economics.adSpend)}
-            detail={
-              buildDeltaDetail(data.comparison?.adSpend, formatCurrency) ??
-              `Ad sales ${formatCurrency(data.economics.adSales)}`
-            }
-          />
-          <MetricCard
-            label="TACOS"
-            value={formatPercent(data.economics.tacos)}
-            detail={
-              buildDeltaDetail(data.comparison?.tacos, formatPercent) ??
-              `Average price ${formatCurrency(data.economics.averagePrice)}`
-            }
-          />
-          <MetricCard
-            label="Cost coverage"
-            value={formatPercent(data.economics.costCoverage)}
-            detail="Coverage of payout, fees, and COGS inputs across the selected window."
-          />
-          <MetricCard
-            label="Break-even ACoS"
-            value={formatPercent(data.economics.breakEvenAcos)}
-            detail="Derived from product-level contribution before ads."
-          />
-          <MetricCard
-            label="Contribution Before Ads / Unit"
-            value={formatCurrency(data.economics.contributionBeforeAdsPerUnit)}
-          />
-          <MetricCard
-            label="Contribution After Ads"
-            value={formatCurrency(data.economics.contributionAfterAds)}
-            detail={
-              buildDeltaDetail(data.comparison?.contributionAfterAds, formatCurrency) ??
-              'Product-level only. No target allocation is applied in Phase 3.'
-            }
-          />
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-        <div className="text-xs uppercase tracking-[0.3em] text-muted">
-          Traffic and conversion inputs
-        </div>
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <MetricCard
-            label="Sessions"
-            value={formatNumber(data.traffic?.sessions.current)}
-            detail={buildDeltaDetail(data.traffic?.sessions, formatNumber)}
-          />
-          <MetricCard
-            label="SP impressions"
-            value={formatNumber(data.traffic?.spImpressions.current)}
-            detail={buildDeltaDetail(data.traffic?.spImpressions, formatNumber)}
-          />
-          <MetricCard
-            label="SQP demand"
-            value={formatNumber(data.traffic?.sqpDemand.current)}
-            detail={data.traffic?.sqpDemand.detail}
-          />
-          <MetricCard
-            label="Unit session %"
-            value={formatPercent(data.conversion?.unitSessionPercentage.current)}
-            detail={buildDeltaDetail(data.conversion?.unitSessionPercentage, formatPercent)}
-          />
-          <MetricCard
-            label="Orders / session"
-            value={formatPercent(data.conversion?.ordersPerSession.current)}
-            detail={buildDeltaDetail(data.conversion?.ordersPerSession, formatPercent)}
-          />
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-        <div className="text-xs uppercase tracking-[0.3em] text-muted">Visibility inputs</div>
-        <div className="mt-4 grid gap-4 xl:grid-cols-3">
-          <CoverageCard
-            label="Organic rank coverage"
-            status={data.visibility.rankingCoverage.status}
-            headline={`${formatNumber(data.visibility.rankingCoverage.trackedKeywords)} tracked keyword(s)`}
-            detail={data.visibility.rankingCoverage.detail}
-          />
-          <CoverageCard
-            label="Hero-query rank trend"
-            status={data.visibility.heroQueryTrend.status}
-            headline={
-              data.visibility.heroQueryTrend.keyword
-                ? `${data.visibility.heroQueryTrend.keyword} · rank ${formatNumber(
-                    data.visibility.heroQueryTrend.latestOrganicRank
-                  )}`
-                : 'No hero query resolved'
-            }
-            detail={data.visibility.heroQueryTrend.detail}
-          />
-          <CoverageCard
-            label="SQP demand coverage"
-            status={data.visibility.sqpCoverage.status}
-            headline={
-              data.visibility.sqpCoverage.selectedWeekEnd
-                ? `Week ${data.visibility.sqpCoverage.selectedWeekEnd}`
-                : 'No SQP week available'
-            }
-            detail={
-              data.visibility.sqpCoverage.status === 'missing'
-                ? data.visibility.sqpCoverage.detail
-                : `${data.visibility.sqpCoverage.detail} Top query ${data.visibility.sqpCoverage.topQuery ?? '—'} · search volume ${formatNumber(
-                    data.visibility.sqpCoverage.totalSearchVolume
-                  )}.`
-            }
-          />
-        </div>
-        {data.visibility.rankingLadder ? (
-          <div className="mt-4 rounded-xl border border-border bg-surface p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-xs uppercase tracking-wide text-muted">Ranking ladder</div>
-                <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
-                  Current · Δ vs prev
-                </div>
-              </div>
-              <div
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${coverageBadgeClass(
-                  data.visibility.rankingLadder.status
-                )}`}
-              >
-                {data.visibility.rankingLadder.status}
-              </div>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {data.visibility.rankingLadder.bands.map((band) => (
-                <div
-                  key={band.label}
-                  className="min-w-[150px] flex-1 rounded-xl border border-border bg-surface-2 px-3 py-2"
-                >
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    {band.label}
-                  </div>
-                  <div className="mt-2 flex items-baseline justify-between gap-3">
-                    <div className="text-lg font-semibold text-foreground">
-                      {formatNumber(band.currentCount)}
-                    </div>
-                    <div className="text-sm font-semibold text-muted">
-                      {formatSignedCount(band.deltaCount)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-2 text-sm text-muted">{data.visibility.rankingLadder.detail}</div>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
-        <div className="text-xs uppercase tracking-[0.3em] text-muted">Coverage notes</div>
-        {data.coverageNotes && data.coverageNotes.length > 0 ? (
-          <ul className="mt-4 space-y-3">
-            {data.coverageNotes.map((note) => (
-              <li
-                key={`${note.source}-${note.message}`}
-                className={`rounded-lg border px-4 py-3 text-sm ${
-                  note.status === 'missing'
-                    ? 'border-rose-200 bg-rose-50 text-rose-800'
-                    : note.status === 'partial'
-                      ? 'border-amber-200 bg-amber-50 text-amber-800'
-                      : 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                }`}
-              >
-                <span className="font-semibold uppercase tracking-wide">{note.source}</span> ·{' '}
-                {note.message}
-              </li>
-            ))}
-          </ul>
-        ) : data.warnings.length === 0 ? (
-          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-800">
-            Required Phase 3 inputs were available for this ASIN without any explicit coverage gaps.
-          </div>
-        ) : (
-          <ul className="mt-4 space-y-3">
-            {data.warnings.map((warning) => (
-              <li key={warning} className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                {warning}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+    <div className="space-y-4">
+      <OverviewHeaderSummary
+        data={props.data}
+        start={props.start}
+        end={props.end}
+        trendEnabled={props.trendEnabled}
+      />
+      <OverviewKpiGrid data={props.data} />
+      <OverviewRankingLadder
+        data={props.data}
+        returnTo={props.returnTo}
+        saveHeroQueryAction={props.saveHeroQueryAction}
+        resetHeroQueryAction={props.resetHeroQueryAction}
+      />
+      <OverviewTrafficSection data={props.data} />
+      <OverviewConversionSection data={props.data} />
+      <OverviewNotesSection data={props.data} />
     </div>
   );
 }

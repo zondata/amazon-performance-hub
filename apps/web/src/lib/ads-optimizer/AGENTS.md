@@ -13,10 +13,22 @@ Follow:
 - Support a shell contract with only two primary tabs: `overview` and `targets`.
 - Support `history`, `config`, and `outcomes` as secondary utility surfaces.
 - Keep legacy optimizer `view=` links normalizable into the new shell contract.
+- The shipped work through Phase 4C is mostly Overview-facing:
+  - run/scope header support
+  - simplified trend handling tied to the selected date range
+  - rebuilt Overview view models and subcomponent wiring
+  - compact ranking ladder support on the shared bucket definition
+  - SQP clarity helpers and honest unavailable states
+  - persisted manual hero query override per ASIN
 - Preserve KPI scope integrity for placement and target metrics.
 - Treat STIS / STIR / TOS IS and ranking as non-additive diagnostics: latest observed values and explicit trends only.
 - Do not let non-additive diagnostics silently become default V1 scoring math.
 - Expected absence of search-term diagnostics on zero-click targets is normal availability behavior unless other inputs make it suspicious.
 - Keep the shared V2 ranking ladder definition centralized: page 1 numeric splits (`1-2`, `3-5`, `6-10`, `11-20`, `21-45`) followed by page-based buckets (`Page 2` through `Page 7`), with signed count deltas instead of percentages or average rank.
+- Hero query override persistence should stay in optimizer-owned state and drive hero-query-dependent Overview sections until reset to auto.
 - For V2 review surfaces, prefer compact summary payloads for collapsed states and explicit detail payloads for advanced/expanded states.
 - Preserve explicit lazy-detail boundaries, stable row identity, and explicit empty-state coverage semantics so the UI does not have to infer missing structure.
+- Phase 5 is the next major helper/view-model step:
+  - create the V2 Targets row model
+  - split large Targets helpers into clearer summary/detail boundaries
+  - support inline-expansion-oriented operator UX without breaking current runtime contracts

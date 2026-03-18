@@ -386,6 +386,10 @@ Turn Overview into a real V2 operator command center.
   - [ ] traffic
   - [ ] conversion
   - [ ] notes / coverage / warnings
+- [ ] Keep hero query overrideable per ASIN:
+  - [ ] auto-selection remains the fallback
+  - [ ] manual selection can be saved and reset from Overview
+  - [ ] saved manual hero query drives all hero-query-dependent Overview sections until reset
 - [ ] Keep the ranking ladder on the shared V2 definition:
   - [ ] page 1 numeric splits (`1-2`, `3-5`, `6-10`, `11-20`, `21-45`)
   - [ ] page-based buckets for `Page 2` through `Page 7`

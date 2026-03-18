@@ -167,7 +167,19 @@ For every phase:
 - Ads Workspace remains the only staging/execution boundary.
 - Keep current-versus-proposed values visible anywhere recommendations change something.
 - Keep missing-data behavior explicit and honest.
-- The V2 Overview ranking ladder uses page 1 numeric splits (`1-2`, `3-5`, `6-10`, `11-20`, `21-45`) and then page-based buckets (`Page 2` through `Page 7`) with signed count deltas only.
+- Phases 1 through 4 were centered on the Overview/operator shell:
+  - shared run/scope header flow
+  - simplified trend behavior driven by the selected date range
+  - rebuilt Overview UI with smaller subcomponents
+  - compact ranking ladder presentation using page 1 numeric splits (`1-2`, `3-5`, `6-10`, `11-20`, `21-45`) and page buckets (`Page 2` through `Page 7`)
+  - SQP clarity improvements, including explicit week labels and hero-query-vs-total demand separation
+  - manual hero query override per ASIN with reset-to-auto
+- Hero query override is persisted in optimizer-owned state (`ads_optimizer_manual_overrides`), not `product_profile.profile_json`.
+- Saved manual hero query should drive all hero-query-dependent Overview sections until reset to auto.
+- The next major step is Phase 5 on Targets:
+  - create the V2 target row model
+  - split/refactor the large Targets panel
+  - move toward inline expansion and a denser operator-first Targets UX
 
 ## When in doubt
 Choose the safer option that:

@@ -23,6 +23,10 @@ import { executeAdsOptimizerWorkspaceHandoff } from '@/lib/ads-optimizer/handoff
 import { saveAdsOptimizerRecommendationOverride } from '@/lib/ads-optimizer/repoOverrides';
 import { executeAdsOptimizerManualRun } from '@/lib/ads-optimizer/runtime';
 import { buildAdsOptimizerHref } from '@/lib/ads-optimizer/shell';
+import {
+  resetAdsOptimizerHeroQueryManualOverride,
+  saveAdsOptimizerHeroQueryManualOverride,
+} from '@/lib/ads-optimizer/heroQueryOverride';
 
 const trimToNull = (value: FormDataEntryValue | null): string | null => {
   if (typeof value !== 'string') return null;
@@ -217,6 +221,66 @@ export async function saveAdsOptimizerProductSettingsAction(formData: FormData) 
     redirectWithFlash(returnTo, {
       error:
         error instanceof Error ? error.message : 'Failed to save optimizer product settings.',
+    });
+  }
+}
+
+export async function saveAdsOptimizerHeroQueryAction(formData: FormData) {
+  const returnTo = ensureReturnTo(
+    trimToNull(formData.get('return_to')),
+    '/ads/optimizer?view=overview'
+  );
+
+  try {
+    const productId = trimToNull(formData.get('product_id'));
+    const productAsin = trimToNull(formData.get('product_asin'));
+    const heroQuery = trimToNull(formData.get('hero_query'));
+
+    if (!productId || !productAsin || !heroQuery) {
+      throw new Error('product_id, product_asin, and hero_query are required.');
+    }
+
+    await saveAdsOptimizerHeroQueryManualOverride({
+      productId,
+      query: heroQuery,
+    });
+
+    revalidatePath('/ads/optimizer');
+    redirectWithFlash(returnTo, {
+      notice: `Saved manual hero query for ${productAsin}.`,
+    });
+  } catch (error) {
+    rethrowRedirectError(error);
+    redirectWithFlash(returnTo, {
+      error: error instanceof Error ? error.message : 'Failed to save hero query override.',
+    });
+  }
+}
+
+export async function resetAdsOptimizerHeroQueryAction(formData: FormData) {
+  const returnTo = ensureReturnTo(
+    trimToNull(formData.get('return_to')),
+    '/ads/optimizer?view=overview'
+  );
+
+  try {
+    const productId = trimToNull(formData.get('product_id'));
+    const productAsin = trimToNull(formData.get('product_asin'));
+
+    if (!productId || !productAsin) {
+      throw new Error('product_id and product_asin are required.');
+    }
+
+    await resetAdsOptimizerHeroQueryManualOverride(productId);
+
+    revalidatePath('/ads/optimizer');
+    redirectWithFlash(returnTo, {
+      notice: `Reset hero query for ${productAsin} back to auto.`,
+    });
+  } catch (error) {
+    rethrowRedirectError(error);
+    redirectWithFlash(returnTo, {
+      error: error instanceof Error ? error.message : 'Failed to reset hero query override.',
     });
   }
 }

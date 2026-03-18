@@ -12,9 +12,11 @@ import {
   activateAdsOptimizerRulePackVersionAction,
   createAdsOptimizerDraftVersionAction,
   handoffAdsOptimizerToWorkspaceAction,
+  resetAdsOptimizerHeroQueryAction,
   runAdsOptimizerNowAction,
   saveAdsOptimizerDraftVersionAction,
   saveAdsOptimizerProductSettingsAction,
+  saveAdsOptimizerHeroQueryAction,
   saveAdsOptimizerRecommendationOverrideAction,
   seedAdsOptimizerStarterVersionsAction,
 } from '@/app/ads/optimizer/actions';
@@ -395,6 +397,9 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           end={end}
           trendEnabled={overviewTrendEnabled}
           data={overviewData}
+          returnTo={returnTo}
+          saveHeroQueryAction={saveAdsOptimizerHeroQueryAction}
+          resetHeroQueryAction={resetAdsOptimizerHeroQueryAction}
         />
       ) : view === 'targets' ? (
         <OptimizerTargetsPanel

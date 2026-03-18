@@ -28,6 +28,10 @@ vi.mock('../apps/web/src/lib/sqp/getProductSqpWeekly', () => ({
   },
 }));
 
+vi.mock('../apps/web/src/lib/ads-optimizer/heroQueryOverride', () => ({
+  getAdsOptimizerHeroQueryManualOverride: async () => null,
+}));
+
 import {
   buildAdsOptimizerOverviewComparisonWindow,
   buildAdsOptimizerOverviewMetricDelta,
@@ -173,6 +177,58 @@ describe('ads optimizer phase 3 overview logic', () => {
     expect(trend.latestOrganicRank).toBe(7);
     expect(trend.rankDelta).toBe(14);
     expect(trend.detail).toContain('from rank 21 to 7');
+  });
+
+  it('uses a saved manual hero query instead of the auto-picked query when it is present', () => {
+    const trend = buildHeroQueryTrend(
+      [
+        {
+          observed_date: '2026-03-01',
+          keyword_norm: 'blue widgets',
+          keyword_raw: 'blue widgets',
+          search_volume: 4200,
+          organic_rank_value: 8,
+        },
+        {
+          observed_date: '2026-03-01',
+          keyword_norm: 'red widgets',
+          keyword_raw: 'red widgets',
+          search_volume: 1200,
+          organic_rank_value: 18,
+        },
+        {
+          observed_date: '2026-03-10',
+          keyword_norm: 'red widgets',
+          keyword_raw: 'red widgets',
+          search_volume: 1200,
+          organic_rank_value: 11,
+        },
+      ] as any,
+      'red widgets'
+    );
+
+    expect(trend.keyword).toBe('red widgets');
+    expect(trend.baselineOrganicRank).toBe(18);
+    expect(trend.latestOrganicRank).toBe(11);
+  });
+
+  it('keeps the saved manual hero query explicit when it is not in current ranking candidates', () => {
+    const trend = buildHeroQueryTrend(
+      [
+        {
+          observed_date: '2026-03-10',
+          keyword_norm: 'blue widgets',
+          keyword_raw: 'blue widgets',
+          search_volume: 4200,
+          organic_rank_value: 7,
+        },
+      ] as any,
+      'red widgets'
+    );
+
+    expect(trend.keyword).toBe('red widgets');
+    expect(trend.latestOrganicRank).toBeNull();
+    expect(trend.detail).toContain('not present in the current ranking candidates');
   });
 
   it('builds an equal-length previous comparison window', () => {
