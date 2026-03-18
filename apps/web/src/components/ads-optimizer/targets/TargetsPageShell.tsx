@@ -106,6 +106,10 @@ type ActiveColumnResize = {
   startClientX: number;
   startWidth: number;
 };
+type HeaderSortOption = {
+  value: AdsOptimizerTargetTableSort;
+  label: string;
+};
 
 const GLOBAL_METHODOLOGY_NOTES = [
   'STIS, STIR, and TOS IS are non-additive diagnostics. The Targets page only shows latest observed values or explicit trend metadata, never a synthetic window average.',
@@ -114,6 +118,24 @@ const GLOBAL_METHODOLOGY_NOTES = [
   'Ads Optimizer remains recommendation-first. Ads Workspace is still the only staging and execution boundary.',
 ];
 const NOT_CAPTURED = 'Not captured';
+const STATE_HEADER_SORT_OPTIONS: HeaderSortOption[] = [
+  { value: 'state_current_profit_loss', label: 'P&L (current)' },
+  { value: 'state_current_acos', label: 'ACoS (current)' },
+];
+const ECONOMICS_HEADER_SORT_OPTIONS: HeaderSortOption[] = [
+  { value: 'economics_current_spend', label: 'Spend (current)' },
+  { value: 'economics_current_sales', label: 'Sales (current)' },
+  { value: 'economics_current_orders', label: 'Orders (current)' },
+];
+const CONTRIBUTION_HEADER_SORT_OPTIONS: HeaderSortOption[] = [
+  { value: 'contribution_sales_rank', label: 'Sales rank' },
+  { value: 'contribution_spend_rank', label: 'Spend rank' },
+  { value: 'contribution_impression_rank', label: 'Impression rank' },
+];
+const RANKING_HEADER_SORT_OPTIONS: HeaderSortOption[] = [
+  { value: 'ranking_organic_latest', label: 'Organic rank' },
+  { value: 'ranking_organic_trend', label: 'Organic trend' },
+];
 
 const formatNumber = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return '—';
@@ -889,6 +911,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
     useState<AdsOptimizerTargetFilterValue>('all');
   const [exceptionFilter, setExceptionFilter] =
     useState<AdsOptimizerTargetExceptionFilterValue>('all');
+  const [targetSearch, setTargetSearch] = useState('');
   const [sortBy, setSortBy] = useState<AdsOptimizerTargetTableSort>('priority');
   const [sortDirection, setSortDirection] = useState<AdsOptimizerTargetTableSortDirection>('asc');
   const [tableLayoutPrefs, setTableLayoutPrefs] = useState<AdsOptimizerTargetTableLayoutPrefs>(
@@ -913,6 +936,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
         confidence: 'all',
         spendDirection: spendDirectionFilter,
         exceptions: exceptionFilter,
+        targetSearch,
         sortBy,
         sortDirection,
       }).filter((summary) =>
@@ -929,6 +953,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
       sortBy,
       sortDirection,
       spendDirectionFilter,
+      targetSearch,
       tierFilter,
       trendFilter,
     ]
@@ -936,6 +961,26 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
   const filteredRows = filteredRowSummaries
     .map((summary) => rowLookup.get(summary.targetSnapshotId) ?? null)
     .filter((row): row is AdsOptimizerTargetReviewRow => row !== null);
+  const trimmedTargetSearch = targetSearch.trim();
+  const hasCollapsedTableFilters =
+    trimmedTargetSearch.length > 0 ||
+    roleFilter !== 'all' ||
+    tierFilter !== 'all' ||
+    trendFilter !== 'all' ||
+    spendDirectionFilter !== 'all' ||
+    exceptionFilter !== 'all';
+  const emptyTableTitle =
+    trimmedTargetSearch.length > 0
+      ? `No matching targets for "${trimmedTargetSearch}"`
+      : hasCollapsedTableFilters
+        ? 'No matching targets'
+        : 'No target rows available';
+  const emptyTableBody =
+    trimmedTargetSearch.length > 0
+      ? 'Try a different search or clear filters.'
+      : hasCollapsedTableFilters
+        ? 'Try a different search or clear filters.'
+        : 'This run did not load persisted target rows.';
   const activeTargetSnapshotId = resolveVisibleExpandedTargetSnapshotId(
     selectedTargetSnapshotId,
     filteredRows.map((row) => row.targetSnapshotId)
@@ -1199,6 +1244,49 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
     if (nextSort === sortBy) return;
     setSortBy(nextSort);
     setSortDirection(getDefaultAdsOptimizerTargetTableSortDirection(nextSort));
+  };
+  const getHeaderSortValue = (options: HeaderSortOption[]) =>
+    options.some((option) => option.value === sortBy) ? sortBy : '';
+  const handleHeaderSortSelect = (value: string) => {
+    if (!value) return;
+    handleSortByChange(value as AdsOptimizerTargetTableSort);
+  };
+  const renderHeaderSortControls = (args: {
+    label: string;
+    options: HeaderSortOption[];
+    ariaLabel: string;
+  }) => {
+    const activeSortValue = getHeaderSortValue(args.options);
+
+    return (
+      <div className="flex min-w-0 flex-col gap-1 pr-5">
+        <div className="truncate">{args.label}</div>
+        <div className="flex items-center gap-2">
+          <select
+            value={activeSortValue}
+            onChange={(event) => handleHeaderSortSelect(event.target.value)}
+            aria-label={args.ariaLabel}
+            className="min-w-0 flex-1 rounded-md border border-border bg-surface-2 px-2 py-1 text-[11px] font-medium normal-case tracking-normal text-foreground"
+          >
+            <option value="">Sort…</option>
+            {args.options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={toggleSortDirection}
+            disabled={!activeSortValue}
+            aria-label={`${args.label} sort direction`}
+            className="shrink-0 rounded-md border border-border bg-surface-2 px-2 py-1 text-[11px] font-semibold normal-case tracking-normal text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {sortDirection === 'asc' ? 'Asc' : 'Desc'}
+          </button>
+        </div>
+      </div>
+    );
   };
 
   const handleResetColumnWidths = () => {
@@ -2644,57 +2732,112 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
           />
         </div>
 
-        {filteredRows.length === 0 ? (
-          <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
-            No target rows match the current inline review filters.
-          </div>
-        ) : (
-          <div
-            className="mt-4 overflow-x-auto overflow-y-visible"
-            data-aph-hscroll
-            data-aph-hscroll-axis="x"
+        <div
+          className="mt-4 overflow-x-auto overflow-y-visible"
+          data-aph-hscroll
+          data-aph-hscroll-axis="x"
+        >
+          <table
+            className="min-w-full table-fixed border-collapse text-left text-sm"
+            style={{ width: `${tableWidthPx}px`, minWidth: '100%' }}
           >
-            <table
-              className="min-w-full table-fixed border-collapse text-left text-sm"
-              style={{ width: `${tableWidthPx}px`, minWidth: '100%' }}
-            >
-              <colgroup>
-                {ADS_OPTIMIZER_TARGET_TABLE_COLUMNS.map((column) => (
-                  <col key={column.key} style={headerCellStyle(column.key)} />
-                ))}
-              </colgroup>
-              <thead>
-                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-                  {ADS_OPTIMIZER_TARGET_TABLE_COLUMNS.map((column) => {
-                    const isTargetColumn = column.key === 'target';
-                    return (
-                      <th
-                        key={column.key}
-                        className={`relative overflow-hidden border-b border-border bg-surface py-2 font-semibold whitespace-nowrap ${
-                          isTargetColumn ? `${targetHeaderClass} pl-4 pr-5` : 'px-3 pr-5'
-                        }`}
-                        style={headerCellStyle(column.key)}
+            <colgroup>
+              {ADS_OPTIMIZER_TARGET_TABLE_COLUMNS.map((column) => (
+                <col key={column.key} style={headerCellStyle(column.key)} />
+              ))}
+            </colgroup>
+            <thead>
+              <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
+                {ADS_OPTIMIZER_TARGET_TABLE_COLUMNS.map((column) => {
+                  const isTargetColumn = column.key === 'target';
+                  return (
+                    <th
+                      key={column.key}
+                      className={`relative overflow-hidden border-b border-border bg-surface py-2 font-semibold whitespace-nowrap ${
+                        isTargetColumn ? `${targetHeaderClass} pl-4 pr-5` : 'px-3 pr-5'
+                      }`}
+                      style={headerCellStyle(column.key)}
+                    >
+                      {column.key === 'target' ? (
+                        <div className="flex min-w-0 flex-col gap-1 pr-5">
+                          <div className="truncate">{column.label}</div>
+                          <input
+                            type="search"
+                            value={targetSearch}
+                            onChange={(event) => setTargetSearch(event.target.value)}
+                            placeholder="Search targets"
+                            aria-label="Search target rows"
+                            className="rounded-md border border-border bg-surface-2 px-2 py-1 text-[11px] font-medium normal-case tracking-normal text-foreground placeholder:text-muted"
+                          />
+                        </div>
+                      ) : column.key === 'state' ? (
+                        renderHeaderSortControls({
+                          label: column.label,
+                          options: STATE_HEADER_SORT_OPTIONS,
+                          ariaLabel: 'Sort State column',
+                        })
+                      ) : column.key === 'economics' ? (
+                        renderHeaderSortControls({
+                          label: column.label,
+                          options: ECONOMICS_HEADER_SORT_OPTIONS,
+                          ariaLabel: 'Sort Economics column',
+                        })
+                      ) : column.key === 'contribution' ? (
+                        renderHeaderSortControls({
+                          label: column.label,
+                          options: CONTRIBUTION_HEADER_SORT_OPTIONS,
+                          ariaLabel: 'Sort Contribution column',
+                        })
+                      ) : column.key === 'ranking' ? (
+                        renderHeaderSortControls({
+                          label: column.label,
+                          options: RANKING_HEADER_SORT_OPTIONS,
+                          ariaLabel: 'Sort Ranking column',
+                        })
+                      ) : (
+                        <div className="truncate pr-5">{column.label}</div>
+                      )}
+                      <button
+                        type="button"
+                        data-column-resize-handle={column.key}
+                        className="group absolute inset-y-0 right-[-6px] z-40 flex w-3 cursor-col-resize touch-none select-none items-center justify-center bg-transparent p-0"
+                        aria-label={`Resize ${column.label} column`}
+                        title={`Resize ${column.label} column`}
+                        onPointerDown={(event) =>
+                          handleColumnResizePointerDown(column.key, event)
+                        }
                       >
-                        <div className="truncate">{column.label}</div>
+                        <span className="h-6 w-px rounded-full bg-border transition group-hover:bg-primary/60" />
+                      </button>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRowSummaries.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={ADS_OPTIMIZER_TARGET_TABLE_COLUMNS.length}
+                    className="px-4 py-6 text-sm"
+                  >
+                    <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4">
+                      <div className="font-semibold text-foreground">{emptyTableTitle}</div>
+                      <div className="mt-1 text-sm text-muted">{emptyTableBody}</div>
+                      {trimmedTargetSearch.length > 0 ? (
                         <button
                           type="button"
-                          data-column-resize-handle={column.key}
-                          className="group absolute inset-y-0 right-[-6px] z-40 flex w-3 cursor-col-resize touch-none select-none items-center justify-center bg-transparent p-0"
-                          aria-label={`Resize ${column.label} column`}
-                          title={`Resize ${column.label} column`}
-                          onPointerDown={(event) =>
-                            handleColumnResizePointerDown(column.key, event)
-                          }
+                          onClick={() => setTargetSearch('')}
+                          className="mt-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground"
                         >
-                          <span className="h-6 w-px rounded-full bg-border transition group-hover:bg-primary/60" />
+                          Clear search
                         </button>
-                      </th>
-                    );
-                  })}
+                      ) : null}
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredRowSummaries.map((summary) => {
+              ) : (
+                filteredRowSummaries.map((summary) => {
                   const row = rowLookup.get(summary.targetSnapshotId);
                   if (!row) return null;
 
@@ -2720,11 +2863,11 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                       }
                     />
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

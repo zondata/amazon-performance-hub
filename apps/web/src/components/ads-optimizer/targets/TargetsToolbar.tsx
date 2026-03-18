@@ -13,6 +13,53 @@ import type {
   AdsOptimizerTargetTableSortDirection,
 } from '@/lib/ads-optimizer/targetRowTableSummary';
 
+const SORT_OPTION_GROUPS: Array<{
+  label: string;
+  options: Array<{ value: AdsOptimizerTargetTableSort; label: string }>;
+}> = [
+  {
+    label: 'Overview',
+    options: [
+      { value: 'priority', label: 'Priority' },
+      { value: 'target', label: 'Target' },
+      { value: 'recommendations', label: 'Change plan' },
+      { value: 'workspace_actions', label: 'Workspace actions' },
+      { value: 'efficiency', label: 'Efficiency' },
+      { value: 'exceptions', label: 'Exceptions' },
+    ],
+  },
+  {
+    label: 'State',
+    options: [
+      { value: 'state_current_profit_loss', label: 'P&L (current)' },
+      { value: 'state_current_acos', label: 'ACoS (current)' },
+    ],
+  },
+  {
+    label: 'Economics',
+    options: [
+      { value: 'economics_current_spend', label: 'Spend (current)' },
+      { value: 'economics_current_sales', label: 'Sales (current)' },
+      { value: 'economics_current_orders', label: 'Orders (current)' },
+    ],
+  },
+  {
+    label: 'Contribution',
+    options: [
+      { value: 'contribution_sales_rank', label: 'Sales rank' },
+      { value: 'contribution_spend_rank', label: 'Spend rank' },
+      { value: 'contribution_impression_rank', label: 'Impression rank' },
+    ],
+  },
+  {
+    label: 'Ranking',
+    options: [
+      { value: 'ranking_organic_latest', label: 'Organic rank' },
+      { value: 'ranking_organic_trend', label: 'Organic trend' },
+    ],
+  },
+];
+
 const formatNumber = (value: number) =>
   value.toLocaleString('en-US', { maximumFractionDigits: 0 });
 
@@ -153,12 +200,15 @@ export default function TargetsToolbar(props: TargetsToolbarProps) {
                 }
                 className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
               >
-                <option value="priority">Priority</option>
-                <option value="target">Target</option>
-                <option value="recommendations">Change plan</option>
-                <option value="workspace_actions">Workspace actions</option>
-                <option value="efficiency">Efficiency</option>
-                <option value="exceptions">Exceptions</option>
+                {SORT_OPTION_GROUPS.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
             </label>
             <button

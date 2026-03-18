@@ -11,7 +11,17 @@ export type AdsOptimizerTargetTableSort =
   | 'confidence'
   | 'tier'
   | 'spend_direction'
-  | 'exceptions';
+  | 'exceptions'
+  | 'state_current_profit_loss'
+  | 'state_current_acos'
+  | 'economics_current_spend'
+  | 'economics_current_sales'
+  | 'economics_current_orders'
+  | 'contribution_sales_rank'
+  | 'contribution_spend_rank'
+  | 'contribution_impression_rank'
+  | 'ranking_organic_latest'
+  | 'ranking_organic_trend';
 export type AdsOptimizerTargetTableSortDirection = 'asc' | 'desc';
 export type AdsOptimizerTargetFilterValue = 'all' | string;
 export type AdsOptimizerTargetExceptionFilterValue =
@@ -161,6 +171,16 @@ export type AdsOptimizerTargetRowTableSummary = {
     riskScore: number | null;
     opportunityScore: number | null;
     targetText: string;
+    currentProfitLoss: number | null;
+    currentAcos: number | null;
+    currentSpend: number | null;
+    currentSales: number | null;
+    currentOrders: number | null;
+    contributionSalesRank: number | null;
+    contributionSpendRank: number | null;
+    contributionImpressionRank: number | null;
+    organicLatestRank: number | null;
+    organicTrendScore: number | null;
   };
 };
 
@@ -171,6 +191,7 @@ export type AdsOptimizerTargetTableFilters = {
   confidence: AdsOptimizerTargetFilterValue;
   spendDirection: AdsOptimizerTargetFilterValue;
   exceptions: AdsOptimizerTargetExceptionFilterValue;
+  targetSearch: string;
   sortBy: AdsOptimizerTargetTableSort;
   sortDirection: AdsOptimizerTargetTableSortDirection;
 };
@@ -270,6 +291,25 @@ const compareNullableString = (left: string | null, right: string | null) => {
   if (left === null) return 1;
   if (right === null) return -1;
   return left.localeCompare(right);
+};
+
+const compareMissingLastNumber = (
+  left: number | null,
+  right: number | null,
+  direction: AdsOptimizerTargetTableSortDirection
+) => {
+  if (left === null && right === null) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  return direction === 'asc' ? left - right : right - left;
+};
+
+const normalizeSearchToken = (value: string | null | undefined) => {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+  return normalized.length > 0 ? normalized : null;
 };
 
 const isWorkspaceSupportedActionType = (
@@ -669,6 +709,14 @@ const buildRankingSummaryBlock = (args: {
   };
 };
 
+const getOrganicTrendSortScore = (trendLabel: RankTrendLabel): number | null => {
+  if (trendLabel === 'Rising') return 4;
+  if (trendLabel === 'Maintain') return 3;
+  if (trendLabel === 'Decline') return 2;
+  if (trendLabel === 'Limited data') return 1;
+  return null;
+};
+
 const buildStateComparison = (
   row: TargetReviewRowLike
 ): AdsOptimizerTargetRowTableSummary['stateComparison'] => {
@@ -831,6 +879,25 @@ const buildTableSummary = (
   const stageableActions = getEffectiveStageableActions(row);
   const reviewOnlyActionCount = getReviewOnlyActionCount(row);
   const highestExceptionSeverity = getHighestExceptionSeverity(row);
+  const currentProfitLoss = getCurrentProfitLoss(row);
+  const contributionSalesRank =
+    context.totals.sales > 0 ? (context.ranks.sales.get(row.persistedTargetKey) ?? null) : null;
+  const contributionSpendRank =
+    context.totals.spend > 0 ? (context.ranks.spend.get(row.persistedTargetKey) ?? null) : null;
+  const contributionImpressionRank =
+    context.totals.impressions > 0
+      ? (context.ranks.impressions.get(row.persistedTargetKey) ?? null)
+      : null;
+  const organicRankingSummary = buildRankingSummaryBlock({
+    observations: row.rankingContext?.organicObservedRanks ?? [],
+    status: row.rankingContext?.status ?? null,
+    note: row.rankingContext?.note ?? null,
+  });
+  const sponsoredRankingSummary = buildRankingSummaryBlock({
+    observations: row.rankingContext?.sponsoredObservedRanks ?? [],
+    status: row.rankingContext?.status ?? null,
+    note: row.rankingContext?.note ?? null,
+  });
 
   return {
     rowId: row.targetSnapshotId,
@@ -854,16 +921,8 @@ const buildTableSummary = (
     economicsComparison: buildEconomicsComparison(row),
     contribution: buildContributionSummary(row, context.totals, context.ranks),
     ranking: {
-      organic: buildRankingSummaryBlock({
-        observations: row.rankingContext?.organicObservedRanks ?? [],
-        status: row.rankingContext?.status ?? null,
-        note: row.rankingContext?.note ?? null,
-      }),
-      sponsored: buildRankingSummaryBlock({
-        observations: row.rankingContext?.sponsoredObservedRanks ?? [],
-        status: row.rankingContext?.status ?? null,
-        note: row.rankingContext?.note ?? null,
-      }),
+      organic: organicRankingSummary,
+      sponsored: sponsoredRankingSummary,
     },
     role: {
       currentValue: row.role.currentRole.value,
@@ -908,6 +967,16 @@ const buildTableSummary = (
       riskScore: row.state.riskScore,
       opportunityScore: row.state.opportunityScore,
       targetText: row.targetText,
+      currentProfitLoss,
+      currentAcos: row.raw.acos,
+      currentSpend: row.raw.spend,
+      currentSales: row.raw.sales,
+      currentOrders: row.raw.orders,
+      contributionSalesRank,
+      contributionSpendRank,
+      contributionImpressionRank,
+      organicLatestRank: organicRankingSummary.latestRank,
+      organicTrendScore: getOrganicTrendSortScore(organicRankingSummary.trendLabel),
     },
   };
 };
@@ -954,10 +1023,22 @@ export const buildAdsOptimizerTargetRowTableSummaries = (rows: TargetReviewRowLi
 
 export const getDefaultAdsOptimizerTargetTableSortDirection = (
   sortBy: AdsOptimizerTargetTableSort
-): AdsOptimizerTargetTableSortDirection =>
-  sortBy === 'recommendations' || sortBy === 'workspace_actions' || sortBy === 'exceptions'
-    ? 'desc'
-    : 'asc';
+): AdsOptimizerTargetTableSortDirection => {
+  if (
+    sortBy === 'recommendations' ||
+    sortBy === 'workspace_actions' ||
+    sortBy === 'exceptions' ||
+    sortBy === 'state_current_profit_loss' ||
+    sortBy === 'economics_current_spend' ||
+    sortBy === 'economics_current_sales' ||
+    sortBy === 'economics_current_orders' ||
+    sortBy === 'ranking_organic_trend'
+  ) {
+    return 'desc';
+  }
+
+  return 'asc';
+};
 
 const compareRowSummariesByDefault = (
   left: AdsOptimizerTargetRowTableSummary,
@@ -976,6 +1057,7 @@ export const compareAdsOptimizerTargetRowTableSummaries = (
   direction: AdsOptimizerTargetTableSortDirection
 ) => {
   let comparison = 0;
+  let handledDirection = false;
 
   switch (sortBy) {
     case 'target':
@@ -1011,10 +1093,86 @@ export const compareAdsOptimizerTargetRowTableSummaries = (
         left.sort.exceptionCount - right.sort.exceptionCount ||
         Number(left.sort.manualReviewRequired) - Number(right.sort.manualReviewRequired);
       break;
+    case 'state_current_profit_loss':
+      handledDirection = true;
+      comparison = compareMissingLastNumber(
+        left.sort.currentProfitLoss,
+        right.sort.currentProfitLoss,
+        direction
+      );
+      break;
+    case 'state_current_acos':
+      handledDirection = true;
+      comparison = compareMissingLastNumber(left.sort.currentAcos, right.sort.currentAcos, direction);
+      break;
+    case 'economics_current_spend':
+      handledDirection = true;
+      comparison = compareMissingLastNumber(
+        left.sort.currentSpend,
+        right.sort.currentSpend,
+        direction
+      );
+      break;
+    case 'economics_current_sales':
+      handledDirection = true;
+      comparison = compareMissingLastNumber(
+        left.sort.currentSales,
+        right.sort.currentSales,
+        direction
+      );
+      break;
+    case 'economics_current_orders':
+      handledDirection = true;
+      comparison = compareMissingLastNumber(
+        left.sort.currentOrders,
+        right.sort.currentOrders,
+        direction
+      );
+      break;
+    case 'contribution_sales_rank':
+      handledDirection = true;
+      comparison = compareMissingLastNumber(
+        left.sort.contributionSalesRank,
+        right.sort.contributionSalesRank,
+        direction
+      );
+      break;
+    case 'contribution_spend_rank':
+      handledDirection = true;
+      comparison = compareMissingLastNumber(
+        left.sort.contributionSpendRank,
+        right.sort.contributionSpendRank,
+        direction
+      );
+      break;
+    case 'contribution_impression_rank':
+      handledDirection = true;
+      comparison = compareMissingLastNumber(
+        left.sort.contributionImpressionRank,
+        right.sort.contributionImpressionRank,
+        direction
+      );
+      break;
+    case 'ranking_organic_latest':
+      handledDirection = true;
+      comparison = compareMissingLastNumber(
+        left.sort.organicLatestRank,
+        right.sort.organicLatestRank,
+        direction
+      );
+      break;
+    case 'ranking_organic_trend':
+      handledDirection = true;
+      comparison = compareMissingLastNumber(
+        left.sort.organicTrendScore,
+        right.sort.organicTrendScore,
+        direction
+      );
+      break;
   }
 
   return (
-    (direction === 'asc' ? comparison : -comparison) ||
+    (handledDirection ? comparison : direction === 'asc' ? comparison : -comparison) ||
     compareRowSummariesByDefault(left, right)
   );
 };
@@ -1022,8 +1180,16 @@ export const compareAdsOptimizerTargetRowTableSummaries = (
 export const filterAdsOptimizerTargetRowTableSummaries = (
   rowSummaries: AdsOptimizerTargetRowTableSummary[],
   filters: AdsOptimizerTargetTableFilters
-) =>
-  [...rowSummaries]
+) => {
+  const targetSearch = normalizeSearchToken(filters.targetSearch);
+
+  return [...rowSummaries]
+    .filter((row) => {
+      if (!targetSearch) return true;
+      const targetText = normalizeSearchToken(row.identity.targetText);
+      const targetId = normalizeSearchToken(row.identity.targetIdLabel);
+      return targetText?.includes(targetSearch) || targetId?.includes(targetSearch) || false;
+    })
     .filter((row) => (filters.role === 'all' ? true : row.filters.role === filters.role))
     .filter((row) =>
       filters.efficiency === 'all' ? true : row.filters.efficiency === filters.efficiency
@@ -1048,3 +1214,4 @@ export const filterAdsOptimizerTargetRowTableSummaries = (
     .sort((left, right) =>
       compareAdsOptimizerTargetRowTableSummaries(left, right, filters.sortBy, filters.sortDirection)
     );
+};

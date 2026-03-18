@@ -266,6 +266,21 @@ const buildRow = (
     ...overrides,
   }) as unknown as AdsOptimizerTargetReviewRow;
 
+const buildFilters = (
+  overrides: Partial<Parameters<typeof filterAdsOptimizerTargetRowTableSummaries>[1]> = {}
+): Parameters<typeof filterAdsOptimizerTargetRowTableSummaries>[1] => ({
+  role: 'all',
+  efficiency: 'all',
+  tier: 'all',
+  confidence: 'all',
+  spendDirection: 'all',
+  exceptions: 'all',
+  targetSearch: '',
+  sortBy: 'priority',
+  sortDirection: 'asc',
+  ...overrides,
+});
+
 describe('ads optimizer target row table summary', () => {
   it('maps the collapsed-row table contract with current / previous / change and ranking blocks', () => {
     const previous = buildRow({
@@ -411,16 +426,12 @@ describe('ads optimizer target row table summary', () => {
     });
 
     const summaries = buildAdsOptimizerTargetRowTableSummaries([dominant, middle, tail]);
-    const filtered = filterAdsOptimizerTargetRowTableSummaries(summaries, {
-      role: 'all',
-      efficiency: 'all',
-      tier: 'tier_2_core',
-      confidence: 'all',
-      spendDirection: 'all',
-      exceptions: 'all',
-      sortBy: 'priority',
-      sortDirection: 'asc',
-    });
+    const filtered = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({
+        tier: 'tier_2_core',
+      })
+    );
 
     expect(filtered).toHaveLength(1);
     expect(filtered[0]?.contribution.rows[0]?.share.display).toBe('33.3%');
@@ -429,6 +440,482 @@ describe('ads optimizer target row table summary', () => {
     expect(filtered[0]?.contribution.rows[1]?.rank.display).toBe('Rank 2');
     expect(filtered[0]?.contribution.rows[2]?.share.display).toBe('33.3%');
     expect(filtered[0]?.contribution.rows[2]?.rank.display).toBe('Rank 2');
+  });
+
+  it('filters target search by trimmed case-insensitive target text and target id', () => {
+    const hero = buildRow({
+      targetSnapshotId: 'snap-hero',
+      persistedTargetKey: 'target-hero',
+      targetText: 'Hero Exact',
+      targetId: 'kw-hero',
+    });
+    const brand = buildRow({
+      targetSnapshotId: 'snap-brand',
+      persistedTargetKey: 'target-brand',
+      targetText: 'Brand Broad',
+      targetId: 'kw-brand',
+    });
+    const summaries = buildAdsOptimizerTargetRowTableSummaries([hero, brand]);
+
+    const byText = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({ targetSearch: '  hero exact  ' })
+    );
+    const byId = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({ targetSearch: 'KW-BRAND' })
+    );
+
+    expect(byText.map((summary) => summary.identity.targetText)).toEqual(['Hero Exact']);
+    expect(byId.map((summary) => summary.identity.targetText)).toEqual(['Brand Broad']);
+  });
+
+  it('returns an empty filtered set for zero-match search and restores rows when the search is cleared', () => {
+    const hero = buildRow({
+      targetSnapshotId: 'snap-hero-clear',
+      persistedTargetKey: 'target-hero-clear',
+      targetText: 'Hero Exact',
+      targetId: 'kw-hero-clear',
+    });
+    const brand = buildRow({
+      targetSnapshotId: 'snap-brand-clear',
+      persistedTargetKey: 'target-brand-clear',
+      targetText: 'Brand Broad',
+      targetId: 'kw-brand-clear',
+    });
+    const summaries = buildAdsOptimizerTargetRowTableSummaries([hero, brand]);
+
+    const zeroMatch = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({ targetSearch: 'missing target' })
+    );
+    const restored = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({ targetSearch: '' })
+    );
+
+    expect(zeroMatch).toEqual([]);
+    expect(restored.map((summary) => summary.identity.targetText)).toHaveLength(2);
+  });
+
+  it('sorts current P&L with missing values last', () => {
+    const profitable = buildRow({
+      targetSnapshotId: 'snap-profit',
+      persistedTargetKey: 'target-profit',
+      targetText: 'profitable',
+      derived: {
+        ...buildRow().derived,
+        contributionAfterAds: 45,
+        profitDollars: 45,
+        lossDollars: null,
+      },
+    });
+    const lossMaking = buildRow({
+      targetSnapshotId: 'snap-loss',
+      persistedTargetKey: 'target-loss',
+      targetText: 'loss making',
+      derived: {
+        ...buildRow().derived,
+        contributionAfterAds: -15,
+        profitDollars: null,
+        lossDollars: 15,
+      },
+    });
+    const missing = buildRow({
+      targetSnapshotId: 'snap-missing-profit',
+      persistedTargetKey: 'target-missing-profit',
+      targetText: 'missing profit',
+      derived: {
+        ...buildRow().derived,
+        contributionAfterAds: null,
+        profitDollars: null,
+        lossDollars: null,
+      },
+    });
+    const summaries = buildAdsOptimizerTargetRowTableSummaries([lossMaking, missing, profitable]);
+
+    const sorted = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({
+        sortBy: 'state_current_profit_loss',
+        sortDirection: 'desc',
+      })
+    );
+
+    expect(sorted.map((summary) => summary.identity.targetText)).toEqual([
+      'profitable',
+      'loss making',
+      'missing profit',
+    ]);
+  });
+
+  it('sorts current ACoS ascending with missing values last', () => {
+    const efficient = buildRow({
+      targetSnapshotId: 'snap-acos-low',
+      persistedTargetKey: 'target-acos-low',
+      targetText: 'acos low',
+      raw: {
+        ...buildRow().raw,
+        acos: 0.19,
+      },
+    });
+    const inefficient = buildRow({
+      targetSnapshotId: 'snap-acos-high',
+      persistedTargetKey: 'target-acos-high',
+      targetText: 'acos high',
+      raw: {
+        ...buildRow().raw,
+        acos: 0.42,
+      },
+    });
+    const missing = buildRow({
+      targetSnapshotId: 'snap-acos-missing',
+      persistedTargetKey: 'target-acos-missing',
+      targetText: 'acos missing',
+      raw: {
+        ...buildRow().raw,
+        acos: null,
+      },
+    });
+    const summaries = buildAdsOptimizerTargetRowTableSummaries([inefficient, missing, efficient]);
+
+    const sorted = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({
+        sortBy: 'state_current_acos',
+        sortDirection: 'asc',
+      })
+    );
+
+    expect(sorted.map((summary) => summary.identity.targetText)).toEqual([
+      'acos low',
+      'acos high',
+      'acos missing',
+    ]);
+  });
+
+  it('sorts current Spend descending', () => {
+    const high = buildRow({
+      targetSnapshotId: 'snap-spend-high',
+      persistedTargetKey: 'target-spend-high',
+      targetText: 'spend high',
+      raw: {
+        ...buildRow().raw,
+        spend: 180,
+      },
+    });
+    const middle = buildRow({
+      targetSnapshotId: 'snap-spend-middle',
+      persistedTargetKey: 'target-spend-middle',
+      targetText: 'spend middle',
+      raw: {
+        ...buildRow().raw,
+        spend: 120,
+      },
+    });
+    const low = buildRow({
+      targetSnapshotId: 'snap-spend-low',
+      persistedTargetKey: 'target-spend-low',
+      targetText: 'spend low',
+      raw: {
+        ...buildRow().raw,
+        spend: 40,
+      },
+    });
+    const summaries = buildAdsOptimizerTargetRowTableSummaries([middle, low, high]);
+
+    const sorted = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({
+        sortBy: 'economics_current_spend',
+        sortDirection: 'desc',
+      })
+    );
+
+    expect(sorted.map((summary) => summary.identity.targetText)).toEqual([
+      'spend high',
+      'spend middle',
+      'spend low',
+    ]);
+  });
+
+  it('sorts current Sales descending', () => {
+    const high = buildRow({
+      targetSnapshotId: 'snap-sales-high',
+      persistedTargetKey: 'target-sales-high',
+      targetText: 'sales high',
+      raw: {
+        ...buildRow().raw,
+        sales: 500,
+      },
+    });
+    const middle = buildRow({
+      targetSnapshotId: 'snap-sales-middle',
+      persistedTargetKey: 'target-sales-middle',
+      targetText: 'sales middle',
+      raw: {
+        ...buildRow().raw,
+        sales: 300,
+      },
+    });
+    const low = buildRow({
+      targetSnapshotId: 'snap-sales-low',
+      persistedTargetKey: 'target-sales-low',
+      targetText: 'sales low',
+      raw: {
+        ...buildRow().raw,
+        sales: 100,
+      },
+    });
+    const summaries = buildAdsOptimizerTargetRowTableSummaries([middle, low, high]);
+
+    const sorted = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({
+        sortBy: 'economics_current_sales',
+        sortDirection: 'desc',
+      })
+    );
+
+    expect(sorted.map((summary) => summary.identity.targetText)).toEqual([
+      'sales high',
+      'sales middle',
+      'sales low',
+    ]);
+  });
+
+  it('sorts current Orders descending', () => {
+    const high = buildRow({
+      targetSnapshotId: 'snap-orders-high',
+      persistedTargetKey: 'target-orders-high',
+      targetText: 'orders high',
+      raw: {
+        ...buildRow().raw,
+        orders: 12,
+      },
+    });
+    const middle = buildRow({
+      targetSnapshotId: 'snap-orders-middle',
+      persistedTargetKey: 'target-orders-middle',
+      targetText: 'orders middle',
+      raw: {
+        ...buildRow().raw,
+        orders: 7,
+      },
+    });
+    const low = buildRow({
+      targetSnapshotId: 'snap-orders-low',
+      persistedTargetKey: 'target-orders-low',
+      targetText: 'orders low',
+      raw: {
+        ...buildRow().raw,
+        orders: 2,
+      },
+    });
+    const summaries = buildAdsOptimizerTargetRowTableSummaries([middle, low, high]);
+
+    const sorted = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({
+        sortBy: 'economics_current_orders',
+        sortDirection: 'desc',
+      })
+    );
+
+    expect(sorted.map((summary) => summary.identity.targetText)).toEqual([
+      'orders high',
+      'orders middle',
+      'orders low',
+    ]);
+  });
+
+  it('sorts sales contribution rank with rank 1 before rank 2 before missing', () => {
+    const first = buildRow({
+      targetSnapshotId: 'snap-rank-1',
+      persistedTargetKey: 'target-rank-1',
+      targetText: 'rank one',
+      raw: {
+        ...buildRow().raw,
+        sales: 500,
+      },
+    });
+    const second = buildRow({
+      targetSnapshotId: 'snap-rank-2',
+      persistedTargetKey: 'target-rank-2',
+      targetText: 'rank two',
+      raw: {
+        ...buildRow().raw,
+        sales: 300,
+      },
+    });
+    const missing = buildRow({
+      targetSnapshotId: 'snap-rank-missing',
+      persistedTargetKey: 'target-rank-missing',
+      targetText: 'rank missing',
+      raw: {
+        ...buildRow().raw,
+        sales: 100,
+      },
+    });
+    const summaries = buildAdsOptimizerTargetRowTableSummaries([second, missing, first]).map(
+      (summary) =>
+        summary.targetSnapshotId === 'snap-rank-missing'
+          ? {
+              ...summary,
+              sort: {
+                ...summary.sort,
+                contributionSalesRank: null,
+              },
+            }
+          : summary
+    );
+
+    const sorted = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({
+        sortBy: 'contribution_sales_rank',
+        sortDirection: 'asc',
+      })
+    );
+
+    expect(sorted.map((summary) => summary.identity.targetText)).toEqual([
+      'rank one',
+      'rank two',
+      'rank missing',
+    ]);
+  });
+
+  it('sorts organic latest rank with lower numbers first and missing values last', () => {
+    const best = buildRow({
+      targetSnapshotId: 'snap-organic-best',
+      persistedTargetKey: 'target-organic-best',
+      targetText: 'organic best',
+      rankingContext: {
+        ...buildRow().rankingContext!,
+        organicObservedRanks: [
+          { observedDate: '2026-03-01', rank: 8 },
+          { observedDate: '2026-03-05', rank: 6 },
+          { observedDate: '2026-03-09', rank: 5 },
+          { observedDate: '2026-03-12', rank: 4 },
+        ],
+      },
+    });
+    const worse = buildRow({
+      targetSnapshotId: 'snap-organic-worse',
+      persistedTargetKey: 'target-organic-worse',
+      targetText: 'organic worse',
+      rankingContext: {
+        ...buildRow().rankingContext!,
+        organicObservedRanks: [
+          { observedDate: '2026-03-01', rank: 18 },
+          { observedDate: '2026-03-05', rank: 16 },
+          { observedDate: '2026-03-09', rank: 14 },
+          { observedDate: '2026-03-12', rank: 12 },
+        ],
+      },
+    });
+    const missing = buildRow({
+      targetSnapshotId: 'snap-organic-missing',
+      persistedTargetKey: 'target-organic-missing',
+      targetText: 'organic missing',
+      rankingContext: {
+        ...buildRow().rankingContext!,
+        organicObservedRanks: [],
+      },
+    });
+    const summaries = buildAdsOptimizerTargetRowTableSummaries([worse, missing, best]);
+
+    const sorted = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({
+        sortBy: 'ranking_organic_latest',
+        sortDirection: 'asc',
+      })
+    );
+
+    expect(sorted.map((summary) => summary.identity.targetText)).toEqual([
+      'organic best',
+      'organic worse',
+      'organic missing',
+    ]);
+  });
+
+  it('sorts organic trend by defined score and keeps No data last', () => {
+    const rising = buildRow({
+      targetSnapshotId: 'snap-trend-rising',
+      persistedTargetKey: 'target-trend-rising',
+      targetText: 'trend rising',
+      rankingContext: {
+        ...buildRow().rankingContext!,
+        organicObservedRanks: [
+          { observedDate: '2026-03-01', rank: 20 },
+          { observedDate: '2026-03-03', rank: 18 },
+          { observedDate: '2026-03-05', rank: 17 },
+          { observedDate: '2026-03-07', rank: 11 },
+          { observedDate: '2026-03-09', rank: 10 },
+          { observedDate: '2026-03-11', rank: 9 },
+        ],
+      },
+    });
+    const maintain = buildRow({
+      targetSnapshotId: 'snap-trend-maintain',
+      persistedTargetKey: 'target-trend-maintain',
+      targetText: 'trend maintain',
+      rankingContext: {
+        ...buildRow().rankingContext!,
+        organicObservedRanks: [
+          { observedDate: '2026-03-01', rank: 20 },
+          { observedDate: '2026-03-03', rank: 18 },
+          { observedDate: '2026-03-05', rank: 17 },
+          { observedDate: '2026-03-07', rank: 16 },
+          { observedDate: '2026-03-09', rank: 15 },
+          { observedDate: '2026-03-11', rank: 14 },
+        ],
+      },
+    });
+    const limited = buildRow({
+      targetSnapshotId: 'snap-trend-limited',
+      persistedTargetKey: 'target-trend-limited',
+      targetText: 'trend limited',
+      rankingContext: {
+        ...buildRow().rankingContext!,
+        organicObservedRanks: [
+          { observedDate: '2026-03-01', rank: 14 },
+          { observedDate: '2026-03-03', rank: 13 },
+          { observedDate: '2026-03-05', rank: 12 },
+        ],
+      },
+    });
+    const missing = buildRow({
+      targetSnapshotId: 'snap-trend-missing',
+      persistedTargetKey: 'target-trend-missing',
+      targetText: 'trend missing',
+      rankingContext: {
+        ...buildRow().rankingContext!,
+        organicObservedRanks: [],
+      },
+    });
+    const summaries = buildAdsOptimizerTargetRowTableSummaries([
+      limited,
+      missing,
+      maintain,
+      rising,
+    ]);
+
+    const sorted = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({
+        sortBy: 'ranking_organic_trend',
+        sortDirection: 'desc',
+      })
+    );
+
+    expect(sorted.map((summary) => summary.identity.targetText)).toEqual([
+      'trend rising',
+      'trend maintain',
+      'trend limited',
+      'trend missing',
+    ]);
   });
 
   it('classifies ranking trends with the required fluctuation-safe vocabulary', () => {
