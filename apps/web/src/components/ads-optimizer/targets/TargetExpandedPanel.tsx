@@ -4,7 +4,8 @@ import type { ReactNode } from 'react';
 
 type TargetExpandedPanelProps = {
   targetSnapshotId: string;
-  onCollapse?: () => void;
+  contextStrip: ReactNode;
+  tabStrip: ReactNode;
   children: ReactNode;
 };
 
@@ -12,21 +13,15 @@ export default function TargetExpandedPanel(props: TargetExpandedPanelProps) {
   return (
     <div
       id={`target-inline-panel-${props.targetSnapshotId}`}
-      className="rounded-2xl border border-border bg-surface/90 p-5 shadow-sm"
+      className="grid h-[36rem] min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden rounded-2xl border border-border bg-surface/90 shadow-sm"
     >
-      {props.onCollapse ? (
-        <div className="mb-4 flex justify-end">
-          <button
-            type="button"
-            className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-foreground transition hover:border-primary/40 hover:text-primary"
-            aria-label="Collapse expanded target details"
-            onClick={props.onCollapse}
-          >
-            Collapse details
-          </button>
-        </div>
-      ) : null}
-      {props.children}
+      <div className="min-w-0 overflow-x-auto border-b-[0.5px] border-border px-4 py-[6px]">
+        {props.contextStrip}
+      </div>
+      <div className="min-w-0 border-b-[0.5px] border-border">{props.tabStrip}</div>
+      <div className="min-h-0 overflow-y-auto px-4 pt-[14px] pb-4">
+        {props.children}
+      </div>
     </div>
   );
 }

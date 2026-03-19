@@ -30,7 +30,7 @@ Follow:
 - Zero-click targets can legitimately show expected-unavailable search-term diagnostics; do not frame that as broken coverage by default.
 - Old optimizer deep links must remain usable: normalize legacy `view=history|config|outcomes` into the V2 shell instead of breaking them.
 - Prefer compact header/adjacent controls for utilities over adding more primary tabs.
-- Phase 5 is the next major route/UI step:
-  - build the V2 Targets row model
-  - split/refactor the large Targets panel
-  - move toward inline row expansion instead of re-entrenching queue + drawer as the default interaction model
+- Targets route/UI work now follows the locked Phase 6 contracts:
+  - Phase 6A remains the authoritative collapsed-row contract
+  - Phase 6B.1 is the current expanded-row step
+  - use `docs/ads-optimizer/ads_optimizer_v2_phase6b_expanded_row_build_plan.md` for the fixed-height tab shell with only the Why flagged tab active

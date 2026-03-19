@@ -24,6 +24,10 @@ const expandedPanelPath = path.join(
   process.cwd(),
   'apps/web/src/components/ads-optimizer/targets/TargetExpandedPanel.tsx'
 );
+const expandedTabsPath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads-optimizer/targets/TargetExpandedTabs.tsx'
+);
 const overrideFormPath = path.join(
   process.cwd(),
   'apps/web/src/components/ads-optimizer/targets/TargetOverrideForm.tsx'
@@ -59,6 +63,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     const toolbarSource = fs.readFileSync(toolbarPath, 'utf-8');
     const summaryRowSource = fs.readFileSync(summaryRowPath, 'utf-8');
     const expandedPanelSource = fs.readFileSync(expandedPanelPath, 'utf-8');
+    const expandedTabsSource = fs.readFileSync(expandedTabsPath, 'utf-8');
     const overrideFormSource = fs.readFileSync(overrideFormPath, 'utf-8');
 
     expect(wrapperSource).toContain('TargetsPageShell');
@@ -67,10 +72,11 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(shellSource).toContain('<TargetsToolbar');
     expect(shellSource).toContain('<TargetSummaryRow');
     expect(shellSource).toContain('<TargetExpandedPanel');
-    expect(shellSource).toContain('<TargetOverrideForm');
+    expect(shellSource).toContain('<TargetExpandedTabs');
     expect(shellSource).toContain('Targets review');
-    expect(shellSource).toContain('buildWorkspaceTargetHref');
     expect(shellSource).toContain('buildWhyFlaggedNarrative');
+    expect(shellSource).toContain("useState<TargetExpandedTabKey>('why_flagged')");
+    expect(shellSource).toContain("setActiveExpandedTab('why_flagged');");
     expect(shellSource).toContain('expandedContent={');
     expect(shellSource).toContain('colSpan={7}');
     expect(shellSource).toContain('data-aph-hscroll');
@@ -114,9 +120,6 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(shellSource).toContain('Organic trend');
     expect(shellSource).toContain('toggleExpandedTargetSnapshotId');
     expect(shellSource).toContain('resolveVisibleExpandedTargetSnapshotId');
-    expect(shellSource).toContain('buildAdsOptimizerSearchTermEvidenceRows');
-    expect(shellSource).toContain('buildAdsOptimizerPlacementEvidenceRows');
-    expect(shellSource).toContain('<SectionDisclosureCard');
     expect(shellSource).not.toContain('Target queue');
     expect(shellSource).not.toContain('Use the drawer');
     const tableLayoutPrefsSource = fs.readFileSync(tableLayoutPrefsPath, 'utf-8');
@@ -190,50 +193,84 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(toolbarSource).toContain('Handoff selected to Ads Workspace');
     expect(toolbarSource).toContain('Open Ads Workspace');
     expect(expandedPanelSource).toContain('target-inline-panel-');
-    expect(expandedPanelSource).toContain('Collapse details');
+    expect(expandedPanelSource).toContain('h-[36rem]');
+    expect(expandedPanelSource).toContain('grid-rows-[auto_auto_minmax(0,1fr)]');
+    expect(expandedPanelSource).toContain('overflow-y-auto');
+    expect(expandedPanelSource).toContain('overflow-hidden');
+    expect(expandedPanelSource).toContain('border-b-[0.5px]');
+    expect(expandedTabsSource).toContain('role="tablist"');
+    expect(expandedTabsSource).toContain('role="tab"');
+    expect(expandedTabsSource).toContain('overflow-x-auto');
+    expect(expandedTabsSource).toContain('aria-selected');
+    expect(expandedTabsSource).toContain('aria-controls');
+    expect(expandedTabsSource).toContain('target-expanded-tab-');
+    expect(expandedTabsSource).toContain('target-expanded-tabpanel-');
     expect(expandedPanelSource).not.toContain('Target detail drawer');
     expect(overrideFormSource).toContain('Save override bundle');
     expect(overrideFormSource).toContain('Replacement action bundle');
   });
 
-  it('keeps expanded sections in the Phase 6 order with current-vs-proposed and override detail inline', () => {
+  it('renders the tabbed expanded row as a fixed-height shell with one active panel at a time', () => {
     const shellSource = fs.readFileSync(shellPath, 'utf-8');
+    const expandedTabsSource = fs.readFileSync(expandedTabsPath, 'utf-8');
     const expandedStart = shellSource.indexOf('const activeExpandedContent');
     const expandedSource = shellSource.slice(
       expandedStart,
       shellSource.indexOf('\n  return (', expandedStart)
     );
+    const normalizedTabsSource = expandedTabsSource.replace(/\s+/g, ' ').trim();
 
-    const orderedLabels = [
-      '">Why flagged</div>',
-      '">Change plan</div>',
-      '">Search terms</div>',
-      '">Placement</div>',
-      'label="Metrics"',
-      '">Override</div>',
-      'label="Advanced"',
+    const orderedTabLabels = [
+      "label: 'Why flagged'",
+      "label: 'Change plan'",
+      "label: 'Search term'",
+      "label: 'Placement'",
+      "label: 'Metrics'",
+      "label: 'Override'",
+      "label: 'Advanced'",
     ];
-    const indexes = orderedLabels.map((label) => expandedSource.indexOf(label));
+    const indexes = orderedTabLabels.map((label) => expandedTabsSource.indexOf(label));
 
     indexes.forEach((index, position) => {
-      expect(index, `missing section label ${orderedLabels[position]}`).toBeGreaterThan(-1);
+      expect(index, `missing tab label ${orderedTabLabels[position]}`).toBeGreaterThan(-1);
     });
     for (let index = 1; index < indexes.length; index += 1) {
       expect(indexes[index]).toBeGreaterThan(indexes[index - 1]!);
     }
 
-    expect(expandedSource).toContain('supported workspace');
-    expect(shellSource).toContain('Review-only proposed action');
-    expect(shellSource).toContain('Current');
-    expect(shellSource).toContain('Proposed');
+    expect(normalizedTabsSource).toContain(
+      "role=\"tablist\" aria-label=\"Expanded target details\""
+    );
+    expect(expandedSource).toContain('role="tabpanel"');
+    expect(expandedSource).toContain("getTargetExpandedTabPanelId(");
+    expect(expandedSource).toContain('switch (activeExpandedTab)');
+    expect(expandedSource).toContain("case 'why_flagged'");
+    expect(expandedSource).toContain("case 'change_plan'");
+    expect(expandedSource).toContain("case 'search_term'");
+    expect(expandedSource).toContain("case 'placement'");
+    expect(expandedSource).toContain("case 'metrics'");
+    expect(expandedSource).toContain("case 'override'");
+    expect(expandedSource).toContain("case 'advanced'");
+    expect(expandedSource).toContain('Reason codes');
+    expect(expandedSource).toContain('No persisted reason codes');
     expect(expandedSource).toContain('Search-term evidence');
-    expect(expandedSource).toContain('max-h-72 overflow-y-auto');
     expect(expandedSource).toContain('Campaign-level context only. Placement evidence');
-    expect(expandedSource).toContain('defaultExpanded={false}');
-    expect(expandedSource).toContain('OverrideDisclosureCard');
     expect(expandedSource).toContain('<TargetOverrideForm');
-    expect(expandedSource).toContain('Open in Ads Workspace');
-    expect(expandedSource).toContain('Handoff this target');
+    expect(expandedSource).toContain('TargetAdvancedSection');
+    expect(expandedSource).toContain("role.currentRole.label} → {activeRow.role.desiredRole.label");
+    expect(expandedSource).toContain("`Objective: ${props.productState?.objective ?? 'Not captured'}`");
+    expect(expandedSource).toContain('Blocking condition unresolved');
+    expect(expandedSource).toContain('Auto-pause eligible');
+    expect(expandedSource).not.toContain('Open in Ads Workspace');
+    expect(expandedSource).not.toContain('Handoff this target');
+    expect(expandedSource).not.toContain('Collapse details');
+    expect(expandedSource).not.toContain("activeRow.typeLabel ?? 'Target'");
+    expect(expandedSource).not.toContain('activeRow.campaignName ?? activeRow.campaignId');
+    expect(expandedSource).not.toContain('Current ${activeRow.role.currentRole.label}');
+    expect(expandedSource).not.toContain('Next ${activeRow.role.desiredRole.label}');
+    expect(expandedSource).not.toContain('OverrideDisclosureCard');
+    expect(expandedSource).not.toContain('SectionDisclosureCard');
+    expect(expandedSource).not.toContain("hidden={activeExpandedTab !== 'why_flagged'}");
   });
 
   it('pulls exact-window run snapshots plus persisted recommendations and role history', () => {

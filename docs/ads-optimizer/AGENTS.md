@@ -176,10 +176,10 @@ For every phase:
   - manual hero query override per ASIN with reset-to-auto
 - Hero query override is persisted in optimizer-owned state (`ads_optimizer_manual_overrides`), not `product_profile.profile_json`.
 - Saved manual hero query should drive all hero-query-dependent Overview sections until reset to auto.
-- The next major step is Phase 5 on Targets:
-  - create the V2 target row model
-  - split/refactor the large Targets panel
-  - move toward inline expansion and a denser operator-first Targets UX
+- Targets work has moved beyond the old Phase 5 planning language:
+  - Phase 6A remains the authoritative collapsed-row contract
+  - Phase 6B.1 is the current expanded-row step
+  - use `docs/ads-optimizer/ads_optimizer_v2_phase6b_expanded_row_build_plan.md` for the fixed-height tab shell with only the Why flagged tab active
 
 ## When in doubt
 Choose the safer option that:

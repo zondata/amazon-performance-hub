@@ -52,6 +52,11 @@ import {
 } from '@/lib/time/formatUiDate';
 import TargetAdvancedSection from './TargetAdvancedSection';
 import TargetExpandedPanel from './TargetExpandedPanel';
+import TargetExpandedTabs, {
+  getTargetExpandedTabId,
+  getTargetExpandedTabPanelId,
+  type TargetExpandedTabKey,
+} from './TargetExpandedTabs';
 import TargetOverrideForm from './TargetOverrideForm';
 import TargetSummaryRow from './TargetSummaryRow';
 import TargetsToolbar from './TargetsToolbar';
@@ -295,33 +300,8 @@ const ProposedChangeSummaryCard = (props: { card: ProposedChangeCard }) => (
   </div>
 );
 
-const StatePill = (props: {
-  kind: 'efficiency' | 'confidence' | 'importance';
-  value: string | null;
-  label: string;
-}) => (
-  <span
-    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap ${statePillClass(
-      props.kind,
-      props.value
-    )}`}
-  >
-    {props.label}
-  </span>
-);
-
-const RolePill = (props: { value: AdsOptimizerTargetRole | null; label: string }) => (
-  <span
-    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap ${rolePillClass(
-      props.value
-    )}`}
-  >
-    {props.label}
-  </span>
-);
-
 const ReasonCodeBadge = (props: { code: string }) => (
-  <span className="rounded-full border border-border bg-surface-2 px-2 py-1 font-mono text-[11px] text-foreground">
+  <span className="rounded-[4px] border border-border bg-surface-2 px-2 py-[3px] font-mono text-[10px] text-muted">
     {props.code}
   </span>
 );
@@ -411,41 +391,6 @@ const EvidenceTag = (props: { label: string; tone?: 'neutral' | 'good' | 'warn' 
     >
       {props.label}
     </span>
-  );
-};
-
-const SectionDisclosureCard = (props: {
-  id: string;
-  label: string;
-  summary: ReactNode;
-  defaultExpanded: boolean;
-  children: ReactNode;
-}) => {
-  const [expanded, setExpanded] = useState(props.defaultExpanded);
-
-  return (
-    <section className="rounded-xl border border-border bg-surface px-4 py-4">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={props.id}
-        className="flex w-full items-start justify-between gap-3 text-left"
-        onClick={() => setExpanded((current) => !current)}
-      >
-        <div className="min-w-0">
-          <div className="text-xs uppercase tracking-[0.3em] text-muted">{props.label}</div>
-          <div className="mt-2 text-sm text-muted">{props.summary}</div>
-        </div>
-        <div className="rounded-lg border border-border bg-surface-2 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
-          {expanded ? 'Collapse' : 'Expand'}
-        </div>
-      </button>
-      {expanded ? (
-        <div id={props.id} className="mt-4">
-          {props.children}
-        </div>
-      ) : null}
-    </section>
   );
 };
 
@@ -687,55 +632,6 @@ const formatPlacementLabel = (value: string | null) => {
   return labelize(value);
 };
 
-const OverrideDisclosureCard = (props: {
-  id: string;
-  label: string;
-  status: 'None' | 'Active' | 'Applied';
-  summary: string;
-  notePreview: string;
-  highlight: boolean;
-  defaultExpanded: boolean;
-  children: ReactNode;
-}) => {
-  const [expanded, setExpanded] = useState(props.defaultExpanded);
-
-  return (
-    <div className="space-y-4">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={props.id}
-        className={`flex w-full items-start justify-between gap-3 rounded-xl border px-4 py-4 text-left transition hover:border-primary/40 ${
-          props.highlight ? 'border-amber-200 bg-amber-50/70' : 'border-border bg-surface-2'
-        }`}
-        onClick={() => setExpanded((current) => !current)}
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="text-xs uppercase tracking-[0.3em] text-muted">{props.label}</div>
-            <div
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${getOverrideStatusClass(
-                props.status
-              )}`}
-            >
-              {props.status}
-            </div>
-          </div>
-          <div className="mt-2 line-clamp-1 text-sm font-semibold text-foreground">
-            {props.summary}
-          </div>
-          <div className="mt-1 line-clamp-1 text-sm text-muted">{props.notePreview}</div>
-        </div>
-        <div className="pt-0.5 text-xs font-semibold uppercase tracking-wide text-muted">
-          {expanded ? 'Collapse' : 'Expand'}
-        </div>
-      </button>
-
-      {expanded ? <div id={props.id}>{props.children}</div> : null}
-    </div>
-  );
-};
-
 const getOverrideStatus = (override: AdsOptimizerRecommendationOverride | null | undefined) => {
   if (!override) return 'None';
   return override.apply_count > 0 ? 'Applied' : 'Active';
@@ -862,26 +758,6 @@ const buildWhyFlaggedNarrative = (args: {
   return pieces.join(' ');
 };
 
-const buildWorkspaceTargetHref = (args: {
-  asin: string;
-  start: string;
-  end: string;
-  targetId: string;
-}) => {
-  const usp = new URLSearchParams({
-    panel: 'workspace',
-    channel: 'sp',
-    level: 'targets',
-    view: 'table',
-    asin: args.asin,
-    start: args.start,
-    end: args.end,
-    compose_level: 'targets',
-    compose_row: args.targetId,
-  });
-  return `/ads/performance?${usp.toString()}`;
-};
-
 const buildTopList = (rows: AdsOptimizerTargetReviewRow[], kind: 'risk' | 'opportunity') =>
   [...rows]
     .filter((row) =>
@@ -919,6 +795,8 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
   );
   const [hasLoadedTableLayoutPrefs, setHasLoadedTableLayoutPrefs] = useState(false);
   const [activeColumnResize, setActiveColumnResize] = useState<ActiveColumnResize | null>(null);
+  const [activeExpandedTab, setActiveExpandedTab] =
+    useState<TargetExpandedTabKey>('why_flagged');
   const rowSummaries = useMemo(
     () => buildAdsOptimizerTargetRowTableSummaries(props.rows),
     [props.rows]
@@ -1072,6 +950,10 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
     };
   }, [activeColumnResize]);
 
+  useEffect(() => {
+    setActiveExpandedTab('why_flagged');
+  }, [activeTargetSnapshotId]);
+
   const expandTargetRow = (targetSnapshotId: string) => {
     setSelectedTargetSnapshotId(targetSnapshotId);
   };
@@ -1080,10 +962,6 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
     setSelectedTargetSnapshotId((current) =>
       toggleExpandedTargetSnapshotId(current, targetSnapshotId)
     );
-  };
-
-  const collapseExpandedTargetRow = () => {
-    setSelectedTargetSnapshotId(null);
   };
 
   if (props.asin === 'all') {
@@ -1352,160 +1230,101 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
         const placementEvidenceRows = buildAdsOptimizerPlacementEvidenceRows(activeRow);
         const overrideStatus = getOverrideStatus(activeRow.manualOverride);
         const overrideSummary = buildOverrideActionSummary(manualOverrideCards);
-        const overrideSectionId = `human-override-panel-${activeRow.targetSnapshotId}`;
-        const metricsDisclosureId = `metrics-panel-${activeRow.targetSnapshotId}`;
-        const advancedDisclosureId = `advanced-panel-${activeRow.targetSnapshotId}`;
         const portfolioControls = activeRow.recommendation?.portfolioControls ?? null;
-        const advancedSectionCount = [
-          true,
-          Boolean(portfolioControls),
-          true,
-          activeRow.roleHistory.length > 0,
-          targetComparisonChanges.length > 0,
-          targetRollbackGuidance.length > 0,
-          true,
-        ].filter(Boolean).length;
-
-        return (
-          <TargetExpandedPanel
-            targetSnapshotId={activeRow.targetSnapshotId}
-            onCollapse={collapseExpandedTargetRow}
-          >
-            <div className="space-y-5">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        const importanceStripLabel =
+          activeRow.state.importance.label.split(' / ')[0] || activeRow.state.importance.label;
+        const contextFacts = [
+          activeRow.role.guardrails.flags.autoPauseEligible ? 'Auto-pause eligible' : null,
+          `Objective: ${props.productState?.objective ?? 'Not captured'}`,
+          activeRow.recommendation?.spendDirection === 'stop' ||
+          activeRow.queue.spendDirection === 'stop' ||
+          activeCriticalWarnings.length > 0 ||
+          activeRowSpecificExceptions.length > 0
+            ? 'Blocking condition unresolved'
+            : null,
+        ].filter((fact): fact is string => Boolean(fact));
+        const combinedCallouts = [...activeCriticalWarnings, ...activeRowSpecificExceptions];
+        const activePanelId = getTargetExpandedTabPanelId(
+          activeRow.targetSnapshotId,
+          activeExpandedTab
+        );
+        const activePanelContent = (() => {
+          switch (activeExpandedTab) {
+            case 'why_flagged':
+              return (
                 <div>
-                  <div className="text-lg font-semibold text-foreground">{activeRow.targetText}</div>
-                  <div className="mt-1 text-sm text-muted">
-                    {activeRow.typeLabel ?? 'Target'} · {activeRow.matchType ?? '—'} ·{' '}
-                    {activeRow.targetId}
+                  <div className="mb-[6px] text-[10px] font-medium uppercase tracking-[0.4px] text-muted">
+                    Flag explanation
                   </div>
-                  <div className="mt-1 text-sm text-muted">
-                    {activeRow.campaignName ?? activeRow.campaignId} /{' '}
-                    {activeRow.adGroupName ?? activeRow.adGroupId}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <RolePill
-                      value={activeRow.role.currentRole.value}
-                      label={`Current ${activeRow.role.currentRole.label}`}
-                    />
-                    <RolePill
-                      value={activeRow.role.desiredRole.value}
-                      label={`Next ${activeRow.role.desiredRole.label}`}
-                    />
-                    <StatePill
-                      kind="efficiency"
-                      value={activeRow.state.efficiency.value}
-                      label={activeRow.state.efficiency.label}
-                    />
-                    <StatePill
-                      kind="confidence"
-                      value={activeRow.state.confidence.value}
-                      label={activeRow.state.confidence.label}
-                    />
-                    <StatePill
-                      kind="importance"
-                      value={activeRow.state.importance.value}
-                      label={activeRow.state.importance.label}
-                    />
-                    {activeRow.manualOverride ? (
-                      <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
-                        {buildOverrideBadgeLabel(activeRow.manualOverride)}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Link
-                    href={buildWorkspaceTargetHref({
-                      asin: props.asin,
-                      start: props.start,
-                      end: props.end,
-                      targetId: activeRow.persistedTargetKey,
-                    })}
-                    className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm font-semibold text-foreground"
-                  >
-                    Open in Ads Workspace
-                  </Link>
-                  <form action={props.handoffAction}>
-                    <input type="hidden" name="return_to" value={props.returnTo} />
-                    <input
-                      type="hidden"
-                      name="workspace_return_to"
-                      value={props.workspaceQueueHref}
-                    />
-                    <input type="hidden" name="asin" value={props.asin} />
-                    <input type="hidden" name="start" value={props.start} />
-                    <input type="hidden" name="end" value={props.end} />
-                    <input
-                      type="hidden"
-                      name="target_snapshot_id"
-                      value={activeRow.targetSnapshotId}
-                    />
-                    <button
-                      type="submit"
-                      disabled={getWorkspaceSupportedActions(activeRow).length === 0}
-                      className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Handoff this target
-                    </button>
-                  </form>
-                </div>
-              </div>
+                  <p className="text-[12px] leading-[1.6] text-foreground/80">
+                    {whyFlaggedNarrative}
+                  </p>
 
-              <section className="rounded-xl border border-border bg-surface px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.3em] text-muted">Why flagged</div>
-                {activeCriticalWarnings.length > 0 || activeRowSpecificExceptions.length > 0 ? (
-                  <div
-                    className={`mt-3 rounded-xl border px-4 py-3 text-sm ${
-                      activeCriticalWarnings.length > 0
-                        ? 'border-rose-200 bg-rose-50 text-rose-900'
-                        : 'border-amber-200 bg-amber-50 text-amber-900'
-                    }`}
-                  >
-                    <div className="font-semibold">Coverage and exception callouts</div>
-                    {activeCriticalWarnings.length > 0 ? (
-                      <ul className="mt-2 space-y-1">
-                        {activeCriticalWarnings.map((note) => (
-                          <li key={`${activeRow.targetSnapshotId}:critical:${note}`}>{note}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {activeRowSpecificExceptions.length > 0 ? (
-                      <ul className="mt-2 space-y-1">
-                        {activeRowSpecificExceptions.map((note) => (
-                          <li key={`${activeRow.targetSnapshotId}:exception:${note}`}>{note}</li>
-                        ))}
-                      </ul>
-                    ) : null}
+                  <div className="mt-[14px] mb-[6px] text-[10px] font-medium uppercase tracking-[0.4px] text-muted">
+                    Coverage callouts
                   </div>
-                ) : null}
-                <div className="mt-3 text-sm text-foreground">{whyFlaggedNarrative}</div>
-              </section>
+                  {combinedCallouts.length > 0 ? (
+                    <div className="space-y-2">
+                      {combinedCallouts.map((note, index) => (
+                        <div
+                          key={`${activeRow.targetSnapshotId}:callout:${index}:${note}`}
+                          className="flex items-start gap-2"
+                        >
+                          <span className="mt-[5px] h-[5px] w-[5px] flex-none rounded-full bg-amber-500" />
+                          <div className="text-[11px] text-amber-800">{note}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-[12px] leading-[1.6] text-muted">
+                      No coverage callouts.
+                    </div>
+                  )}
 
-              <section className="rounded-xl border border-border bg-surface px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.3em] text-muted">Change plan</div>
-                <div className="mt-3 rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
-                  {formatNumber(getWorkspaceSupportedActions(activeRow).length)} supported workspace
-                  action(s) can be staged from this target.{' '}
-                  {formatNumber(getUnsupportedReviewOnlyActions(activeRow).length)} action(s) remain
-                  review-only inside the optimizer.
+                  <div className="mt-[14px] mb-[6px] text-[10px] font-medium uppercase tracking-[0.4px] text-muted">
+                    Reason codes
+                  </div>
+                  {activeRow.queue.reasonCodeBadges.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {activeRow.queue.reasonCodeBadges.map((code) => (
+                        <ReasonCodeBadge
+                          key={`${activeRow.targetSnapshotId}:reason-code:${code}`}
+                          code={code}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-[12px] leading-[1.6] text-muted">
+                      No persisted reason codes
+                    </div>
+                  )}
                 </div>
-                {proposedChangeCards.length > 0 ? (
-                  <div className="mt-3 grid gap-3">
-                    {proposedChangeCards.map((card) => (
-                      <ProposedChangeSummaryCard key={card.key} card={card} />
-                    ))}
+              );
+            case 'change_plan':
+              return (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
+                    {formatNumber(getWorkspaceSupportedActions(activeRow).length)} supported
+                    workspace action(s) can be staged from this target.{' '}
+                    {formatNumber(getUnsupportedReviewOnlyActions(activeRow).length)} action(s)
+                    remain review-only inside the optimizer.
                   </div>
-                ) : (
-                  <div className="mt-3 rounded-xl border border-border bg-surface-2 px-4 py-4 text-sm text-muted">
-                    No concrete changes were proposed for this target in the selected run.
-                  </div>
-                )}
-              </section>
-
-              <section className="rounded-xl border border-border bg-surface px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.3em] text-muted">Search terms</div>
-                <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.8fr)_minmax(280px,1fr)]">
+                  {proposedChangeCards.length > 0 ? (
+                    <div className="grid gap-3">
+                      {proposedChangeCards.map((card) => (
+                        <ProposedChangeSummaryCard key={card.key} card={card} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-border bg-surface-2 px-4 py-4 text-sm text-muted">
+                      No concrete changes were proposed for this target in the selected run.
+                    </div>
+                  )}
+                </div>
+              );
+            case 'search_term':
+              return (
+                <div className="grid gap-3 xl:grid-cols-[minmax(0,1.8fr)_minmax(280px,1fr)]">
                   <div className="rounded-xl border border-border/70 bg-surface-2 px-3 py-3">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div>
@@ -1644,11 +1463,10 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                     </div>
                   </div>
                 </div>
-              </section>
-
-              <section className="rounded-xl border border-border bg-surface px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.3em] text-muted">Placement</div>
-                <div className="mt-3 space-y-3">
+              );
+            case 'placement':
+              return (
+                <div className="space-y-3">
                   <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
                     Campaign-level context only. Placement evidence should guide operator review,
                     not be treated as target-owned history.
@@ -1737,19 +1555,16 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                             ) : null}
                           </div>
                         )}
-                        <div className="mt-3 text-[11px] leading-5 text-muted">{placement.note}</div>
+                        <div className="mt-3 text-[11px] leading-5 text-muted">
+                          {placement.note}
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
-              </section>
-
-              <SectionDisclosureCard
-                id={metricsDisclosureId}
-                label="Metrics"
-                summary="Metrics details stay collapsed by default until the operator needs deeper KPI context."
-                defaultExpanded={false}
-              >
+              );
+            case 'metrics':
+              return (
                 <div className="grid gap-4 xl:grid-cols-3">
                   <DetailGrid
                     items={[
@@ -1798,107 +1613,115 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                     ]}
                   />
                 </div>
-              </SectionDisclosureCard>
-
-              <section className="rounded-xl border border-border bg-surface px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.3em] text-muted">Override</div>
-                <div className="mt-3">
-                  <OverrideDisclosureCard
-                    key={`${activeRow.targetSnapshotId}:${props.overrideError ? 'error' : 'default'}`}
-                    id={overrideSectionId}
-                    label="Manual override"
-                    status={overrideStatus}
-                    summary={overrideSummary}
-                    notePreview={
-                      activeRow.manualOverride?.operator_note ??
-                      'Open to create or replace a staged override bundle.'
-                    }
-                    highlight={Boolean(activeRow.manualOverride)}
-                    defaultExpanded={props.overrideError}
+              );
+            case 'override':
+              return (
+                <div className="space-y-4">
+                  <div
+                    className={`rounded-xl border px-4 py-4 ${
+                      activeRow.manualOverride
+                        ? 'border-amber-200 bg-amber-50/70'
+                        : 'border-border bg-surface-2'
+                    }`}
                   >
-                    <div className="space-y-4">
-                      <div className="text-sm text-foreground">Replace staged actions</div>
-                      <div className="text-sm text-muted">
-                        This override replaces the staged Ads Workspace bundle. The persisted
-                        optimizer proposal above remains visible for audit review.
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-[10px] font-medium uppercase tracking-[0.4px] text-muted">
+                        Manual override
                       </div>
+                      <div
+                        className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${getOverrideStatusClass(
+                          overrideStatus
+                        )}`}
+                      >
+                        {overrideStatus}
+                      </div>
+                    </div>
+                    <div className="mt-2 text-sm font-semibold text-foreground">
+                      {overrideSummary}
+                    </div>
+                    <div className="mt-1 text-sm text-muted">
+                      {activeRow.manualOverride?.operator_note ??
+                        'Open to create or replace a staged override bundle.'}
+                    </div>
+                  </div>
 
-                      {activeRow.manualOverride ? (
-                        <div className="space-y-3">
-                          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <div className="rounded-full border border-amber-200 bg-surface px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
-                                {buildOverrideBadgeLabel(activeRow.manualOverride)}
-                              </div>
-                              <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-                                Override scope
-                              </div>
-                              <div className="text-sm text-foreground">
-                                {labelize(activeRow.manualOverride.override_scope)}
-                              </div>
+                  <div className="space-y-4">
+                    <div className="text-sm text-foreground">Replace staged actions</div>
+                    <div className="text-sm text-muted">
+                      This override replaces the staged Ads Workspace bundle. The persisted
+                      optimizer proposal above remains visible for audit review.
+                    </div>
+
+                    {activeRow.manualOverride ? (
+                      <div className="space-y-3">
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="rounded-full border border-amber-200 bg-surface px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                              {buildOverrideBadgeLabel(activeRow.manualOverride)}
                             </div>
-                            <div className="mt-3 text-sm text-foreground">
-                              <span className="font-semibold">Override note:</span>{' '}
-                              {activeRow.manualOverride.operator_note}
+                            <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+                              Override scope
                             </div>
-                            <div className="mt-2 text-xs text-muted">
-                              Created {formatDateTime(activeRow.manualOverride.created_at)} · applied{' '}
-                              {formatNumber(activeRow.manualOverride.apply_count)} time(s)
+                            <div className="text-sm text-foreground">
+                              {labelize(activeRow.manualOverride.override_scope)}
                             </div>
                           </div>
-                          {manualOverrideCards.length > 0 ? (
-                            <div className="grid gap-3">
-                              {manualOverrideCards.map((card) => (
-                                <ProposedChangeSummaryCard key={card.key} card={card} />
-                              ))}
-                            </div>
-                          ) : null}
+                          <div className="mt-3 text-sm text-foreground">
+                            <span className="font-semibold">Override note:</span>{' '}
+                            {activeRow.manualOverride.operator_note}
+                          </div>
+                          <div className="mt-2 text-xs text-muted">
+                            Created {formatDateTime(activeRow.manualOverride.created_at)} · applied{' '}
+                            {formatNumber(activeRow.manualOverride.apply_count)} time(s)
+                          </div>
                         </div>
-                      ) : (
-                        <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
-                          No active human override is saved for this target.
-                        </div>
-                      )}
+                        {manualOverrideCards.length > 0 ? (
+                          <div className="grid gap-3">
+                            {manualOverrideCards.map((card) => (
+                              <ProposedChangeSummaryCard key={card.key} card={card} />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
+                        No active human override is saved for this target.
+                      </div>
+                    )}
 
-                      {activeRow.recommendation ? (
-                        <TargetOverrideForm
-                          row={activeRow}
-                          recommendation={activeRow.recommendation}
-                          productId={props.productId}
-                          returnTo={props.returnTo}
-                          saveRecommendationOverrideAction={props.saveRecommendationOverrideAction}
-                          bidActionEditor={bidActionEditor}
-                          stateActionEditor={stateActionEditor}
-                          placementActionEditor={placementActionEditor}
-                          currentBid={currentBidForOverride}
-                          nextBid={nextBidForOverride}
-                          currentState={currentStateForOverride}
-                          nextState={nextStateForOverride}
-                          currentPlacementCode={currentPlacementCodeForOverride}
-                          currentPlacementPercentage={currentPlacementPctForOverride}
-                          nextPlacementPercentage={nextPlacementPctForOverride}
-                          formatCurrency={formatCurrency}
-                          formatWholePercent={formatWholePercent}
-                          formatPlacementLabel={formatPlacementLabel}
-                          sentenceCase={sentenceCase}
-                        />
-                      ) : (
-                        <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
-                          Product scope or recommendation context is missing, so this target cannot
-                          accept a saved override yet.
-                        </div>
-                      )}
-                    </div>
-                  </OverrideDisclosureCard>
+                    {activeRow.recommendation ? (
+                      <TargetOverrideForm
+                        row={activeRow}
+                        recommendation={activeRow.recommendation}
+                        productId={props.productId}
+                        returnTo={props.returnTo}
+                        saveRecommendationOverrideAction={props.saveRecommendationOverrideAction}
+                        bidActionEditor={bidActionEditor}
+                        stateActionEditor={stateActionEditor}
+                        placementActionEditor={placementActionEditor}
+                        currentBid={currentBidForOverride}
+                        nextBid={nextBidForOverride}
+                        currentState={currentStateForOverride}
+                        nextState={nextStateForOverride}
+                        currentPlacementCode={currentPlacementCodeForOverride}
+                        currentPlacementPercentage={currentPlacementPctForOverride}
+                        nextPlacementPercentage={nextPlacementPctForOverride}
+                        formatCurrency={formatCurrency}
+                        formatWholePercent={formatWholePercent}
+                        formatPlacementLabel={formatPlacementLabel}
+                        sentenceCase={sentenceCase}
+                      />
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
+                        Product scope or recommendation context is missing, so this target cannot
+                        accept a saved override yet.
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </section>
-
-              <SectionDisclosureCard
-                id={advancedDisclosureId}
-                label="Advanced"
-                summary={`${formatNumber(advancedSectionCount)} advanced block(s) remain behind explicit disclosure for comparison, rollback, caps, and supporting JSON.`}
-                defaultExpanded={false}
-              >
+              );
+            case 'advanced':
+              return (
                 <div className="space-y-4">
                   <TargetAdvancedSection label="Action plan">
                     <DetailGrid
@@ -1979,9 +1802,12 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                     <TargetAdvancedSection label="Role history">
                       <div className="space-y-2 text-sm text-foreground">
                         {activeRow.roleHistory.slice(0, 6).map((entry) => (
-                          <div key={entry.roleTransitionLogId} className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-                            Run {entry.runId} · rule {entry.transitionRule ?? NOT_CAPTURED} · desired{' '}
-                            {entry.desiredRole ?? NOT_CAPTURED}
+                          <div
+                            key={entry.roleTransitionLogId}
+                            className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3"
+                          >
+                            Run {entry.runId} · rule {entry.transitionRule ?? NOT_CAPTURED} ·
+                            desired {entry.desiredRole ?? NOT_CAPTURED}
                           </div>
                         ))}
                       </div>
@@ -2024,7 +1850,57 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                     <JsonBlock value={activeRow.recommendation?.supportingMetrics ?? null} />
                   </TargetAdvancedSection>
                 </div>
-              </SectionDisclosureCard>
+              );
+          }
+        })();
+
+        return (
+          <TargetExpandedPanel
+            targetSnapshotId={activeRow.targetSnapshotId}
+            contextStrip={
+              <div className="flex min-w-max items-center gap-2 whitespace-nowrap">
+                <span
+                  className={`inline-flex items-center rounded-full border px-[7px] py-[2px] text-[10px] font-medium ${rolePillClass(
+                    activeRow.role.desiredRole.value ?? activeRow.role.currentRole.value
+                  )}`}
+                >
+                  {activeRow.role.currentRole.label} → {activeRow.role.desiredRole.label}
+                </span>
+                <span
+                  className={`inline-flex items-center rounded-full border px-[7px] py-[2px] text-[10px] font-medium ${statePillClass(
+                    'importance',
+                    activeRow.state.importance.value
+                  )}`}
+                >
+                  {importanceStripLabel}
+                </span>
+                <span
+                  className={`inline-flex items-center rounded-full border px-[7px] py-[2px] text-[10px] font-medium ${statePillClass(
+                    'efficiency',
+                    activeRow.state.efficiency.value
+                  )}`}
+                >
+                  {activeRow.state.efficiency.label}
+                </span>
+                <span className="h-3 w-px shrink-0 bg-border" />
+                <span className="text-[10px] text-muted">{contextFacts.join(' · ')}</span>
+              </div>
+            }
+            tabStrip={
+              <TargetExpandedTabs
+                targetSnapshotId={activeRow.targetSnapshotId}
+                activeKey={activeExpandedTab}
+                onChange={setActiveExpandedTab}
+              />
+            }
+          >
+            <div
+              id={activePanelId}
+              role="tabpanel"
+              aria-labelledby={getTargetExpandedTabId(activeRow.targetSnapshotId, activeExpandedTab)}
+              className="space-y-4"
+            >
+              {activePanelContent}
             </div>
           </TargetExpandedPanel>
         );
@@ -2052,8 +1928,9 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
               Inline decision rows for the selected persisted optimizer run
             </div>
             <div className="mt-2 max-w-3xl text-sm text-muted">
-              Review the highest-priority targets inline, keep search-term and placement evidence
-              close to the decision, and stage only supported changes into Ads Workspace after
+              Review the highest-priority targets inline, open the new tabbed detail surface for
+              row-level context across Why flagged, Change plan, Search term, Placement, Metrics,
+              Override, and Advanced, and stage only supported changes into Ads Workspace after
               operator review. Ads Workspace remains the only staging and execution boundary.
             </div>
           </div>
@@ -2132,13 +2009,14 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
               <div>Use the inline list to sort and filter targets by priority, role, state, and confidence.</div>
               <div>Coverage rolls up into Ready, Partial, and Missing. Missing can be normal for zero-click search-term diagnostics or suspicious when source data should exist.</div>
               <div>Non-additive diagnostics such as STIS, STIR, TOS IS, and rank are shown only as latest observed values or explicit trend descriptors.</div>
+              <div>The expanded row is now a tabbed detail surface with dedicated tabs for Why flagged, Change plan, Search term, Placement, Metrics, Override, and Advanced.</div>
             </div>
           </div>
           <div className="rounded-xl border border-border bg-surface px-4 py-3">
             <div className="text-xs uppercase tracking-wide text-muted">What to do next</div>
             <div className="mt-2 space-y-2 text-sm text-foreground">
               <div>Review row-specific exceptions and critical warnings first.</div>
-              <div>Expand the row to inspect recommendation details, portfolio context, comparison cues, and rollback guidance.</div>
+              <div>Expand a row to inspect the tabbed detail surface, compare the recommendation plan, review search-term and placement evidence, inspect metrics, manage overrides, and open the advanced diagnostics blocks.</div>
               <div>Handoff only the supported actions you want staged into Ads Workspace.</div>
             </div>
           </div>
@@ -2668,9 +2546,9 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">Targets review</div>
             <div className="mt-2 text-sm text-muted">
-              Review persisted optimizer target decisions inline. Expand a row to inspect why it
-              was flagged, the full change plan, search-term and placement evidence, override
-              state, and advanced trust detail without leaving the list.
+              Review persisted optimizer target decisions inline. Expand a row to open the tabbed
+              detail surface with Why flagged, Change plan, Search term, Placement, Metrics,
+              Override, and Advanced tabs populated from the persisted review data.
             </div>
             <div className="mt-3">
               <InlineHelp title="Coverage">
@@ -2683,8 +2561,8 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
             <div className="mt-3">
               <InlineHelp title="Reason-code badges">
                 Badges summarize the main persisted reason codes for a row. Use them as a quick
-                triage aid, then expand the row for the full recommendation, state, and comparison
-                details behind those badges.
+                triage aid, then expand the row for the Why flagged narrative and the persisted
+                reason-code block behind those badges.
               </InlineHelp>
             </div>
           </div>

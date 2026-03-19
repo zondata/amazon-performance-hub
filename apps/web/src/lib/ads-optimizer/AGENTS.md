@@ -28,7 +28,7 @@ Follow:
 - Hero query override persistence should stay in optimizer-owned state and drive hero-query-dependent Overview sections until reset to auto.
 - For V2 review surfaces, prefer compact summary payloads for collapsed states and explicit detail payloads for advanced/expanded states.
 - Preserve explicit lazy-detail boundaries, stable row identity, and explicit empty-state coverage semantics so the UI does not have to infer missing structure.
-- Phase 5 is the next major helper/view-model step:
-  - create the V2 Targets row model
-  - split large Targets helpers into clearer summary/detail boundaries
-  - support inline-expansion-oriented operator UX without breaking current runtime contracts
+- Targets helper/view-model work now follows the locked Phase 6 contracts:
+  - Phase 6A remains the authoritative collapsed-row contract
+  - Phase 6B.1 is the current expanded-row step
+  - support the fixed-height tab shell and Why flagged-only expanded detail contract without reopening the collapsed-row surface
