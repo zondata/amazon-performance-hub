@@ -100,6 +100,11 @@ export default function SpCampaignsTable({
       defaultFrozen: true,
       supportsWrap: true,
       getSortValue: (row) => row.campaign_name,
+      textFilter: {
+        placeholder: 'Search campaign',
+        ariaLabel: 'Search campaign',
+        getFilterText: (row) => row.campaign_name,
+      },
       renderCell: (row, context) => (
         <div className="min-w-0">
           <div

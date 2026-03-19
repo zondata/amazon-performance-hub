@@ -3,23 +3,21 @@
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 
+import {
+  filterAdsWorkspaceGridRows,
+  getActiveAdsWorkspaceTextFilters,
+  sortAdsWorkspaceGridRows,
+  type AdsWorkspaceGridNumericFilter,
+  type AdsWorkspaceNumericFilterOperator,
+  type AdsWorkspaceGridTextFilterConfig,
+} from '@/lib/ads-workspace/gridTableFilters';
 import type {
   AdsWorkspaceSurfaceSettings,
   AdsWorkspaceTableFontSize,
 } from '@/lib/ads-workspace/adsWorkspaceUiSettings';
 import { normalizeAdsWorkspaceSurfaceSettings } from '@/lib/ads-workspace/adsWorkspaceUiSettings';
 
-export type AdsWorkspaceNumericFilterOperator =
-  | 'gte'
-  | 'lte'
-  | 'gt'
-  | 'lt'
-  | 'has_value';
-
-type NumericFilter = {
-  operator: AdsWorkspaceNumericFilterOperator;
-  value: string;
-};
+export type { AdsWorkspaceNumericFilterOperator } from '@/lib/ads-workspace/gridTableFilters';
 
 export type AdsWorkspaceGridColumn<TRow> = {
   key: string;
@@ -31,6 +29,7 @@ export type AdsWorkspaceGridColumn<TRow> = {
   alwaysVisible?: boolean;
   getSortValue?: (row: TRow) => string | number | null;
   getNumericValue?: (row: TRow) => number | null;
+  textFilter?: AdsWorkspaceGridTextFilterConfig<TRow>;
   renderCell: (row: TRow, context: { wrapLongLabels: boolean; fontSize: AdsWorkspaceTableFontSize }) => ReactNode;
 };
 
@@ -57,25 +56,6 @@ const fontSizeClassName = (fontSize: AdsWorkspaceTableFontSize) => {
   if (fontSize === 'compact') return 'text-[13px]';
   if (fontSize === 'comfortable') return 'text-[15px]';
   return 'text-sm';
-};
-
-const compareNullable = (
-  left: string | number | null,
-  right: string | number | null,
-  direction: 'asc' | 'desc'
-) => {
-  if (left === null && right === null) return 0;
-  if (left === null) return 1;
-  if (right === null) return -1;
-  if (typeof left === 'number' && typeof right === 'number') {
-    return direction === 'asc' ? left - right : right - left;
-  }
-  const leftText = String(left).toLowerCase();
-  const rightText = String(right).toLowerCase();
-  if (leftText === rightText) return 0;
-  return direction === 'asc'
-    ? leftText.localeCompare(rightText)
-    : rightText.localeCompare(leftText);
 };
 
 const buildFrozenOffsets = <TRow,>(
@@ -129,7 +109,8 @@ export default function AdsWorkspaceGridTable<TRow>({
     columnKey: null,
     direction: 'desc',
   });
-  const [numericFilters, setNumericFilters] = useState<Record<string, NumericFilter>>({});
+  const [numericFilters, setNumericFilters] = useState<Record<string, AdsWorkspaceGridNumericFilter>>({});
+  const [textFilters, setTextFilters] = useState<Record<string, string>>({});
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeFilterColumnKey, setActiveFilterColumnKey] = useState<string | null>(null);
   const [draftFilterOperator, setDraftFilterOperator] =
@@ -159,42 +140,31 @@ export default function AdsWorkspaceGridTable<TRow>({
     [normalizedSettings.frozenColumns, visibleColumns]
   );
   const frozenOffsets = useMemo(() => buildFrozenOffsets(visibleColumns, frozenKeys), [visibleColumns, frozenKeys]);
+  const activeTextFilters = useMemo(
+    () => getActiveAdsWorkspaceTextFilters(textFilters),
+    [textFilters]
+  );
 
   const filteredRows = useMemo(() => {
-    return rows.filter((row) =>
-      Object.entries(numericFilters).every(([columnKey, filter]) => {
-        const column = columns.find((entry) => entry.key === columnKey);
-        if (!column?.getNumericValue) return true;
-        const numericValue = column.getNumericValue(row);
-        if (filter.operator === 'has_value') {
-          return numericValue !== null;
-        }
-        if (numericValue === null) return false;
-        const filterValue = Number(filter.value);
-        if (!Number.isFinite(filterValue)) return true;
-        if (filter.operator === 'gte') return numericValue >= filterValue;
-        if (filter.operator === 'lte') return numericValue <= filterValue;
-        if (filter.operator === 'gt') return numericValue > filterValue;
-        return numericValue < filterValue;
-      })
-    );
-  }, [columns, numericFilters, rows]);
+    return filterAdsWorkspaceGridRows({
+      rows,
+      columns,
+      numericFilters,
+      textFilters: activeTextFilters,
+    });
+  }, [activeTextFilters, columns, numericFilters, rows]);
 
   const sortedRows = useMemo(() => {
-    if (!sortState.columnKey) return filteredRows;
-    const column = columns.find((entry) => entry.key === sortState.columnKey);
-    if (!column?.getSortValue) return filteredRows;
-    return [...filteredRows].sort((left, right) =>
-      compareNullable(
-        column.getSortValue?.(left) ?? null,
-        column.getSortValue?.(right) ?? null,
-        sortState.direction
-      )
-    );
+    return sortAdsWorkspaceGridRows({
+      rows: filteredRows,
+      columns,
+      sortState,
+    });
   }, [columns, filteredRows, sortState]);
 
   const totalWidth = visibleColumns.reduce((sum, column) => sum + column.width, 0);
-  const filterCount = Object.keys(numericFilters).length;
+  const filterCount =
+    Object.keys(numericFilters).length + Object.keys(activeTextFilters).length;
 
   const setSurfaceSettings = (next: AdsWorkspaceSurfaceSettings) => {
     onSurfaceSettingsChange(
@@ -368,7 +338,10 @@ export default function AdsWorkspaceGridTable<TRow>({
             {filterCount > 0 ? (
               <button
                 type="button"
-                onClick={() => setNumericFilters({})}
+                onClick={() => {
+                  setNumericFilters({});
+                  setTextFilters({});
+                }}
                 className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-muted"
               >
                 Clear {filterCount} filter{filterCount === 1 ? '' : 's'}
@@ -465,29 +438,46 @@ export default function AdsWorkspaceGridTable<TRow>({
                   className={`relative px-3 py-3 ${isFrozen ? 'sticky z-30 bg-surface shadow-[2px_0_0_rgba(0,0,0,0.04)]' : ''}`}
                   style={isFrozen ? { left: `${frozenOffsets.get(column.key) ?? 0}px` } : undefined}
                 >
-                  <div className={`flex items-center gap-2 ${column.align === 'right' ? 'justify-end' : column.align === 'center' ? 'justify-center' : 'justify-between'}`}>
-                    <button
-                      type="button"
-                      onClick={() => column.getSortValue && toggleSort(column.key)}
-                      className={`min-w-0 text-left ${column.getSortValue ? 'cursor-pointer' : 'cursor-default'}`}
-                    >
-                      <span>{column.label}</span>
-                      {isSorted ? <span className="ml-1">{sortState.direction === 'asc' ? '▲' : '▼'}</span> : null}
-                    </button>
-                    {column.getNumericValue ? (
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <div className={`flex items-center gap-2 ${column.align === 'right' ? 'justify-end' : column.align === 'center' ? 'justify-center' : 'justify-between'}`}>
                       <button
                         type="button"
-                        onClick={() => openFilter(column.key)}
-                        aria-label={`Filter ${column.label}`}
-                        title={`Filter ${column.label}`}
-                        className={`inline-flex h-6 w-6 items-center justify-center rounded-full border ${
-                          filter
-                            ? 'border-primary/30 bg-primary text-primary-foreground'
-                            : 'border-border bg-surface-2 text-muted'
-                        }`}
+                        onClick={() => column.getSortValue && toggleSort(column.key)}
+                        className={`min-w-0 text-left ${column.getSortValue ? 'cursor-pointer' : 'cursor-default'}`}
                       >
-                        <FilterIcon active={Boolean(filter)} />
+                        <span>{column.label}</span>
+                        {isSorted ? <span className="ml-1">{sortState.direction === 'asc' ? '▲' : '▼'}</span> : null}
                       </button>
+                      {column.getNumericValue ? (
+                        <button
+                          type="button"
+                          onClick={() => openFilter(column.key)}
+                          aria-label={`Filter ${column.label}`}
+                          title={`Filter ${column.label}`}
+                          className={`inline-flex h-6 w-6 items-center justify-center rounded-full border ${
+                            filter
+                              ? 'border-primary/30 bg-primary text-primary-foreground'
+                              : 'border-border bg-surface-2 text-muted'
+                          }`}
+                        >
+                          <FilterIcon active={Boolean(filter)} />
+                        </button>
+                      ) : null}
+                    </div>
+                    {column.textFilter ? (
+                      <input
+                        type="search"
+                        value={textFilters[column.key] ?? ''}
+                        onChange={(event) =>
+                          setTextFilters((current) => ({
+                            ...current,
+                            [column.key]: event.target.value,
+                          }))
+                        }
+                        placeholder={column.textFilter.placeholder}
+                        aria-label={column.textFilter.ariaLabel}
+                        className="w-full rounded-md border border-border bg-surface-2 px-2 py-1 text-[11px] font-medium normal-case tracking-normal text-foreground placeholder:text-muted"
+                      />
                     ) : null}
                   </div>
                   {activeFilterColumnKey === column.key ? (
@@ -620,9 +610,7 @@ export default function AdsWorkspaceGridTable<TRow>({
               className="grid min-h-[240px] place-items-center border-t border-border bg-surface/50 px-5 py-10 text-center text-sm text-muted"
               style={{ gridTemplateColumns: `${Math.max(totalWidth, 1)}px` }}
             >
-              <div className="max-w-md">
-                No rows matched the current filters. Adjust or clear the header filters to restore results.
-              </div>
+              <div>No result</div>
             </div>
           ) : null}
         </div>

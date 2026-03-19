@@ -18,6 +18,7 @@ import type {
 } from '@/lib/sqp/getProductSqpWeekly';
 import type { SqpTrendRow } from '@/lib/sqp/getProductSqpTrendSeries';
 import { ALL_COLUMNS, IMPORTANT_COLUMNS } from '@/lib/sqp/sqpColumns';
+import { matchesTableTextFilter } from '@/lib/tableTextFilters';
 import { formatUiDateRange } from '@/lib/time/formatUiDate';
 
 const formatNumber = (value?: number | null): string => {
@@ -157,12 +158,12 @@ export default function ProductSqpTable({
       });
     }
 
-    const query = keywordSearch.trim().toLowerCase();
-    if (query) {
+    if (keywordSearch) {
       nextRows = nextRows.filter((row) => {
-        const raw = (row.search_query_raw ?? '').toLowerCase();
-        const norm = (row.search_query_norm ?? '').toLowerCase();
-        return raw.includes(query) || norm.includes(query);
+        return matchesTableTextFilter(
+          [row.search_query_raw, row.search_query_norm],
+          keywordSearch
+        );
       });
     }
 
@@ -356,32 +357,6 @@ export default function ProductSqpTable({
               ))}
             </select>
           </label>
-          {showGroupColumn ? (
-            <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-              Group
-              <select
-                value={safeGroupFilter}
-                onChange={(event) => setGroupFilter(event.target.value)}
-                className="mt-1 min-w-[160px] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-              >
-                <option value="all">All groups</option>
-                {groupOptions.map((group) => (
-                  <option key={group.group_id} value={group.group_id}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-            Search
-            <input
-              value={keywordSearch}
-              onChange={(event) => setKeywordSearch(event.target.value)}
-              placeholder="Contains"
-              className="mt-1 w-[180px] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-            />
-          </label>
         </div>
       </InlineFilters>
 
@@ -398,11 +373,9 @@ export default function ProductSqpTable({
       ) : null}
 
       <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
-        {selectedWeekEnd === null || sortedRows.length === 0 ? (
+        {selectedWeekEnd === null || rows.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
-            {rows.length === 0
-              ? 'No SQP data for the selected week.'
-              : 'No rows match the current filters.'}
+            No SQP data for the selected week.
           </div>
         ) : (
           <div
@@ -427,16 +400,45 @@ export default function ProductSqpTable({
                           className="sticky top-0 left-[var(--trend-col-w)] z-50 w-[var(--query-col-w)] border-b border-border bg-surface px-3 py-3 text-left shadow-sm"
                           title={queryColumn.tooltip ?? queryColumn.label}
                         >
-                          <div className="flex items-center gap-2">
-                            <span>{queryColumn.shortLabel ?? queryColumn.label}</span>
-                            <span className="text-[10px] text-muted">{arrow}</span>
+                          <div className="flex min-w-0 flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span>{queryColumn.shortLabel ?? queryColumn.label}</span>
+                              <span className="text-[10px] text-muted">{arrow}</span>
+                            </div>
+                            <input
+                              type="search"
+                              value={keywordSearch}
+                              onChange={(event) => setKeywordSearch(event.target.value)}
+                              onClick={(event) => event.stopPropagation()}
+                              onPointerDown={(event) => event.stopPropagation()}
+                              placeholder="Search query"
+                              aria-label="Search query"
+                              className="w-full rounded-md border border-border bg-surface-2 px-2 py-1 text-[11px] font-medium normal-case tracking-normal text-foreground placeholder:text-muted"
+                            />
                           </div>
                         </th>
                       );
                     })() : null}
                     {showGroupColumn ? (
                       <th className="sticky top-0 left-[calc(var(--query-col-w)+var(--trend-col-w))] z-50 w-[var(--group-col-w)] border-b border-border bg-surface px-3 py-3 text-left shadow-sm">
-                        Groups
+                        <div className="flex min-w-0 flex-col gap-1">
+                          <span>Groups</span>
+                          <select
+                            value={safeGroupFilter}
+                            onChange={(event) => setGroupFilter(event.target.value)}
+                            onClick={(event) => event.stopPropagation()}
+                            onPointerDown={(event) => event.stopPropagation()}
+                            aria-label="Filter groups"
+                            className="w-full rounded-md border border-border bg-surface-2 px-2 py-1 text-[11px] font-medium normal-case tracking-normal text-foreground"
+                          >
+                            <option value="all">All groups</option>
+                            {groupOptions.map((group) => (
+                              <option key={group.group_id} value={group.group_id}>
+                                {group.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </th>
                     ) : null}
                     {dataColumns.map((column, index) => {
@@ -472,88 +474,99 @@ export default function ProductSqpTable({
                   </tr>
                 </thead>
                 <tbody className="text-sm">
-                  {sortedRows.map((row, rowIndex) => {
-                    const groupNames = row.keyword_id
-                      ? (membershipMap.get(row.keyword_id) ?? [])
-                          .map((groupId) => groupNameById.get(groupId))
-                          .filter(Boolean)
-                      : [];
-                    const trendKeyValue = row.search_query_norm ?? null;
-                    return (
-                      <tr key={`${row.search_query_norm}-${rowIndex}`}>
-                        <td className="sticky left-0 z-20 w-[var(--trend-col-w)] border-b border-border/60 bg-surface px-3 py-3">
-                          {trendKeyValue ? (
-                            <button
-                              type="button"
-                              onClick={() => openTrend(trendKeyValue)}
-                              className="whitespace-nowrap rounded-md border border-border bg-surface px-2 py-1 text-[10px] font-semibold text-foreground hover:bg-surface-2"
-                            >
-                              Trend
-                            </button>
-                          ) : (
-                            <span className="text-[10px] text-muted">—</span>
-                          )}
-                        </td>
-                        {queryColumn ? (() => {
-                          const rawValue = row[queryColumn.key as keyof typeof row] as
-                            | number
-                            | string
-                            | null
-                            | undefined;
-                          const displayValue = formatText(rawValue as string | null | undefined);
-                          return (
-                            <td
-                              key={`${rowIndex}-${queryColumn.key}`}
-                              className="sticky left-[var(--trend-col-w)] z-20 w-[var(--query-col-w)] border-b border-border/60 bg-surface px-3 py-3 font-semibold"
-                            >
+                  {sortedRows.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={dataColumns.length + (showGroupColumn ? 3 : 2)}
+                        className="px-3 py-10 text-center text-sm text-muted"
+                      >
+                        No result
+                      </td>
+                    </tr>
+                  ) : (
+                    sortedRows.map((row, rowIndex) => {
+                      const groupNames = row.keyword_id
+                        ? (membershipMap.get(row.keyword_id) ?? [])
+                            .map((groupId) => groupNameById.get(groupId))
+                            .filter(Boolean)
+                        : [];
+                      const trendKeyValue = row.search_query_norm ?? null;
+                      return (
+                        <tr key={`${row.search_query_norm}-${rowIndex}`}>
+                          <td className="sticky left-0 z-20 w-[var(--trend-col-w)] border-b border-border/60 bg-surface px-3 py-3">
+                            {trendKeyValue ? (
                               <button
                                 type="button"
                                 onClick={() => openTrend(trendKeyValue)}
-                                className="group flex min-w-0 flex-col text-left"
+                                className="whitespace-nowrap rounded-md border border-border bg-surface px-2 py-1 text-[10px] font-semibold text-foreground hover:bg-surface-2"
                               >
-                                <span className="truncate">{displayValue}</span>
-                                <span className="mt-1 text-[10px] font-normal text-muted group-hover:text-foreground">
-                                  {row.search_query_norm ?? '—'}
-                                </span>
+                                Trend
                               </button>
-                            </td>
-                          );
-                        })() : null}
-                        {showGroupColumn ? (
-                          <td className="sticky left-[calc(var(--query-col-w)+var(--trend-col-w))] z-10 border-b border-border/60 bg-surface px-3 py-3 text-xs text-muted">
-                            {groupNames.length > 0 ? groupNames.join(', ') : '—'}
+                            ) : (
+                              <span className="text-[10px] text-muted">—</span>
+                            )}
                           </td>
-                        ) : null}
-                        {dataColumns.map((column, columnIndex) => {
-                          const rawValue = row[column.key as keyof typeof row] as
-                            | number
-                            | string
-                            | null
-                            | undefined;
-                          let displayValue = '';
-                          if (column.key.endsWith('_index')) {
-                            displayValue = formatIndex(toNumber(rawValue));
-                          } else if (column.kind === 'text') {
-                            displayValue = formatText(rawValue as string | null | undefined);
-                          } else if (column.kind === 'int') {
-                            displayValue = formatNumber(toInt(rawValue));
-                          } else if (column.kind === 'money') {
-                            displayValue = formatMoney(toNumber(rawValue));
-                          } else {
-                            displayValue = formatPercent(toNumber(rawValue));
-                          }
-                          return (
-                            <td
-                              key={`${rowIndex}-${column.key}-${columnIndex}`}
-                              className="border-b border-border/60 px-3 py-3 align-top"
-                            >
-                              {displayValue}
+                          {queryColumn ? (() => {
+                            const rawValue = row[queryColumn.key as keyof typeof row] as
+                              | number
+                              | string
+                              | null
+                              | undefined;
+                            const displayValue = formatText(rawValue as string | null | undefined);
+                            return (
+                              <td
+                                key={`${rowIndex}-${queryColumn.key}`}
+                                className="sticky left-[var(--trend-col-w)] z-20 w-[var(--query-col-w)] border-b border-border/60 bg-surface px-3 py-3 font-semibold"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => openTrend(trendKeyValue)}
+                                  className="group flex min-w-0 flex-col text-left"
+                                >
+                                  <span className="truncate">{displayValue}</span>
+                                  <span className="mt-1 text-[10px] font-normal text-muted group-hover:text-foreground">
+                                    {row.search_query_norm ?? '—'}
+                                  </span>
+                                </button>
+                              </td>
+                            );
+                          })() : null}
+                          {showGroupColumn ? (
+                            <td className="sticky left-[calc(var(--query-col-w)+var(--trend-col-w))] z-10 border-b border-border/60 bg-surface px-3 py-3 text-xs text-muted">
+                              {groupNames.length > 0 ? groupNames.join(', ') : '—'}
                             </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
+                          ) : null}
+                          {dataColumns.map((column, columnIndex) => {
+                            const rawValue = row[column.key as keyof typeof row] as
+                              | number
+                              | string
+                              | null
+                              | undefined;
+                            let displayValue = '';
+                            if (column.key.endsWith('_index')) {
+                              displayValue = formatIndex(toNumber(rawValue));
+                            } else if (column.kind === 'text') {
+                              displayValue = formatText(rawValue as string | null | undefined);
+                            } else if (column.kind === 'int') {
+                              displayValue = formatNumber(toInt(rawValue));
+                            } else if (column.kind === 'money') {
+                              displayValue = formatMoney(toNumber(rawValue));
+                            } else {
+                              displayValue = formatPercent(toNumber(rawValue));
+                            }
+                            return (
+                              <td
+                                key={`${rowIndex}-${column.key}-${columnIndex}`}
+                                className="border-b border-border/60 px-3 py-3 align-top"
+                              >
+                                {displayValue}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

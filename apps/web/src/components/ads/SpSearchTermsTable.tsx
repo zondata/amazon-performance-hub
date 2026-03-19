@@ -87,6 +87,11 @@ export default function SpSearchTermsTable({
       defaultFrozen: true,
       supportsWrap: true,
       getSortValue: (row) => row.search_term,
+      textFilter: {
+        placeholder: 'Search term',
+        ariaLabel: 'Search term',
+        getFilterText: (row) => row.search_term_norm || row.search_term,
+      },
       renderCell: (row, context) => (
         <div className="min-w-0">
           <div className={`font-semibold text-foreground ${context.wrapLongLabels ? 'whitespace-normal break-words' : 'line-clamp-2 break-words'}`}>

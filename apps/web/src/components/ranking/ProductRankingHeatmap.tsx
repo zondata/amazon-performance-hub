@@ -16,13 +16,11 @@ import {
   getRankHue,
 } from '@/lib/ranking/rankBands';
 import type { ProductRankingRow } from '@/lib/ranking/getProductRankingDaily';
+import {
+  matchesTableTextFilter,
+  normalizeTableTextFilter,
+} from '@/lib/tableTextFilters';
 import { formatUiDateRange } from '@/lib/time/formatUiDate';
-
-const normalizeKeyword = (value: string): string =>
-  value
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, ' ');
 
 const formatNumber = (value?: number | null): string => {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
@@ -166,7 +164,7 @@ export default function ProductRankingHeatmap({
       dates.add(observedDate);
 
       const keywordRaw = row.keyword_raw ?? row.keyword_norm ?? '';
-      const keywordNorm = row.keyword_norm ?? normalizeKeyword(keywordRaw);
+      const keywordNorm = row.keyword_norm ?? normalizeTableTextFilter(keywordRaw);
       const keywordId = row.keyword_id ?? null;
       const key = keywordId ?? keywordNorm ?? keywordRaw;
       if (!key) return;
@@ -177,7 +175,7 @@ export default function ProductRankingHeatmap({
           key,
           keywordId,
           keywordRaw: keywordRaw || keywordNorm || key,
-          keywordNorm: keywordNorm || normalizeKeyword(keywordRaw || key),
+          keywordNorm: keywordNorm || normalizeTableTextFilter(keywordRaw || key),
           searchVolume: null,
           ranks: {},
         };
@@ -236,12 +234,9 @@ export default function ProductRankingHeatmap({
       });
     }
 
-    const query = keywordSearch.trim().toLowerCase();
-    if (query) {
+    if (keywordSearch) {
       entries = entries.filter((entry) => {
-        if (entry.keywordRaw.toLowerCase().includes(query)) return true;
-        if (entry.keywordNorm.includes(query)) return true;
-        return false;
+        return matchesTableTextFilter([entry.keywordRaw, entry.keywordNorm], keywordSearch);
       });
     }
 
@@ -401,15 +396,6 @@ export default function ProductRankingHeatmap({
               <option value="all">∞</option>
             </select>
           </label>
-          <label className="flex flex-col text-xs uppercase tracking-wide text-muted">
-            Search
-            <input
-              value={keywordSearch}
-              onChange={(event) => setKeywordSearch(event.target.value)}
-              placeholder="Contains"
-              className="mt-1 w-[180px] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-            />
-          </label>
           <label className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
             <input
               type="checkbox"
@@ -457,11 +443,9 @@ export default function ProductRankingHeatmap({
       </div>
 
       <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
-        {visibleDates.length === 0 || filteredEntries.length === 0 ? (
+        {visibleDates.length === 0 || rankingRows.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
-            {rankingRows.length === 0
-              ? 'No ranking data for this date range.'
-              : 'No keywords match the current filters.'}
+            No ranking data for this date range.
           </div>
         ) : (
           <div
@@ -486,11 +470,23 @@ export default function ProductRankingHeatmap({
                         }
                       }}
                     >
-                      <div className="flex items-center gap-2">
-                        <span>Keyword</span>
-                        <span className="text-[10px] text-muted">
-                          {getSortArrow(isSameSortKey(activeSortKey, 'keyword'), sortDir)}
-                        </span>
+                      <div className="flex min-w-0 flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span>Keyword</span>
+                          <span className="text-[10px] text-muted">
+                            {getSortArrow(isSameSortKey(activeSortKey, 'keyword'), sortDir)}
+                          </span>
+                        </div>
+                        <input
+                          type="search"
+                          value={keywordSearch}
+                          onChange={(event) => setKeywordSearch(event.target.value)}
+                          onClick={(event) => event.stopPropagation()}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          placeholder="Search keyword"
+                          aria-label="Search keyword"
+                          className="w-full rounded-md border border-border bg-surface-2 px-2 py-1 text-[11px] font-medium normal-case tracking-normal text-foreground placeholder:text-muted"
+                        />
                       </div>
                     </th>
                     {showGroupColumn ? (
@@ -560,55 +556,66 @@ export default function ProductRankingHeatmap({
                   </tr>
                 </thead>
                 <tbody className="text-sm text-foreground/85">
-                  {filteredEntries.map((entry) => {
-                    const groupIds =
-                      showGroupColumn && entry.keywordId
-                        ? membershipMap.get(entry.keywordId) ?? []
-                        : [];
-                    const groupNames = groupIds
-                      .map((id) => groupNameById.get(id) ?? id)
-                      .filter(Boolean)
-                      .join(', ');
-
-                    return (
-                      <tr key={entry.key} className="hover:bg-surface-2/70">
-                        <td className="sticky left-0 z-20 w-[var(--kw-col-w)] border-b border-r border-border/70 bg-surface px-3 py-3 font-semibold text-foreground shadow-[2px_0_0_rgba(0,0,0,0.06)]">
-                          {entry.keywordRaw}
-                        </td>
-                        {showGroupColumn ? (
-                          <td className="sticky left-[var(--kw-col-w)] z-20 w-[var(--group-col-w)] border-b border-r border-border/70 bg-surface px-3 py-3 text-muted shadow-[2px_0_0_rgba(0,0,0,0.06)]">
-                            {groupNames || '—'}
-                          </td>
-                        ) : null}
-                        <td
-                          className="sticky z-20 w-[var(--sv-col-w)] border-b border-r border-border/70 bg-surface px-3 py-3 text-muted shadow-[2px_0_0_rgba(0,0,0,0.06)]"
-                          style={{
-                            left: showGroupColumn
-                              ? 'calc(var(--kw-col-w) + var(--group-col-w))'
-                              : 'var(--kw-col-w)',
-                          }}
-                        >
-                          {formatNumber(entry.searchVolume)}
-                        </td>
-                        {visibleDates.map((date) => (
-                        <td
-                          key={`${entry.key}-${date}`}
-                          className="border-b border-r border-border/70 px-3 py-3 text-center text-muted"
-                        >
-                          <div className="flex min-h-[44px] flex-col items-center justify-center gap-1">
-                            {renderOrganicBadge(entry.ranks[date]?.organic)}
-                            <div className="flex items-center gap-1">
-                              <span className="text-[9px] font-semibold text-muted">
-                                S
-                              </span>
-                              {renderSponsoredBadge(entry.ranks[date]?.sponsored)}
-                            </div>
-                          </div>
-                        </td>
-                      ))}
+                  {filteredEntries.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={visibleDates.length + (showGroupColumn ? 3 : 2)}
+                        className="px-3 py-10 text-center text-sm text-muted"
+                      >
+                        No result
+                      </td>
                     </tr>
-                  );
-                  })}
+                  ) : (
+                    filteredEntries.map((entry) => {
+                      const groupIds =
+                        showGroupColumn && entry.keywordId
+                          ? membershipMap.get(entry.keywordId) ?? []
+                          : [];
+                      const groupNames = groupIds
+                        .map((id) => groupNameById.get(id) ?? id)
+                        .filter(Boolean)
+                        .join(', ');
+
+                      return (
+                        <tr key={entry.key} className="hover:bg-surface-2/70">
+                          <td className="sticky left-0 z-20 w-[var(--kw-col-w)] border-b border-r border-border/70 bg-surface px-3 py-3 font-semibold text-foreground shadow-[2px_0_0_rgba(0,0,0,0.06)]">
+                            {entry.keywordRaw}
+                          </td>
+                          {showGroupColumn ? (
+                            <td className="sticky left-[var(--kw-col-w)] z-20 w-[var(--group-col-w)] border-b border-r border-border/70 bg-surface px-3 py-3 text-muted shadow-[2px_0_0_rgba(0,0,0,0.06)]">
+                              {groupNames || '—'}
+                            </td>
+                          ) : null}
+                          <td
+                            className="sticky z-20 w-[var(--sv-col-w)] border-b border-r border-border/70 bg-surface px-3 py-3 text-muted shadow-[2px_0_0_rgba(0,0,0,0.06)]"
+                            style={{
+                              left: showGroupColumn
+                                ? 'calc(var(--kw-col-w) + var(--group-col-w))'
+                                : 'var(--kw-col-w)',
+                            }}
+                          >
+                            {formatNumber(entry.searchVolume)}
+                          </td>
+                          {visibleDates.map((date) => (
+                            <td
+                              key={`${entry.key}-${date}`}
+                              className="border-b border-r border-border/70 px-3 py-3 text-center text-muted"
+                            >
+                              <div className="flex min-h-[44px] flex-col items-center justify-center gap-1">
+                                {renderOrganicBadge(entry.ranks[date]?.organic)}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[9px] font-semibold text-muted">
+                                    S
+                                  </span>
+                                  {renderSponsoredBadge(entry.ranks[date]?.sponsored)}
+                                </div>
+                              </div>
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

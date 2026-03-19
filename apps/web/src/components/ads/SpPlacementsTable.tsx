@@ -87,6 +87,11 @@ export default function SpPlacementsTable({
       defaultFrozen: true,
       supportsWrap: true,
       getSortValue: (row) => row.campaign_name,
+      textFilter: {
+        placeholder: 'Search campaign',
+        ariaLabel: 'Search campaign',
+        getFilterText: (row) => row.campaign_name,
+      },
       renderCell: (row, context) => (
         <div className="min-w-0">
           <div className={`font-medium text-foreground ${context.wrapLongLabels ? 'whitespace-normal break-words' : 'line-clamp-2 break-words'}`}>
@@ -103,6 +108,11 @@ export default function SpPlacementsTable({
       defaultFrozen: true,
       supportsWrap: true,
       getSortValue: (row) => row.placement_label,
+      textFilter: {
+        placeholder: 'Search placement',
+        ariaLabel: 'Search placement',
+        getFilterText: (row) => row.placement_label,
+      },
       renderCell: (row, context) => (
         <div className="min-w-0">
           <div className={`font-semibold text-foreground ${context.wrapLongLabels ? 'whitespace-normal break-words' : 'line-clamp-2 break-words'}`}>

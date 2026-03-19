@@ -90,6 +90,11 @@ export default function SpTargetsTable({
       defaultFrozen: true,
       supportsWrap: true,
       getSortValue: (row) => row.target_text,
+      textFilter: {
+        placeholder: 'Search target',
+        ariaLabel: 'Search target',
+        getFilterText: (row) => row.target_text,
+      },
       renderCell: (row, context) => (
         <div className="min-w-0">
           <div className={`font-semibold text-foreground ${context.wrapLongLabels ? 'whitespace-normal break-words' : 'line-clamp-2 break-words'}`}>
@@ -146,6 +151,11 @@ export default function SpTargetsTable({
       width: 190,
       supportsWrap: true,
       getSortValue: (row) => row.campaign_name,
+      textFilter: {
+        placeholder: 'Search campaign',
+        ariaLabel: 'Search campaign',
+        getFilterText: (row) => row.campaign_name,
+      },
       renderCell: (row, context) => (
         <div className="min-w-0">
           <div className={context.wrapLongLabels ? 'whitespace-normal break-words text-foreground' : 'line-clamp-2 break-words text-foreground'}>
@@ -161,6 +171,11 @@ export default function SpTargetsTable({
       width: 190,
       supportsWrap: true,
       getSortValue: (row) => row.ad_group_name,
+      textFilter: {
+        placeholder: 'Search ad group',
+        ariaLabel: 'Search ad group',
+        getFilterText: (row) => row.ad_group_name,
+      },
       renderCell: (row, context) => (
         <div className="min-w-0">
           <div className={context.wrapLongLabels ? 'whitespace-normal break-words text-foreground' : 'line-clamp-2 break-words text-foreground'}>
