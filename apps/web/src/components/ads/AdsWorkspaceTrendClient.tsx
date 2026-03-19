@@ -111,6 +111,25 @@ const markerTitle = (marker: SpTrendMarker) =>
 
 const MINI_BAR_HEIGHT = 32;
 const MINI_BAR_MIN_VISIBLE_HEIGHT = 6;
+const KPI_COLUMN_LABEL = 'KPI';
+const SUMMARY_COLUMN_LABEL = 'Summary';
+const TREND_COLUMN_LABEL = 'Trend';
+const KPI_HEADER_CELL_CLASS =
+  'sticky z-50 w-[var(--metric-col-w)] min-w-[var(--metric-col-w)] max-w-[var(--metric-col-w)] border-r border-border bg-surface px-3 py-3 font-semibold shadow-[2px_0_0_rgba(0,0,0,0.04)]';
+const SUMMARY_HEADER_CELL_CLASS =
+  'sticky z-40 w-[var(--summary-col-w)] min-w-[var(--summary-col-w)] max-w-[var(--summary-col-w)] border-r border-border bg-surface px-3 py-3 font-semibold';
+const TREND_HEADER_CELL_CLASS =
+  'sticky z-30 w-[var(--trend-col-w)] min-w-[var(--trend-col-w)] max-w-[var(--trend-col-w)] border-r border-border bg-surface px-3 py-3 font-semibold';
+const DATE_HEADER_CELL_CLASS =
+  'sticky z-20 w-[var(--day-col-w)] min-w-[var(--day-col-w)] max-w-[var(--day-col-w)] border-r border-border/60 bg-surface px-2 py-3 text-center font-semibold';
+const KPI_BODY_CELL_CLASS =
+  'sticky z-10 w-[var(--metric-col-w)] min-w-[var(--metric-col-w)] max-w-[var(--metric-col-w)] border-r border-border bg-surface px-3 py-3 text-left shadow-[2px_0_0_rgba(0,0,0,0.04)]';
+const SUMMARY_BODY_CELL_CLASS =
+  'sticky z-[9] w-[var(--summary-col-w)] min-w-[var(--summary-col-w)] max-w-[var(--summary-col-w)] border-r border-border bg-surface px-3 py-3 text-right text-foreground';
+const TREND_BODY_CELL_CLASS =
+  'sticky z-[8] w-[var(--trend-col-w)] min-w-[var(--trend-col-w)] max-w-[var(--trend-col-w)] border-r border-border bg-surface px-3 py-2';
+const DATE_BODY_CELL_CLASS =
+  'relative z-0 border-r border-border/60 px-2 py-3 align-top';
 
 const buildMiniBarMetrics = (cells: SpTrendMetricCell[], kind: string) => {
   const values = cells.map((cell) => cell.value);
@@ -507,24 +526,45 @@ export default function AdsWorkspaceTrendClient({
             className="max-h-[62vh] overflow-auto xl:max-h-[720px]"
           >
             <table
-              className="min-w-[calc(180px+96px*7+160px)] w-full text-left text-sm"
+              className="w-full table-fixed border-separate border-spacing-0 text-left text-sm"
               style={{
+                minWidth: 'calc(180px + 120px + 160px + 96px * 7)',
                 ['--metric-col-w' as string]: '180px',
+                ['--summary-col-w' as string]: '120px',
+                ['--trend-col-w' as string]: '160px',
                 ['--day-col-w' as string]: '96px',
-                ['--analysis-col-w' as string]: '160px',
               }}
             >
-                <thead className="sticky top-0 z-10 bg-surface text-[11px] uppercase tracking-[0.18em] text-muted">
+                <thead className="bg-surface text-[11px] uppercase tracking-[0.18em] text-muted">
                   <tr className="border-b border-border">
-                    <th className="sticky left-0 z-20 w-[var(--metric-col-w)] border-r border-border bg-surface px-3 py-3 font-semibold">
-                      KPI
+                    <th
+                      className={KPI_HEADER_CELL_CLASS}
+                      style={{ top: 0, left: 0 }}
+                    >
+                      {KPI_COLUMN_LABEL}
+                    </th>
+                    <th
+                      className={SUMMARY_HEADER_CELL_CLASS}
+                      style={{ top: 0, left: 'var(--metric-col-w)' }}
+                    >
+                      {SUMMARY_COLUMN_LABEL}
+                    </th>
+                    <th
+                      className={TREND_HEADER_CELL_CLASS}
+                      style={{
+                        top: 0,
+                        left: 'calc(var(--metric-col-w) + var(--summary-col-w))',
+                      }}
+                    >
+                      {TREND_COLUMN_LABEL}
                     </th>
                     {trendData.dates.map((date) => {
                       const markerIds = trendData.markersByDate[date] ?? [];
                       return (
                         <th
                           key={date}
-                          className="w-[var(--day-col-w)] border-r border-border/60 px-2 py-3 text-center font-semibold"
+                          className={DATE_HEADER_CELL_CLASS}
+                          style={{ top: 0 }}
                         >
                           <div>{formatDateHeader(date)}</div>
                           <div className="mt-1 text-[10px] normal-case tracking-normal text-muted">
@@ -545,16 +585,19 @@ export default function AdsWorkspaceTrendClient({
                         </th>
                       );
                     })}
-                    <th className="w-[var(--analysis-col-w)] px-3 py-3 text-center font-semibold">
-                      Trend
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {trendData.metricRows.map((metric) => {
                     const miniBars = buildMiniBarMetrics(metric.cells, metric.kind);
+                    // CVR stays kind-based here alongside the other percent rows.
+                    const renderedSummaryValue = formatCellValue(
+                      metric.summary_value,
+                      metric.kind
+                    );
                     const showInlineSupportNote =
-                      !(level === 'targets' && (metric.key === 'stis' || metric.key === 'stir')) &&
+                      metric.key !== 'stis' &&
+                      metric.key !== 'stir' &&
                       metric.key !== 'organic_rank' &&
                       metric.key !== 'sponsored_rank' &&
                       metric.key !== 'tos_is';
@@ -563,7 +606,10 @@ export default function AdsWorkspaceTrendClient({
                       key={metric.key}
                       className="bg-surface/70"
                     >
-                      <th className="sticky left-0 z-10 w-[var(--metric-col-w)] border-r border-border bg-surface px-3 py-3 text-left shadow-[2px_0_0_rgba(0,0,0,0.04)]">
+                      <th
+                        className={KPI_BODY_CELL_CLASS}
+                        style={{ left: 0 }}
+                      >
                         <div className="font-semibold text-foreground">{metric.label}</div>
                         {showInlineSupportNote && metric.support_note ? (
                           <div className="mt-1 text-xs font-normal normal-case tracking-normal text-muted">
@@ -571,31 +617,20 @@ export default function AdsWorkspaceTrendClient({
                           </div>
                         ) : null}
                       </th>
-                      {metric.cells.map((cell) => {
-                        const hasMarkers = cell.marker_ids.length > 0;
-                        return (
-                          <td
-                            key={`${metric.key}:${cell.date}`}
-                            className={`border-r border-border/60 px-2 py-3 align-top ${
-                              hasMarkers ? 'border-t-2 border-t-amber-400/60' : ''
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => setHoveredMetric(metric, cell)}
-                              onMouseEnter={() => setHoveredMetric(metric, cell)}
-                              onFocus={() => setHoveredMetric(metric, cell)}
-                              aria-label={`Inspect ${metric.label} on ${cell.date}`}
-                              className="w-full rounded-xl border border-transparent px-2 py-2 text-right text-sm text-foreground outline-none transition hover:border-border hover:bg-surface-2/60 focus:border-primary/30 focus:bg-surface-2/60"
-                            >
-                              {formatCellValue(cell.value, metric.kind)}
-                            </button>
-                          </td>
-                        );
-                      })}
-                      <td className="w-[var(--analysis-col-w)] px-3 py-2">
+                      <td
+                        className={SUMMARY_BODY_CELL_CLASS}
+                        style={{ left: 'var(--metric-col-w)' }}
+                      >
+                        {renderedSummaryValue}
+                      </td>
+                      <td
+                        className={TREND_BODY_CELL_CLASS}
+                        style={{
+                          left: 'calc(var(--metric-col-w) + var(--summary-col-w))',
+                        }}
+                      >
                         {miniBars.hasData ? (
-                          <div className="relative h-9 w-[var(--analysis-col-w)]">
+                          <div className="relative h-9 w-[var(--trend-col-w)]">
                             {miniBars.hasNegative ? (
                               <div
                                 className="absolute left-0 right-0 h-px bg-border"
@@ -642,6 +677,28 @@ export default function AdsWorkspaceTrendClient({
                           <span className="text-xs text-muted">—</span>
                         )}
                       </td>
+                      {metric.cells.map((cell) => {
+                        const hasMarkers = cell.marker_ids.length > 0;
+                        return (
+                          <td
+                            key={`${metric.key}:${cell.date}`}
+                            className={`${DATE_BODY_CELL_CLASS} ${
+                              hasMarkers ? 'border-t-2 border-t-amber-400/60' : ''
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setHoveredMetric(metric, cell)}
+                              onMouseEnter={() => setHoveredMetric(metric, cell)}
+                              onFocus={() => setHoveredMetric(metric, cell)}
+                              aria-label={`Inspect ${metric.label} on ${cell.date}`}
+                              className="w-full rounded-xl border border-transparent px-2 py-2 text-right text-sm text-foreground outline-none transition hover:border-border hover:bg-surface-2/60 focus:border-primary/30 focus:bg-surface-2/60"
+                            >
+                              {formatCellValue(cell.value, metric.kind)}
+                            </button>
+                          </td>
+                        );
+                      })}
                     </tr>
                   )})}
                 </tbody>

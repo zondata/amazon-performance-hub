@@ -17,6 +17,7 @@ export type SpTrendMetricKey =
   | 'acos'
   | 'roas'
   | 'ctr'
+  | 'cvr'
   | 'cpc'
   | 'organic_rank'
   | 'sponsored_rank'
@@ -70,8 +71,11 @@ export type SpTrendMetricRow = {
   label: string;
   kind: SpTrendMetricKind;
   support_note: string | null;
+  summary_value: number | null;
   cells: SpTrendMetricCell[];
 };
+
+export type SpTrendSummaryValues = Record<SpTrendMetricKey, number | null>;
 
 export type SpWorkspaceTrendData = {
   level: SpTrendLevel;
@@ -191,6 +195,7 @@ const METRIC_DEFS: Array<{
   { key: 'acos', label: 'ACOS', kind: 'percent' },
   { key: 'roas', label: 'ROAS', kind: 'ratio' },
   { key: 'ctr', label: 'CTR', kind: 'percent' },
+  { key: 'cvr', label: 'CVR', kind: 'percent' },
   { key: 'cpc', label: 'CPC', kind: 'currency' },
   { key: 'organic_rank', label: 'Organic Rank', kind: 'rank' },
   { key: 'sponsored_rank', label: 'Sponsored Rank', kind: 'rank' },
@@ -198,6 +203,50 @@ const METRIC_DEFS: Array<{
   { key: 'stir', label: 'STIR', kind: 'rank' },
   { key: 'tos_is', label: 'TOS IS', kind: 'percent' },
 ];
+
+export const buildEmptySpTrendSummaryValues = (): SpTrendSummaryValues =>
+  Object.fromEntries(METRIC_DEFS.map((metric) => [metric.key, null])) as SpTrendSummaryValues;
+
+export const buildCampaignTrendSummaryValues = (
+  selectedCampaign: SpCampaignsWorkspaceRow | null
+): SpTrendSummaryValues => {
+  if (!selectedCampaign) return buildEmptySpTrendSummaryValues();
+  return {
+    ...buildEmptySpTrendSummaryValues(),
+    spend: selectedCampaign.spend,
+    sales: selectedCampaign.sales,
+    orders: selectedCampaign.orders,
+    units: selectedCampaign.units,
+    acos: selectedCampaign.acos,
+    roas: selectedCampaign.roas,
+    ctr: selectedCampaign.ctr,
+    cvr: selectedCampaign.conversion,
+    cpc: selectedCampaign.cpc,
+  };
+};
+
+export const buildTargetTrendSummaryValues = (
+  selectedTarget: SpTargetsWorkspaceRow | null
+): SpTrendSummaryValues => {
+  if (!selectedTarget) return buildEmptySpTrendSummaryValues();
+  return {
+    ...buildEmptySpTrendSummaryValues(),
+    spend: selectedTarget.spend,
+    sales: selectedTarget.sales,
+    orders: selectedTarget.orders,
+    units: selectedTarget.units,
+    acos: selectedTarget.acos,
+    roas: selectedTarget.roas,
+    ctr: selectedTarget.ctr,
+    cvr: selectedTarget.conversion,
+    cpc: selectedTarget.cpc,
+    organic_rank: selectedTarget.rank_context?.organic_rank ?? null,
+    sponsored_rank: selectedTarget.rank_context?.sponsored_rank ?? null,
+    stis: selectedTarget.stis,
+    stir: selectedTarget.stir,
+    tos_is: selectedTarget.tos_is,
+  };
+};
 
 const safeDivide = (numerator: number | null, denominator: number | null) => {
   if (
@@ -278,6 +327,7 @@ const buildMetricRows = (params: {
   dates: string[];
   markersByDate: Map<string, string[]>;
   valuesByDate: Map<string, Record<SpTrendMetricKey, number | null>>;
+  summaryValues: SpTrendSummaryValues;
   supportNotes?: Partial<Record<SpTrendMetricKey, string | null>>;
 }) =>
   METRIC_DEFS.map((metric) => ({
@@ -285,6 +335,7 @@ const buildMetricRows = (params: {
     label: metric.label,
     kind: metric.kind,
     support_note: params.supportNotes?.[metric.key] ?? null,
+    summary_value: params.summaryValues[metric.key] ?? null,
     cells: params.dates.map((date) => ({
       date,
       value: params.valuesByDate.get(date)?.[metric.key] ?? null,
@@ -356,6 +407,7 @@ export const buildCampaignTrendData = (params: {
   selectedEntityLabel: string;
   start: string;
   end: string;
+  summaryValues: SpTrendSummaryValues;
   campaignRows: SpTrendCampaignDailyRow[];
   placementUnitRows: SpTrendPlacementUnitsRow[];
   markers: SpTrendMarker[];
@@ -414,6 +466,7 @@ export const buildCampaignTrendData = (params: {
       acos: value.has_row ? safeDivide(value.spend, value.sales) : 0,
       roas: value.has_row ? safeDivide(value.sales, value.spend) : 0,
       ctr: value.has_row ? safeDivide(value.clicks, value.impressions) : 0,
+      cvr: value.has_row ? safeDivide(value.orders, value.clicks) : 0,
       cpc: value.has_row ? safeDivide(value.spend, value.clicks) : 0,
       organic_rank: null,
       sponsored_rank: null,
@@ -434,6 +487,7 @@ export const buildCampaignTrendData = (params: {
       dates,
       markersByDate: params.markersByDate,
       valuesByDate,
+      summaryValues: params.summaryValues,
       supportNotes: {
         stis: unavailableNote,
         stir: unavailableNote,
@@ -480,6 +534,7 @@ export const buildTargetTrendData = (params: {
   selectedEntityLabel: string;
   start: string;
   end: string;
+  summaryValues: SpTrendSummaryValues;
   targetRows: SpTrendTargetDailyRow[];
   stirRows: SpTrendTargetStirRow[];
   rankRows?: SpTrendTargetRankRow[];
@@ -581,6 +636,7 @@ export const buildTargetTrendData = (params: {
       acos: daily.has_row ? safeDivide(daily.spend, daily.sales) : 0,
       roas: daily.has_row ? safeDivide(daily.sales, daily.spend) : 0,
       ctr: daily.has_row ? safeDivide(daily.clicks, daily.impressions) : 0,
+      cvr: daily.has_row ? safeDivide(daily.orders, daily.clicks) : 0,
       cpc: daily.has_row ? safeDivide(daily.spend, daily.clicks) : 0,
       organic_rank: rank?.organic_rank ?? null,
       sponsored_rank: rank?.sponsored_rank ?? null,
@@ -601,6 +657,7 @@ export const buildTargetTrendData = (params: {
       dates,
       markersByDate: params.markersByDate,
       valuesByDate,
+      summaryValues: params.summaryValues,
       supportNotes: {
         organic_rank:
           params.rankSupportNote ??

@@ -78,6 +78,7 @@ describe('ads workspace 7B-B UI wiring', () => {
     const campaignsTableSource = fs.readFileSync(campaignsTablePath, 'utf-8');
     const adGroupsTableSource = fs.readFileSync(adGroupsTablePath, 'utf-8');
     const trendSource = fs.readFileSync(trendPath, 'utf-8');
+    const normalizedTrendSource = trendSource.replace(/\s+/g, ' ').trim();
     const stateBarSource = fs.readFileSync(stateBarPath, 'utf-8');
     const rowActionsMenuSource = fs.readFileSync(rowActionsMenuPath, 'utf-8');
     const rowActionsLibSource = fs.readFileSync(rowActionsLibPath, 'utf-8');
@@ -101,11 +102,63 @@ describe('ads workspace 7B-B UI wiring', () => {
     expect(rowActionsLibSource).toContain("view: 'trend'");
     expect(rowActionsLibSource).toContain("level: 'placements'");
     expect(trendSource).toContain('Trend');
+    expect(trendSource).toContain('Summary');
+    expect(trendSource).toContain('CVR');
+    expect(trendSource).toContain('--summary-col-w');
+    expect(trendSource).toContain('--trend-col-w');
+    expect(normalizedTrendSource).toMatch(
+      /const KPI_HEADER_CELL_CLASS = 'sticky z-50[^']*bg-surface[^']*'/
+    );
+    expect(normalizedTrendSource).toMatch(
+      /const SUMMARY_HEADER_CELL_CLASS = 'sticky z-40[^']*bg-surface[^']*'/
+    );
+    expect(normalizedTrendSource).toMatch(
+      /const TREND_HEADER_CELL_CLASS = 'sticky z-30[^']*bg-surface[^']*'/
+    );
+    expect(normalizedTrendSource).toMatch(
+      /const KPI_BODY_CELL_CLASS = 'sticky z-10[^']*bg-surface[^']*'/
+    );
+    expect(normalizedTrendSource).toMatch(
+      /const SUMMARY_BODY_CELL_CLASS = 'sticky z-\[9\][^']*bg-surface[^']*'/
+    );
+    expect(normalizedTrendSource).toMatch(
+      /const TREND_BODY_CELL_CLASS = 'sticky z-\[8\][^']*bg-surface[^']*'/
+    );
+    expect(normalizedTrendSource).toMatch(
+      /const DATE_HEADER_CELL_CLASS = 'sticky z-20[^']*'/
+    );
+    expect(normalizedTrendSource).toMatch(/const DATE_BODY_CELL_CLASS = 'relative z-0[^']*'/);
     expect(trendSource).toContain('buildMiniBarMetrics');
     expect(trendSource).toContain('useLocalContrastScaling');
     expect(trendSource).toContain('MINI_BAR_MIN_VISIBLE_HEIGHT');
     expect(trendSource).toContain('className="max-h-[62vh] overflow-auto xl:max-h-[720px]"');
-    expect(trendSource).toContain("!(level === 'targets' && (metric.key === 'stis' || metric.key === 'stir')) &&");
+    const summaryHeaderCellMatches = normalizedTrendSource.match(
+      /<th[^>]*>\s*\{SUMMARY_COLUMN_LABEL\}\s*<\/th>/g
+    );
+    const trendHeaderCellMatches = normalizedTrendSource.match(
+      /<th[^>]*>\s*\{TREND_COLUMN_LABEL\}\s*<\/th>/g
+    );
+    expect(summaryHeaderCellMatches).toHaveLength(1);
+    expect(trendHeaderCellMatches).toHaveLength(1);
+    expect(normalizedTrendSource).toMatch(
+      /<th[^>]*className=\{KPI_HEADER_CELL_CLASS\}[^>]*>\s*\{KPI_COLUMN_LABEL\}\s*<\/th>\s*<th[^>]*className=\{SUMMARY_HEADER_CELL_CLASS\}[^>]*>\s*\{SUMMARY_COLUMN_LABEL\}\s*<\/th>\s*<th[^>]*className=\{TREND_HEADER_CELL_CLASS\}[^>]*>\s*\{TREND_COLUMN_LABEL\}\s*<\/th>\s*\{trendData\.dates\.map/
+    );
+    expect(normalizedTrendSource).toContain("style={{ top: 0, left: 0 }}");
+    expect(normalizedTrendSource).toContain("style={{ top: 0, left: 'var(--metric-col-w)' }}");
+    expect(normalizedTrendSource).toContain(
+      "top: 0, left: 'calc(var(--metric-col-w) + var(--summary-col-w))'"
+    );
+    expect(normalizedTrendSource).toContain("style={{ top: 0 }}");
+    expect(normalizedTrendSource).toContain('{renderedSummaryValue}');
+    expect(normalizedTrendSource.indexOf('{renderedSummaryValue}')).toBeLessThan(
+      normalizedTrendSource.indexOf('{miniBars.hasData ? (')
+    );
+    expect(normalizedTrendSource.indexOf('{miniBars.hasData ? (')).toBeLessThan(
+      normalizedTrendSource.indexOf('{metric.cells.map((cell) => {')
+    );
+    expect(normalizedTrendSource).toContain(
+      "metric.key !== 'stis' && metric.key !== 'stir' &&"
+    );
     expect(trendSource).toContain("metric.key !== 'organic_rank' &&");
     expect(trendSource).toContain("metric.key !== 'sponsored_rank' &&");
     expect(trendSource).toContain("metric.key !== 'tos_is';");

@@ -13,8 +13,10 @@ import type { SpCampaignsWorkspaceRow } from './spWorkspaceTablesModel';
 import {
   buildCampaignTrendData,
   buildCampaignTrendEntityOptions,
+  buildCampaignTrendSummaryValues,
   buildTargetTrendData,
   buildTargetTrendEntityOptions,
+  buildTargetTrendSummaryValues,
   buildTrendMarkers,
   type SpTrendCampaignDailyRow,
   type SpTrendLevel,
@@ -353,6 +355,14 @@ export const getSpWorkspaceTrendData = async ({
   const resolvedSelectedEntityId =
     entities.find((entity) => entity.id === selectedEntityId)?.id ?? entities[0]!.id;
   const resolvedSelectedEntity = entities.find((entity) => entity.id === resolvedSelectedEntityId)!;
+  const selectedCampaign =
+    level === 'campaigns'
+      ? campaignRows.find((row) => row.campaign_id === resolvedSelectedEntityId) ?? null
+      : null;
+  const selectedTarget =
+    level === 'targets'
+      ? targetRows.find((row) => row.target_id === resolvedSelectedEntityId) ?? null
+      : null;
   const { markers, markersByDate } = await loadTrendMarkers({
     accountId,
     marketplace,
@@ -371,6 +381,7 @@ export const getSpWorkspaceTrendData = async ({
       selectedEntityLabel: resolvedSelectedEntity.label,
       start,
       end,
+      summaryValues: buildCampaignTrendSummaryValues(selectedCampaign),
       ...(await loadCampaignTrendRows({
         accountId,
         campaignId: resolvedSelectedEntityId,
@@ -381,7 +392,6 @@ export const getSpWorkspaceTrendData = async ({
       markersByDate,
     });
   } else {
-    const selectedTarget = targetRows.find((row) => row.target_id === resolvedSelectedEntityId) ?? null;
     const targetTrendRows = await loadTargetTrendRows({
       accountId,
       targetId: resolvedSelectedEntityId,
@@ -437,6 +447,7 @@ export const getSpWorkspaceTrendData = async ({
       selectedEntityLabel: resolvedSelectedEntity.label,
       start,
       end,
+      summaryValues: buildTargetTrendSummaryValues(selectedTarget),
       ...targetTrendRows,
       rankRows,
       rankSupportNote,
