@@ -23,6 +23,7 @@ import { detectSourceTypeFromFilename, type DetectedSourceType } from "../fs/rep
 import { mapUpload as mapSpUpload } from "../mapping/db";
 import { mapUpload as mapSbUpload } from "../mapping_sb/db";
 import { mapUpload as mapSdUpload } from "../mapping_sd/db";
+import { upsertImportSourceStatus } from "../importStatus/db";
 import { rejectDeprecatedAccountId } from "./_accountGuard";
 import { resolveSalesTrendAsinOverrideFromManifestItem } from "./importBatchManifestHelpers";
 
@@ -42,13 +43,15 @@ type IngestSummary = {
   status: "ok" | "already ingested" | "error";
   upload_id?: string;
   row_count?: number;
+  message?: string;
   error?: string;
 };
 
 type MapSummary = {
-  status: "ok" | "missing_snapshot" | "skipped" | "error";
+  status: "ok" | "not_required" | "missing_snapshot" | "skipped" | "error";
   fact_rows?: number;
   issue_rows?: number;
+  message?: string;
   error?: string;
 };
 
@@ -129,6 +132,58 @@ function getArg(flag: string): string | undefined {
 function asErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
+}
+
+function isMappableSourceType(sourceType: DetectedSourceType): boolean {
+  return isSpMapReportType(sourceType) || isSbMapReportType(sourceType) || isSdMapReportType(sourceType);
+}
+
+function buildNoMappingRequiredSummary(): MapSummary {
+  return {
+    status: "not_required",
+    message: "No mapping step required for this source type.",
+  };
+}
+
+function buildSkippedMapSummary(reason: "already_ingested" | "ingest_failed" | "missing_upload_id"): MapSummary {
+  if (reason === "already_ingested") {
+    return {
+      status: "skipped",
+      message:
+        "Mapping skipped because ingest status was already ingested and this flow did not remap the existing upload.",
+    };
+  }
+  if (reason === "missing_upload_id") {
+    return {
+      status: "skipped",
+      message: "Mapping skipped because upload_id was not returned from ingest.",
+    };
+  }
+  return {
+    status: "skipped",
+    message: "Mapping skipped because ingest failed.",
+  };
+}
+
+async function persistItemStatus(params: {
+  accountId: string;
+  item: ItemSummary;
+}) {
+  const { accountId, item } = params;
+  await upsertImportSourceStatus({
+    account_id: accountId,
+    source_type: item.source_type,
+    last_attempted_at: item.run_at_iso,
+    last_original_filename: item.original_filename,
+    last_upload_id: item.ingest.upload_id ?? null,
+    ingest_status: item.ingest.status,
+    ingest_row_count: item.ingest.row_count ?? null,
+    ingest_message: item.ingest.message ?? item.ingest.error ?? null,
+    map_status: item.map.status,
+    map_fact_rows: item.map.fact_rows ?? null,
+    map_issue_rows: item.map.issue_rows ?? null,
+    map_message: item.map.message ?? item.map.error ?? null,
+  });
 }
 
 function readManifest(manifestPath: string): Manifest {
@@ -286,6 +341,10 @@ async function mapIfRequired(sourceType: DetectedSourceType, uploadId: string): 
       status: result.status,
       fact_rows: result.factRows,
       issue_rows: result.issueRows,
+      message:
+        result.status === "missing_snapshot"
+          ? "No compatible bulk snapshot was found for this upload."
+          : undefined,
     };
   }
 
@@ -295,6 +354,10 @@ async function mapIfRequired(sourceType: DetectedSourceType, uploadId: string): 
       status: result.status,
       fact_rows: result.factRows,
       issue_rows: result.issueRows,
+      message:
+        result.status === "missing_snapshot"
+          ? "No compatible bulk snapshot was found for this upload."
+          : undefined,
     };
   }
 
@@ -304,10 +367,14 @@ async function mapIfRequired(sourceType: DetectedSourceType, uploadId: string): 
       status: result.status,
       fact_rows: result.factRows,
       issue_rows: result.issueRows,
+      message:
+        result.status === "missing_snapshot"
+          ? "No compatible bulk snapshot was found for this upload."
+          : undefined,
     };
   }
 
-  return { status: "skipped" };
+  return buildNoMappingRequiredSummary();
 }
 
 async function processItem(params: {
@@ -324,6 +391,7 @@ async function processItem(params: {
     detectSourceTypeFromFilename(path.basename(item.path));
 
   if (!item.path || !path.isAbsolute(item.path)) {
+    const ingestMessage = `Manifest item path must be absolute: ${item.path}`;
     return {
       original_filename: originalFilename,
       source_type: sourceType ?? "unknown",
@@ -331,13 +399,18 @@ async function processItem(params: {
       run_at_iso: runAtIso,
       ingest: {
         status: "error",
-        error: `Manifest item path must be absolute: ${item.path}`,
+        message: ingestMessage,
+        error: ingestMessage,
       },
-      map: { status: "skipped" },
+      map:
+        sourceType && !isMappableSourceType(sourceType)
+          ? buildNoMappingRequiredSummary()
+          : buildSkippedMapSummary("ingest_failed"),
     };
   }
 
   if (!fs.existsSync(item.path)) {
+    const ingestMessage = `File not found: ${item.path}`;
     return {
       original_filename: originalFilename,
       source_type: sourceType ?? "unknown",
@@ -345,13 +418,18 @@ async function processItem(params: {
       run_at_iso: runAtIso,
       ingest: {
         status: "error",
-        error: `File not found: ${item.path}`,
+        message: ingestMessage,
+        error: ingestMessage,
       },
-      map: { status: "skipped" },
+      map:
+        sourceType && !isMappableSourceType(sourceType)
+          ? buildNoMappingRequiredSummary()
+          : buildSkippedMapSummary("ingest_failed"),
     };
   }
 
   if (!sourceType) {
+    const ingestMessage = `Could not detect source_type from filename: ${originalFilename}`;
     return {
       original_filename: originalFilename,
       source_type: "unknown",
@@ -359,9 +437,10 @@ async function processItem(params: {
       run_at_iso: runAtIso,
       ingest: {
         status: "error",
-        error: `Could not detect source_type from filename: ${originalFilename}`,
+        message: ingestMessage,
+        error: ingestMessage,
       },
-      map: { status: "skipped" },
+      map: buildSkippedMapSummary("ingest_failed"),
     };
   }
 
@@ -386,12 +465,15 @@ async function processItem(params: {
         exported_at_iso: exportedAtIso,
         run_at_iso: runAtIso,
         ingest: ingestSummary,
-        map: { status: "skipped" },
+        map: isMappableSourceType(sourceType)
+          ? buildSkippedMapSummary("already_ingested")
+          : buildNoMappingRequiredSummary(),
       };
     }
 
     const uploadId = ingestResult.uploadId ?? normalizeUploadId(ingestResult);
     if (!uploadId) {
+      const ingestMessage = "Ingest succeeded but upload_id was not returned.";
       return {
         original_filename: originalFilename,
         source_type: sourceType,
@@ -400,9 +482,12 @@ async function processItem(params: {
         ingest: {
           ...ingestSummary,
           status: "error",
-          error: "Ingest succeeded but upload_id was not returned.",
+          message: ingestMessage,
+          error: ingestMessage,
         },
-        map: { status: "skipped" },
+        map: isMappableSourceType(sourceType)
+          ? buildSkippedMapSummary("missing_upload_id")
+          : buildNoMappingRequiredSummary(),
       };
     }
 
@@ -417,6 +502,7 @@ async function processItem(params: {
         map: mapSummary,
       };
     } catch (error) {
+      const message = asErrorMessage(error);
       return {
         original_filename: originalFilename,
         source_type: sourceType,
@@ -425,11 +511,13 @@ async function processItem(params: {
         ingest: ingestSummary,
         map: {
           status: "error",
-          error: asErrorMessage(error),
+          message,
+          error: message,
         },
       };
     }
   } catch (error) {
+    const message = asErrorMessage(error);
     return {
       original_filename: originalFilename,
       source_type: sourceType,
@@ -437,9 +525,12 @@ async function processItem(params: {
       run_at_iso: runAtIso,
       ingest: {
         status: "error",
-        error: asErrorMessage(error),
+        message,
+        error: message,
       },
-      map: { status: "skipped" },
+      map: isMappableSourceType(sourceType)
+        ? buildSkippedMapSummary("ingest_failed")
+        : buildNoMappingRequiredSummary(),
     };
   }
 }
@@ -467,7 +558,9 @@ async function main() {
   const runAtIso = new Date().toISOString();
   const summaryItems: ItemSummary[] = [];
   for (const item of items) {
-    summaryItems.push(await processItem({ item, accountId, marketplace, runAtIso }));
+    const summaryItem = await processItem({ item, accountId, marketplace, runAtIso });
+    await persistItemStatus({ accountId, item: summaryItem });
+    summaryItems.push(summaryItem);
   }
 
   const summary: BatchSummary = { items: summaryItems };

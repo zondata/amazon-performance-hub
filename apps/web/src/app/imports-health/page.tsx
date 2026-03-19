@@ -2,9 +2,15 @@ import { redirect } from 'next/navigation';
 
 import CopyButton from '@/components/CopyButton';
 import ImportBatchUploader from '@/components/imports/ImportBatchUploader';
+import ImportStatusBadge from '@/components/imports/ImportStatusBadge';
 import { env } from '@/lib/env';
-import { getDataHealth, type DataHealthResult } from '@/lib/health/getDataHealth';
+import { getDataHealth } from '@/lib/health/getDataHealth';
 import { getImportsHealthSettings } from '@/lib/imports/preferences';
+import {
+  buildImportsHealthSourceSections,
+  getImportsHealthStatusPresentation,
+  type ImportsHealthSourceDisplayRow,
+} from '@/lib/imports/statusPresentation';
 import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
 import { seedProductsFromSalesLatest } from '@/lib/products/seedProductsFromSalesLatest';
 import { formatUiDate, formatUiDateRange } from '@/lib/time/formatUiDate';
@@ -47,21 +53,18 @@ const formatNumber = (value?: number | string | null) => {
   return numeric.toLocaleString('en-US');
 };
 
-const getLatestTimestamp = (row: DataHealthResult['latestUploadsBySourceType'][number]) => {
+type LatestUploadTimestampLike = {
+  exported_at: string | null;
+  snapshot_date: string | null;
+  ingested_at: string | null;
+};
+
+const getLatestTimestamp = (row: LatestUploadTimestampLike | null) => {
+  if (!row) return null;
   return row.exported_at || row.snapshot_date || row.ingested_at;
 };
 
-const getRowKey = (
-  row: DataHealthResult['latestUploadsBySourceType'][number]
-) => {
-  if (row.upload_id) return row.upload_id;
-  const stamp = row.exported_at || row.snapshot_date || row.ingested_at || 'na';
-  const filename = row.original_filename || 'na';
-  const source = row.source_type || 'unknown';
-  return `${source}|${stamp}|${filename}`;
-};
-
-const isStale = (row: DataHealthResult['latestUploadsBySourceType'][number]) => {
+const isStale = (row: LatestUploadTimestampLike) => {
   const latest = getLatestTimestamp(row);
   if (!latest) return false;
   const parsed = new Date(latest);
@@ -73,7 +76,7 @@ const isStale = (row: DataHealthResult['latestUploadsBySourceType'][number]) => 
 
 const renderUploadTable = (
   title: string,
-  rows: DataHealthResult['latestUploadsBySourceType']
+  rows: ImportsHealthSourceDisplayRow[]
 ) => {
   return (
     <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
@@ -98,36 +101,50 @@ const renderUploadTable = (
                 <th className="w-24 pb-2">Rows</th>
                 <th className="w-64 pb-2">File</th>
                 <th className="w-56 pb-2">Upload ID</th>
-                <th className="w-24 pb-2 text-right">Status</th>
+                <th className="w-64 pb-2">Import status</th>
+                <th className="w-24 pb-2 text-right">Freshness</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {rows.map((row) => (
-                <tr key={getRowKey(row)}>
+                <tr key={row.sourceType}>
                   <td className="py-3 font-medium text-foreground">
-                    {row.source_type}
+                    {row.sourceType}
                   </td>
                   <td className="py-3 text-muted">
-                    {formatUiDate(getLatestTimestamp(row))}
+                    {formatUiDate(getLatestTimestamp(row.latestUpload))}
                   </td>
                   <td className="py-3 text-muted">
-                    {row.coverage_start || row.coverage_end
-                      ? formatUiDateRange(row.coverage_start, row.coverage_end)
+                    {row.latestUpload?.coverage_start || row.latestUpload?.coverage_end
+                      ? formatUiDateRange(row.latestUpload?.coverage_start, row.latestUpload?.coverage_end)
                       : '—'}
                   </td>
                   <td className="py-3 text-muted">
-                    {formatNumber(row.row_count)}
+                    {row.latestUpload ? formatNumber(row.latestUpload.row_count) : '—'}
                   </td>
                   <td className="py-3 text-muted">
                     <div className="flex min-w-0 items-center gap-2">
                       <span
                         className="min-w-0 flex-1 truncate"
-                        title={row.original_filename ?? undefined}
+                        title={
+                          row.latestUpload?.original_filename
+                          ?? row.persistedStatus?.last_original_filename
+                          ?? undefined
+                        }
                       >
-                        {row.original_filename ?? '—'}
+                        {row.latestUpload?.original_filename
+                          ?? row.persistedStatus?.last_original_filename
+                          ?? '—'}
                       </span>
-                      {row.original_filename ? (
-                        <CopyButton value={row.original_filename} label="filename" />
+                      {row.latestUpload?.original_filename || row.persistedStatus?.last_original_filename ? (
+                        <CopyButton
+                          value={
+                            row.latestUpload?.original_filename
+                            ?? row.persistedStatus?.last_original_filename
+                            ?? ''
+                          }
+                          label="filename"
+                        />
                       ) : null}
                     </div>
                   </td>
@@ -135,25 +152,57 @@ const renderUploadTable = (
                     <div className="flex min-w-0 items-center gap-2">
                       <span
                         className="min-w-0 flex-1 truncate"
-                        title={row.upload_id ?? undefined}
+                        title={
+                          row.latestUpload?.upload_id
+                          ?? row.persistedStatus?.last_upload_id
+                          ?? undefined
+                        }
                       >
-                        {row.upload_id ?? '—'}
+                        {row.latestUpload?.upload_id ?? row.persistedStatus?.last_upload_id ?? '—'}
                       </span>
-                      {row.upload_id ? (
-                        <CopyButton value={row.upload_id} label="upload id" />
+                      {row.latestUpload?.upload_id || row.persistedStatus?.last_upload_id ? (
+                        <CopyButton
+                          value={row.latestUpload?.upload_id ?? row.persistedStatus?.last_upload_id ?? ''}
+                          label="upload id"
+                        />
                       ) : null}
                     </div>
                   </td>
+                  <td className="py-3">
+                    {(() => {
+                      const presentation = getImportsHealthStatusPresentation(row.persistedStatus);
+                      if (!presentation) return '—';
+                      return (
+                        <div className="space-y-1">
+                          <ImportStatusBadge tone={presentation.tone}>
+                            {presentation.label}
+                          </ImportStatusBadge>
+                          {presentation.tone === 'problem' && presentation.message ? (
+                            <div
+                              className="break-words whitespace-normal text-xs leading-5 text-rose-700"
+                              title={presentation.message}
+                            >
+                              {presentation.message}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
+                  </td>
                   <td className="py-3 text-right">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
-                        isStale(row)
-                          ? 'bg-rose-100 text-rose-700'
-                          : 'bg-emerald-100 text-emerald-700'
-                      }`}
-                    >
-                      {isStale(row) ? 'Stale' : 'Healthy'}
-                    </span>
+                    {row.latestUpload ? (
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                          isStale(row.latestUpload)
+                            ? 'bg-rose-100 text-rose-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}
+                      >
+                        {isStale(row.latestUpload) ? 'Stale' : 'Healthy'}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
                   </td>
                 </tr>
               ))}
@@ -212,22 +261,11 @@ export default async function ImportsHealthPage({
       marketplace: data.marketplace,
     }),
   ]);
-  const latestBySource = new Map(
-    data.latestUploadsBySourceType.map((row) => [row.source_type ?? '', row])
-  );
-
-  const usedSources = new Set<string>();
-  const groupedSections = SOURCE_GROUPS.map((group) => {
-    const rows = group.sources
-      .map((source) => latestBySource.get(source))
-      .filter((row): row is NonNullable<typeof row> => Boolean(row));
-    group.sources.forEach((source) => usedSources.add(source));
-    return { title: group.title, rows };
+  const { groups: groupedSections, otherRows } = buildImportsHealthSourceSections({
+    sourceGroups: SOURCE_GROUPS,
+    latestUploadsBySourceType: data.latestUploadsBySourceType,
+    importSourceStatuses: data.importSourceStatuses,
   });
-
-  const otherRows = data.latestUploadsBySourceType.filter(
-    (row) => row.source_type && !usedSources.has(row.source_type)
-  );
 
   return (
     <div className="space-y-8">

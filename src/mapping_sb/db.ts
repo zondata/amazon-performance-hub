@@ -1,5 +1,6 @@
 import { getSupabaseClient } from "../db/supabaseClient";
 import { chunkArray } from "../ingest/utils";
+import { upsertImportSourceStatus } from "../importStatus/db";
 import {
   BulkLookup,
   ManualOverrideRow,
@@ -25,6 +26,7 @@ type UploadRow = {
   upload_id: string;
   account_id: string;
   source_type: string;
+  original_filename: string | null;
   exported_at: string | null;
 };
 
@@ -406,11 +408,31 @@ async function fetchUpload(uploadId: string): Promise<UploadRow> {
   const client = getSupabaseClient();
   const { data, error } = await client
     .from("uploads")
-    .select("upload_id,account_id,source_type,exported_at")
+    .select("upload_id,account_id,source_type,original_filename,exported_at")
     .eq("upload_id", uploadId)
     .single();
   if (error) throw new Error(`Failed fetching upload: ${error.message}`);
   return data as UploadRow;
+}
+
+async function persistMapStatus(params: {
+  upload: UploadRow;
+  reportType: "sb_campaign" | "sb_campaign_placement" | "sb_keyword" | "sb_stis";
+  mapStatus: "ok" | "missing_snapshot" | "error";
+  factRows?: number | null;
+  issueRows?: number | null;
+  message?: string | null;
+}) {
+  await upsertImportSourceStatus({
+    account_id: params.upload.account_id,
+    source_type: params.reportType,
+    last_original_filename: params.upload.original_filename,
+    last_upload_id: params.upload.upload_id,
+    map_status: params.mapStatus,
+    map_fact_rows: params.factRows ?? null,
+    map_issue_rows: params.issueRows ?? null,
+    map_message: params.message ?? null,
+  });
 }
 
 async function clearExisting(uploadId: string, reportType: string, factTable: string) {
@@ -480,55 +502,143 @@ export async function mapUpload(
   reportType: "sb_campaign" | "sb_campaign_placement" | "sb_keyword" | "sb_stis"
 ) {
   const upload = await fetchUpload(uploadId);
-  if (upload.source_type !== reportType) {
-    throw new Error(`Upload ${uploadId} is ${upload.source_type}, expected ${reportType}`);
-  }
+  try {
+    if (upload.source_type !== reportType) {
+      throw new Error(`Upload ${uploadId} is ${upload.source_type}, expected ${reportType}`);
+    }
 
-  const exportedAtDate = extractDate(upload.exported_at);
-  if (!exportedAtDate) throw new Error(`Upload ${uploadId} has no exported_at`);
+    const exportedAtDate = extractDate(upload.exported_at);
+    if (!exportedAtDate) throw new Error(`Upload ${uploadId} has no exported_at`);
 
-  await clearExisting(
-    uploadId,
-    reportType,
-    reportType === "sb_campaign"
-      ? "sb_campaign_daily_fact"
-      : reportType === "sb_campaign_placement"
-        ? "sb_campaign_placement_daily_fact"
-        : reportType === "sb_keyword"
-          ? "sb_keyword_daily_fact"
-          : "sb_stis_daily_fact"
-  );
-
-  const snapshotDate =
-    (await pickBestBulkSnapshotForUpload({
-      accountId: upload.account_id,
+    await clearExisting(
       uploadId,
       reportType,
-      exportedAtDate,
-    })) ?? (await pickBulkSnapshotForExport(upload.account_id, exportedAtDate));
-  if (!snapshotDate) {
-    await insertIssues(upload.account_id, uploadId, reportType, [
-      {
-        entity_level: "snapshot",
-        issue_type: "missing_bulk_snapshot",
-        key_json: { exported_at_date: exportedAtDate },
-        row_count: 1,
-      },
-    ]);
-    return { status: "missing_snapshot" as const, factRows: 0, issueRows: 1 };
-  }
+      reportType === "sb_campaign"
+        ? "sb_campaign_daily_fact"
+        : reportType === "sb_campaign_placement"
+          ? "sb_campaign_placement_daily_fact"
+          : reportType === "sb_keyword"
+            ? "sb_keyword_daily_fact"
+            : "sb_stis_daily_fact"
+    );
 
-  const lookup = await loadBulkLookup(upload.account_id, snapshotDate);
-  const referenceDate = exportedAtDate;
-  const exportedAt = upload.exported_at ?? new Date().toISOString();
+    const snapshotDate =
+      (await pickBestBulkSnapshotForUpload({
+        accountId: upload.account_id,
+        uploadId,
+        reportType,
+        exportedAtDate,
+      })) ?? (await pickBulkSnapshotForExport(upload.account_id, exportedAtDate));
+    if (!snapshotDate) {
+      const message = "No compatible bulk snapshot was found for this upload.";
+      await insertIssues(upload.account_id, uploadId, reportType, [
+        {
+          entity_level: "snapshot",
+          issue_type: "missing_bulk_snapshot",
+          key_json: { exported_at_date: exportedAtDate },
+          row_count: 1,
+        },
+      ]);
+      await persistMapStatus({
+        upload,
+        reportType,
+        mapStatus: "missing_snapshot",
+        factRows: 0,
+        issueRows: 1,
+        message,
+      });
+      return { status: "missing_snapshot" as const, factRows: 0, issueRows: 1 };
+    }
 
-  if (reportType === "sb_campaign") {
-    const rows = await fetchAllRows<SbCampaignRawRow>(
-      "sb_campaign_daily_raw",
-      "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders,units",
+    const lookup = await loadBulkLookup(upload.account_id, snapshotDate);
+    const referenceDate = exportedAtDate;
+    const exportedAt = upload.exported_at ?? new Date().toISOString();
+
+    if (reportType === "sb_campaign") {
+      const rows = await fetchAllRows<SbCampaignRawRow>(
+        "sb_campaign_daily_raw",
+        "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,impressions,clicks,spend,sales,orders,units",
+        { upload_id: uploadId }
+      );
+      const { facts, issues } = mapSbCampaignRows({
+        rows,
+        lookup,
+        uploadId,
+        accountId: upload.account_id,
+        exportedAt,
+        referenceDate,
+      });
+      await insertChunked("sb_campaign_daily_fact", facts, "sb_campaign");
+      await refreshSbCampaignDailyFactGold(uploadId);
+      await insertIssues(upload.account_id, uploadId, reportType, issues);
+      await persistMapStatus({
+        upload,
+        reportType,
+        mapStatus: "ok",
+        factRows: facts.length,
+        issueRows: issues.length,
+      });
+      return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
+    }
+
+    if (reportType === "sb_campaign_placement") {
+      const rows = await fetchAllRows<SbCampaignPlacementRawRow>(
+        "sb_campaign_placement_daily_raw",
+        "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,placement_raw,placement_raw_norm,placement_code,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas",
+        { upload_id: uploadId }
+      );
+      const { facts, issues } = mapSbCampaignPlacementRows({
+        rows,
+        lookup,
+        uploadId,
+        accountId: upload.account_id,
+        exportedAt,
+        referenceDate,
+      });
+      await insertChunked("sb_campaign_placement_daily_fact", facts, "sb_campaign_placement");
+      await insertIssues(upload.account_id, uploadId, reportType, issues);
+      await persistMapStatus({
+        upload,
+        reportType,
+        mapStatus: "ok",
+        factRows: facts.length,
+        issueRows: issues.length,
+      });
+      return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
+    }
+
+    if (reportType === "sb_keyword") {
+      const rows = await fetchAllRows<SbKeywordRawRow>(
+        "sb_keyword_daily_raw",
+        "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,targeting_raw,targeting_norm,match_type_raw,match_type_norm,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
+        { upload_id: uploadId }
+      );
+      const { facts, issues } = mapSbKeywordRows({
+        rows,
+        lookup,
+        uploadId,
+        accountId: upload.account_id,
+        exportedAt,
+        referenceDate,
+      });
+      await insertChunked("sb_keyword_daily_fact", facts, "sb_keyword");
+      await insertIssues(upload.account_id, uploadId, reportType, issues);
+      await persistMapStatus({
+        upload,
+        reportType,
+        mapStatus: "ok",
+        factRows: facts.length,
+        issueRows: issues.length,
+      });
+      return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
+    }
+
+    const rows = await fetchAllRows<SbStisRawRow>(
+      "sb_stis_daily_raw",
+      "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,targeting_raw,targeting_norm,match_type_raw,match_type_norm,customer_search_term_raw,customer_search_term_norm,search_term_impression_rank,search_term_impression_share,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
       { upload_id: uploadId }
     );
-    const { facts, issues } = mapSbCampaignRows({
+    const { facts, issues } = mapSbStisRows({
       rows,
       lookup,
       uploadId,
@@ -536,66 +646,26 @@ export async function mapUpload(
       exportedAt,
       referenceDate,
     });
-    await insertChunked("sb_campaign_daily_fact", facts, "sb_campaign");
-    await refreshSbCampaignDailyFactGold(uploadId);
+    await insertChunked("sb_stis_daily_fact", facts, "sb_stis");
     await insertIssues(upload.account_id, uploadId, reportType, issues);
-    return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
-  }
-
-  if (reportType === "sb_campaign_placement") {
-    const rows = await fetchAllRows<SbCampaignPlacementRawRow>(
-      "sb_campaign_placement_daily_raw",
-      "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,placement_raw,placement_raw_norm,placement_code,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas",
-      { upload_id: uploadId }
-    );
-    const { facts, issues } = mapSbCampaignPlacementRows({
-      rows,
-      lookup,
-      uploadId,
-      accountId: upload.account_id,
-      exportedAt,
-      referenceDate,
+    await persistMapStatus({
+      upload,
+      reportType,
+      mapStatus: "ok",
+      factRows: facts.length,
+      issueRows: issues.length,
     });
-    await insertChunked("sb_campaign_placement_daily_fact", facts, "sb_campaign_placement");
-    await insertIssues(upload.account_id, uploadId, reportType, issues);
     return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
-  }
-
-  if (reportType === "sb_keyword") {
-    const rows = await fetchAllRows<SbKeywordRawRow>(
-      "sb_keyword_daily_raw",
-      "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,targeting_raw,targeting_norm,match_type_raw,match_type_norm,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
-      { upload_id: uploadId }
-    );
-    const { facts, issues } = mapSbKeywordRows({
-      rows,
-      lookup,
-      uploadId,
-      accountId: upload.account_id,
-      exportedAt,
-      referenceDate,
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await persistMapStatus({
+      upload,
+      reportType,
+      mapStatus: "error",
+      message,
     });
-    await insertChunked("sb_keyword_daily_fact", facts, "sb_keyword");
-    await insertIssues(upload.account_id, uploadId, reportType, issues);
-    return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
+    throw error;
   }
-
-  const rows = await fetchAllRows<SbStisRawRow>(
-    "sb_stis_daily_raw",
-    "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,targeting_raw,targeting_norm,match_type_raw,match_type_norm,customer_search_term_raw,customer_search_term_norm,search_term_impression_rank,search_term_impression_share,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
-    { upload_id: uploadId }
-  );
-  const { facts, issues } = mapSbStisRows({
-    rows,
-    lookup,
-    uploadId,
-    accountId: upload.account_id,
-    exportedAt,
-    referenceDate,
-  });
-  await insertChunked("sb_stis_daily_fact", facts, "sb_stis");
-  await insertIssues(upload.account_id, uploadId, reportType, issues);
-  return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
 }
 
 export async function findUploadIdByFileHash(accountId: string, fileHash: string): Promise<string | null> {

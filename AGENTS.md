@@ -551,6 +551,52 @@ Notes:
 - Keyword linkage helper: `sqp_weekly_latest_known_keywords` left-joins `dim_keyword` by `search_query_norm`.
 - ASIN View exports are per ASIN; to analyze multiple ASINs, download and ingest each ASIN's SQP export separately (can use `ingest:sqp:weekly:date`).
 
+### Import Status Persistence
+- The system persists the latest ingest and mapping outcome per `(account_id, source_type)` in `public.import_source_status`.
+- Do not treat `uploads` or `upload_stats` as the only source of truth for Imports Health runtime status. `/imports-health` now reads persisted import status in addition to latest upload rows.
+
+Status values:
+- ingest status:
+  - `ok`
+  - `already ingested`
+  - `error`
+- map status:
+  - `ok`
+  - `not_required`
+  - `missing_snapshot`
+  - `skipped`
+  - `error`
+
+Meaning rules:
+- `not_required` means the source type has no mapping step and should be treated as a success state in the UI.
+- `skipped` is not a success state. It means a mapping step was expected but did not run.
+- `missing_snapshot` means mapping could not find a compatible bulk snapshot.
+- Problem states that must remain visible in Imports Health are:
+  - ingest `error`
+  - map `missing_snapshot`
+  - map `skipped`
+  - map `error`
+
+Imports Health behavior:
+- `/imports-health` renders a dedicated `Import status` column from `public.import_source_status`.
+- When a persisted status is unresolved, the page shows a red problem status with the exact stored message.
+- `map_status = not_required` is rendered as a success state.
+- The page renders fallback source rows even when no latest upload row exists.
+- Source types that are not in the standard source groups must render under `Other uploads`, including `unknown`.
+
+Migration requirement:
+- Apply migration `20260319120000_import_source_status.sql` before running the updated `/imports-health` page.
+- If the page throws `Could not find the table 'public.import_source_status' in the schema cache`, the connected Supabase project does not have the migration applied yet.
+
+Mapping issues summary:
+- The Sponsored Products mapping-issues summary must include `sp_advertised_product`.
+
+Caution:
+- Do not use `skipped` for non-mappable sources.
+- Non-mappable sources must persist `map_status = not_required`.
+- Do not assume re-uploading an already-ingested file remaps it.
+- Manual mapping commands can update persisted map status after the fact.
+
 Supabase views (migrations):
 - `sp_campaign_hourly_latest`: latest-wins by (account_id, date, start_time, campaign_name_norm) with max(exported_at)
 

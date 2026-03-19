@@ -1,5 +1,6 @@
 import { getSupabaseClient } from "../db/supabaseClient";
 import { chunkArray } from "../ingest/utils";
+import { upsertImportSourceStatus } from "../importStatus/db";
 import { normText } from "../bulk/parseSponsoredProductsBulk";
 import {
   BulkLookup,
@@ -27,6 +28,7 @@ type UploadRow = {
   upload_id: string;
   account_id: string;
   source_type: string;
+  original_filename: string | null;
   exported_at: string | null;
 };
 
@@ -298,11 +300,31 @@ async function fetchUpload(uploadId: string): Promise<UploadRow> {
   const client = getSupabaseClient();
   const { data, error } = await client
     .from("uploads")
-    .select("upload_id,account_id,source_type,exported_at")
+    .select("upload_id,account_id,source_type,original_filename,exported_at")
     .eq("upload_id", uploadId)
     .single();
   if (error) throw new Error(`Failed fetching upload: ${error.message}`);
   return data as UploadRow;
+}
+
+async function persistMapStatus(params: {
+  upload: UploadRow;
+  reportType: SdReportType;
+  mapStatus: "ok" | "missing_snapshot" | "error";
+  factRows?: number | null;
+  issueRows?: number | null;
+  message?: string | null;
+}) {
+  await upsertImportSourceStatus({
+    account_id: params.upload.account_id,
+    source_type: params.reportType,
+    last_original_filename: params.upload.original_filename,
+    last_upload_id: params.upload.upload_id,
+    map_status: params.mapStatus,
+    map_fact_rows: params.factRows ?? null,
+    map_issue_rows: params.issueRows ?? null,
+    map_message: params.message ?? null,
+  });
 }
 
 async function clearExisting(uploadId: string, reportType: string, factTable: string) {
@@ -368,51 +390,165 @@ export async function mapUpload(
   reportType: SdReportType
 ) {
   const upload = await fetchUpload(uploadId);
-  if (upload.source_type !== reportType) {
-    throw new Error(`Upload ${uploadId} is ${upload.source_type}, expected ${reportType}`);
-  }
+  try {
+    if (upload.source_type !== reportType) {
+      throw new Error(`Upload ${uploadId} is ${upload.source_type}, expected ${reportType}`);
+    }
 
-  const exportedAtDate = extractDate(upload.exported_at);
-  if (!exportedAtDate) throw new Error(`Upload ${uploadId} has no exported_at`);
+    const exportedAtDate = extractDate(upload.exported_at);
+    if (!exportedAtDate) throw new Error(`Upload ${uploadId} has no exported_at`);
 
-  await clearExisting(
-    uploadId,
-    reportType,
-    reportType === "sd_campaign"
-      ? "sd_campaign_daily_fact"
-      : reportType === "sd_advertised_product"
-        ? "sd_advertised_product_daily_fact"
-        : reportType === "sd_targeting"
-          ? "sd_targeting_daily_fact"
-          : reportType === "sd_matched_target"
-            ? "sd_matched_target_daily_fact"
-            : "sd_purchased_product_daily_fact"
-  );
+    await clearExisting(
+      uploadId,
+      reportType,
+      reportType === "sd_campaign"
+        ? "sd_campaign_daily_fact"
+        : reportType === "sd_advertised_product"
+          ? "sd_advertised_product_daily_fact"
+          : reportType === "sd_targeting"
+            ? "sd_targeting_daily_fact"
+            : reportType === "sd_matched_target"
+              ? "sd_matched_target_daily_fact"
+              : "sd_purchased_product_daily_fact"
+    );
 
-  const snapshotDate = await pickBulkSnapshotForExport(upload.account_id, exportedAtDate);
-  if (!snapshotDate) {
-    await insertIssues(upload.account_id, uploadId, reportType, [
-      {
-        entity_level: "snapshot",
-        issue_type: "missing_bulk_snapshot",
-        key_json: { exported_at_date: exportedAtDate },
-        row_count: 1,
-      },
-    ]);
-    return { status: "missing_snapshot" as const, factRows: 0, issueRows: 1 };
-  }
+    const snapshotDate = await pickBulkSnapshotForExport(upload.account_id, exportedAtDate);
+    if (!snapshotDate) {
+      const message = "No compatible bulk snapshot was found for this upload.";
+      await insertIssues(upload.account_id, uploadId, reportType, [
+        {
+          entity_level: "snapshot",
+          issue_type: "missing_bulk_snapshot",
+          key_json: { exported_at_date: exportedAtDate },
+          row_count: 1,
+        },
+      ]);
+      await persistMapStatus({
+        upload,
+        reportType,
+        mapStatus: "missing_snapshot",
+        factRows: 0,
+        issueRows: 1,
+        message,
+      });
+      return { status: "missing_snapshot" as const, factRows: 0, issueRows: 1 };
+    }
 
-  const lookup = await loadBulkLookup(upload.account_id, snapshotDate);
-  const referenceDate = exportedAtDate;
-  const exportedAt = upload.exported_at ?? new Date().toISOString();
+    const lookup = await loadBulkLookup(upload.account_id, snapshotDate);
+    const referenceDate = exportedAtDate;
+    const exportedAt = upload.exported_at ?? new Date().toISOString();
 
-  if (reportType === "sd_campaign") {
-    const rows = await fetchAllRows<SdCampaignRawRow>(
-      "sd_campaign_daily_raw",
-      "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,cost_type,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
+    if (reportType === "sd_campaign") {
+      const rows = await fetchAllRows<SdCampaignRawRow>(
+        "sd_campaign_daily_raw",
+        "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,cost_type,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
+        { upload_id: uploadId }
+      );
+      const { facts, issues } = mapSdCampaignRows({
+        rows,
+        lookup,
+        uploadId,
+        accountId: upload.account_id,
+        exportedAt,
+        referenceDate,
+      });
+      await insertChunked("sd_campaign_daily_fact", facts, "sd_campaign");
+      await refreshSdCampaignDailyFactGold(uploadId);
+      await insertIssues(upload.account_id, uploadId, reportType, issues);
+      await persistMapStatus({
+        upload,
+        reportType,
+        mapStatus: "ok",
+        factRows: facts.length,
+        issueRows: issues.length,
+      });
+      return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
+    }
+
+    if (reportType === "sd_advertised_product") {
+      const rows = await fetchAllRows<SdAdvertisedProductRawRow>(
+        "sd_advertised_product_daily_raw",
+        "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,advertised_sku_raw,advertised_sku_norm,advertised_asin_raw,advertised_asin_norm,cost_type,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
+        { upload_id: uploadId }
+      );
+      const { facts, issues } = mapSdAdvertisedProductRows({
+        rows,
+        lookup,
+        uploadId,
+        accountId: upload.account_id,
+        exportedAt,
+        referenceDate,
+      });
+      await insertChunked("sd_advertised_product_daily_fact", facts, "sd_advertised_product");
+      await insertIssues(upload.account_id, uploadId, reportType, issues);
+      await persistMapStatus({
+        upload,
+        reportType,
+        mapStatus: "ok",
+        factRows: facts.length,
+        issueRows: issues.length,
+      });
+      return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
+    }
+
+    if (reportType === "sd_targeting") {
+      const rows = await fetchAllRows<SdTargetingRawRow>(
+        "sd_targeting_daily_raw",
+        "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,targeting_raw,targeting_norm,match_type_raw,match_type_norm,cost_type,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
+        { upload_id: uploadId }
+      );
+      const { facts, issues } = mapSdTargetingRows({
+        rows,
+        lookup,
+        uploadId,
+        accountId: upload.account_id,
+        exportedAt,
+        referenceDate,
+      });
+      await insertChunked("sd_targeting_daily_fact", facts, "sd_targeting");
+      await insertIssues(upload.account_id, uploadId, reportType, issues);
+      await persistMapStatus({
+        upload,
+        reportType,
+        mapStatus: "ok",
+        factRows: facts.length,
+        issueRows: issues.length,
+      });
+      return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
+    }
+
+    if (reportType === "sd_matched_target") {
+      const rows = await fetchAllRows<SdMatchedTargetRawRow>(
+        "sd_matched_target_daily_raw",
+        "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,targeting_raw,targeting_norm,matched_target_raw,matched_target_norm,cost_type,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
+        { upload_id: uploadId }
+      );
+      const { facts, issues } = mapSdMatchedTargetRows({
+        rows,
+        lookup,
+        uploadId,
+        accountId: upload.account_id,
+        exportedAt,
+        referenceDate,
+      });
+      await insertChunked("sd_matched_target_daily_fact", facts, "sd_matched_target");
+      await insertIssues(upload.account_id, uploadId, reportType, issues);
+      await persistMapStatus({
+        upload,
+        reportType,
+        mapStatus: "ok",
+        factRows: facts.length,
+        issueRows: issues.length,
+      });
+      return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
+    }
+
+    const rows = await fetchAllRows<SdPurchasedProductRawRow>(
+      "sd_purchased_product_daily_raw",
+      "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,purchased_sku_raw,purchased_sku_norm,purchased_asin_raw,purchased_asin_norm,cost_type,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
       { upload_id: uploadId }
     );
-    const { facts, issues } = mapSdCampaignRows({
+    const { facts, issues } = mapSdPurchasedProductRows({
       rows,
       lookup,
       uploadId,
@@ -420,85 +556,26 @@ export async function mapUpload(
       exportedAt,
       referenceDate,
     });
-    await insertChunked("sd_campaign_daily_fact", facts, "sd_campaign");
-    await refreshSdCampaignDailyFactGold(uploadId);
+    await insertChunked("sd_purchased_product_daily_fact", facts, "sd_purchased_product");
     await insertIssues(upload.account_id, uploadId, reportType, issues);
-    return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
-  }
-
-  if (reportType === "sd_advertised_product") {
-    const rows = await fetchAllRows<SdAdvertisedProductRawRow>(
-      "sd_advertised_product_daily_raw",
-      "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,advertised_sku_raw,advertised_sku_norm,advertised_asin_raw,advertised_asin_norm,cost_type,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
-      { upload_id: uploadId }
-    );
-    const { facts, issues } = mapSdAdvertisedProductRows({
-      rows,
-      lookup,
-      uploadId,
-      accountId: upload.account_id,
-      exportedAt,
-      referenceDate,
+    await persistMapStatus({
+      upload,
+      reportType,
+      mapStatus: "ok",
+      factRows: facts.length,
+      issueRows: issues.length,
     });
-    await insertChunked("sd_advertised_product_daily_fact", facts, "sd_advertised_product");
-    await insertIssues(upload.account_id, uploadId, reportType, issues);
     return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
-  }
-
-  if (reportType === "sd_targeting") {
-    const rows = await fetchAllRows<SdTargetingRawRow>(
-      "sd_targeting_daily_raw",
-      "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,targeting_raw,targeting_norm,match_type_raw,match_type_norm,cost_type,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
-      { upload_id: uploadId }
-    );
-    const { facts, issues } = mapSdTargetingRows({
-      rows,
-      lookup,
-      uploadId,
-      accountId: upload.account_id,
-      exportedAt,
-      referenceDate,
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await persistMapStatus({
+      upload,
+      reportType,
+      mapStatus: "error",
+      message,
     });
-    await insertChunked("sd_targeting_daily_fact", facts, "sd_targeting");
-    await insertIssues(upload.account_id, uploadId, reportType, issues);
-    return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
+    throw error;
   }
-
-  if (reportType === "sd_matched_target") {
-    const rows = await fetchAllRows<SdMatchedTargetRawRow>(
-      "sd_matched_target_daily_raw",
-      "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,targeting_raw,targeting_norm,matched_target_raw,matched_target_norm,cost_type,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
-      { upload_id: uploadId }
-    );
-    const { facts, issues } = mapSdMatchedTargetRows({
-      rows,
-      lookup,
-      uploadId,
-      accountId: upload.account_id,
-      exportedAt,
-      referenceDate,
-    });
-    await insertChunked("sd_matched_target_daily_fact", facts, "sd_matched_target");
-    await insertIssues(upload.account_id, uploadId, reportType, issues);
-    return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
-  }
-
-  const rows = await fetchAllRows<SdPurchasedProductRawRow>(
-    "sd_purchased_product_daily_raw",
-    "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,purchased_sku_raw,purchased_sku_norm,purchased_asin_raw,purchased_asin_norm,cost_type,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
-    { upload_id: uploadId }
-  );
-  const { facts, issues } = mapSdPurchasedProductRows({
-    rows,
-    lookup,
-    uploadId,
-    accountId: upload.account_id,
-    exportedAt,
-    referenceDate,
-  });
-  await insertChunked("sd_purchased_product_daily_fact", facts, "sd_purchased_product");
-  await insertIssues(upload.account_id, uploadId, reportType, issues);
-  return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
 }
 
 export async function findUploadIdByFileHash(accountId: string, fileHash: string): Promise<string | null> {

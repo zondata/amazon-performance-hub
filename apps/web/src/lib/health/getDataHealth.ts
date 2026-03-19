@@ -1,6 +1,7 @@
 import 'server-only';
 
 import fs from 'node:fs/promises';
+import type { ImportSourceStatusRow } from '../../../../../src/importStatus/db';
 import { env } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
@@ -20,6 +21,20 @@ type UploadStatRow = {
 type MappingIssueSummary = {
   issue_rows: number;
   affected_rows: number;
+};
+
+const getImportSourceStatuses = async (accountId: string): Promise<ImportSourceStatusRow[]> => {
+  const { data, error } = await supabaseAdmin
+    .from('import_source_status')
+    .select('*')
+    .eq('account_id', accountId)
+    .order('source_type', { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to load import_source_status: ${error.message}`);
+  }
+
+  return (data as ImportSourceStatusRow[] | null) ?? [];
 };
 
 const toDate = (value: string | null | undefined): Date | null => {
@@ -150,6 +165,7 @@ export const getDataHealth = async () => {
     'sp_campaign',
     'sp_placement',
     'sp_targeting',
+    'sp_advertised_product',
     'sp_stis',
   ]
     .map(latestIdForSource)
@@ -174,10 +190,11 @@ export const getDataHealth = async () => {
     .map(latestIdForSource)
     .filter((value): value is string => Boolean(value));
 
-  const [spIssues, sbIssues, sdIssues] = await Promise.all([
+  const [spIssues, sbIssues, sdIssues, importSourceStatuses] = await Promise.all([
     getMappingIssueSummary('sp_mapping_issues', spUploadIds),
     getMappingIssueSummary('sb_mapping_issues', sbUploadIds),
     getMappingIssueSummary('sd_mapping_issues', sdUploadIds),
+    getImportSourceStatuses(env.accountId),
   ]);
 
   const reconcileQueue = env.pendingReconcileDir
@@ -225,6 +242,7 @@ export const getDataHealth = async () => {
     accountId: env.accountId,
     marketplace: env.marketplace,
     latestUploadsBySourceType,
+    importSourceStatuses,
     mappingIssues: {
       sp: spIssues,
       sb: sbIssues,

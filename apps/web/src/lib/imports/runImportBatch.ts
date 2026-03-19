@@ -25,12 +25,14 @@ export type ImportBatchCliItemResult = {
     status: 'ok' | 'already ingested' | 'error';
     upload_id?: string;
     row_count?: number;
+    message?: string;
     error?: string;
   };
   map: {
-    status: 'ok' | 'missing_snapshot' | 'skipped' | 'error';
+    status: 'ok' | 'not_required' | 'missing_snapshot' | 'skipped' | 'error';
     fact_rows?: number;
     issue_rows?: number;
+    message?: string;
     error?: string;
   };
 };

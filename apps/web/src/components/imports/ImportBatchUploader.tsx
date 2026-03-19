@@ -2,6 +2,7 @@
 
 import { useActionState, useMemo, useState, useTransition } from 'react';
 
+import ImportStatusBadge from '@/components/imports/ImportStatusBadge';
 import {
   runImportBatchAction,
   saveIgnoredSourceTypesAction,
@@ -11,6 +12,14 @@ import {
   IMPORT_BATCH_SOURCE_TYPES,
   type ImportSourceType,
 } from '@/lib/imports/sourceTypes';
+import {
+  getBatchDetailsText,
+  getBatchIngestLabel,
+  getBatchIngestTone,
+  getBatchMapLabel,
+  getBatchMapTone,
+  getBatchSummaryCounts,
+} from '@/lib/imports/statusPresentation';
 
 type AsinOption = {
   asin: string;
@@ -106,24 +115,10 @@ export default function ImportBatchUploader(props: ImportBatchUploaderProps) {
     [requiredSourceTypes, uploadedSourceTypes]
   );
 
-  const ingestCounts = useMemo(() => {
-    const rows = state.summary?.items ?? [];
-    return {
-      ok: rows.filter((item) => item.ingest.status === 'ok').length,
-      already: rows.filter((item) => item.ingest.status === 'already ingested').length,
-      failed: rows.filter((item) => item.ingest.status === 'error').length,
-    };
-  }, [state.summary?.items]);
-
-  const mapCounts = useMemo(() => {
-    const rows = state.summary?.items ?? [];
-    return {
-      ok: rows.filter((item) => item.map.status === 'ok').length,
-      missingSnapshot: rows.filter((item) => item.map.status === 'missing_snapshot').length,
-      skipped: rows.filter((item) => item.map.status === 'skipped').length,
-      failed: rows.filter((item) => item.map.status === 'error').length,
-    };
-  }, [state.summary?.items]);
+  const batchCounts = useMemo(
+    () => getBatchSummaryCounts(state.summary?.items ?? []),
+    [state.summary?.items]
+  );
 
   return (
     <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
@@ -247,23 +242,34 @@ export default function ImportBatchUploader(props: ImportBatchUploaderProps) {
 
       {state.summary ? (
         <div className="mt-6 space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             <div className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm">
-              <div className="text-xs uppercase tracking-wide text-muted">Ingested</div>
-              <div className="mt-1 text-xl font-semibold text-foreground">{ingestCounts.ok}</div>
+              <div className="text-xs uppercase tracking-wide text-muted">Ingest OK</div>
+              <div className="mt-1 text-xl font-semibold text-foreground">{batchCounts.ingestOk}</div>
             </div>
             <div className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm">
               <div className="text-xs uppercase tracking-wide text-muted">Already ingested</div>
-              <div className="mt-1 text-xl font-semibold text-foreground">{ingestCounts.already}</div>
+              <div className="mt-1 text-xl font-semibold text-foreground">{batchCounts.alreadyIngested}</div>
             </div>
             <div className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm">
-              <div className="text-xs uppercase tracking-wide text-muted">Failed</div>
-              <div className="mt-1 text-xl font-semibold text-foreground">{ingestCounts.failed}</div>
+              <div className="text-xs uppercase tracking-wide text-muted">Ingest errors</div>
+              <div className="mt-1 text-xl font-semibold text-foreground">{batchCounts.ingestErrors}</div>
             </div>
             <div className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm">
-              <div className="text-xs uppercase tracking-wide text-muted">Mapped (ok/missing/skipped/error)</div>
-              <div className="mt-1 text-base font-semibold text-foreground">
-                {mapCounts.ok} / {mapCounts.missingSnapshot} / {mapCounts.skipped} / {mapCounts.failed}
+              <div className="text-xs uppercase tracking-wide text-muted">Map OK</div>
+              <div className="mt-1 text-xl font-semibold text-foreground">{batchCounts.mapOk}</div>
+            </div>
+            <div className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm">
+              <div className="text-xs uppercase tracking-wide text-muted">No mapping required</div>
+              <div className="mt-1 text-xl font-semibold text-foreground">{batchCounts.noMappingRequired}</div>
+            </div>
+            <div className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm">
+              <div className="text-xs uppercase tracking-wide text-muted">Map problems</div>
+              <div className="mt-1 text-xl font-semibold text-foreground">{batchCounts.mapProblems}</div>
+              <div className="mt-1 text-xs text-muted">
+                missing snapshot: {batchCounts.mapProblemBreakdown.missingSnapshot} · skipped:{' '}
+                {batchCounts.mapProblemBreakdown.skipped} · error:{' '}
+                {batchCounts.mapProblemBreakdown.error}
               </div>
             </div>
           </div>
@@ -310,13 +316,13 @@ export default function ImportBatchUploader(props: ImportBatchUploaderProps) {
                   <th className="w-[24%] px-3 py-2">File</th>
                   <th className="w-28 px-3 py-2">Date</th>
                   <th className="w-36 px-3 py-2">Source type</th>
-                  <th className="w-24 px-3 py-2">Ingest</th>
+                  <th className="w-32 px-3 py-2">Ingest status</th>
                   <th className="w-44 px-3 py-2">Upload ID</th>
                   <th className="w-20 px-3 py-2">Rows</th>
-                  <th className="w-28 px-3 py-2">Map</th>
+                  <th className="w-36 px-3 py-2">Map status</th>
                   <th className="w-24 px-3 py-2">Fact rows</th>
                   <th className="w-24 px-3 py-2">Issue rows</th>
-                  <th className="w-[26%] px-3 py-2">Error</th>
+                  <th className="w-[26%] px-3 py-2">Details</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-surface">
@@ -329,7 +335,11 @@ export default function ImportBatchUploader(props: ImportBatchUploaderProps) {
                       {formatBatchDate(item.exported_at_iso, item.run_at_iso)}
                     </td>
                     <td className="px-3 py-2 text-muted">{item.source_type}</td>
-                    <td className="px-3 py-2 text-muted">{item.ingest.status}</td>
+                    <td className="px-3 py-2">
+                      <ImportStatusBadge tone={getBatchIngestTone(item.ingest.status)}>
+                        {getBatchIngestLabel(item.ingest.status)}
+                      </ImportStatusBadge>
+                    </td>
                     <td className="px-3 py-2 text-xs text-muted">
                       <span className="block truncate" title={item.ingest.upload_id ?? undefined}>
                         {item.ingest.upload_id ?? '—'}
@@ -338,15 +348,19 @@ export default function ImportBatchUploader(props: ImportBatchUploaderProps) {
                     <td className="px-3 py-2 text-muted">
                       {item.ingest.row_count !== undefined ? item.ingest.row_count : '—'}
                     </td>
-                    <td className="px-3 py-2 text-muted">{item.map.status}</td>
+                    <td className="px-3 py-2">
+                      <ImportStatusBadge tone={getBatchMapTone(item.map.status)}>
+                        {getBatchMapLabel(item.map.status)}
+                      </ImportStatusBadge>
+                    </td>
                     <td className="px-3 py-2 text-muted">
                       {item.map.fact_rows !== undefined ? item.map.fact_rows : '—'}
                     </td>
                     <td className="px-3 py-2 text-muted">
                       {item.map.issue_rows !== undefined ? item.map.issue_rows : '—'}
                     </td>
-                    <td className="break-words whitespace-normal px-3 py-2 text-xs leading-5 text-rose-700">
-                      {item.ingest.error ?? item.map.error ?? '—'}
+                    <td className="break-words whitespace-normal px-3 py-2 text-xs leading-5 text-muted">
+                      {getBatchDetailsText(item)}
                     </td>
                   </tr>
                 ))}
