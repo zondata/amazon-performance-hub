@@ -6,7 +6,6 @@ export type TargetExpandedTabKey =
   | 'search_term'
   | 'placement'
   | 'metrics'
-  | 'override'
   | 'advanced';
 
 type TargetExpandedTabDefinition = {
@@ -26,7 +25,6 @@ export const TARGET_EXPANDED_TAB_DEFINITIONS: TargetExpandedTabDefinition[] = [
   { key: 'search_term', label: 'Search term' },
   { key: 'placement', label: 'Placement' },
   { key: 'metrics', label: 'Metrics' },
-  { key: 'override', label: 'Override' },
   { key: 'advanced', label: 'Advanced' },
 ];
 

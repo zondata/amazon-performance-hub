@@ -30,8 +30,6 @@ import {
 } from '@/lib/ads-optimizer/targetRowTableSummary';
 import {
   buildAdsOptimizerPlacementEvidenceRows,
-  buildAdsOptimizerSearchTermEvidenceRows,
-  buildAdsOptimizerSearchTermsEmptyState,
 } from '@/lib/ads-optimizer/targetDecisionSurface';
 import {
   ADS_OPTIMIZER_TARGET_TABLE_COLUMNS,
@@ -51,13 +49,18 @@ import {
   formatUiDateTime as formatDateTime,
 } from '@/lib/time/formatUiDate';
 import TargetAdvancedSection from './TargetAdvancedSection';
+import TargetChangePlanTab, {
+  type TargetChangePlanOverrideActionItem,
+  type TargetChangePlanProposalItem,
+} from './TargetChangePlanTab';
 import TargetExpandedPanel from './TargetExpandedPanel';
+import TargetSearchTermTab from './TargetSearchTermTab';
 import TargetExpandedTabs, {
+  TARGET_EXPANDED_TAB_DEFINITIONS,
   getTargetExpandedTabId,
   getTargetExpandedTabPanelId,
   type TargetExpandedTabKey,
 } from './TargetExpandedTabs';
-import TargetOverrideForm from './TargetOverrideForm';
 import TargetSummaryRow from './TargetSummaryRow';
 import TargetsToolbar from './TargetsToolbar';
 
@@ -88,7 +91,7 @@ type WorkspaceSupportedActionType =
   | 'update_target_bid'
   | 'update_target_state'
   | 'update_placement_modifier';
-type ProposedChangeCard =
+type ProposedChangeDetail =
   | {
       key: string;
       title: string;
@@ -266,40 +269,6 @@ const SummaryCard = (props: { label: string; value: string; detail?: string }) =
   </div>
 );
 
-const ProposedChangeSummaryCard = (props: { card: ProposedChangeCard }) => (
-  <div className="rounded-xl border border-border bg-surface px-4 py-4">
-    <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-muted">
-      {props.card.reviewOnly
-        ? 'Review-only proposed action'
-        : props.card.category === 'cadence'
-          ? 'Cadence recommendation'
-          : 'Execution-changing action'}
-    </div>
-    <div className="mt-2 text-sm font-semibold text-foreground">{props.card.title}</div>
-    {props.card.reviewOnly ? (
-      <div className="mt-3 text-sm text-muted">{props.card.detail}</div>
-    ) : (
-      <>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-              Current
-            </div>
-            <div className="mt-1 text-sm text-foreground">{props.card.currentValue}</div>
-          </div>
-          <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-              Proposed
-            </div>
-            <div className="mt-1 text-sm text-foreground">{props.card.proposedValue}</div>
-          </div>
-        </div>
-        {props.card.detail ? <div className="mt-3 text-sm text-muted">{props.card.detail}</div> : null}
-      </>
-    )}
-  </div>
-);
-
 const ReasonCodeBadge = (props: { code: string }) => (
   <span className="rounded-[4px] border border-border bg-surface-2 px-2 py-[3px] font-mono text-[10px] text-muted">
     {props.code}
@@ -451,9 +420,6 @@ const getUnsupportedReviewOnlyActions = (row: AdsOptimizerTargetReviewRow) =>
 const getOverrideActions = (override: AdsOptimizerRecommendationOverride | null | undefined) =>
   override?.replacement_action_bundle_json.actions ?? [];
 
-const buildOverrideBadgeLabel = (override: AdsOptimizerRecommendationOverride) =>
-  override.override_scope === 'persistent' ? 'Human override · persistent' : 'Human override';
-
 const readJsonString = (value: Record<string, unknown> | null, key: string) =>
   typeof value?.[key] === 'string' ? (value[key] as string) : null;
 
@@ -476,8 +442,8 @@ const buildActionCards = (args: {
     entityContext: Record<string, unknown> | null;
     proposedChange: Record<string, unknown> | null;
   }>;
-}): ProposedChangeCard[] => {
-  const cards: ProposedChangeCard[] = [];
+}): ProposedChangeDetail[] => {
+  const cards: ProposedChangeDetail[] = [];
 
   for (const action of args.actions) {
     if (action.actionType === 'update_target_state') {
@@ -540,8 +506,8 @@ const buildActionCards = (args: {
   return cards;
 };
 
-const buildProposedChangeCards = (row: AdsOptimizerTargetReviewRow): ProposedChangeCard[] => {
-  const cards: ProposedChangeCard[] = buildActionCards({
+const buildProposedChangeCards = (row: AdsOptimizerTargetReviewRow): ProposedChangeDetail[] => {
+  const cards: ProposedChangeDetail[] = buildActionCards({
     cardKeyPrefix: row.targetSnapshotId,
     actions: row.recommendation?.actions ?? [],
   });
@@ -590,14 +556,34 @@ const buildProposedChangeCards = (row: AdsOptimizerTargetReviewRow): ProposedCha
   );
 };
 
-const buildManualOverrideCards = (row: AdsOptimizerTargetReviewRow): ProposedChangeCard[] =>
-  buildActionCards({
-    cardKeyPrefix: `${row.targetSnapshotId}:override`,
-    actions: getOverrideActions(row.manualOverride).map((action) => ({
-      actionType: action.action_type,
-      entityContext: action.entity_context_json,
-      proposedChange: action.proposed_change_json,
-    })),
+const buildTargetChangePlanProposalRows = (
+  row: AdsOptimizerTargetReviewRow
+): TargetChangePlanProposalItem[] =>
+  buildProposedChangeCards(row).map((card) => {
+    if (card.reviewOnly) {
+      return {
+        key: card.key,
+        title: card.title,
+        tone: 'review',
+        status: 'review',
+        currentValue: NOT_CAPTURED,
+        currentValueUnknown: true,
+        proposedValue: 'Review',
+        footnote: card.detail,
+      };
+    }
+
+    return {
+      key: card.key,
+      title: card.title,
+      tone: card.category,
+      status: card.category === 'execution' ? 'stageable' : 'review',
+      currentValue: card.currentValue,
+      currentValueUnknown:
+        card.currentValue === NOT_CAPTURED || card.currentValue.trim().length === 0,
+      proposedValue: card.proposedValue,
+      footnote: card.detail ?? null,
+    };
   });
 
 const getActionEditorSource = (
@@ -632,23 +618,63 @@ const formatPlacementLabel = (value: string | null) => {
   return labelize(value);
 };
 
-const getOverrideStatus = (override: AdsOptimizerRecommendationOverride | null | undefined) => {
-  if (!override) return 'None';
-  return override.apply_count > 0 ? 'Applied' : 'Active';
-};
-
-const getOverrideStatusClass = (status: 'None' | 'Active' | 'Applied') => {
-  if (status === 'Active') return 'border-amber-200 bg-amber-50 text-amber-800';
-  if (status === 'Applied') return 'border-sky-200 bg-sky-50 text-sky-800';
-  return 'border-border bg-surface-2 text-muted';
-};
-
-const buildOverrideActionSummary = (cards: ProposedChangeCard[]) => {
-  const primaryCard = cards[0] ?? null;
-  if (!primaryCard) return 'No saved override bundle.';
-  if (primaryCard.reviewOnly) return primaryCard.detail;
-  return `${primaryCard.title}: ${primaryCard.proposedValue}`;
-};
+const buildTargetChangePlanOverrideRows = (args: {
+  bidActionEditor: ReturnType<typeof getActionEditorSource>;
+  stateActionEditor: ReturnType<typeof getActionEditorSource>;
+  placementActionEditor: ReturnType<typeof getActionEditorSource>;
+  currentBid: number | null;
+  nextBid: number | null;
+  currentState: string | null;
+  nextState: string | null;
+  currentPlacementCode: string;
+  currentPlacementPercentage: number | null;
+  nextPlacementPercentage: number | null;
+}): TargetChangePlanOverrideActionItem[] => [
+  {
+    key: 'update_target_bid',
+    title: 'Update target bid',
+    currentLine: `Current: ${formatCurrency(args.currentBid)}`,
+    enabledFieldName: 'override_bid_enabled',
+    valueFieldName: 'override_bid_next_bid',
+    inputType: 'number',
+    initialChecked: args.bidActionEditor.source !== 'none',
+    initialValue: args.nextBid === null ? '' : String(args.nextBid),
+    placeholder: 'Next bid',
+    min: '0.01',
+    step: '0.01',
+  },
+  {
+    key: 'update_target_state',
+    title: 'Update target state',
+    currentLine: `Current: ${sentenceCase(args.currentState)}`,
+    enabledFieldName: 'override_state_enabled',
+    valueFieldName: 'override_state_next_state',
+    inputType: 'select',
+    initialChecked: args.stateActionEditor.source !== 'none',
+    initialValue: args.nextState ?? 'paused',
+    options: [
+      { value: 'enabled', label: 'Enabled' },
+      { value: 'paused', label: 'Paused' },
+      { value: 'archived', label: 'Archived' },
+    ],
+  },
+  {
+    key: 'update_placement_modifier',
+    title: 'Update placement modifier',
+    currentLine: `${formatPlacementLabel(args.currentPlacementCode)} · current ${formatWholePercent(
+      args.currentPlacementPercentage
+    )}`,
+    enabledFieldName: 'override_placement_enabled',
+    valueFieldName: 'override_placement_next_percentage',
+    inputType: 'number',
+    initialChecked: args.placementActionEditor.source !== 'none',
+    initialValue:
+      args.nextPlacementPercentage === null ? '' : String(args.nextPlacementPercentage),
+    placeholder: 'Next placement percentage',
+    min: '0',
+    step: '1',
+  },
+];
 
 const buildTargetActivityFact = (row: AdsOptimizerTargetReviewRow) => {
   if (row.raw.clicks <= 0 && row.raw.spend <= 0) {
@@ -1192,8 +1218,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
 
   const activeExpandedContent = activeRow
     ? (() => {
-        const proposedChangeCards = buildProposedChangeCards(activeRow);
-        const manualOverrideCards = buildManualOverrideCards(activeRow);
+        const changePlanProposalRows = buildTargetChangePlanProposalRows(activeRow);
         const bidActionEditor = getActionEditorSource(activeRow, 'update_target_bid');
         const stateActionEditor = getActionEditorSource(activeRow, 'update_target_state');
         const placementActionEditor = getActionEditorSource(
@@ -1225,11 +1250,25 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
           row: activeRow,
           productState: props.productState,
         });
-        const searchTermEvidenceRows = buildAdsOptimizerSearchTermEvidenceRows(activeRow);
-        const searchTermsEmptyState = buildAdsOptimizerSearchTermsEmptyState(activeRow);
         const placementEvidenceRows = buildAdsOptimizerPlacementEvidenceRows(activeRow);
-        const overrideStatus = getOverrideStatus(activeRow.manualOverride);
-        const overrideSummary = buildOverrideActionSummary(manualOverrideCards);
+        const stageableCount = getWorkspaceSupportedActions(activeRow).length;
+        const reviewOnlyCount = getUnsupportedReviewOnlyActions(activeRow).length;
+        const changePlanOverrideRows = buildTargetChangePlanOverrideRows({
+          bidActionEditor,
+          stateActionEditor,
+          placementActionEditor,
+          currentBid: currentBidForOverride,
+          nextBid: nextBidForOverride,
+          currentState: currentStateForOverride,
+          nextState: nextStateForOverride,
+          currentPlacementCode: currentPlacementCodeForOverride,
+          currentPlacementPercentage: currentPlacementPctForOverride,
+          nextPlacementPercentage: nextPlacementPctForOverride,
+        });
+        const changePlanFormUnavailableNote =
+          props.productId && activeRow.recommendation
+            ? null
+            : 'Product scope or recommendation context is missing, so this target cannot accept a saved override yet.';
         const portfolioControls = activeRow.recommendation?.portfolioControls ?? null;
         const importanceStripLabel =
           activeRow.state.importance.label.split(' / ')[0] || activeRow.state.importance.label;
@@ -1244,12 +1283,8 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
             : null,
         ].filter((fact): fact is string => Boolean(fact));
         const combinedCallouts = [...activeCriticalWarnings, ...activeRowSpecificExceptions];
-        const activePanelId = getTargetExpandedTabPanelId(
-          activeRow.targetSnapshotId,
-          activeExpandedTab
-        );
-        const activePanelContent = (() => {
-          switch (activeExpandedTab) {
+        const renderExpandedPanel = (tabKey: TargetExpandedTabKey) => {
+          switch (tabKey) {
             case 'why_flagged':
               return (
                 <div>
@@ -1302,167 +1337,43 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
               );
             case 'change_plan':
               return (
-                <div className="space-y-4">
-                  <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
-                    {formatNumber(getWorkspaceSupportedActions(activeRow).length)} supported
-                    workspace action(s) can be staged from this target.{' '}
-                    {formatNumber(getUnsupportedReviewOnlyActions(activeRow).length)} action(s)
-                    remain review-only inside the optimizer.
-                  </div>
-                  {proposedChangeCards.length > 0 ? (
-                    <div className="grid gap-3">
-                      {proposedChangeCards.map((card) => (
-                        <ProposedChangeSummaryCard key={card.key} card={card} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-border bg-surface-2 px-4 py-4 text-sm text-muted">
-                      No concrete changes were proposed for this target in the selected run.
-                    </div>
-                  )}
-                </div>
+                <TargetChangePlanTab
+                  initialScope={activeRow.manualOverride?.override_scope ?? 'one_time'}
+                  initialOperatorNote={activeRow.manualOverride?.operator_note ?? ''}
+                  proposalRows={changePlanProposalRows}
+                  stageableCount={stageableCount}
+                  reviewOnlyCount={reviewOnlyCount}
+                  overrideRows={changePlanOverrideRows}
+                  hiddenInputs={{
+                    returnTo: props.returnTo,
+                    productId: props.productId,
+                    asin: activeRow.asin,
+                    targetId: activeRow.targetId,
+                    runId: activeRow.runId,
+                    targetSnapshotId: activeRow.targetSnapshotId,
+                    recommendationSnapshotId:
+                      activeRow.recommendation?.recommendationSnapshotId ??
+                      activeRow.manualOverride?.recommendation_snapshot_id ??
+                      null,
+                    campaignId: activeRow.campaignId,
+                    currentState: currentStateForOverride,
+                    currentBid: currentBidForOverride,
+                    currentPlacementCode: currentPlacementCodeForOverride,
+                    currentPlacementPercentage: currentPlacementPctForOverride,
+                  }}
+                  canSave={Boolean(props.productId && activeRow.recommendation)}
+                  formUnavailableNote={changePlanFormUnavailableNote}
+                  saveRecommendationOverrideAction={props.saveRecommendationOverrideAction}
+                />
               );
             case 'search_term':
               return (
-                <div className="grid gap-3 xl:grid-cols-[minmax(0,1.8fr)_minmax(280px,1fr)]">
-                  <div className="rounded-xl border border-border/70 bg-surface-2 px-3 py-3">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <div className="text-sm font-semibold text-foreground">
-                          Search-term evidence
-                        </div>
-                        <div className="mt-1 text-sm text-muted">
-                          {activeRow.recommendation?.queryDiagnostics?.note ??
-                            activeRow.searchTermDiagnostics.note ??
-                            'Search-term evidence is limited to persisted top-term diagnostics for this target.'}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        <EvidenceTag
-                          label={`${formatNumber(searchTermEvidenceRows.length)} term row(s)`}
-                        />
-                        <EvidenceTag
-                          label={`${formatNumber(
-                            activeRow.demandProxies.sameTextSearchTermCount
-                          )} same-text`}
-                          tone="action"
-                        />
-                      </div>
-                    </div>
-                    {searchTermEvidenceRows.length > 0 ? (
-                      <div className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-border bg-surface">
-                        <table className="min-w-full border-collapse text-left text-sm">
-                          <thead className="sticky top-0 bg-surface">
-                            <tr className="border-b border-border text-[11px] uppercase tracking-wide text-muted">
-                              <th className="px-3 py-2">Term</th>
-                              <th className="px-3 py-2">Evidence</th>
-                              <th className="px-3 py-2">Clicks</th>
-                              <th className="px-3 py-2">Orders</th>
-                              <th className="px-3 py-2">Spend</th>
-                              <th className="px-3 py-2">Sales</th>
-                              <th className="px-3 py-2">STIS</th>
-                              <th className="px-3 py-2">STIR</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {searchTermEvidenceRows.map((term) => (
-                              <tr
-                                key={`${activeRow.targetSnapshotId}:${term.searchTerm}:${term.sameText}`}
-                                className="border-b border-border/60 align-top"
-                              >
-                                <td className="px-3 py-2.5">
-                                  <div className="font-semibold text-foreground">
-                                    {term.searchTerm}
-                                  </div>
-                                  <div className="mt-1 text-[11px] text-muted">
-                                    Impr {formatNumber(term.impressions)}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2.5">
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {term.evidenceTags.map((tag) => (
-                                      <EvidenceTag
-                                        key={`${term.searchTerm}:${tag}`}
-                                        label={tag}
-                                        tone={
-                                          tag === 'Winning'
-                                            ? 'good'
-                                            : tag === 'Losing'
-                                              ? 'warn'
-                                              : tag === 'Promote exact' ||
-                                                  tag === 'Isolate' ||
-                                                  tag === 'Negate'
-                                                ? 'action'
-                                                : 'neutral'
-                                        }
-                                      />
-                                    ))}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2.5 text-foreground">
-                                  {formatNumber(term.clicks)}
-                                </td>
-                                <td className="px-3 py-2.5 text-foreground">
-                                  {formatNumber(term.orders)}
-                                </td>
-                                <td className="px-3 py-2.5 text-foreground">
-                                  {formatCurrency(term.spend)}
-                                </td>
-                                <td className="px-3 py-2.5 text-foreground">
-                                  {formatCurrency(term.sales)}
-                                </td>
-                                <td className="px-3 py-2.5 text-foreground">
-                                  {formatPercent(term.stis)}
-                                </td>
-                                <td className="px-3 py-2.5 text-foreground">
-                                  {term.stir === null ? NOT_CAPTURED : formatNumber(term.stir)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div className="mt-3 rounded-lg border border-dashed border-border bg-surface px-4 py-4 text-sm text-muted">
-                        {searchTermsEmptyState}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-3">
-                    <DetailGrid
-                      items={[
-                        {
-                          label: 'Representative term',
-                          value:
-                            activeRow.searchTermDiagnostics.representativeSearchTerm ??
-                            activeRow.demandProxies.representativeSearchTerm ??
-                            'No representative term',
-                        },
-                        {
-                          label: 'Same-text pinned',
-                          value:
-                            activeRow.recommendation?.queryDiagnostics?.sameTextQueryPinning.searchTerm ??
-                            NOT_CAPTURED,
-                        },
-                        {
-                          label: 'Demand terms',
-                          value: formatNumber(activeRow.demandProxies.searchTermCount),
-                        },
-                        {
-                          label: 'Total term clicks',
-                          value: formatNumber(activeRow.demandProxies.totalSearchTermClicks),
-                        },
-                      ]}
-                    />
-                    <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
-                      <span className="font-semibold">Search-term diagnosis:</span>{' '}
-                      {activeRow.searchTermDiagnostics.note ??
-                        activeRow.recommendation?.queryDiagnostics?.note ??
-                        'No additional search-term diagnosis was persisted for this target.'}
-                    </div>
-                  </div>
-                </div>
+                <TargetSearchTermTab
+                  row={activeRow}
+                  asin={props.asin}
+                  start={props.start}
+                  end={props.end}
+                />
               );
             case 'placement':
               return (
@@ -1614,112 +1525,6 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                   />
                 </div>
               );
-            case 'override':
-              return (
-                <div className="space-y-4">
-                  <div
-                    className={`rounded-xl border px-4 py-4 ${
-                      activeRow.manualOverride
-                        ? 'border-amber-200 bg-amber-50/70'
-                        : 'border-border bg-surface-2'
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-[10px] font-medium uppercase tracking-[0.4px] text-muted">
-                        Manual override
-                      </div>
-                      <div
-                        className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${getOverrideStatusClass(
-                          overrideStatus
-                        )}`}
-                      >
-                        {overrideStatus}
-                      </div>
-                    </div>
-                    <div className="mt-2 text-sm font-semibold text-foreground">
-                      {overrideSummary}
-                    </div>
-                    <div className="mt-1 text-sm text-muted">
-                      {activeRow.manualOverride?.operator_note ??
-                        'Open to create or replace a staged override bundle.'}
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="text-sm text-foreground">Replace staged actions</div>
-                    <div className="text-sm text-muted">
-                      This override replaces the staged Ads Workspace bundle. The persisted
-                      optimizer proposal above remains visible for audit review.
-                    </div>
-
-                    {activeRow.manualOverride ? (
-                      <div className="space-y-3">
-                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="rounded-full border border-amber-200 bg-surface px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
-                              {buildOverrideBadgeLabel(activeRow.manualOverride)}
-                            </div>
-                            <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-                              Override scope
-                            </div>
-                            <div className="text-sm text-foreground">
-                              {labelize(activeRow.manualOverride.override_scope)}
-                            </div>
-                          </div>
-                          <div className="mt-3 text-sm text-foreground">
-                            <span className="font-semibold">Override note:</span>{' '}
-                            {activeRow.manualOverride.operator_note}
-                          </div>
-                          <div className="mt-2 text-xs text-muted">
-                            Created {formatDateTime(activeRow.manualOverride.created_at)} · applied{' '}
-                            {formatNumber(activeRow.manualOverride.apply_count)} time(s)
-                          </div>
-                        </div>
-                        {manualOverrideCards.length > 0 ? (
-                          <div className="grid gap-3">
-                            {manualOverrideCards.map((card) => (
-                              <ProposedChangeSummaryCard key={card.key} card={card} />
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
-                        No active human override is saved for this target.
-                      </div>
-                    )}
-
-                    {activeRow.recommendation ? (
-                      <TargetOverrideForm
-                        row={activeRow}
-                        recommendation={activeRow.recommendation}
-                        productId={props.productId}
-                        returnTo={props.returnTo}
-                        saveRecommendationOverrideAction={props.saveRecommendationOverrideAction}
-                        bidActionEditor={bidActionEditor}
-                        stateActionEditor={stateActionEditor}
-                        placementActionEditor={placementActionEditor}
-                        currentBid={currentBidForOverride}
-                        nextBid={nextBidForOverride}
-                        currentState={currentStateForOverride}
-                        nextState={nextStateForOverride}
-                        currentPlacementCode={currentPlacementCodeForOverride}
-                        currentPlacementPercentage={currentPlacementPctForOverride}
-                        nextPlacementPercentage={nextPlacementPctForOverride}
-                        formatCurrency={formatCurrency}
-                        formatWholePercent={formatWholePercent}
-                        formatPlacementLabel={formatPlacementLabel}
-                        sentenceCase={sentenceCase}
-                      />
-                    ) : (
-                      <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-4 text-sm text-muted">
-                        Product scope or recommendation context is missing, so this target cannot
-                        accept a saved override yet.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
             case 'advanced':
               return (
                 <div className="space-y-4">
@@ -1852,10 +1657,11 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                 </div>
               );
           }
-        })();
+        };
 
         return (
           <TargetExpandedPanel
+            key={activeRow.targetSnapshotId}
             targetSnapshotId={activeRow.targetSnapshotId}
             contextStrip={
               <div className="flex min-w-max items-center gap-2 whitespace-nowrap">
@@ -1894,14 +1700,22 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
               />
             }
           >
-            <div
-              id={activePanelId}
-              role="tabpanel"
-              aria-labelledby={getTargetExpandedTabId(activeRow.targetSnapshotId, activeExpandedTab)}
-              className="space-y-4"
-            >
-              {activePanelContent}
-            </div>
+            {TARGET_EXPANDED_TAB_DEFINITIONS.map((tab) => {
+              const isActive = tab.key === activeExpandedTab;
+
+              return (
+                <div
+                  key={tab.key}
+                  id={getTargetExpandedTabPanelId(activeRow.targetSnapshotId, tab.key)}
+                  role="tabpanel"
+                  aria-labelledby={getTargetExpandedTabId(activeRow.targetSnapshotId, tab.key)}
+                  hidden={!isActive}
+                  className={isActive ? 'h-full min-h-0' : 'hidden h-full min-h-0'}
+                >
+                  {renderExpandedPanel(tab.key)}
+                </div>
+              );
+            })}
           </TargetExpandedPanel>
         );
       })()
@@ -1930,8 +1744,9 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
             <div className="mt-2 max-w-3xl text-sm text-muted">
               Review the highest-priority targets inline, open the new tabbed detail surface for
               row-level context across Why flagged, Change plan, Search term, Placement, Metrics,
-              Override, and Advanced, and stage only supported changes into Ads Workspace after
-              operator review. Ads Workspace remains the only staging and execution boundary.
+              and Advanced, keep manual override controls inside Change plan, and stage only
+              supported changes into Ads Workspace after operator review. Ads Workspace remains
+              the only staging and execution boundary.
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -2009,14 +1824,14 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
               <div>Use the inline list to sort and filter targets by priority, role, state, and confidence.</div>
               <div>Coverage rolls up into Ready, Partial, and Missing. Missing can be normal for zero-click search-term diagnostics or suspicious when source data should exist.</div>
               <div>Non-additive diagnostics such as STIS, STIR, TOS IS, and rank are shown only as latest observed values or explicit trend descriptors.</div>
-              <div>The expanded row is now a tabbed detail surface with dedicated tabs for Why flagged, Change plan, Search term, Placement, Metrics, Override, and Advanced.</div>
+              <div>The expanded row is now a tabbed detail surface with dedicated tabs for Why flagged, Change plan, Search term, Placement, Metrics, and Advanced.</div>
             </div>
           </div>
           <div className="rounded-xl border border-border bg-surface px-4 py-3">
             <div className="text-xs uppercase tracking-wide text-muted">What to do next</div>
             <div className="mt-2 space-y-2 text-sm text-foreground">
               <div>Review row-specific exceptions and critical warnings first.</div>
-              <div>Expand a row to inspect the tabbed detail surface, compare the recommendation plan, review search-term and placement evidence, inspect metrics, manage overrides, and open the advanced diagnostics blocks.</div>
+              <div>Expand a row to inspect the tabbed detail surface, compare the recommendation plan, review search-term and placement evidence, inspect metrics, use manual override controls inside Change plan, and open the advanced diagnostics blocks.</div>
               <div>Handoff only the supported actions you want staged into Ads Workspace.</div>
             </div>
           </div>
@@ -2547,8 +2362,8 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
             <div className="text-xs uppercase tracking-[0.3em] text-muted">Targets review</div>
             <div className="mt-2 text-sm text-muted">
               Review persisted optimizer target decisions inline. Expand a row to open the tabbed
-              detail surface with Why flagged, Change plan, Search term, Placement, Metrics,
-              Override, and Advanced tabs populated from the persisted review data.
+              detail surface with Why flagged, Change plan, Search term, Placement, Metrics, and
+              Advanced tabs populated from the persisted review data.
             </div>
             <div className="mt-3">
               <InlineHelp title="Coverage">

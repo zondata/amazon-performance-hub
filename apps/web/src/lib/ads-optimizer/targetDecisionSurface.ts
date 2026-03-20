@@ -13,6 +13,28 @@ export type AdsOptimizerSearchTermEvidenceRow = {
   evidenceTags: string[];
 };
 
+export type AdsOptimizerSearchTermMetricCell = {
+  current: number | null;
+  previous: number | null;
+  changePercent: number | null;
+  isNew: boolean;
+};
+
+export type AdsOptimizerSearchTermTableRow = {
+  searchTerm: string;
+  sameText: boolean;
+  primaryEvidence: 'same' | 'winning' | 'losing' | null;
+  actionHint: 'isolate' | 'negate' | null;
+  stis: number | null;
+  stir: number | null;
+  impressions: AdsOptimizerSearchTermMetricCell;
+  clicks: AdsOptimizerSearchTermMetricCell;
+  ctr: AdsOptimizerSearchTermMetricCell;
+  spend: AdsOptimizerSearchTermMetricCell;
+  orders: AdsOptimizerSearchTermMetricCell;
+  acos: AdsOptimizerSearchTermMetricCell;
+};
+
 export type AdsOptimizerPlacementEvidenceRow = {
   code: 'PLACEMENT_TOP' | 'PLACEMENT_REST_OF_SEARCH' | 'PLACEMENT_PRODUCT_PAGE';
   shortLabel: 'TOS' | 'ROS' | 'PP';
@@ -33,8 +55,10 @@ const addEvidenceTag = (tags: string[], condition: boolean, label: string) => {
   if (condition && !tags.includes(label)) tags.push(label);
 };
 
+const normalizeSearchTerm = (searchTerm: string) => searchTerm.trim().toLowerCase();
+
 const buildSearchTermCandidateKey = (searchTerm: string, sameText: boolean) =>
-  `${searchTerm.toLowerCase()}::${sameText ? 'same' : 'diff'}`;
+  `${normalizeSearchTerm(searchTerm)}::${sameText ? 'same' : 'diff'}`;
 
 const buildQueryCandidateKeySet = (
   candidates:
@@ -86,6 +110,72 @@ export const buildAdsOptimizerSearchTermEvidenceRows = (
       stis: term.stis,
       stir: term.stir,
       evidenceTags,
+    };
+  });
+};
+
+const buildSearchTermMetricCell = (
+  current: number | null,
+  previous: number | null,
+  isNew: boolean
+): AdsOptimizerSearchTermMetricCell => {
+  const changePercent =
+    isNew || previous === null || current === null || previous === 0
+      ? null
+      : ((current - previous) / previous) * 100;
+
+  return {
+    current,
+    previous,
+    changePercent,
+    isNew,
+  };
+};
+
+export const buildAdsOptimizerSearchTermTableRows = (
+  row: AdsOptimizerTargetReviewRow
+): AdsOptimizerSearchTermTableRow[] => {
+  const currentRows = buildAdsOptimizerSearchTermEvidenceRows(row);
+  const previousRows = row.previousComparable?.searchTermDiagnostics.topTerms ?? [];
+  const previousByKey = new Map(
+    previousRows.map((term) => [buildSearchTermCandidateKey(term.searchTerm, term.sameText), term])
+  );
+
+  return currentRows.map((term) => {
+    const previous = previousByKey.get(buildSearchTermCandidateKey(term.searchTerm, term.sameText));
+    const isNew = !previous;
+    const ctrCurrent = term.impressions > 0 ? term.clicks / term.impressions : null;
+    const ctrPrevious =
+      previous && previous.impressions > 0 ? previous.clicks / previous.impressions : null;
+    const acosCurrent = term.sales > 0 ? term.spend / term.sales : null;
+    const acosPrevious = previous && previous.sales > 0 ? previous.spend / previous.sales : null;
+    const primaryEvidence = term.sameText
+      ? 'same'
+      : term.evidenceTags.includes('Winning')
+        ? 'winning'
+        : term.evidenceTags.includes('Losing')
+          ? 'losing'
+          : null;
+    const actionHint =
+      primaryEvidence === 'winning' && term.evidenceTags.includes('Isolate')
+        ? 'isolate'
+        : primaryEvidence === 'losing' && term.evidenceTags.includes('Negate')
+          ? 'negate'
+          : null;
+
+    return {
+      searchTerm: term.searchTerm,
+      sameText: term.sameText,
+      primaryEvidence,
+      actionHint,
+      stis: term.stis,
+      stir: term.stir,
+      impressions: buildSearchTermMetricCell(term.impressions, previous?.impressions ?? null, isNew),
+      clicks: buildSearchTermMetricCell(term.clicks, previous?.clicks ?? null, isNew),
+      ctr: buildSearchTermMetricCell(ctrCurrent, ctrPrevious, isNew),
+      spend: buildSearchTermMetricCell(term.spend, previous?.spend ?? null, isNew),
+      orders: buildSearchTermMetricCell(term.orders, previous?.orders ?? null, isNew),
+      acos: buildSearchTermMetricCell(acosCurrent, acosPrevious, isNew),
     };
   });
 };
