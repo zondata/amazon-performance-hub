@@ -101,6 +101,16 @@ const buildRow = (
         { observedDate: '2026-03-18', rank: 16 },
       ],
     },
+    sqpContext: {
+      selectedWeekEnd: '2026-03-08',
+      matchedQueryNorm: 'hero exact',
+      trackedQueryCount: 320,
+      marketImpressionsTotal: 1600,
+      totalMarketImpressions: 32000,
+      marketImpressionShare: 0.05,
+      marketImpressionRank: 5,
+      note: null,
+    },
     demandProxies: {
       searchTermCount: 3,
       sameTextSearchTermCount: 1,
@@ -360,6 +370,29 @@ describe('ads optimizer target row table summary', () => {
     expect(summary.stateComparison.rows[2].change.tone).toBe('good');
     expect(summary.stateComparison.rows[3].current.display).toBe('40.0%');
     expect(summary.stateComparison.rows[3].previous.display).toBe('50.0%');
+    expect(summary.contribution.rows.map((entry) => entry.label)).toEqual([
+      'Sales',
+      'Spend',
+      'Impression',
+      'SQP Impression',
+    ]);
+    expect(summary.contribution.rows[0]).toMatchObject({
+      share: { display: '100.0%' },
+      rank: { display: 'Rank 1' },
+    });
+    expect(summary.contribution.rows[1]).toMatchObject({
+      share: { display: '100.0%' },
+      rank: { display: 'Rank 1' },
+    });
+    expect(summary.contribution.rows[2]).toMatchObject({
+      share: { display: '100.0%' },
+      rank: { display: 'Rank 1' },
+    });
+    expect(summary.contribution.rows[3]).toMatchObject({
+      label: 'SQP Impression',
+      share: { display: '5.0%' },
+      rank: { display: 'Rank 5' },
+    });
     expect(summary.ranking.organic.latestLabel).toBe('#9');
     expect(summary.ranking.organic.trendLabel).toBe('Rising');
     expect(summary.ranking.sponsored.latestLabel).toBe('#16');
@@ -371,6 +404,12 @@ describe('ads optimizer target row table summary', () => {
       targetSnapshotId: 'snap-a',
       persistedTargetKey: 'target-a',
       targetText: 'dominant',
+      sqpContext: {
+        ...buildRow().sqpContext!,
+        matchedQueryNorm: 'dominant',
+        marketImpressionShare: 0.45,
+        marketImpressionRank: 1,
+      },
       state: {
         ...buildRow().state,
         importance: {
@@ -390,6 +429,12 @@ describe('ads optimizer target row table summary', () => {
       targetSnapshotId: 'snap-b',
       persistedTargetKey: 'target-b',
       targetText: 'middle',
+      sqpContext: {
+        ...buildRow().sqpContext!,
+        matchedQueryNorm: 'middle',
+        marketImpressionShare: 0.32,
+        marketImpressionRank: 2,
+      },
       state: {
         ...buildRow().state,
         importance: {
@@ -409,6 +454,12 @@ describe('ads optimizer target row table summary', () => {
       targetSnapshotId: 'snap-c',
       persistedTargetKey: 'target-c',
       targetText: 'tail',
+      sqpContext: {
+        ...buildRow().sqpContext!,
+        matchedQueryNorm: 'tail',
+        marketImpressionShare: 0.11,
+        marketImpressionRank: 3,
+      },
       state: {
         ...buildRow().state,
         importance: {
@@ -440,6 +491,22 @@ describe('ads optimizer target row table summary', () => {
     expect(filtered[0]?.contribution.rows[1]?.rank.display).toBe('Rank 2');
     expect(filtered[0]?.contribution.rows[2]?.share.display).toBe('33.3%');
     expect(filtered[0]?.contribution.rows[2]?.rank.display).toBe('Rank 2');
+    expect(filtered[0]?.contribution.rows[3]?.share.display).toBe('32.0%');
+    expect(filtered[0]?.contribution.rows[3]?.rank.display).toBe('Rank 2');
+  });
+
+  it('shows missing SQP Impression contribution values when sqpContext is absent', () => {
+    const row = buildRow({
+      sqpContext: undefined,
+    });
+
+    const summary = buildAdsOptimizerTargetRowTableSummary(row, [row]);
+
+    expect(summary.contribution.rows[3]).toMatchObject({
+      label: 'SQP Impression',
+      share: { display: '—' },
+      rank: { display: '—' },
+    });
   });
 
   it('filters target search by trimmed case-insensitive target text and target id', () => {
@@ -783,6 +850,100 @@ describe('ads optimizer target row table summary', () => {
       'rank two',
       'rank missing',
     ]);
+  });
+
+  it('sorts SQP impression contribution rank with rank 1 before rank 2 before missing', () => {
+    const first = buildRow({
+      targetSnapshotId: 'snap-sqp-rank-1',
+      persistedTargetKey: 'target-sqp-rank-1',
+      targetText: 'sqp rank one',
+      sqpContext: {
+        ...buildRow().sqpContext!,
+        matchedQueryNorm: 'sqp rank one',
+        marketImpressionRank: 1,
+      },
+    });
+    const second = buildRow({
+      targetSnapshotId: 'snap-sqp-rank-2',
+      persistedTargetKey: 'target-sqp-rank-2',
+      targetText: 'sqp rank two',
+      sqpContext: {
+        ...buildRow().sqpContext!,
+        matchedQueryNorm: 'sqp rank two',
+        marketImpressionRank: 2,
+      },
+    });
+    const missing = buildRow({
+      targetSnapshotId: 'snap-sqp-rank-missing',
+      persistedTargetKey: 'target-sqp-rank-missing',
+      targetText: 'sqp rank missing',
+      sqpContext: undefined,
+    });
+    const summaries = buildAdsOptimizerTargetRowTableSummaries([second, missing, first]);
+
+    const sorted = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({
+        sortBy: 'contribution_sqp_impression_rank',
+        sortDirection: 'asc',
+      })
+    );
+
+    expect(sorted.map((summary) => summary.identity.targetText)).toEqual([
+      'sqp rank one',
+      'sqp rank two',
+      'sqp rank missing',
+    ]);
+  });
+
+  it('keeps duplicate matched SQP queries on the same SQP rank and uses existing fallback ordering to stay deterministic', () => {
+    const alpha = buildRow({
+      targetSnapshotId: 'snap-sqp-dup-alpha',
+      persistedTargetKey: 'target-sqp-dup-alpha',
+      targetText: 'alpha target',
+      sqpContext: {
+        ...buildRow().sqpContext!,
+        matchedQueryNorm: 'shared query',
+        marketImpressionRank: 2,
+      },
+    });
+    const beta = buildRow({
+      targetSnapshotId: 'snap-sqp-dup-beta',
+      persistedTargetKey: 'target-sqp-dup-beta',
+      targetText: 'beta target',
+      sqpContext: {
+        ...buildRow().sqpContext!,
+        matchedQueryNorm: 'shared query',
+        marketImpressionRank: 2,
+      },
+    });
+    const best = buildRow({
+      targetSnapshotId: 'snap-sqp-dup-best',
+      persistedTargetKey: 'target-sqp-dup-best',
+      targetText: 'best target',
+      sqpContext: {
+        ...buildRow().sqpContext!,
+        matchedQueryNorm: 'best query',
+        marketImpressionRank: 1,
+      },
+    });
+    const summaries = buildAdsOptimizerTargetRowTableSummaries([beta, alpha, best]);
+
+    const sorted = filterAdsOptimizerTargetRowTableSummaries(
+      summaries,
+      buildFilters({
+        sortBy: 'contribution_sqp_impression_rank',
+        sortDirection: 'asc',
+      })
+    );
+
+    expect(sorted.map((summary) => summary.identity.targetText)).toEqual([
+      'best target',
+      'alpha target',
+      'beta target',
+    ]);
+    expect(sorted[1]?.sort.contributionSqpImpressionRank).toBe(2);
+    expect(sorted[2]?.sort.contributionSqpImpressionRank).toBe(2);
   });
 
   it('sorts organic latest rank with lower numbers first and missing values last', () => {

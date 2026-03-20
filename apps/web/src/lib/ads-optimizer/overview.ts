@@ -923,7 +923,7 @@ const emptySqpWeekly = {
   rows: [] as SqpKnownKeywordRow[],
 };
 
-const selectSqpWeekForWindow = (args: {
+export const selectSqpWeekForWindow = (args: {
   availableWeeks: SqpWeek[];
   targetEnd: string;
 }): {

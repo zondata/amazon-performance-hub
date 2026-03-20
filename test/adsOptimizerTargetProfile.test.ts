@@ -5,11 +5,71 @@ const rankingState = vi.hoisted(() => ({
   error: null as Error | null,
 }));
 
+const overviewState = vi.hoisted(() => ({
+  data: {
+    product: {
+      asin: 'B001TEST',
+      title: 'Test product',
+      shortName: 'Test',
+      displayName: 'Test',
+    },
+    economics: {
+      sales: 1800,
+      orders: 30,
+      units: 32,
+      adSpend: 420,
+      adSales: 950,
+      tacos: 0.23,
+      averagePrice: 56.25,
+      costCoverage: 0.62,
+      breakEvenAcos: 0.34,
+      contributionBeforeAdsPerUnit: 18,
+      contributionAfterAds: 226,
+    },
+    visibility: {
+      rankingCoverage: {
+        status: 'ready',
+        trackedKeywords: 5,
+        detail: 'ready',
+      },
+      heroQueryTrend: {
+        status: 'ready',
+        keyword: 'blue widget',
+        searchVolume: 2200,
+        latestOrganicRank: 9,
+        baselineOrganicRank: 13,
+        rankDelta: 4,
+        detail: 'ready',
+      },
+      sqpCoverage: {
+        status: 'ready',
+        selectedWeekEnd: '2026-03-08',
+        trackedQueries: 4,
+        totalSearchVolume: 4200,
+        topQuery: 'blue widget',
+        detail: 'ready',
+        alignment: 'exact',
+      },
+    },
+    state: {
+      value: 'profitable',
+      label: 'Profitable',
+      reason: 'ready',
+    },
+    objective: {
+      value: 'Scale Profit',
+      reason: 'ready',
+    },
+    warnings: [],
+  } as any,
+}));
+
 const state = {
   advertisedRows: [] as Array<Record<string, unknown>>,
   targetingRows: [] as Array<Record<string, unknown>>,
   stisRows: [] as Array<Record<string, unknown>>,
   placementRows: [] as Array<Record<string, unknown>>,
+  sqpRows: [] as Array<Record<string, unknown>>,
 };
 
 const resetState = () => {
@@ -17,8 +77,34 @@ const resetState = () => {
   state.targetingRows = [];
   state.stisRows = [];
   state.placementRows = [];
+  state.sqpRows = [];
   rankingState.rows = [];
   rankingState.error = null;
+  overviewState.data.visibility = {
+    rankingCoverage: {
+      status: 'ready',
+      trackedKeywords: 5,
+      detail: 'ready',
+    },
+    heroQueryTrend: {
+      status: 'ready',
+      keyword: 'blue widget',
+      searchVolume: 2200,
+      latestOrganicRank: 9,
+      baselineOrganicRank: 13,
+      rankDelta: 4,
+      detail: 'ready',
+    },
+    sqpCoverage: {
+      status: 'ready',
+      selectedWeekEnd: '2026-03-08',
+      trackedQueries: 4,
+      totalSearchVolume: 4200,
+      topQuery: 'blue widget',
+      detail: 'ready',
+      alignment: 'exact',
+    },
+  };
 };
 
 const createQuery = (table: string) => {
@@ -48,6 +134,8 @@ const createQuery = (table: string) => {
             ? state.stisRows
             : table === 'sp_placement_daily_fact_latest'
               ? state.placementRows
+              : table === 'sqp_weekly_latest_known_keywords'
+                ? state.sqpRows
               : [];
     return source.filter(matches);
   };
@@ -150,61 +238,7 @@ vi.mock('../apps/web/src/lib/bulksheets/fetchCurrent', () => ({
 }));
 
 vi.mock('../apps/web/src/lib/ads-optimizer/overview', () => ({
-  getAdsOptimizerOverviewData: async () => ({
-    product: {
-      asin: 'B001TEST',
-      title: 'Test product',
-      shortName: 'Test',
-      displayName: 'Test',
-    },
-    economics: {
-      sales: 1800,
-      orders: 30,
-      units: 32,
-      adSpend: 420,
-      adSales: 950,
-      tacos: 0.23,
-      averagePrice: 56.25,
-      costCoverage: 0.62,
-      breakEvenAcos: 0.34,
-      contributionBeforeAdsPerUnit: 18,
-      contributionAfterAds: 226,
-    },
-    visibility: {
-      rankingCoverage: {
-        status: 'ready',
-        trackedKeywords: 5,
-        detail: 'ready',
-      },
-      heroQueryTrend: {
-        status: 'ready',
-        keyword: 'blue widget',
-        searchVolume: 2200,
-        latestOrganicRank: 9,
-        baselineOrganicRank: 13,
-        rankDelta: 4,
-        detail: 'ready',
-      },
-      sqpCoverage: {
-        status: 'ready',
-        selectedWeekEnd: '2026-03-08',
-        trackedQueries: 4,
-        totalSearchVolume: 4200,
-        topQuery: 'blue widget',
-        detail: 'ready',
-      },
-    },
-    state: {
-      value: 'profitable',
-      label: 'Profitable',
-      reason: 'ready',
-    },
-    objective: {
-      value: 'Scale Profit',
-      reason: 'ready',
-    },
-    warnings: [],
-  }),
+  getAdsOptimizerOverviewData: async () => overviewState.data,
 }));
 
 vi.mock('../apps/web/src/lib/ranking/getProductRankingDaily', () => ({
@@ -474,6 +508,309 @@ describe('ads optimizer phase 5 target profile engine', () => {
     expect(result.rows[0]?.snapshotPayload.execution_context.snapshot_date).toBe('2026-03-10');
     expect(result.rows[0]?.snapshotPayload.execution_context.target.current_bid).toBe(1.4);
     expect(result.rows[0]?.snapshotPayload.execution_context.placement.current_percentage).toBe(18);
+  });
+
+  it('persists aligned SQP market-impression context from the Overview-selected week using the full aligned-week query set', async () => {
+    state.advertisedRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        advertised_asin_norm: 'B001TEST',
+        impressions: 100,
+        clicks: 10,
+        spend: 25,
+        sales: 120,
+        orders: 3,
+        units: 3,
+      },
+    ];
+    state.targetingRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        exported_at: '2026-03-10T00:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        target_id: 'target-1',
+        portfolio_name_raw: 'Portfolio',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: 'Ad Group 1',
+        targeting_raw: 'blue widget',
+        targeting_norm: 'blue widget',
+        match_type_norm: 'exact',
+        impressions: 80,
+        clicks: 8,
+        spend: 20,
+        sales: 90,
+        orders: 2,
+        units: 2,
+        top_of_search_impression_share: 0.34,
+      },
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        exported_at: '2026-03-10T00:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        target_id: 'target-2',
+        portfolio_name_raw: 'Portfolio',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: 'Ad Group 1',
+        targeting_raw: 'blue widget',
+        targeting_norm: 'blue widget',
+        match_type_norm: 'phrase',
+        impressions: 50,
+        clicks: 5,
+        spend: 12,
+        sales: 48,
+        orders: 1,
+        units: 1,
+        top_of_search_impression_share: 0.18,
+      },
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        exported_at: '2026-03-10T00:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        target_id: 'target-3',
+        portfolio_name_raw: 'Portfolio',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: 'Ad Group 1',
+        targeting_raw: 'asin=\"B001UNSUPPORTED\"',
+        targeting_norm: 'asin=\"b001unsupported\"',
+        match_type_norm: 'TARGETING_EXPRESSION',
+        impressions: 20,
+        clicks: 2,
+        spend: 4,
+        sales: 0,
+        orders: 0,
+        units: 0,
+        top_of_search_impression_share: null,
+      },
+    ];
+    rankingState.rows = [
+      {
+        observed_date: '2026-03-03',
+        keyword_raw: 'blue widget',
+        keyword_norm: 'blue widget',
+        keyword_id: 'kw-1',
+        organic_rank_value: 11,
+        organic_rank_kind: 'rank',
+        organic_rank_raw: '11',
+        sponsored_pos_value: 8,
+        sponsored_pos_kind: 'rank',
+        sponsored_pos_raw: '8',
+        search_volume: 2200,
+      },
+    ];
+    state.sqpRows = [
+      {
+        account_id: 'acct',
+        marketplace: 'US',
+        scope_type: 'asin',
+        scope_value: 'B001TEST',
+        week_end: '2026-03-08',
+        search_query_norm: 'alpha query',
+        search_query_raw: 'alpha query',
+        impressions_total: 1200,
+      },
+      {
+        account_id: 'acct',
+        marketplace: 'US',
+        scope_type: 'asin',
+        scope_value: 'B001TEST',
+        week_end: '2026-03-08',
+        search_query_norm: null,
+        search_query_raw: 'Blue Widget',
+        impressions_total: 1000,
+      },
+      ...Array.from({ length: 1000 }, (_, index) => ({
+        account_id: 'acct',
+        marketplace: 'US',
+        scope_type: 'asin',
+        scope_value: 'B001TEST',
+        week_end: '2026-03-08',
+        search_query_norm: `query ${index + 1}`,
+        search_query_raw: `Query ${index + 1}`,
+        impressions_total: index + 1,
+      })),
+    ];
+
+    const result = await loadAdsOptimizerTargetProfiles({
+      asin: 'B001TEST',
+      start: '2026-03-01',
+      end: '2026-03-10',
+    });
+
+    expect(result.zeroTargetDiagnostics).toBeNull();
+    expect(result.rows).toHaveLength(3);
+
+    const rowsByTargetId = new Map(result.rows.map((row) => [row.targetId, row]));
+    const expectedTotalMarketImpressions = 1200 + 1000 + (1000 * 1001) / 2;
+
+    expect(rowsByTargetId.get('target-1')?.snapshotPayload.sqp_context).toMatchObject({
+      selected_week_end: '2026-03-08',
+      matched_query_norm: 'blue widget',
+      tracked_query_count: 1002,
+      market_impressions_total: 1000,
+      total_market_impressions: expectedTotalMarketImpressions,
+      market_impression_rank: 2,
+      note: null,
+    });
+    expect(
+      (rowsByTargetId.get('target-1')?.snapshotPayload.sqp_context as Record<string, unknown>)
+        .market_impression_share
+    ).toBeCloseTo(1000 / expectedTotalMarketImpressions);
+    expect(rowsByTargetId.get('target-2')?.snapshotPayload.sqp_context).toMatchObject({
+      selected_week_end: '2026-03-08',
+      matched_query_norm: 'blue widget',
+      tracked_query_count: 1002,
+      market_impressions_total: 1000,
+      total_market_impressions: expectedTotalMarketImpressions,
+      market_impression_rank: 2,
+      note: null,
+    });
+    expect(rowsByTargetId.get('target-3')?.snapshotPayload.sqp_context).toMatchObject({
+      selected_week_end: '2026-03-08',
+      matched_query_norm: null,
+      tracked_query_count: 1002,
+      market_impressions_total: null,
+      total_market_impressions: expectedTotalMarketImpressions,
+      market_impression_share: null,
+      market_impression_rank: null,
+      note:
+        'SQP market-impression context is unavailable because no deterministic keyword mapping was resolved for this target.',
+    });
+  });
+
+  it('matches the Overview SQP week-selection semantics and persists the Overview-selected week into sqp_context', async () => {
+    const { selectSqpWeekForWindow } =
+      await vi.importActual<typeof import('../apps/web/src/lib/ads-optimizer/overview')>(
+        '../apps/web/src/lib/ads-optimizer/overview'
+      );
+    const exact = selectSqpWeekForWindow({
+      availableWeeks: [
+        { week_start: '2026-03-02', week_end: '2026-03-08' },
+        { week_start: '2026-02-23', week_end: '2026-03-01' },
+      ],
+      targetEnd: '2026-03-08',
+    });
+    const nearestPrior = selectSqpWeekForWindow({
+      availableWeeks: [
+        { week_start: '2026-03-02', week_end: '2026-03-08' },
+        { week_start: '2026-02-23', week_end: '2026-03-01' },
+      ],
+      targetEnd: '2026-03-05',
+    });
+    const fallbackLatest = selectSqpWeekForWindow({
+      availableWeeks: [
+        { week_start: '2026-03-09', week_end: '2026-03-15' },
+        { week_start: '2026-03-02', week_end: '2026-03-08' },
+      ],
+      targetEnd: '2026-03-01',
+    });
+
+    expect(exact).toMatchObject({ weekEnd: '2026-03-08', alignment: 'exact' });
+    expect(nearestPrior).toMatchObject({ weekEnd: '2026-03-01', alignment: 'nearest_prior' });
+    expect(fallbackLatest).toMatchObject({
+      weekEnd: '2026-03-15',
+      alignment: 'fallback_latest',
+    });
+
+    state.advertisedRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        advertised_asin_norm: 'B001TEST',
+        impressions: 100,
+        clicks: 10,
+        spend: 25,
+        sales: 120,
+        orders: 3,
+        units: 3,
+      },
+    ];
+    state.targetingRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        exported_at: '2026-03-10T00:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        target_id: 'target-1',
+        portfolio_name_raw: 'Portfolio',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: 'Ad Group 1',
+        targeting_raw: 'blue widget',
+        targeting_norm: 'blue widget',
+        match_type_norm: 'exact',
+        impressions: 80,
+        clicks: 8,
+        spend: 20,
+        sales: 90,
+        orders: 2,
+        units: 2,
+        top_of_search_impression_share: 0.34,
+      },
+    ];
+    state.sqpRows = [
+      {
+        account_id: 'acct',
+        marketplace: 'US',
+        scope_type: 'asin',
+        scope_value: 'B001TEST',
+        week_end: '2026-03-01',
+        search_query_norm: 'blue widget',
+        search_query_raw: 'blue widget',
+        impressions_total: 100,
+      },
+    ];
+
+    for (const scenario of [
+      { selectedWeekEnd: exact.weekEnd, label: 'exact' },
+      { selectedWeekEnd: nearestPrior.weekEnd, label: 'nearest_prior' },
+      { selectedWeekEnd: fallbackLatest.weekEnd, label: 'fallback_latest' },
+    ]) {
+      overviewState.data.visibility = {
+        ...overviewState.data.visibility,
+        sqpCoverage: {
+          status: 'ready',
+          selectedWeekEnd: scenario.selectedWeekEnd,
+          trackedQueries: 1,
+          totalSearchVolume: 100,
+          topQuery: 'blue widget',
+          detail: scenario.label,
+          alignment: scenario.label,
+        },
+      };
+      state.sqpRows = [
+        {
+          account_id: 'acct',
+          marketplace: 'US',
+          scope_type: 'asin',
+          scope_value: 'B001TEST',
+          week_end: scenario.selectedWeekEnd,
+          search_query_norm: 'blue widget',
+          search_query_raw: 'blue widget',
+          impressions_total: 100,
+        },
+      ];
+
+      const result = await loadAdsOptimizerTargetProfiles({
+        asin: 'B001TEST',
+        start: '2026-03-01',
+        end: '2026-03-10',
+      });
+
+      expect(result.rows[0]?.snapshotPayload.sqp_context).toMatchObject({
+        selected_week_end: scenario.selectedWeekEnd,
+      });
+    }
   });
 
   it('continues building target profiles when keyword-query ranking is unavailable', async () => {
@@ -836,6 +1173,16 @@ describe('ads optimizer phase 5 target profile engine', () => {
             },
           ],
         },
+        sqp_context: {
+          selected_week_end: '2026-03-08',
+          matched_query_norm: 'blue widget',
+          tracked_query_count: 1002,
+          market_impressions_total: 1000,
+          total_market_impressions: 502700,
+          market_impression_share: 1000 / 502700,
+          market_impression_rank: 2,
+          note: null,
+        },
         demand_proxies: {
           search_term_count: 1,
           same_text_search_term_count: 1,
@@ -1047,6 +1394,16 @@ describe('ads optimizer phase 5 target profile engine', () => {
         },
       ],
     });
+    expect(row.sqpContext).toMatchObject({
+      selectedWeekEnd: '2026-03-08',
+      matchedQueryNorm: 'blue widget',
+      trackedQueryCount: 1002,
+      marketImpressionsTotal: 1000,
+      totalMarketImpressions: 502700,
+      marketImpressionShare: 1000 / 502700,
+      marketImpressionRank: 2,
+      note: null,
+    });
     expect(row.nonAdditiveDiagnostics.tosIs.latestObservedDate).toBe('2026-03-03');
     expect(row.nonAdditiveDiagnostics.stis.previousValue).toBe(0.18);
     expect(row.nonAdditiveDiagnostics.stir.direction).toBe('down');
@@ -1144,6 +1501,7 @@ describe('ads optimizer phase 5 target profile engine', () => {
     });
 
     expect(row.rankingContext).toBeUndefined();
+    expect(row.sqpContext).toBeUndefined();
   });
 
   it('falls back from legacy placement_context into a three-row placement breakdown', () => {

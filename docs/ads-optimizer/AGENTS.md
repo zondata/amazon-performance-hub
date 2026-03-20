@@ -180,6 +180,22 @@ For every phase:
   - Phase 6A remains the authoritative collapsed-row contract
   - Phase 6B.1 is the current expanded-row step
   - use `docs/ads-optimizer/ads_optimizer_v2_phase6b_expanded_row_build_plan.md` for the fixed-height tab shell with only the Why flagged tab active
+- Targets collapsed-row contract is locked:
+  - The collapsed table keeps the same top-level column order: `Target`, `State`, `Economics`, `Contribution`, `Ranking`, `Role`, `Change summary`.
+  - This change does not add a new top-level SQP column; `Contribution` remains a single collapsed-row column.
+  - The `Contribution` cell now renders 4 rows in this exact order: `Sales`, `Spend`, `Impression`, `SQP Impression`.
+  - Each contribution row shows percentage share and rank inline on the same line.
+  - Existing `Sales` / `Spend` / `Impression` contribution logic remains unchanged.
+  - `SQP Impression` is market-context SQP share + rank, not a replacement for the existing `Impression` row.
+  - Targets use the same SQP week already resolved by `Overview`, with precedence of exact selected-window end match, nearest prior available week, then latest available week only when all available weeks are after the selected window end.
+  - `SQP Impression` is based on aligned ASIN-level SQP weekly rows.
+  - SQP share is computed from `impressions_total / sum(all aligned SQP rows impressions_total)`.
+  - SQP rank is based on `impressions_total` descending across the full aligned SQP query set.
+  - Missing or unresolved keyword mapping must stay explicit missing data, never synthetic share/rank values.
+  - Multiple target rows that resolve to the same SQP query may legitimately share the same SQP share and SQP rank.
+  - Contribution sort options include `SQP impression rank`.
+  - Contribution ranks and SQP ranks must sort from persisted/computed market rank, not visible-row renumbering.
+  - Filtering must not renumber contribution ranks or SQP ranks.
 
 ## When in doubt
 Choose the safer option that:

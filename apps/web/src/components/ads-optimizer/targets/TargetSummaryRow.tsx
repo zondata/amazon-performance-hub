@@ -35,6 +35,7 @@ const rankToneClass = (trend: string) => {
 };
 
 const metricLabelClass = 'text-[10px] font-medium tracking-wide text-muted';
+const SQP_IMPRESSION_LABEL = 'SQP Impression';
 const valueClass = (
   emphasis: 'current' | 'previous' | 'change',
   tone: 'good' | 'bad' | 'neutral' | 'missing',
@@ -239,25 +240,31 @@ export default function TargetSummaryRow(props: TargetSummaryRowProps) {
           style={columnStyle('contribution')}
         >
           <div className="w-full min-w-0 max-w-full space-y-2 overflow-hidden text-[11px] leading-4">
-            {summary.contribution.rows.map((entry) => (
-              <div key={entry.label} className="flex min-w-0 items-start justify-between gap-2">
-                <div className={`min-w-0 flex-1 truncate ${metricLabelClass}`}>{entry.label}</div>
-                <div className="min-w-0 shrink-0 text-right">
-                  <div
-                    className={`truncate ${valueClass(
-                      'current',
-                      entry.share.tone,
-                      entry.share.display
-                    )}`}
-                  >
-                    {entry.share.display}
+            {summary.contribution.rows.map((entry) => {
+              const contributionLabel =
+                entry.label === SQP_IMPRESSION_LABEL ? SQP_IMPRESSION_LABEL : entry.label;
+
+              return (
+                <div
+                  key={contributionLabel}
+                  className="flex min-w-0 items-center justify-between gap-2"
+                >
+                  <div className={`min-w-0 flex-1 truncate ${metricLabelClass}`}>
+                    {entry.label}
                   </div>
-                  <div className={`truncate ${secondaryValueClass(entry.rank.display)}`}>
-                    {entry.rank.display}
+                  <div className="flex shrink-0 items-center gap-2 whitespace-nowrap text-right">
+                    <div
+                      className={valueClass('current', entry.share.tone, entry.share.display)}
+                    >
+                      {entry.share.display}
+                    </div>
+                    <div className={secondaryValueClass(entry.rank.display)}>
+                      {entry.rank.display}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </td>
 

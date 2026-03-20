@@ -23,6 +23,8 @@ import {
   type ProductRankingRow,
 } from '@/lib/ranking/getProductRankingDaily';
 import { mapPlacementModifierKey } from '@/lib/logbook/aiPack/aiPackV3Helpers';
+import type { SqpKnownKeywordRow } from '@/lib/sqp/getProductSqpWeekly';
+import { normalizeSqpRow } from '@/lib/sqp/normalizeSqpRow';
 import { fetchAllRows } from '@/lib/supabaseFetchAll';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
@@ -149,6 +151,34 @@ type TargetRankingContext = {
   organicObservedRanks: RankingObservation[];
   sponsoredObservedRanks: RankingObservation[];
 };
+type TargetSqpContext = {
+  selectedWeekEnd: string | null;
+  matchedQueryNorm: string | null;
+  trackedQueryCount: number;
+  marketImpressionsTotal: number | null;
+  totalMarketImpressions: number | null;
+  marketImpressionShare: number | null;
+  marketImpressionRank: number | null;
+  note: string | null;
+};
+type SqpMarketImpressionRow = Pick<
+  SqpKnownKeywordRow,
+  'search_query_raw' | 'search_query_norm' | 'impressions_total'
+>;
+type AlignedSqpWeekContext = {
+  selectedWeekEnd: string | null;
+  trackedQueryCount: number;
+  totalMarketImpressions: number | null;
+  matchedRowsByQueryNorm: Map<
+    string,
+    {
+      queryNorm: string;
+      impressionsTotal: number | null;
+    }
+  >;
+  rankByQueryNorm: Map<string, number>;
+  error: string | null;
+};
 type CurrentSnapshotData = Awaited<ReturnType<typeof fetchCurrentSpData>>;
 
 export type AdsOptimizerTargetProfileRow = {
@@ -213,6 +243,7 @@ export type AdsOptimizerTargetProfileSnapshotView = {
     stir: NonAdditiveTrend;
   };
   rankingContext?: TargetRankingContext;
+  sqpContext?: TargetSqpContext;
   demandProxies: {
     searchTermCount: number;
     sameTextSearchTermCount: number;
@@ -951,6 +982,124 @@ const loadPlacementRowsByCampaignIds = async (args: {
   return rows;
 };
 
+const normalizeSqpQueryKey = (row: SqpMarketImpressionRow) =>
+  normalizeIdentityToken(row.search_query_norm ?? row.search_query_raw);
+
+const compareSqpMatchedRow = (
+  left: { queryNorm: string; impressionsTotal: number | null },
+  right: { queryNorm: string; impressionsTotal: number | null }
+) => {
+  const leftFinite = left.impressionsTotal !== null && Number.isFinite(left.impressionsTotal);
+  const rightFinite = right.impressionsTotal !== null && Number.isFinite(right.impressionsTotal);
+  if (leftFinite !== rightFinite) return leftFinite ? -1 : 1;
+  if ((left.impressionsTotal ?? 0) !== (right.impressionsTotal ?? 0)) {
+    return (right.impressionsTotal ?? 0) - (left.impressionsTotal ?? 0);
+  }
+  return left.queryNorm.localeCompare(right.queryNorm);
+};
+
+const loadAlignedSqpWeekContext = async (args: {
+  asin: string;
+  selectedWeekEnd: string | null;
+}): Promise<AlignedSqpWeekContext> => {
+  if (!args.selectedWeekEnd) {
+    return {
+      selectedWeekEnd: null,
+      trackedQueryCount: 0,
+      totalMarketImpressions: null,
+      matchedRowsByQueryNorm: new Map(),
+      rankByQueryNorm: new Map(),
+      error: null,
+    };
+  }
+
+  try {
+    const fetchedRows = await fetchAllRows<SqpMarketImpressionRow>((from, to) =>
+      supabaseAdmin
+        .from('sqp_weekly_latest_known_keywords')
+        .select('search_query_raw,search_query_norm,impressions_total')
+        .eq('account_id', env.accountId)
+        .eq('marketplace', env.marketplace)
+        .eq('scope_type', 'asin')
+        .eq('scope_value', args.asin)
+        .eq('week_end', args.selectedWeekEnd)
+        .range(from, to)
+    );
+    const normalizedRows = fetchedRows.map((row) => normalizeSqpRow(row));
+    const matchedRowsByQueryNorm = new Map<
+      string,
+      {
+        queryNorm: string;
+        impressionsTotal: number | null;
+      }
+    >();
+
+    normalizedRows.forEach((row) => {
+      const queryNorm = normalizeSqpQueryKey(row);
+      if (!queryNorm) return;
+
+      const next = {
+        queryNorm,
+        impressionsTotal:
+          typeof row.impressions_total === 'number' && Number.isFinite(row.impressions_total)
+            ? row.impressions_total
+            : null,
+      };
+      const current = matchedRowsByQueryNorm.get(queryNorm);
+      if (!current || compareSqpMatchedRow(next, current) < 0) {
+        matchedRowsByQueryNorm.set(queryNorm, next);
+      }
+    });
+
+    const rankedRows = [...matchedRowsByQueryNorm.values()]
+      .filter(
+        (row): row is { queryNorm: string; impressionsTotal: number } =>
+          row.impressionsTotal !== null && Number.isFinite(row.impressionsTotal)
+      )
+      .sort(
+        (left, right) =>
+          right.impressionsTotal - left.impressionsTotal ||
+          left.queryNorm.localeCompare(right.queryNorm)
+      );
+
+    return {
+      selectedWeekEnd: args.selectedWeekEnd,
+      trackedQueryCount: normalizedRows.length,
+      totalMarketImpressions: normalizedRows.reduce((sum, row) => {
+        const impressions =
+          typeof row.impressions_total === 'number' && Number.isFinite(row.impressions_total)
+            ? row.impressions_total
+            : 0;
+        return sum + impressions;
+      }, 0),
+      matchedRowsByQueryNorm,
+      rankByQueryNorm: new Map(
+        rankedRows.map((row, index) => [row.queryNorm, index + 1] as const)
+      ),
+      error: null,
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Unknown aligned SQP week load failure.';
+    console.warn('[ads-optimizer][target-profile] aligned SQP week load failed', {
+      accountId: env.accountId,
+      marketplace: env.marketplace,
+      asin: args.asin,
+      selectedWeekEnd: args.selectedWeekEnd,
+      error: message,
+    });
+
+    return {
+      selectedWeekEnd: args.selectedWeekEnd,
+      trackedQueryCount: 0,
+      totalMarketImpressions: null,
+      matchedRowsByQueryNorm: new Map(),
+      rankByQueryNorm: new Map(),
+      error: `Aligned SQP market-impression context is unavailable for ${args.selectedWeekEnd}: ${message}`,
+    };
+  }
+};
+
 const isCanonicalPlacementCode = (value: string | null): value is CanonicalPlacementCode =>
   value === 'PLACEMENT_TOP' ||
   value === 'PLACEMENT_REST_OF_SEARCH' ||
@@ -1041,6 +1190,116 @@ const buildPlacementBreakdownPayload = (args: {
 const getRepresentativeSearchTerm = (searchTerms: SpTargetsWorkspaceChildRow[]) =>
   [...searchTerms].sort(compareRepresentativeSearchTerm)[0] ?? null;
 
+const buildTargetSqpContext = (args: {
+  overview: AdsOptimizerOverviewData;
+  rankingContext: TargetRankingContext;
+  alignedSqpWeekContext: AlignedSqpWeekContext;
+}) => {
+  const selectedWeekEnd = args.overview.visibility.sqpCoverage.selectedWeekEnd ?? null;
+  const trackedQueryCount = args.alignedSqpWeekContext.trackedQueryCount;
+  const totalMarketImpressions = args.alignedSqpWeekContext.totalMarketImpressions;
+
+  if (!selectedWeekEnd) {
+    return {
+      selected_week_end: null,
+      matched_query_norm: null,
+      tracked_query_count: 0,
+      market_impressions_total: null,
+      total_market_impressions: null,
+      market_impression_share: null,
+      market_impression_rank: null,
+      note:
+        args.overview.visibility.sqpCoverage.detail ??
+        'SQP market-impression context is unavailable because Overview did not resolve an aligned SQP week.',
+    };
+  }
+
+  if (args.alignedSqpWeekContext.error) {
+    return {
+      selected_week_end: selectedWeekEnd,
+      matched_query_norm: null,
+      tracked_query_count: trackedQueryCount,
+      market_impressions_total: null,
+      total_market_impressions: null,
+      market_impression_share: null,
+      market_impression_rank: null,
+      note: args.alignedSqpWeekContext.error,
+    };
+  }
+
+  const resolvedKeywordNorm = args.rankingContext.resolvedKeywordNorm;
+  if (!resolvedKeywordNorm) {
+    return {
+      selected_week_end: selectedWeekEnd,
+      matched_query_norm: null,
+      tracked_query_count: trackedQueryCount,
+      market_impressions_total: null,
+      total_market_impressions: totalMarketImpressions,
+      market_impression_share: null,
+      market_impression_rank: null,
+      note:
+        'SQP market-impression context is unavailable because no deterministic keyword mapping was resolved for this target.',
+    };
+  }
+
+  const matchedRow =
+    args.alignedSqpWeekContext.matchedRowsByQueryNorm.get(resolvedKeywordNorm) ?? null;
+  if (!matchedRow) {
+    return {
+      selected_week_end: selectedWeekEnd,
+      matched_query_norm: null,
+      tracked_query_count: trackedQueryCount,
+      market_impressions_total: null,
+      total_market_impressions: totalMarketImpressions,
+      market_impression_share: null,
+      market_impression_rank: null,
+      note: `No aligned SQP query matched resolved keyword "${resolvedKeywordNorm}" for ${selectedWeekEnd}.`,
+    };
+  }
+
+  if (matchedRow.impressionsTotal === null || !Number.isFinite(matchedRow.impressionsTotal)) {
+    return {
+      selected_week_end: selectedWeekEnd,
+      matched_query_norm: matchedRow.queryNorm,
+      tracked_query_count: trackedQueryCount,
+      market_impressions_total: null,
+      total_market_impressions: totalMarketImpressions,
+      market_impression_share: null,
+      market_impression_rank: null,
+      note: `Matched SQP query "${matchedRow.queryNorm}" has no finite impressions_total for ${selectedWeekEnd}.`,
+    };
+  }
+
+  if (
+    totalMarketImpressions === null ||
+    !Number.isFinite(totalMarketImpressions) ||
+    totalMarketImpressions <= 0
+  ) {
+    return {
+      selected_week_end: selectedWeekEnd,
+      matched_query_norm: matchedRow.queryNorm,
+      tracked_query_count: trackedQueryCount,
+      market_impressions_total: matchedRow.impressionsTotal,
+      total_market_impressions: totalMarketImpressions,
+      market_impression_share: null,
+      market_impression_rank: null,
+      note: `Aligned SQP market-impression totals are unavailable for ${selectedWeekEnd}.`,
+    };
+  }
+
+  return {
+    selected_week_end: selectedWeekEnd,
+    matched_query_norm: matchedRow.queryNorm,
+    tracked_query_count: trackedQueryCount,
+    market_impressions_total: matchedRow.impressionsTotal,
+    total_market_impressions: totalMarketImpressions,
+    market_impression_share: safeRatio(matchedRow.impressionsTotal, totalMarketImpressions),
+    market_impression_rank:
+      args.alignedSqpWeekContext.rankByQueryNorm.get(matchedRow.queryNorm) ?? null,
+    note: null,
+  };
+};
+
 const buildTargetProfileViewRow = (args: {
   asin: string;
   requestedStart: string;
@@ -1067,6 +1326,7 @@ const buildTargetProfileViewRow = (args: {
     stir: NonAdditiveTrend;
   } | null;
   rankingContext: TargetRankingContext;
+  alignedSqpWeekContext: AlignedSqpWeekContext;
   overview: AdsOptimizerOverviewData;
   currentSnapshotDate: string | null;
   currentSnapshotWarning: string | null;
@@ -1123,6 +1383,11 @@ const buildTargetProfileViewRow = (args: {
     (adSalesShare !== null && adSalesShare >= 0.2) ||
     (adOrderShare !== null && adOrderShare >= 0.2) ||
     (totalSalesShare !== null && totalSalesShare >= 0.08);
+  const sqpContext = buildTargetSqpContext({
+    overview: args.overview,
+    rankingContext: args.rankingContext,
+    alignedSqpWeekContext: args.alignedSqpWeekContext,
+  });
   const organicContextSignal =
     sameTextSearchTerms.length > 0
       ? 'same_text_visibility_context'
@@ -1272,6 +1537,7 @@ const buildTargetProfileViewRow = (args: {
           rank: entry.rank,
         })),
       },
+      sqp_context: sqpContext,
       demand_proxies: {
         search_term_count: searchTermCount,
         same_text_search_term_count: sameTextSearchTerms.length,
@@ -1498,6 +1764,7 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
   const placementBreakdown = asJsonObject(payload.placement_breakdown);
   const searchTermDiagnostics = asJsonObject(payload.search_term_diagnostics);
   const rankingContext = asJsonObject(payload.ranking_context);
+  const sqpContext = asJsonObject(payload.sqp_context);
   const coverage = asJsonObject(payload.coverage);
   const statuses = asJsonObject(coverage?.statuses);
   const executionContext = asJsonObject(payload.execution_context);
@@ -1607,6 +1874,7 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
       rankingNote !== null ||
       organicObservedRanks.length > 0 ||
       sponsoredObservedRanks.length > 0);
+  const hasSqpContextPayload = sqpContext !== null;
 
   const coverageNotes = coverageNotesRaw.filter((entry): entry is string => typeof entry === 'string');
   const criticalWarnings = criticalWarningsRaw.filter(
@@ -1721,6 +1989,20 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
           note: rankingNote,
           organicObservedRanks,
           sponsoredObservedRanks,
+        }
+      : undefined,
+    sqpContext: hasSqpContextPayload
+      ? {
+          selectedWeekEnd: readNestedString(sqpContext, 'selected_week_end'),
+          matchedQueryNorm: readNestedString(sqpContext, 'matched_query_norm'),
+          trackedQueryCount: numberValue(
+            sqpContext?.tracked_query_count as number | null | undefined
+          ),
+          marketImpressionsTotal: readNestedNumber(sqpContext, 'market_impressions_total'),
+          totalMarketImpressions: readNestedNumber(sqpContext, 'total_market_impressions'),
+          marketImpressionShare: readNestedNumber(sqpContext, 'market_impression_share'),
+          marketImpressionRank: readNestedNumber(sqpContext, 'market_impression_rank'),
+          note: readNestedString(sqpContext, 'note'),
         }
       : undefined,
     demandProxies: {
@@ -2075,8 +2357,12 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
             asin: args.asin,
             start: args.start,
             end: args.end,
-          }),
+        }),
     ]);
+  const alignedSqpWeekContext = await loadAlignedSqpWeekContext({
+    asin: args.asin,
+    selectedWeekEnd: overviewData.visibility.sqpCoverage.selectedWeekEnd ?? null,
+  });
   const rankingLoadResult = await getProductRankingDaily({
     accountId: env.accountId,
     marketplace: env.marketplace,
@@ -2209,6 +2495,7 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
           rankingContextByKeywordNorm,
           rankingLoadError: rankingLoadResult.error,
         }),
+        alignedSqpWeekContext,
         overview: overviewData,
         currentSnapshotDate: currentSnapshotResult.data?.snapshotDate ?? null,
         currentSnapshotWarning: currentSnapshotResult.warning,

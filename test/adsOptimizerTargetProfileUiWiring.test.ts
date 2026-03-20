@@ -591,6 +591,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(shellSource).toContain('Sales rank');
     expect(shellSource).toContain('Spend rank');
     expect(shellSource).toContain('Impression rank');
+    expect(shellSource).toContain('SQP impression rank');
     expect(shellSource).toContain('Organic rank');
     expect(shellSource).toContain('Organic trend');
     expect(shellSource).toContain('toggleExpandedTargetSnapshotId');
@@ -649,6 +650,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(summaryRowSource).toContain('Current');
     expect(summaryRowSource).toContain('Previous');
     expect(summaryRowSource).toContain('Change');
+    expect(summaryRowSource).toContain('SQP Impression');
     expect(summaryRowSource).toContain('Organic');
     expect(summaryRowSource).toContain('Sponsored');
     expect(summaryRowSource).not.toContain('Target tier');
@@ -665,6 +667,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(toolbarSource).toContain('Sales rank');
     expect(toolbarSource).toContain('Spend rank');
     expect(toolbarSource).toContain('Impression rank');
+    expect(toolbarSource).toContain('SQP impression rank');
     expect(toolbarSource).toContain('Organic rank');
     expect(toolbarSource).toContain('Organic trend');
     expect(toolbarSource).toContain('Reset widths');

@@ -49,6 +49,7 @@ const SORT_OPTION_GROUPS: Array<{
       { value: 'contribution_sales_rank', label: 'Sales rank' },
       { value: 'contribution_spend_rank', label: 'Spend rank' },
       { value: 'contribution_impression_rank', label: 'Impression rank' },
+      { value: 'contribution_sqp_impression_rank', label: 'SQP impression rank' },
     ],
   },
   {

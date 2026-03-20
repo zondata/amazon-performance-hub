@@ -20,6 +20,7 @@ export type AdsOptimizerTargetTableSort =
   | 'contribution_sales_rank'
   | 'contribution_spend_rank'
   | 'contribution_impression_rank'
+  | 'contribution_sqp_impression_rank'
   | 'ranking_organic_latest'
   | 'ranking_organic_trend';
 export type AdsOptimizerTargetTableSortDirection = 'asc' | 'desc';
@@ -66,6 +67,7 @@ type RankingObservation = {
   observedDate: string | null;
   rank: number | null;
 };
+type ContributionRowLabel = 'Sales' | 'Spend' | 'Impression' | 'SQP Impression';
 
 type TargetReviewRowLike = AdsOptimizerTargetReviewRow;
 
@@ -107,8 +109,8 @@ export type AdsOptimizerTargetRowTableSummary = {
   };
   contribution: {
     rows: Array<{
-      label: 'Sales' | 'Spend' | 'Impression';
-      value: number;
+      label: ContributionRowLabel;
+      value: number | null;
       share: SummaryValue<number | null>;
       rank: SummaryValue<number | null>;
     }>;
@@ -179,6 +181,7 @@ export type AdsOptimizerTargetRowTableSummary = {
     contributionSalesRank: number | null;
     contributionSpendRank: number | null;
     contributionImpressionRank: number | null;
+    contributionSqpImpressionRank: number | null;
     organicLatestRank: number | null;
     organicTrendScore: number | null;
   };
@@ -787,6 +790,8 @@ const buildContributionSummary = (
   const salesShare = totals.sales > 0 ? row.raw.sales / totals.sales : null;
   const spendShare = totals.spend > 0 ? row.raw.spend / totals.spend : null;
   const impressionShare = totals.impressions > 0 ? row.raw.impressions / totals.impressions : null;
+  const sqpImpressionShare = row.sqpContext?.marketImpressionShare ?? null;
+  const sqpImpressionRank = row.sqpContext?.marketImpressionRank ?? null;
 
   return {
     rows: [
@@ -842,6 +847,21 @@ const buildContributionSummary = (
           tone: impressionShare === null ? 'missing' : 'neutral',
         },
       },
+      {
+        label: 'SQP Impression' as const,
+        value: row.sqpContext?.marketImpressionsTotal ?? null,
+        share: {
+          raw: sqpImpressionShare,
+          display: formatShare(sqpImpressionShare),
+          tone: sqpImpressionShare === null ? 'missing' : 'neutral',
+        },
+        rank: {
+          raw: sqpImpressionRank,
+          display:
+            sqpImpressionRank === null ? '—' : `Rank ${formatNumber(sqpImpressionRank)}`,
+          tone: sqpImpressionRank === null ? 'missing' : 'neutral',
+        },
+      },
     ],
   };
 };
@@ -888,6 +908,7 @@ const buildTableSummary = (
     context.totals.impressions > 0
       ? (context.ranks.impressions.get(row.persistedTargetKey) ?? null)
       : null;
+  const contributionSqpImpressionRank = row.sqpContext?.marketImpressionRank ?? null;
   const organicRankingSummary = buildRankingSummaryBlock({
     observations: row.rankingContext?.organicObservedRanks ?? [],
     status: row.rankingContext?.status ?? null,
@@ -975,6 +996,7 @@ const buildTableSummary = (
       contributionSalesRank,
       contributionSpendRank,
       contributionImpressionRank,
+      contributionSqpImpressionRank,
       organicLatestRank: organicRankingSummary.latestRank,
       organicTrendScore: getOrganicTrendSortScore(organicRankingSummary.trendLabel),
     },
@@ -1150,6 +1172,14 @@ export const compareAdsOptimizerTargetRowTableSummaries = (
       comparison = compareMissingLastNumber(
         left.sort.contributionImpressionRank,
         right.sort.contributionImpressionRank,
+        direction
+      );
+      break;
+    case 'contribution_sqp_impression_rank':
+      handledDirection = true;
+      comparison = compareMissingLastNumber(
+        left.sort.contributionSqpImpressionRank,
+        right.sort.contributionSqpImpressionRank,
         direction
       );
       break;
