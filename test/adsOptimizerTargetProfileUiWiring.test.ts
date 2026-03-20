@@ -575,6 +575,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(shellSource).toContain('data-column-resize-handle');
     expect(shellSource).toContain("tableLayoutPrefs.frozenColumns.includes('target')");
     expect(shellSource).toContain('sticky left-0 z-30');
+    expect(shellSource).toContain("backgroundColor: 'var(--color-surface)'");
     expect(shellSource).toContain('Search targets');
     expect(shellSource).toContain('aria-label="Search target rows"');
     expect(shellSource).toContain('No matching targets');
@@ -623,6 +624,13 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(summaryRowSource).toContain('summary.stateComparison.rows.slice(1)');
     expect(summaryRowSource).toContain('stateStatus.current.display');
     expect(summaryRowSource).toContain('stateStatusClass');
+    expect(summaryRowSource).toContain("backgroundColor: 'var(--color-surface)'");
+    expect(summaryRowSource).toContain(
+      "backgroundColor: 'color-mix(in srgb, var(--color-primary) 5%, var(--color-surface))'"
+    );
+    expect(summaryRowSource).toContain(
+      "backgroundColor: 'color-mix(in srgb, var(--color-surface-2) 35%, var(--color-surface))'"
+    );
     expect(summaryRowSource).toContain("columnStyle('target')");
     expect(summaryRowSource).toContain('maxWidth');
     expect(summaryRowSource).toContain('w-full min-w-0 max-w-full');
@@ -630,6 +638,8 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(summaryRowSource).toContain(
       'grid w-full min-w-0 max-w-full grid-cols-[minmax(0,1.15fr)_repeat(3,minmax(0,1fr))]'
     );
+    expect(summaryRowSource).toContain('gap-x-1.5');
+    expect(summaryRowSource).not.toContain('gap-x-3');
     expect(summaryRowSource).not.toContain(
       'grid w-max grid-cols-[max-content_repeat(3,minmax(6.5rem,max-content))]'
     );
@@ -1190,7 +1200,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     const source = fs.readFileSync(tableLayoutPrefsPath, 'utf-8');
 
     expect(source).toContain('ADS_OPTIMIZER_TARGET_TABLE_LAYOUT_STORAGE_KEY');
-    expect(source).toContain("'aph.adsOptimizerTargetsCollapsedTableLayout.v1'");
+    expect(source).toContain("'aph.adsOptimizerTargetsCollapsedTableLayout.v2'");
     expect(source).toContain("key: 'target'");
     expect(source).toContain("key: 'state'");
     expect(source).toContain("key: 'economics'");
@@ -1202,6 +1212,15 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(source).toContain('minWidth');
     expect(source).toContain('maxWidth');
     expect(source).toContain('freezable: true');
+    expect(source).toContain('minWidth: 280');
+    expect(source).toContain('defaultWidth: 340');
+    expect(source).toContain('maxWidth: 500');
+    expect(source).toContain('defaultWidth: 280');
+    expect(source).toContain('defaultWidth: 270');
+    expect(source).toContain('defaultWidth: 170');
+    expect(source).toContain('defaultWidth: 150');
+    expect(source).toContain('defaultWidth: 120');
+    expect(source).toContain('defaultWidth: 200');
     expect(source).toContain('parseAdsOptimizerTargetTableLayoutPrefs');
     expect(source).toContain('serializeAdsOptimizerTargetTableLayoutPrefs');
     expect(source).toContain('toggleAdsOptimizerTargetTableFrozenColumn');

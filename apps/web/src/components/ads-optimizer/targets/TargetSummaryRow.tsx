@@ -78,7 +78,7 @@ const ComparisonMatrix = (props: {
     change: { display: string; tone: 'good' | 'bad' | 'neutral' | 'missing' };
   }>;
 }) => (
-  <div className="grid w-full min-w-0 max-w-full grid-cols-[minmax(0,1.15fr)_repeat(3,minmax(0,1fr))] gap-x-3 gap-y-1.5 overflow-hidden text-[11px] leading-4">
+  <div className="grid w-full min-w-0 max-w-full grid-cols-[minmax(0,1.15fr)_repeat(3,minmax(0,1fr))] gap-x-1.5 gap-y-1.5 overflow-hidden text-[11px] leading-4">
     <div />
     <div className="min-w-0 truncate text-[10px] font-semibold uppercase tracking-wide text-muted">
       Current
@@ -123,13 +123,22 @@ type TargetSummaryRowProps = {
 export default function TargetSummaryRow(props: TargetSummaryRowProps) {
   const { row, summary } = props;
   const changeItems = summary.changeSummary.lines;
-  const stickyCellBackground = props.isActive ? 'bg-primary/5' : 'bg-surface';
+  const stickyCellBackgroundStyle = props.isActive
+    ? {
+        backgroundColor: 'color-mix(in srgb, var(--color-primary) 5%, var(--color-surface))',
+      }
+    : {
+        backgroundColor: 'var(--color-surface)',
+      };
   const stateStatus = summary.stateComparison.rows[0];
   const columnStyle = (key: keyof AdsOptimizerTargetTableColumnWidths) => ({
     width: `${props.columnWidths[key]}px`,
     minWidth: `${props.columnWidths[key]}px`,
     maxWidth: `${props.columnWidths[key]}px`,
   });
+  const expandedRowBackgroundStyle = {
+    backgroundColor: 'color-mix(in srgb, var(--color-surface-2) 35%, var(--color-surface))',
+  };
   const targetColumnClass = props.isTargetColumnFrozen
     ? 'sticky left-0 z-20 shadow-[8px_0_12px_-12px_rgba(15,23,42,0.18)]'
     : '';
@@ -142,8 +151,8 @@ export default function TargetSummaryRow(props: TargetSummaryRowProps) {
         data-persisted-target-key={summary.persistedTargetKey}
       >
         <td
-          className={`${targetColumnClass} overflow-hidden border-r border-border/70 px-4 py-3 ${stickyCellBackground}`}
-          style={columnStyle('target')}
+          className={`${targetColumnClass} overflow-hidden border-r border-border/70 px-4 py-3`}
+          style={{ ...columnStyle('target'), ...stickyCellBackgroundStyle }}
         >
           <div className="flex min-w-0 max-w-full items-start gap-3 overflow-hidden">
             <input
@@ -336,7 +345,7 @@ export default function TargetSummaryRow(props: TargetSummaryRowProps) {
         </td>
       </tr>
       {props.expandedContent ? (
-        <tr className="border-b border-border/60 bg-surface-2/35">
+        <tr className="border-b border-border/60" style={expandedRowBackgroundStyle}>
           <td colSpan={props.colSpan} className="px-3 pb-4 pt-0">
             {props.expandedContent}
           </td>

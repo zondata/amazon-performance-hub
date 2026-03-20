@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ADS_OPTIMIZER_TARGET_TABLE_LAYOUT_STORAGE_KEY,
   applyAdsOptimizerTargetTableColumnResizeDelta,
   getDefaultAdsOptimizerTargetTableLayoutPrefs,
   parseAdsOptimizerTargetTableLayoutPrefs,
@@ -13,13 +14,25 @@ describe('ads optimizer target table layout prefs', () => {
   it('uses stable defaults for widths and target freeze state', () => {
     const prefs = getDefaultAdsOptimizerTargetTableLayoutPrefs();
 
-    expect(prefs.widths.target).toBeGreaterThan(0);
-    expect(prefs.widths.state).toBeGreaterThan(0);
-    expect(prefs.widths.economics).toBeGreaterThan(0);
-    expect(prefs.widths.contribution).toBeGreaterThan(0);
-    expect(prefs.widths.ranking).toBeGreaterThan(0);
-    expect(prefs.widths.role).toBeGreaterThan(0);
-    expect(prefs.widths.change_summary).toBeGreaterThan(0);
+    expect(ADS_OPTIMIZER_TARGET_TABLE_LAYOUT_STORAGE_KEY).toBe(
+      'aph.adsOptimizerTargetsCollapsedTableLayout.v2'
+    );
+    expect(prefs.widths.target).toBe(340);
+    expect(prefs.widths.state).toBe(280);
+    expect(prefs.widths.economics).toBe(270);
+    expect(prefs.widths.contribution).toBe(170);
+    expect(prefs.widths.ranking).toBe(150);
+    expect(prefs.widths.role).toBe(120);
+    expect(prefs.widths.change_summary).toBe(200);
+    expect(
+      prefs.widths.target +
+        prefs.widths.state +
+        prefs.widths.economics +
+        prefs.widths.contribution +
+        prefs.widths.ranking +
+        prefs.widths.role +
+        prefs.widths.change_summary
+    ).toBe(1530);
     expect(prefs.frozenColumns).toEqual(['target']);
   });
 
@@ -32,24 +45,24 @@ describe('ads optimizer target table layout prefs', () => {
             updateAdsOptimizerTargetTableColumnWidth(
               updateAdsOptimizerTargetTableColumnWidth(
                 updateAdsOptimizerTargetTableColumnWidth(
-                  updateAdsOptimizerTargetTableColumnWidth(defaults, 'target', 560),
+                  updateAdsOptimizerTargetTableColumnWidth(defaults, 'target', 480),
                   'state',
-                  408
+                  360
                 ),
                 'economics',
-                392
+                340
               ),
               'contribution',
-              280
+              260
             ),
             'ranking',
-            296
+            220
           ),
           'role',
-          224
+          180
         ),
         'change_summary',
-        376
+        320
       ),
       'target'
     );
@@ -58,13 +71,13 @@ describe('ads optimizer target table layout prefs', () => {
       serializeAdsOptimizerTargetTableLayoutPrefs(updated)
     );
 
-    expect(restored.widths.target).toBe(560);
-    expect(restored.widths.state).toBe(408);
-    expect(restored.widths.economics).toBe(392);
-    expect(restored.widths.contribution).toBe(280);
-    expect(restored.widths.ranking).toBe(296);
-    expect(restored.widths.role).toBe(224);
-    expect(restored.widths.change_summary).toBe(376);
+    expect(restored.widths.target).toBe(480);
+    expect(restored.widths.state).toBe(360);
+    expect(restored.widths.economics).toBe(340);
+    expect(restored.widths.contribution).toBe(260);
+    expect(restored.widths.ranking).toBe(220);
+    expect(restored.widths.role).toBe(180);
+    expect(restored.widths.change_summary).toBe(320);
     expect(restored.frozenColumns).toEqual([]);
   });
 
@@ -97,8 +110,8 @@ describe('ads optimizer target table layout prefs', () => {
       })
     );
 
-    expect(restored.widths.target).toBeGreaterThan(20);
-    expect(restored.widths.ranking).toBeLessThan(9999);
+    expect(restored.widths.target).toBe(280);
+    expect(restored.widths.ranking).toBe(260);
     expect(restored.frozenColumns).toEqual(['target']);
     expect(parseAdsOptimizerTargetTableLayoutPrefs('{bad json')).toEqual(
       getDefaultAdsOptimizerTargetTableLayoutPrefs()
@@ -109,11 +122,11 @@ describe('ads optimizer target table layout prefs', () => {
     const defaults = getDefaultAdsOptimizerTargetTableLayoutPrefs();
     const resized = updateAdsOptimizerTargetTableColumnWidth(
       defaults,
-          'target',
-          560
+      'target',
+      560
     );
 
-    expect(resized.widths.target).toBe(560);
+    expect(resized.widths.target).toBe(500);
     expect(getDefaultAdsOptimizerTargetTableLayoutPrefs()).toEqual(defaults);
   });
 });

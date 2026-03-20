@@ -877,10 +877,14 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
   const targetHeaderClass = isTargetColumnFrozen
     ? 'sticky left-0 z-30 shadow-[8px_0_12px_-12px_rgba(15,23,42,0.18)]'
     : '';
-  const headerCellStyle = (key: AdsOptimizerTargetTableColumnKey) => ({
+  const columnWidthStyle = (key: AdsOptimizerTargetTableColumnKey) => ({
     width: `${tableLayoutPrefs.widths[key]}px`,
     minWidth: `${tableLayoutPrefs.widths[key]}px`,
     maxWidth: `${tableLayoutPrefs.widths[key]}px`,
+  });
+  const headerCellStyle = (key: AdsOptimizerTargetTableColumnKey) => ({
+    ...columnWidthStyle(key),
+    backgroundColor: 'var(--color-surface)',
   });
   const tableWidthPx = ADS_OPTIMIZER_TARGET_TABLE_COLUMNS.reduce(
     (sum, column) => sum + tableLayoutPrefs.widths[column.key],
@@ -2317,7 +2321,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
           >
             <colgroup>
               {ADS_OPTIMIZER_TARGET_TABLE_COLUMNS.map((column) => (
-                <col key={column.key} style={headerCellStyle(column.key)} />
+                <col key={column.key} style={columnWidthStyle(column.key)} />
               ))}
             </colgroup>
             <thead>
