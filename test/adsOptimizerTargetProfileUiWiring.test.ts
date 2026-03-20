@@ -10,6 +10,7 @@ import TargetChangePlanTab, {
   type TargetChangePlanOverrideActionItem,
   type TargetChangePlanProposalItem,
 } from '../apps/web/src/components/ads-optimizer/targets/TargetChangePlanTab';
+import TargetPlacementTab from '../apps/web/src/components/ads-optimizer/targets/TargetPlacementTab';
 import TargetSearchTermTab from '../apps/web/src/components/ads-optimizer/targets/TargetSearchTermTab';
 import type { AdsOptimizerTargetReviewRow } from '../apps/web/src/lib/ads-optimizer/runtime';
 
@@ -46,6 +47,10 @@ const searchTermTabPath = path.join(
   process.cwd(),
   'apps/web/src/components/ads-optimizer/targets/TargetSearchTermTab.tsx'
 );
+const placementTabPath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads-optimizer/targets/TargetPlacementTab.tsx'
+);
 const runtimePath = path.join(
   process.cwd(),
   'apps/web/src/lib/ads-optimizer/runtime.ts'
@@ -61,6 +66,10 @@ const phase6cDocPath = path.join(
 const phase6dDocPath = path.join(
   process.cwd(),
   'docs/ads-optimizer/ads_optimizer_v2_phase6d_search_term_tab_build_plan.md'
+);
+const phase6eDocPath = path.join(
+  process.cwd(),
+  'docs/ads-optimizer/ads_optimizer_v2_phase6e_placement_tab_build_plan.md'
 );
 
 const requireFromWeb = createRequire(path.join(process.cwd(), 'apps/web/package.json'));
@@ -333,6 +342,174 @@ const renderFixtureSearchTermMarkup = () =>
     })
   );
 
+const makePlacementFixtureRow = (): AdsOptimizerTargetReviewRow => {
+  const row = makeSearchTermFixtureRow();
+
+  return {
+    ...row,
+    currentCampaignBiddingStrategy: 'dynamic down only',
+    nonAdditiveDiagnostics: {
+      note: 'Placement diagnostics remain contextual only.',
+      representativeSearchTerm: 'Hero Exact',
+      tosIs: {
+        latestValue: 0.42,
+        previousValue: 0.35,
+        delta: 0.07,
+        direction: 'up',
+        observedDays: 6,
+        latestObservedDate: '2026-02-28',
+      },
+      stis: {
+        latestValue: 0.42,
+        previousValue: 0.35,
+        delta: 0.07,
+        direction: 'up',
+        observedDays: 6,
+        latestObservedDate: '2026-02-28',
+      },
+      stir: {
+        latestValue: 11,
+        previousValue: 14,
+        delta: -3,
+        direction: 'down',
+        observedDays: 6,
+        latestObservedDate: '2026-02-28',
+      },
+    },
+    placementContext: {
+      topOfSearchModifierPct: 25,
+      impressions: 1400,
+      clicks: 64,
+      orders: 9,
+      units: 9,
+      sales: 420,
+      spend: 96,
+      note: 'Campaign-level placement context.',
+    },
+    placementBreakdown: {
+      note: 'Placement metrics remain campaign-level context only. They are shared across targets in the same campaign and must not be treated as target-owned history.',
+      rows: [
+        {
+          placementCode: 'PLACEMENT_TOP',
+          placementLabel: 'Top of search',
+          modifierPct: 25,
+          impressions: 1400,
+          clicks: 64,
+          orders: 9,
+          sales: 420,
+          spend: 96,
+        },
+        {
+          placementCode: 'PLACEMENT_REST_OF_SEARCH',
+          placementLabel: 'Rest of search',
+          modifierPct: 10,
+          impressions: 900,
+          clicks: 40,
+          orders: 0,
+          sales: 0,
+          spend: 52,
+        },
+        {
+          placementCode: 'PLACEMENT_PRODUCT_PAGE',
+          placementLabel: 'Product pages',
+          modifierPct: null,
+          impressions: 200,
+          clicks: 0,
+          orders: 0,
+          sales: 0,
+          spend: 0,
+        },
+      ],
+    },
+    previousComparable: {
+      ...(row.previousComparable ?? {}),
+      placementBreakdown: {
+        note: 'Placement metrics remain campaign-level context only. They are shared across targets in the same campaign and must not be treated as target-owned history.',
+        rows: [
+          {
+            placementCode: 'PLACEMENT_TOP',
+            placementLabel: 'Top of search',
+            modifierPct: 18,
+            impressions: 1200,
+            clicks: 48,
+            orders: 6,
+            sales: 300,
+            spend: 90,
+          },
+          {
+            placementCode: 'PLACEMENT_REST_OF_SEARCH',
+            placementLabel: 'Rest of search',
+            modifierPct: 8,
+            impressions: 800,
+            clicks: 35,
+            orders: 2,
+            sales: 40,
+            spend: 30,
+          },
+          {
+            placementCode: 'PLACEMENT_PRODUCT_PAGE',
+            placementLabel: 'Product pages',
+            modifierPct: null,
+            impressions: 100,
+            clicks: 0,
+            orders: 0,
+            sales: 0,
+            spend: 0,
+          },
+        ],
+      },
+      currentCampaignBiddingStrategy: 'dynamic down only',
+    },
+    coverage: {
+      ...row.coverage,
+      statuses: {
+        ...row.coverage.statuses,
+        tosIs: 'ready',
+        placementContext: 'ready',
+      },
+    },
+    recommendation: {
+      ...(row.recommendation ?? {}),
+      placementDiagnostics: {
+        contextScope: 'campaign_level_context_only',
+        currentPlacementLabel: 'Top of search',
+        currentPlacementCode: 'PLACEMENT_TOP',
+        currentPercentage: 25,
+        biasRecommendation: 'stronger',
+        reasonCodes: ['PLACEMENT_BIAS_STRONGER_CONTEXT'],
+        note: 'Campaign-level context only.',
+      },
+    },
+  } as AdsOptimizerTargetReviewRow;
+};
+
+const makePlacementFixtureRows = () => {
+  const primary = makePlacementFixtureRow();
+  const shared = {
+    ...makePlacementFixtureRow(),
+    targetSnapshotId: 'target-snapshot-2',
+    targetId: 'target-2',
+    targetText: 'hero broad',
+  } as AdsOptimizerTargetReviewRow;
+  const otherCampaign = {
+    ...makePlacementFixtureRow(),
+    targetSnapshotId: 'target-snapshot-3',
+    targetId: 'target-3',
+    campaignId: 'campaign-2',
+    campaignName: 'Other Campaign',
+  } as AdsOptimizerTargetReviewRow;
+
+  return [primary, shared, otherCampaign];
+};
+
+const renderFixturePlacementMarkup = (allRows = makePlacementFixtureRows()) =>
+  renderToStaticMarkup(
+    React.createElement(TargetPlacementTab, {
+      row: allRows[0],
+      allRows,
+    })
+  );
+
 describe('ads optimizer phase 6 inline target review wiring', () => {
   it('loads targets view data only for the targets view and renders the inline targets panel', () => {
     const source = fs.readFileSync(pagePath, 'utf-8');
@@ -358,6 +535,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     const expandedTabsSource = fs.readFileSync(expandedTabsPath, 'utf-8');
     const changePlanTabSource = fs.readFileSync(changePlanTabPath, 'utf-8');
     const searchTermTabSource = fs.readFileSync(searchTermTabPath, 'utf-8');
+    const placementTabSource = fs.readFileSync(placementTabPath, 'utf-8');
 
     expect(wrapperSource).toContain('TargetsPageShell');
     expect(shellSource).toContain('buildAdsOptimizerTargetRowTableSummaries');
@@ -506,6 +684,9 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(changePlanTabSource).toContain('Replacement actions');
     expect(searchTermTabSource).toContain('buildAdsWorkspaceNavigationHref');
     expect(searchTermTabSource).toContain("Top = current · Middle = previous · Bottom = change %");
+    expect(placementTabSource).toContain('TOP OF SEARCH IMPRESSION SHARE (TOS IS)');
+    expect(placementTabSource).toContain('CAMPAIGN CONTEXT');
+    expect(placementTabSource).toContain("data-show-previous-change={showPreviousAndChange ? 'true' : 'false'}");
   });
 
   it('renders the tabbed expanded row as a fixed-height shell with one active panel at a time', () => {
@@ -553,7 +734,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(expandedSource).toContain('Reason codes');
     expect(expandedSource).toContain('No persisted reason codes');
     expect(expandedSource).toContain('<TargetSearchTermTab');
-    expect(expandedSource).toContain('Campaign-level context only. Placement evidence');
+    expect(expandedSource).toContain('<TargetPlacementTab');
     expect(expandedSource).toContain('<TargetChangePlanTab');
     expect(expandedSource).not.toContain('<TargetOverrideForm');
     expect(expandedSource).toContain('TargetAdvancedSection');
@@ -566,6 +747,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(expandedSource).not.toContain('Collapse details');
     expect(expandedSource).not.toContain('Search-term evidence');
     expect(expandedSource).not.toContain('Search-term diagnosis:');
+    expect(expandedSource).not.toContain('Campaign-level context only. Placement evidence');
     expect(expandedSource).not.toContain("activeRow.typeLabel ?? 'Target'");
     expect(expandedSource).not.toContain('activeRow.campaignName ?? activeRow.campaignId');
     expect(expandedSource).not.toContain('Current ${activeRow.role.currentRole.label}');
@@ -603,6 +785,21 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(source).toContain(
       'Trend is not rendered inline inside the `Search term` tab; the tab uses a `Trend` button that opens Ads Workspace target trend in a new browser tab.'
     );
+  });
+
+  it('documents Phase 6E as a Placement tab-only replacement inside the fixed expanded shell', () => {
+    const source = fs.readFileSync(phase6eDocPath, 'utf-8');
+
+    expect(source).toContain('Phase 6A remains authoritative for the collapsed row.');
+    expect(source).toContain(
+      'Phase 6B remains authoritative for the fixed-height expanded shell.'
+    );
+    expect(source).toContain('Phase 6D remains authoritative for the Search term tab.');
+    expect(source).toContain('This task changes only the Placement tab.');
+    expect(source).toContain('Placement metrics remain campaign-level context.');
+    expect(source).toContain('TOS IS remains a non-additive target-level diagnostic.');
+    expect(source).toContain('No client fetch is performed when the tab opens.');
+    expect(source).toContain('No synthetic TOS IS window average is allowed.');
   });
 
   it('renders the split Change plan contract with the fixture-specific default OFF state', () => {
@@ -855,6 +1052,110 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(markup).not.toContain('Search-term evidence');
     expect(markup).not.toContain('Search-term diagnosis:');
     expect(markup).not.toContain('Representative term');
+  });
+
+  it('renders the redesigned Placement tab with non-additive TOS context, shared campaign context, and the new table', () => {
+    const shellSource = fs.readFileSync(shellPath, 'utf-8');
+    const placementTabSource = fs.readFileSync(placementTabPath, 'utf-8');
+    const sharedMarkup = renderFixturePlacementMarkup();
+    const exclusiveMarkup = renderFixturePlacementMarkup([makePlacementFixtureRow()]);
+    const orderedColumns = [
+      `Placement
+              </th>`,
+      `Bid strategy
+              </th>`,
+      `Evidence
+              </th>`,
+      "renderSortableHeader('Impr.', 'impressions')",
+      "renderSortableHeader('Clicks', 'clicks')",
+      "renderSortableHeader('CTR', 'ctr')",
+      "renderSortableHeader('CVR', 'cvr')",
+      "renderSortableHeader('Spend', 'spend')",
+      "renderSortableHeader('Sales', 'sales')",
+      "renderSortableHeader('Orders', 'orders')",
+      "renderSortableHeader('ACOS', 'acos')",
+      "renderSortableHeader('ROAS', 'roas')",
+    ];
+    const orderedColumnIndexes = orderedColumns.map((label) => placementTabSource.indexOf(label));
+
+    expect(shellSource).toContain('<TargetPlacementTab');
+    expect(placementTabSource).toContain("role=\"switch\"");
+    expect(placementTabSource).toContain("formatUiDate(tosIs.latestObservedDate)");
+    expect(placementTabSource).toContain('buildAdsOptimizerPlacementCampaignTargetCount');
+    expect(placementTabSource).toContain("data-show-previous-change={showPreviousAndChange ? 'true' : 'false'}");
+    expect(placementTabSource).toContain('[data-row-kind="data"] .metric-prev');
+    expect(placementTabSource).toContain('[data-row-kind="data"] .metric-change');
+    expect(placementTabSource).toContain("renderMetricLines({ kind: 'cvr', metric: placement.cvr })");
+    expect(placementTabSource).toContain(
+      "renderMetricLines({ kind: 'sales', metric: placement.sales })"
+    );
+    expect(placementTabSource).toContain(
+      "renderMetricLines({ kind: 'roas', metric: placement.roas })"
+    );
+    expect(sharedMarkup).toContain('TOP OF SEARCH IMPRESSION SHARE (TOS IS)');
+    expect(sharedMarkup).toContain('CAMPAIGN CONTEXT');
+    expect(sharedMarkup).toContain('Top = current · Middle = previous · Bottom = change %');
+    expect(sharedMarkup).toContain('Previous &amp; change');
+    expect(sharedMarkup).toContain('role="switch"');
+    expect(sharedMarkup).toContain('aria-checked="true"');
+    expect(sharedMarkup).toContain('Placement');
+    expect(sharedMarkup).toContain('Bid strategy');
+    expect(sharedMarkup).toContain('Evidence');
+    expect(sharedMarkup).toContain('Impr.');
+    expect(sharedMarkup).toContain('Clicks');
+    expect(sharedMarkup).toContain('CTR');
+    expect(sharedMarkup).toContain('CVR');
+    expect(sharedMarkup).toContain('Spend');
+    expect(sharedMarkup).toContain('Sales');
+    expect(sharedMarkup).toContain('Orders');
+    expect(sharedMarkup).toContain('ACOS');
+    expect(sharedMarkup).toContain('ROAS');
+    expect(sharedMarkup).toContain('Top of search');
+    expect(sharedMarkup).toContain('Rest of search');
+    expect(sharedMarkup).toContain('Product pages');
+    expect(sharedMarkup).toContain('Strong');
+    expect(sharedMarkup).toContain('Weak');
+    expect(sharedMarkup).toContain('Mixed');
+    expect(sharedMarkup).toContain('dynamic down only');
+    expect(sharedMarkup).toContain('Modifier: +25%');
+    expect(sharedMarkup).toContain('Modifier: +10%');
+    expect(sharedMarkup).toContain('42%');
+    expect(sharedMarkup).toContain('35%');
+    expect(sharedMarkup).toContain('+7pp');
+    expect(sharedMarkup).toContain('Latest observed (28 Feb 2026)');
+    expect(sharedMarkup).toContain('Previous observed');
+    expect(sharedMarkup).toContain(
+      'Non-additive diagnostic. Latest and previous are the two most recent observed TOS IS values in-window. No window average is synthesized.'
+    );
+    expect(sharedMarkup).toContain('Observed days');
+    expect(sharedMarkup).toContain('Direction');
+    expect(sharedMarkup).toContain('Coverage');
+    expect(sharedMarkup).toContain('Higher');
+    expect(sharedMarkup).toContain('Ready');
+    expect(sharedMarkup).toContain(
+      'This campaign contains <strong class="font-medium text-foreground">2</strong> targets'
+    );
+    expect(sharedMarkup).toContain('Shared across 2 targets');
+    expect(exclusiveMarkup).toContain(
+      'This is the only target in this campaign. Placement data reflects this campaign for one target only. Changes to placement modifiers affect only this target.'
+    );
+    expect(exclusiveMarkup).toContain('Exclusive to this target');
+    expect(sharedMarkup).toContain('Total: 3');
+    expect(sharedMarkup).toContain('Sorted by impressions (desc)');
+    expect(sharedMarkup).toContain('data-show-previous-change="true"');
+    orderedColumnIndexes.forEach((index, position) => {
+      expect(index, `missing Placement column ${orderedColumns[position]}`).toBeGreaterThan(-1);
+    });
+    for (let index = 1; index < orderedColumnIndexes.length; index += 1) {
+      expect(orderedColumnIndexes[index]).toBeGreaterThan(orderedColumnIndexes[index - 1]!);
+    }
+    expect(sharedMarkup.lastIndexOf('Total: 3')).toBeGreaterThan(
+      sharedMarkup.lastIndexOf('Product pages')
+    );
+    expect(sharedMarkup).not.toContain('>Trend<');
+    expect(sharedMarkup).not.toContain('Current avg');
+    expect(sharedMarkup).not.toContain('Previous avg');
+    expect(sharedMarkup).not.toContain('<polyline points="2 12 5.5 7 9 9.5 14 3"');
   });
 
   it('pulls exact-window run snapshots plus persisted recommendations and role history', () => {

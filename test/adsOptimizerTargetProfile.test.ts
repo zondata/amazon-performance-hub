@@ -396,6 +396,44 @@ describe('ads optimizer phase 5 target profile engine', () => {
       clicks: 12,
       spend: 32,
     });
+    expect(result.rows[0]?.snapshotPayload.current_campaign_bidding_strategy).toBe(
+      'dynamic down only'
+    );
+    expect(result.rows[0]?.snapshotPayload.placement_breakdown).toMatchObject({
+      note: 'Placement metrics remain campaign-level context only. They are shared across targets in the same campaign and must not be treated as target-owned history.',
+      rows: [
+        {
+          placement_code: 'PLACEMENT_TOP',
+          placement_label: 'Top of search',
+          modifier_pct: 18,
+          impressions: 120,
+          clicks: 12,
+          orders: 3,
+          sales: 140,
+          spend: 32,
+        },
+        {
+          placement_code: 'PLACEMENT_REST_OF_SEARCH',
+          placement_label: 'Rest of search',
+          modifier_pct: null,
+          impressions: null,
+          clicks: null,
+          orders: null,
+          sales: null,
+          spend: null,
+        },
+        {
+          placement_code: 'PLACEMENT_PRODUCT_PAGE',
+          placement_label: 'Product pages',
+          modifier_pct: null,
+          impressions: null,
+          clicks: null,
+          orders: null,
+          sales: null,
+          spend: null,
+        },
+      ],
+    });
     expect(result.rows[0]?.snapshotPayload.derived_metrics.contribution_after_ads).toBeCloseTo(10.6);
     expect(result.rows[0]?.snapshotPayload.derived_metrics.break_even_gap).toBeCloseTo(
       0.11777777777777781
@@ -816,6 +854,42 @@ describe('ads optimizer phase 5 target profile engine', () => {
           spend: 32,
           note: 'placement note',
         },
+        current_campaign_bidding_strategy: 'dynamic down only',
+        placement_breakdown: {
+          note: 'Placement metrics remain campaign-level context only. They are shared across targets in the same campaign and must not be treated as target-owned history.',
+          rows: [
+            {
+              placement_code: 'PLACEMENT_TOP',
+              placement_label: 'Top of search',
+              modifier_pct: 18,
+              impressions: 120,
+              clicks: 12,
+              orders: 3,
+              sales: 140,
+              spend: 32,
+            },
+            {
+              placement_code: 'PLACEMENT_REST_OF_SEARCH',
+              placement_label: 'Rest of search',
+              modifier_pct: 4,
+              impressions: 80,
+              clicks: 7,
+              orders: 1,
+              sales: 40,
+              spend: 12,
+            },
+            {
+              placement_code: 'PLACEMENT_PRODUCT_PAGE',
+              placement_label: 'Product pages',
+              modifier_pct: null,
+              impressions: null,
+              clicks: null,
+              orders: null,
+              sales: null,
+              spend: null,
+            },
+          ],
+        },
         search_term_diagnostics: {
           representative_search_term: 'blue widget',
           representative_same_text: true,
@@ -986,6 +1060,45 @@ describe('ads optimizer phase 5 target profile engine', () => {
     expect(row.role.previousRole).toBe('Harvest');
     expect(row.role.currentRole.value).toBe('Scale');
     expect(row.role.guardrails.categories.maxBidIncreasePerCyclePct).toBe(9);
+    expect(row.currentCampaignBiddingStrategy).toBe('dynamic down only');
+    expect(row.placementBreakdown.note).toBe(
+      'Placement metrics remain campaign-level context only. They are shared across targets in the same campaign and must not be treated as target-owned history.'
+    );
+    expect(row.placementBreakdown.rows.map((entry) => entry.placementCode)).toEqual([
+      'PLACEMENT_TOP',
+      'PLACEMENT_REST_OF_SEARCH',
+      'PLACEMENT_PRODUCT_PAGE',
+    ]);
+    expect(row.placementBreakdown.rows[0]).toMatchObject({
+      placementCode: 'PLACEMENT_TOP',
+      placementLabel: 'Top of search',
+      modifierPct: 18,
+      impressions: 120,
+      clicks: 12,
+      orders: 3,
+      sales: 140,
+      spend: 32,
+    });
+    expect(row.placementBreakdown.rows[1]).toMatchObject({
+      placementCode: 'PLACEMENT_REST_OF_SEARCH',
+      placementLabel: 'Rest of search',
+      modifierPct: 4,
+      impressions: 80,
+      clicks: 7,
+      orders: 1,
+      sales: 40,
+      spend: 12,
+    });
+    expect(row.placementBreakdown.rows[2]).toMatchObject({
+      placementCode: 'PLACEMENT_PRODUCT_PAGE',
+      placementLabel: 'Product pages',
+      modifierPct: null,
+      impressions: null,
+      clicks: null,
+      orders: null,
+      sales: null,
+      spend: null,
+    });
   });
 
   it('does not coerce legacy snapshots without ranking_context into unavailable ranking state', () => {
@@ -1031,6 +1144,89 @@ describe('ads optimizer phase 5 target profile engine', () => {
     });
 
     expect(row.rankingContext).toBeUndefined();
+  });
+
+  it('falls back from legacy placement_context into a three-row placement breakdown', () => {
+    const row = mapTargetSnapshotToProfileView({
+      target_snapshot_id: 'snapshot-legacy-placement',
+      run_id: 'run-legacy-placement',
+      created_at: '2026-03-10T00:00:00Z',
+      asin: 'B001TEST',
+      campaign_id: 'campaign-1',
+      ad_group_id: 'ad-group-1',
+      target_id: 'target-1',
+      coverage_note: null,
+      snapshot_payload_json: {
+        phase: 5,
+        identity: {
+          campaign_name: 'Campaign 1',
+          ad_group_name: 'Ad Group 1',
+          target_text: 'blue widget',
+          match_type: 'exact',
+          type_label: 'Keyword',
+        },
+        execution_context: {
+          campaign: {
+            current_bidding_strategy: 'legacy up and down',
+          },
+        },
+        placement_context: {
+          top_of_search_modifier_pct: 12,
+          impressions: 90,
+          clicks: 8,
+          orders: 1,
+          units: 1,
+          sales: 35,
+          spend: 11,
+          note: 'legacy placement note',
+        },
+        coverage: {
+          observed_start: '2026-03-03',
+          observed_end: '2026-03-03',
+          days_observed: 1,
+          statuses: {},
+          notes: [],
+          critical_warnings: [],
+        },
+      },
+    });
+
+    expect(row.currentCampaignBiddingStrategy).toBe('legacy up and down');
+    expect(row.placementBreakdown.note).toBe(
+      'Placement metrics remain campaign-level context only. They are shared across targets in the same campaign and must not be treated as target-owned history.'
+    );
+    expect(row.placementBreakdown.rows).toEqual([
+      {
+        placementCode: 'PLACEMENT_TOP',
+        placementLabel: 'Top of search',
+        modifierPct: 12,
+        impressions: 90,
+        clicks: 8,
+        orders: 1,
+        sales: 35,
+        spend: 11,
+      },
+      {
+        placementCode: 'PLACEMENT_REST_OF_SEARCH',
+        placementLabel: 'Rest of search',
+        modifierPct: null,
+        impressions: null,
+        clicks: null,
+        orders: null,
+        sales: null,
+        spend: null,
+      },
+      {
+        placementCode: 'PLACEMENT_PRODUCT_PAGE',
+        placementLabel: 'Product pages',
+        modifierPct: null,
+        impressions: null,
+        clicks: null,
+        orders: null,
+        sales: null,
+        spend: null,
+      },
+    ]);
   });
 
   it('preserves observed ranks when persisted ranking_context is missing status', () => {

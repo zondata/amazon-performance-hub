@@ -54,6 +54,42 @@ export type AdsOptimizerPlacementEvidenceRow = {
   currentFocus: boolean;
 };
 
+export type AdsOptimizerPlacementMetricCell = {
+  current: number | null;
+  previous: number | null;
+  changePercent: number | null;
+};
+
+export type AdsOptimizerPlacementTableRow = {
+  placementCode: 'PLACEMENT_TOP' | 'PLACEMENT_REST_OF_SEARCH' | 'PLACEMENT_PRODUCT_PAGE';
+  placementName: 'Top of search' | 'Rest of search' | 'Product pages';
+  modifierPct: number | null;
+  bidStrategy: string | null;
+  evidence: 'strong' | 'weak' | 'mixed';
+  impressions: AdsOptimizerPlacementMetricCell;
+  clicks: AdsOptimizerPlacementMetricCell;
+  ctr: AdsOptimizerPlacementMetricCell;
+  cvr: AdsOptimizerPlacementMetricCell;
+  spend: AdsOptimizerPlacementMetricCell;
+  sales: AdsOptimizerPlacementMetricCell;
+  orders: AdsOptimizerPlacementMetricCell;
+  acos: AdsOptimizerPlacementMetricCell;
+  roas: AdsOptimizerPlacementMetricCell;
+};
+
+export type AdsOptimizerPlacementTotalsRow = {
+  placementCount: number;
+  impressions: number | null;
+  clicks: number | null;
+  ctr: number | null;
+  cvr: number | null;
+  spend: number | null;
+  sales: number | null;
+  orders: number | null;
+  acos: number | null;
+  roas: number | null;
+};
+
 const addEvidenceTag = (tags: string[], condition: boolean, label: string) => {
   if (condition && !tags.includes(label)) tags.push(label);
 };
@@ -225,6 +261,87 @@ const PLACEMENT_ROWS: Array<{
   { code: 'PLACEMENT_PRODUCT_PAGE', shortLabel: 'PP', label: 'Product Pages' },
 ];
 
+const PLACEMENT_TABLE_ROWS: Array<{
+  placementCode: AdsOptimizerPlacementTableRow['placementCode'];
+  placementName: AdsOptimizerPlacementTableRow['placementName'];
+}> = [
+  {
+    placementCode: 'PLACEMENT_TOP',
+    placementName: 'Top of search',
+  },
+  {
+    placementCode: 'PLACEMENT_REST_OF_SEARCH',
+    placementName: 'Rest of search',
+  },
+  {
+    placementCode: 'PLACEMENT_PRODUCT_PAGE',
+    placementName: 'Product pages',
+  },
+];
+
+const buildPlacementMetricCell = (
+  current: number | null,
+  previous: number | null
+): AdsOptimizerPlacementMetricCell => ({
+  current,
+  previous,
+  changePercent:
+    previous === null || current === null || previous === 0
+      ? null
+      : ((current - previous) / previous) * 100,
+});
+
+const derivePlacementEvidence = (
+  targetRow: AdsOptimizerTargetReviewRow,
+  placementCode: AdsOptimizerPlacementTableRow['placementCode'],
+  current: {
+    clicks: number | null;
+    orders: number | null;
+    sales: number | null;
+    spend: number | null;
+  }
+): AdsOptimizerPlacementTableRow['evidence'] => {
+  const placementDiagnostics = targetRow.recommendation?.placementDiagnostics;
+  if (placementDiagnostics?.currentPlacementCode === placementCode) {
+    if (placementDiagnostics.biasRecommendation === 'stronger') return 'strong';
+    if (placementDiagnostics.biasRecommendation === 'weaker') return 'weak';
+    if (placementDiagnostics.biasRecommendation === 'hold') return 'mixed';
+  }
+
+  if (
+    current.sales !== null &&
+    current.spend !== null &&
+    current.orders !== null &&
+    current.sales > current.spend &&
+    current.orders > 0
+  ) {
+    return 'strong';
+  }
+
+  if (
+    current.clicks !== null &&
+    current.clicks > 0 &&
+    ((current.orders !== null && current.orders === 0) ||
+      (current.sales !== null &&
+        current.spend !== null &&
+        current.sales > 0 &&
+        current.sales <= current.spend))
+  ) {
+    return 'weak';
+  }
+
+  return 'mixed';
+};
+
+const sumNullableMetric = (values: Array<number | null>) => {
+  const present = values.filter((value): value is number => value !== null);
+  if (present.length === 0) return null;
+  return present.reduce((sum, value) => sum + value, 0);
+};
+
+const deriveRatio = (numerator: number | null, denominator: number | null) =>
+  numerator !== null && denominator !== null && denominator > 0 ? numerator / denominator : null;
+
 export const buildAdsOptimizerPlacementEvidenceRows = (
   row: AdsOptimizerTargetReviewRow
 ): AdsOptimizerPlacementEvidenceRow[] => {
@@ -300,3 +417,83 @@ export const buildAdsOptimizerPlacementEvidenceRows = (
     };
   });
 };
+
+export const buildAdsOptimizerPlacementTableRows = (
+  row: AdsOptimizerTargetReviewRow
+): AdsOptimizerPlacementTableRow[] => {
+  const currentRowsByCode = new Map(
+    row.placementBreakdown.rows.map((placement) => [placement.placementCode, placement])
+  );
+  const previousRowsByCode = new Map(
+    (row.previousComparable?.placementBreakdown.rows ?? []).map((placement) => [
+      placement.placementCode,
+      placement,
+    ])
+  );
+
+  return PLACEMENT_TABLE_ROWS.map((placement) => {
+    const current = currentRowsByCode.get(placement.placementCode);
+    const previous = previousRowsByCode.get(placement.placementCode);
+    const ctrCurrent = deriveRatio(current?.clicks ?? null, current?.impressions ?? null);
+    const ctrPrevious = deriveRatio(previous?.clicks ?? null, previous?.impressions ?? null);
+    const cvrCurrent = deriveRatio(current?.orders ?? null, current?.clicks ?? null);
+    const cvrPrevious = deriveRatio(previous?.orders ?? null, previous?.clicks ?? null);
+    const acosCurrent = deriveRatio(current?.spend ?? null, current?.sales ?? null);
+    const acosPrevious = deriveRatio(previous?.spend ?? null, previous?.sales ?? null);
+    const roasCurrent = deriveRatio(current?.sales ?? null, current?.spend ?? null);
+    const roasPrevious = deriveRatio(previous?.sales ?? null, previous?.spend ?? null);
+
+    return {
+      placementCode: placement.placementCode,
+      placementName: placement.placementName,
+      modifierPct: current?.modifierPct ?? null,
+      bidStrategy: row.currentCampaignBiddingStrategy,
+      evidence: derivePlacementEvidence(row, placement.placementCode, {
+        clicks: current?.clicks ?? null,
+        orders: current?.orders ?? null,
+        sales: current?.sales ?? null,
+        spend: current?.spend ?? null,
+      }),
+      impressions: buildPlacementMetricCell(
+        current?.impressions ?? null,
+        previous?.impressions ?? null
+      ),
+      clicks: buildPlacementMetricCell(current?.clicks ?? null, previous?.clicks ?? null),
+      ctr: buildPlacementMetricCell(ctrCurrent, ctrPrevious),
+      cvr: buildPlacementMetricCell(cvrCurrent, cvrPrevious),
+      spend: buildPlacementMetricCell(current?.spend ?? null, previous?.spend ?? null),
+      sales: buildPlacementMetricCell(current?.sales ?? null, previous?.sales ?? null),
+      orders: buildPlacementMetricCell(current?.orders ?? null, previous?.orders ?? null),
+      acos: buildPlacementMetricCell(acosCurrent, acosPrevious),
+      roas: buildPlacementMetricCell(roasCurrent, roasPrevious),
+    };
+  });
+};
+
+export const buildAdsOptimizerPlacementTotalsRow = (
+  rows: AdsOptimizerPlacementTableRow[]
+): AdsOptimizerPlacementTotalsRow => {
+  const impressions = sumNullableMetric(rows.map((row) => row.impressions.current));
+  const clicks = sumNullableMetric(rows.map((row) => row.clicks.current));
+  const orders = sumNullableMetric(rows.map((row) => row.orders.current));
+  const sales = sumNullableMetric(rows.map((row) => row.sales.current));
+  const spend = sumNullableMetric(rows.map((row) => row.spend.current));
+
+  return {
+    placementCount: rows.length,
+    impressions,
+    clicks,
+    ctr: deriveRatio(clicks, impressions),
+    cvr: deriveRatio(orders, clicks),
+    spend,
+    sales,
+    orders,
+    acos: deriveRatio(spend, sales),
+    roas: deriveRatio(sales, spend),
+  };
+};
+
+export const buildAdsOptimizerPlacementCampaignTargetCount = (
+  rows: AdsOptimizerTargetReviewRow[],
+  campaignId: string
+) => rows.filter((row) => row.campaignId === campaignId).length;

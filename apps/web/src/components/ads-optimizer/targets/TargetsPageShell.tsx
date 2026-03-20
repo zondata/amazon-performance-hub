@@ -29,9 +29,6 @@ import {
   type AdsOptimizerTargetTableSortDirection,
 } from '@/lib/ads-optimizer/targetRowTableSummary';
 import {
-  buildAdsOptimizerPlacementEvidenceRows,
-} from '@/lib/ads-optimizer/targetDecisionSurface';
-import {
   ADS_OPTIMIZER_TARGET_TABLE_COLUMNS,
   ADS_OPTIMIZER_TARGET_TABLE_LAYOUT_STORAGE_KEY,
   applyAdsOptimizerTargetTableColumnResizeDelta,
@@ -54,6 +51,7 @@ import TargetChangePlanTab, {
   type TargetChangePlanProposalItem,
 } from './TargetChangePlanTab';
 import TargetExpandedPanel from './TargetExpandedPanel';
+import TargetPlacementTab from './TargetPlacementTab';
 import TargetSearchTermTab from './TargetSearchTermTab';
 import TargetExpandedTabs, {
   TARGET_EXPANDED_TAB_DEFINITIONS,
@@ -341,25 +339,6 @@ const JsonBlock = (props: { value: Record<string, unknown> | null }) => {
     <pre className="overflow-x-auto rounded-lg border border-border/70 bg-surface-2 p-3 text-[11px] leading-5 text-foreground">
       {JSON.stringify(props.value, null, 2)}
     </pre>
-  );
-};
-
-const EvidenceTag = (props: { label: string; tone?: 'neutral' | 'good' | 'warn' | 'action' }) => {
-  const className =
-    props.tone === 'good'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-      : props.tone === 'warn'
-        ? 'border-amber-200 bg-amber-50 text-amber-800'
-        : props.tone === 'action'
-          ? 'border-sky-200 bg-sky-50 text-sky-800'
-          : 'border-border bg-surface text-muted';
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${className}`}
-    >
-      {props.label}
-    </span>
   );
 };
 
@@ -1250,7 +1229,6 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
           row: activeRow,
           productState: props.productState,
         });
-        const placementEvidenceRows = buildAdsOptimizerPlacementEvidenceRows(activeRow);
         const stageableCount = getWorkspaceSupportedActions(activeRow).length;
         const reviewOnlyCount = getUnsupportedReviewOnlyActions(activeRow).length;
         const changePlanOverrideRows = buildTargetChangePlanOverrideRows({
@@ -1376,104 +1354,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                 />
               );
             case 'placement':
-              return (
-                <div className="space-y-3">
-                  <div className="rounded-lg border border-border/70 bg-surface-2 px-3 py-3 text-sm text-foreground">
-                    Campaign-level context only. Placement evidence should guide operator review,
-                    not be treated as target-owned history.
-                  </div>
-                  <div className="grid gap-3 xl:grid-cols-3">
-                    {placementEvidenceRows.map((placement) => (
-                      <div
-                        key={`${activeRow.targetSnapshotId}:${placement.code}`}
-                        className="rounded-xl border border-border/70 bg-surface-2 px-3 py-3"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold text-foreground">
-                              {placement.shortLabel} · {placement.label}
-                            </div>
-                            <div className="mt-1 text-[11px] text-muted">
-                              {placement.currentFocus ? 'Current optimizer focus' : 'Context row'}
-                            </div>
-                          </div>
-                          <EvidenceTag
-                            label={placement.recommendationLabel}
-                            tone={placement.currentFocus ? 'action' : 'neutral'}
-                          />
-                        </div>
-                        {placement.hasKpiContext ? (
-                          <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                            <div className="rounded-lg border border-border bg-surface px-3 py-2">
-                              <div className="text-[11px] uppercase tracking-wide text-muted">
-                                Modifier
-                              </div>
-                              <div className="mt-1 text-foreground">
-                                {placement.modifierPct === null
-                                  ? NOT_CAPTURED
-                                  : formatWholePercent(placement.modifierPct)}
-                              </div>
-                            </div>
-                            <div className="rounded-lg border border-border bg-surface px-3 py-2">
-                              <div className="text-[11px] uppercase tracking-wide text-muted">
-                                Clicks
-                              </div>
-                              <div className="mt-1 text-foreground">
-                                {formatNumber(placement.clicks)}
-                              </div>
-                            </div>
-                            <div className="rounded-lg border border-border bg-surface px-3 py-2">
-                              <div className="text-[11px] uppercase tracking-wide text-muted">
-                                Orders
-                              </div>
-                              <div className="mt-1 text-foreground">
-                                {formatNumber(placement.orders)}
-                              </div>
-                            </div>
-                            <div className="rounded-lg border border-border bg-surface px-3 py-2">
-                              <div className="text-[11px] uppercase tracking-wide text-muted">
-                                Spend
-                              </div>
-                              <div className="mt-1 text-foreground">
-                                {formatCurrency(placement.spend)}
-                              </div>
-                            </div>
-                            <div className="rounded-lg border border-border bg-surface px-3 py-2">
-                              <div className="text-[11px] uppercase tracking-wide text-muted">
-                                Sales
-                              </div>
-                              <div className="mt-1 text-foreground">
-                                {formatCurrency(placement.sales)}
-                              </div>
-                            </div>
-                            <div className="rounded-lg border border-border bg-surface px-3 py-2">
-                              <div className="text-[11px] uppercase tracking-wide text-muted">
-                                Impressions
-                              </div>
-                              <div className="mt-1 text-foreground">
-                                {formatNumber(placement.impressions)}
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="mt-3 rounded-lg border border-dashed border-border bg-surface px-3 py-3 text-sm text-muted">
-                            No KPI context was captured for this placement in the current target
-                            snapshot.
-                            {placement.modifierPct !== null ? (
-                              <div className="mt-2 text-foreground">
-                                Current modifier {formatWholePercent(placement.modifierPct)}
-                              </div>
-                            ) : null}
-                          </div>
-                        )}
-                        <div className="mt-3 text-[11px] leading-5 text-muted">
-                          {placement.note}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
+              return <TargetPlacementTab row={activeRow} allRows={props.rows} />;
             case 'metrics':
               return (
                 <div className="grid gap-4 xl:grid-cols-3">

@@ -22,6 +22,7 @@ import {
   getProductRankingDaily,
   type ProductRankingRow,
 } from '@/lib/ranking/getProductRankingDaily';
+import { mapPlacementModifierKey } from '@/lib/logbook/aiPack/aiPackV3Helpers';
 import { fetchAllRows } from '@/lib/supabaseFetchAll';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
@@ -48,10 +49,61 @@ import {
 const TARGET_SOURCE_SCOPE = 'asin_via_sp_advertised_product_membership';
 const PLACEMENT_CONTEXT_NOTE =
   'Placement context remains campaign-level context only. It is not flattened into target-owned facts.';
+const PLACEMENT_BREAKDOWN_NOTE =
+  'Placement metrics remain campaign-level context only. They are shared across targets in the same campaign and must not be treated as target-owned history.';
 const SEARCH_TERM_DIAGNOSTICS_NOTE =
   'Search-term diagnostics are contextual only and do not imply direct attribution beyond the existing SP STIS facts.';
 const TARGET_PROFILE_VERSION = 'phase5_v2';
 const UNRESOLVED_AD_GROUP_PREFIX = '__ads_optimizer_unresolved_ad_group__';
+
+type CanonicalPlacementCode =
+  | 'PLACEMENT_TOP'
+  | 'PLACEMENT_REST_OF_SEARCH'
+  | 'PLACEMENT_PRODUCT_PAGE';
+
+type CanonicalPlacementLabel = 'Top of search' | 'Rest of search' | 'Product pages';
+
+type PlacementBreakdownRowView = {
+  placementCode: CanonicalPlacementCode;
+  placementLabel: CanonicalPlacementLabel;
+  modifierPct: number | null;
+  impressions: number | null;
+  clicks: number | null;
+  orders: number | null;
+  sales: number | null;
+  spend: number | null;
+};
+
+type PlacementBreakdownView = {
+  note: string | null;
+  rows: PlacementBreakdownRowView[];
+};
+
+type PlacementBreakdownAccumulator = {
+  impressions: number;
+  clicks: number;
+  orders: number;
+  sales: number;
+  spend: number;
+};
+
+const CANONICAL_PLACEMENT_BREAKDOWN_ROWS: Array<{
+  placementCode: CanonicalPlacementCode;
+  placementLabel: CanonicalPlacementLabel;
+}> = [
+  {
+    placementCode: 'PLACEMENT_TOP',
+    placementLabel: 'Top of search',
+  },
+  {
+    placementCode: 'PLACEMENT_REST_OF_SEARCH',
+    placementLabel: 'Rest of search',
+  },
+  {
+    placementCode: 'PLACEMENT_PRODUCT_PAGE',
+    placementLabel: 'Product pages',
+  },
+];
 
 type SpAdvertisedProductRow = SpScopeAdvertisedProductRow & {
   date: string | null;
@@ -179,6 +231,8 @@ export type AdsOptimizerTargetProfileSnapshotView = {
     spend: number | null;
     note: string | null;
   };
+  currentCampaignBiddingStrategy: string | null;
+  placementBreakdown: PlacementBreakdownView;
   searchTermDiagnostics: {
     representativeSearchTerm: string | null;
     representativeSameText: boolean | null;
@@ -897,6 +951,93 @@ const loadPlacementRowsByCampaignIds = async (args: {
   return rows;
 };
 
+const isCanonicalPlacementCode = (value: string | null): value is CanonicalPlacementCode =>
+  value === 'PLACEMENT_TOP' ||
+  value === 'PLACEMENT_REST_OF_SEARCH' ||
+  value === 'PLACEMENT_PRODUCT_PAGE';
+
+const buildPlacementBreakdownMetricsByCampaign = (placementRows: SpPlacementFactRow[]) => {
+  const byCampaign = new Map<string, Map<CanonicalPlacementCode, PlacementBreakdownAccumulator>>();
+
+  for (const row of placementRows) {
+    const campaignId = trimString(row.campaign_id);
+    if (!campaignId) continue;
+
+    const placementCode = mapPlacementModifierKey(
+      'sp',
+      row.placement_code,
+      row.placement_raw_norm ?? row.placement_raw
+    );
+    if (!isCanonicalPlacementCode(placementCode)) continue;
+
+    const campaignBuckets = byCampaign.get(campaignId) ?? new Map();
+    const currentBucket = campaignBuckets.get(placementCode) ?? {
+      impressions: 0,
+      clicks: 0,
+      orders: 0,
+      sales: 0,
+      spend: 0,
+    };
+
+    currentBucket.impressions += numberValue(row.impressions);
+    currentBucket.clicks += numberValue(row.clicks);
+    currentBucket.orders += numberValue(row.orders);
+    currentBucket.sales += numberValue(row.sales);
+    currentBucket.spend += numberValue(row.spend);
+
+    campaignBuckets.set(placementCode, currentBucket);
+    byCampaign.set(campaignId, campaignBuckets);
+  }
+
+  return byCampaign;
+};
+
+const buildPlacementBreakdownPayload = (args: {
+  target: SpTargetsWorkspaceRow;
+  placementBreakdownMetricsByCampaign: Map<
+    string,
+    Map<CanonicalPlacementCode, PlacementBreakdownAccumulator>
+  >;
+}) => {
+  const modifierByPlacement = new Map<CanonicalPlacementCode, number | null>();
+
+  for (const placement of args.target.composer_context.placements ?? []) {
+    const placementCode = trimString(placement.placement_code);
+    if (!isCanonicalPlacementCode(placementCode)) continue;
+    modifierByPlacement.set(placementCode, placement.current_percentage ?? null);
+  }
+
+  if (!modifierByPlacement.has('PLACEMENT_TOP')) {
+    modifierByPlacement.set(
+      'PLACEMENT_TOP',
+      args.target.placement_context?.top_of_search_modifier_pct ??
+        args.target.composer_context.placement?.current_percentage ??
+        null
+    );
+  }
+
+  const campaignBreakdown =
+    args.placementBreakdownMetricsByCampaign.get(args.target.campaign_id) ?? new Map();
+
+  return {
+    note: PLACEMENT_BREAKDOWN_NOTE,
+    rows: CANONICAL_PLACEMENT_BREAKDOWN_ROWS.map((placement) => {
+      const metrics = campaignBreakdown.get(placement.placementCode);
+
+      return {
+        placement_code: placement.placementCode,
+        placement_label: placement.placementLabel,
+        modifier_pct: modifierByPlacement.get(placement.placementCode) ?? null,
+        impressions: metrics?.impressions ?? null,
+        clicks: metrics?.clicks ?? null,
+        orders: metrics?.orders ?? null,
+        sales: metrics?.sales ?? null,
+        spend: metrics?.spend ?? null,
+      };
+    }),
+  };
+};
+
 const getRepresentativeSearchTerm = (searchTerms: SpTargetsWorkspaceChildRow[]) =>
   [...searchTerms].sort(compareRepresentativeSearchTerm)[0] ?? null;
 
@@ -929,6 +1070,10 @@ const buildTargetProfileViewRow = (args: {
   overview: AdsOptimizerOverviewData;
   currentSnapshotDate: string | null;
   currentSnapshotWarning: string | null;
+  placementBreakdownMetricsByCampaign: Map<
+    string,
+    Map<CanonicalPlacementCode, PlacementBreakdownAccumulator>
+  >;
 }): AdsOptimizerTargetProfileRow => {
   const representativeSearchTerm = getRepresentativeSearchTerm(args.target.search_terms);
   const searchTermCount = args.target.search_terms.length;
@@ -1158,6 +1303,12 @@ const buildTargetProfileViewRow = (args: {
             spend: null,
             note: PLACEMENT_CONTEXT_NOTE,
           },
+      current_campaign_bidding_strategy:
+        args.target.composer_context.campaign.current_bidding_strategy ?? null,
+      placement_breakdown: buildPlacementBreakdownPayload({
+        target: args.target,
+        placementBreakdownMetricsByCampaign: args.placementBreakdownMetricsByCampaign,
+      }),
       search_term_diagnostics: {
         representative_search_term: representativeSearchTerm?.search_term ?? null,
         representative_same_text: representativeSearchTerm?.same_text ?? null,
@@ -1344,12 +1495,18 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
   const derivedMetrics = asJsonObject(payload.derived_metrics);
   const demandProxies = asJsonObject(payload.demand_proxies);
   const placementContext = asJsonObject(payload.placement_context);
+  const placementBreakdown = asJsonObject(payload.placement_breakdown);
   const searchTermDiagnostics = asJsonObject(payload.search_term_diagnostics);
   const rankingContext = asJsonObject(payload.ranking_context);
   const coverage = asJsonObject(payload.coverage);
   const statuses = asJsonObject(coverage?.statuses);
+  const executionContext = asJsonObject(payload.execution_context);
+  const executionCampaign = asJsonObject(executionContext?.campaign);
   const topTermsRaw = Array.isArray(searchTermDiagnostics?.top_terms)
     ? searchTermDiagnostics?.top_terms
+    : [];
+  const placementBreakdownRowsRaw = Array.isArray(placementBreakdown?.rows)
+    ? placementBreakdown.rows
     : [];
   const coverageNotesRaw = Array.isArray(coverage?.notes) ? coverage?.notes : [];
   const criticalWarningsRaw = Array.isArray(coverage?.critical_warnings)
@@ -1382,6 +1539,56 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
         observedDate: readNestedString(entry, 'observed_date'),
         rank: readNestedNumber(entry, 'rank'),
       }));
+  };
+  const readPlacementBreakdownRows = (): PlacementBreakdownView['rows'] => {
+    const persistedRowsByCode = new Map<CanonicalPlacementCode, JsonObject>();
+
+    for (const entry of placementBreakdownRowsRaw) {
+      const next = asJsonObject(entry);
+      const placementCode = trimString(readNestedString(next, 'placement_code'));
+      if (!next || !isCanonicalPlacementCode(placementCode)) continue;
+      persistedRowsByCode.set(placementCode, next);
+    }
+
+    return CANONICAL_PLACEMENT_BREAKDOWN_ROWS.map((placement) => {
+      const persisted = persistedRowsByCode.get(placement.placementCode);
+      if (persisted) {
+        return {
+          placementCode: placement.placementCode,
+          placementLabel: placement.placementLabel,
+          modifierPct: readNestedNumber(persisted, 'modifier_pct'),
+          impressions: readNestedNumber(persisted, 'impressions'),
+          clicks: readNestedNumber(persisted, 'clicks'),
+          orders: readNestedNumber(persisted, 'orders'),
+          sales: readNestedNumber(persisted, 'sales'),
+          spend: readNestedNumber(persisted, 'spend'),
+        };
+      }
+
+      if (placementBreakdown === null && placement.placementCode === 'PLACEMENT_TOP') {
+        return {
+          placementCode: placement.placementCode,
+          placementLabel: placement.placementLabel,
+          modifierPct: readNestedNumber(placementContext, 'top_of_search_modifier_pct'),
+          impressions: readNestedNumber(placementContext, 'impressions'),
+          clicks: readNestedNumber(placementContext, 'clicks'),
+          orders: readNestedNumber(placementContext, 'orders'),
+          sales: readNestedNumber(placementContext, 'sales'),
+          spend: readNestedNumber(placementContext, 'spend'),
+        };
+      }
+
+      return {
+        placementCode: placement.placementCode,
+        placementLabel: placement.placementLabel,
+        modifierPct: null,
+        impressions: null,
+        clicks: null,
+        orders: null,
+        sales: null,
+        spend: null,
+      };
+    });
   };
   const rankingContract =
     readNestedString(rankingContext, 'contract') === 'keyword_query_context'
@@ -1539,6 +1746,13 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
       sales: readNestedNumber(placementContext, 'sales'),
       spend: readNestedNumber(placementContext, 'spend'),
       note: readNestedString(placementContext, 'note'),
+    },
+    currentCampaignBiddingStrategy:
+      readNestedString(payload, 'current_campaign_bidding_strategy') ??
+      readNestedString(executionCampaign, 'current_bidding_strategy'),
+    placementBreakdown: {
+      note: readNestedString(placementBreakdown, 'note') ?? PLACEMENT_BREAKDOWN_NOTE,
+      rows: readPlacementBreakdownRows(),
     },
     searchTermDiagnostics: {
       representativeSearchTerm: readNestedString(
@@ -1893,6 +2107,8 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
   const searchTermRows = [...searchTermRowsByAdGroup, ...searchTermRowsByCampaignFallback];
 
   const normalizedSearchTermRows = normalizeSearchTermRowsForProfiles(searchTermRows);
+  const placementBreakdownMetricsByCampaign =
+    buildPlacementBreakdownMetricsByCampaign(placementRows);
   const rankingContextByKeywordNorm = buildRankingContextByKeywordNorm(rankingLoadResult.rows);
   const coverageByTarget = buildTargetCoverageById(normalizedTargetingRows);
   const tosTrendByTarget = buildTargetTosTrendById(normalizedTargetingRows);
@@ -1996,6 +2212,7 @@ export const loadAdsOptimizerTargetProfiles = async (args: {
         overview: overviewData,
         currentSnapshotDate: currentSnapshotResult.data?.snapshotDate ?? null,
         currentSnapshotWarning: currentSnapshotResult.warning,
+        placementBreakdownMetricsByCampaign,
       })
     );
 
