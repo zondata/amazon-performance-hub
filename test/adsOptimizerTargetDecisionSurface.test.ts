@@ -263,9 +263,21 @@ describe('ads optimizer target decision surface helpers', () => {
     expect(rows[0]?.ctr.current).toBe(0.2);
     expect(rows[0]?.ctr.previous).toBe(0.2);
     expect(rows[0]?.ctr.changePercent).toBe(0);
+    expect(rows[0]?.cvr.current).toBe(0.25);
+    expect(rows[0]?.cvr.previous).toBe(0.25);
+    expect(rows[0]?.cvr.changePercent).toBe(0);
+    expect(rows[0]?.sales).toEqual({
+      current: 200,
+      previous: 160,
+      changePercent: 25,
+      isNew: false,
+    });
     expect(rows[0]?.acos.current).toBe(0.2);
     expect(rows[0]?.acos.previous).toBe(0.1875);
     expect(rows[0]?.acos.changePercent).toBeCloseTo(6.6666666667);
+    expect(rows[0]?.roas.current).toBe(5);
+    expect(rows[0]?.roas.previous).toBeCloseTo(160 / 30);
+    expect(rows[0]?.roas.changePercent).toBeCloseTo(-6.25);
 
     expect(rows[1]).toMatchObject({
       searchTerm: 'Hero Broad Winner',
@@ -276,8 +288,14 @@ describe('ads optimizer target decision surface helpers', () => {
     expect(rows[1]?.impressions.previous).toBe(50);
     expect(rows[1]?.ctr.current).toBeCloseTo(10 / 60);
     expect(rows[1]?.ctr.previous).toBeCloseTo(8 / 50);
+    expect(rows[1]?.cvr.current).toBe(0.2);
+    expect(rows[1]?.cvr.previous).toBe(0.125);
+    expect(rows[1]?.sales.current).toBe(100);
+    expect(rows[1]?.sales.previous).toBe(60);
     expect(rows[1]?.acos.current).toBe(0.15);
     expect(rows[1]?.acos.previous).toBe(0.2);
+    expect(rows[1]?.roas.current).toBeCloseTo(100 / 15);
+    expect(rows[1]?.roas.previous).toBe(5);
 
     expect(rows[2]).toMatchObject({
       searchTerm: 'Hero Broad Waste',
@@ -286,8 +304,17 @@ describe('ads optimizer target decision surface helpers', () => {
     });
     expect(rows[2]?.impressions.previous).toBe(20);
     expect(rows[2]?.spend.changePercent).toBe(100);
+    expect(rows[2]?.sales.current).toBe(0);
+    expect(rows[2]?.sales.previous).toBe(0);
+    expect(rows[2]?.sales.changePercent).toBe(null);
+    expect(rows[2]?.cvr.current).toBe(0);
+    expect(rows[2]?.cvr.previous).toBe(0);
+    expect(rows[2]?.cvr.changePercent).toBe(null);
     expect(rows[2]?.acos.previous).toBe(null);
     expect(rows[2]?.acos.changePercent).toBe(null);
+    expect(rows[2]?.roas.current).toBe(0);
+    expect(rows[2]?.roas.previous).toBe(0);
+    expect(rows[2]?.roas.changePercent).toBe(null);
     expect(rows[2]?.orders.changePercent).toBe(null);
 
     expect(rows[3]).toMatchObject({
@@ -299,6 +326,11 @@ describe('ads optimizer target decision surface helpers', () => {
     expect(rows[3]?.impressions.previous).toBe(null);
     expect(rows[3]?.impressions.changePercent).toBe(null);
     expect(rows[3]?.ctr.isNew).toBe(true);
+    expect(rows[3]?.sales.isNew).toBe(true);
+    expect(rows[3]?.sales.previous).toBe(null);
+    expect(rows[3]?.sales.changePercent).toBe(null);
+    expect(rows[3]?.cvr.isNew).toBe(true);
+    expect(rows[3]?.roas.isNew).toBe(true);
   });
 
   it('keeps STIR as a rank integer and does not surface Promote exact in the redesigned row model', () => {

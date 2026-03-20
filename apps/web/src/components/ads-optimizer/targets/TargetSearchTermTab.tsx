@@ -25,12 +25,24 @@ type SearchTermSortKey =
   | 'impressions'
   | 'clicks'
   | 'ctr'
+  | 'cvr'
   | 'spend'
+  | 'sales'
   | 'orders'
-  | 'acos';
+  | 'acos'
+  | 'roas';
 
 type SearchTermSortDirection = 'asc' | 'desc';
-type SearchTermMetricKind = 'impressions' | 'clicks' | 'ctr' | 'spend' | 'orders' | 'acos';
+type SearchTermMetricKind =
+  | 'impressions'
+  | 'clicks'
+  | 'ctr'
+  | 'cvr'
+  | 'spend'
+  | 'sales'
+  | 'orders'
+  | 'acos'
+  | 'roas';
 
 const SORT_LABELS: Record<SearchTermSortKey, string> = {
   stis: 'stis',
@@ -38,9 +50,12 @@ const SORT_LABELS: Record<SearchTermSortKey, string> = {
   impressions: 'impressions',
   clicks: 'clicks',
   ctr: 'ctr',
+  cvr: 'cvr',
   spend: 'spend',
+  sales: 'sales',
   orders: 'orders',
   acos: 'acos',
+  roas: 'roas',
 };
 
 const getSortValue = (row: AdsOptimizerSearchTermTableRow, key: SearchTermSortKey) => {
@@ -55,12 +70,18 @@ const getSortValue = (row: AdsOptimizerSearchTermTableRow, key: SearchTermSortKe
       return row.clicks.current;
     case 'ctr':
       return row.ctr.current;
+    case 'cvr':
+      return row.cvr.current;
     case 'spend':
       return row.spend.current;
+    case 'sales':
+      return row.sales.current;
     case 'orders':
       return row.orders.current;
     case 'acos':
       return row.acos.current;
+    case 'roas':
+      return row.roas.current;
   }
 };
 
@@ -89,6 +110,11 @@ const formatUsd = (value: number | null) => {
   });
 };
 
+const formatRatio = (value: number | null) => {
+  if (value === null || !Number.isFinite(value)) return '—';
+  return value.toFixed(2);
+};
+
 const formatMetricCurrentOrPrevious = (
   kind: SearchTermMetricKind,
   value: number | null
@@ -96,7 +122,8 @@ const formatMetricCurrentOrPrevious = (
   if (kind === 'impressions' || kind === 'clicks' || kind === 'orders') {
     return formatInteger(value);
   }
-  if (kind === 'ctr' || kind === 'acos') return formatPercent(value);
+  if (kind === 'ctr' || kind === 'cvr' || kind === 'acos') return formatPercent(value);
+  if (kind === 'roas') return formatRatio(value);
   return formatUsd(value);
 };
 
@@ -117,7 +144,13 @@ const getChangeToneClass = (kind: SearchTermMetricKind, value: number | null) =>
   if (rounded === null || rounded === 0) return 'text-muted';
 
   const positiveIsFavorable =
-    kind === 'impressions' || kind === 'clicks' || kind === 'ctr' || kind === 'orders';
+    kind === 'impressions' ||
+    kind === 'clicks' ||
+    kind === 'ctr' ||
+    kind === 'cvr' ||
+    kind === 'sales' ||
+    kind === 'orders' ||
+    kind === 'roas';
   const isPositive = rounded > 0;
 
   if ((positiveIsFavorable && isPositive) || (!positiveIsFavorable && !isPositive)) {
@@ -152,8 +185,6 @@ const renderMetricLines = (args: {
 };
 
 const renderEvidenceBadge = (row: AdsOptimizerSearchTermTableRow) => {
-  if (row.primaryEvidence === null) return null;
-
   const badgeProps =
     row.primaryEvidence === 'same'
       ? {
@@ -170,19 +201,32 @@ const renderEvidenceBadge = (row: AdsOptimizerSearchTermTableRow) => {
             className: 'bg-[#FCEBEB] text-[#A32D2D]',
           };
 
+  if (row.primaryEvidence === null && !row.sameText && !row.actionHint) return null;
+
   return (
-    <>
-      <span
-        className={`inline-block rounded-[4px] px-2 py-[2px] text-[10px] font-medium ${badgeProps.className}`}
-      >
-        {badgeProps.label}
-      </span>
+    <div className="flex flex-col items-start">
+      {row.primaryEvidence !== null ? (
+        <span
+          className={`inline-block rounded-[4px] px-2 py-[2px] text-[10px] font-medium ${badgeProps.className}`}
+        >
+          {badgeProps.label}
+        </span>
+      ) : null}
+      {row.sameText ? (
+        <span
+          className={`inline-block rounded-[4px] bg-surface-2 px-2 py-[2px] text-[10px] font-medium text-muted ${
+            row.primaryEvidence !== null ? 'mt-[3px]' : ''
+          }`}
+        >
+          Same Text
+        </span>
+      ) : null}
       {row.actionHint ? (
         <span className="mt-[3px] block text-[10px] text-primary">
           {row.actionHint === 'isolate' ? 'Isolate →' : 'Negate →'}
         </span>
       ) : null}
-    </>
+    </div>
   );
 };
 
@@ -361,7 +405,7 @@ export default function TargetSearchTermTab(props: TargetSearchTermTabProps) {
         className="min-h-0 overflow-x-auto overflow-y-auto rounded-xl border border-border/70 bg-surface"
       >
         {sortedRows.length > 0 ? (
-          <table className="min-w-[1095px] w-full table-fixed border-collapse">
+          <table className="min-w-[1375px] w-full table-fixed border-collapse">
             <colgroup>
               <col style={{ width: '280px' }} />
               <col style={{ width: '120px' }} />
@@ -370,7 +414,10 @@ export default function TargetSearchTermTab(props: TargetSearchTermTabProps) {
               <col style={{ width: '95px' }} />
               <col style={{ width: '90px' }} />
               <col style={{ width: '90px' }} />
+              <col style={{ width: '90px' }} />
               <col style={{ width: '100px' }} />
+              <col style={{ width: '100px' }} />
+              <col style={{ width: '90px' }} />
               <col style={{ width: '90px' }} />
               <col style={{ width: '90px' }} />
             </colgroup>
@@ -398,13 +445,22 @@ export default function TargetSearchTermTab(props: TargetSearchTermTabProps) {
                   {renderSortableHeader('CTR', 'ctr')}
                 </th>
                 <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
+                  {renderSortableHeader('CVR', 'cvr')}
+                </th>
+                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
                   {renderSortableHeader('Spend', 'spend')}
+                </th>
+                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
+                  {renderSortableHeader('Sales', 'sales')}
                 </th>
                 <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
                   {renderSortableHeader('Orders', 'orders')}
                 </th>
                 <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
                   {renderSortableHeader('ACOS', 'acos')}
+                </th>
+                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
+                  {renderSortableHeader('ROAS', 'roas')}
                 </th>
               </tr>
             </thead>
@@ -438,13 +494,22 @@ export default function TargetSearchTermTab(props: TargetSearchTermTabProps) {
                     {renderMetricLines({ kind: 'ctr', metric: row.ctr })}
                   </td>
                   <td className="px-2 py-[10px] text-right align-top">
+                    {renderMetricLines({ kind: 'cvr', metric: row.cvr })}
+                  </td>
+                  <td className="px-2 py-[10px] text-right align-top">
                     {renderMetricLines({ kind: 'spend', metric: row.spend })}
+                  </td>
+                  <td className="px-2 py-[10px] text-right align-top">
+                    {renderMetricLines({ kind: 'sales', metric: row.sales })}
                   </td>
                   <td className="px-2 py-[10px] text-right align-top">
                     {renderMetricLines({ kind: 'orders', metric: row.orders })}
                   </td>
                   <td className="px-2 py-[10px] text-right align-top">
                     {renderMetricLines({ kind: 'acos', metric: row.acos })}
+                  </td>
+                  <td className="px-2 py-[10px] text-right align-top">
+                    {renderMetricLines({ kind: 'roas', metric: row.roas })}
                   </td>
                 </tr>
               ))}

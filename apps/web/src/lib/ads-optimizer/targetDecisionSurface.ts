@@ -30,9 +30,12 @@ export type AdsOptimizerSearchTermTableRow = {
   impressions: AdsOptimizerSearchTermMetricCell;
   clicks: AdsOptimizerSearchTermMetricCell;
   ctr: AdsOptimizerSearchTermMetricCell;
+  cvr: AdsOptimizerSearchTermMetricCell;
   spend: AdsOptimizerSearchTermMetricCell;
+  sales: AdsOptimizerSearchTermMetricCell;
   orders: AdsOptimizerSearchTermMetricCell;
   acos: AdsOptimizerSearchTermMetricCell;
+  roas: AdsOptimizerSearchTermMetricCell;
 };
 
 export type AdsOptimizerPlacementEvidenceRow = {
@@ -147,8 +150,12 @@ export const buildAdsOptimizerSearchTermTableRows = (
     const ctrCurrent = term.impressions > 0 ? term.clicks / term.impressions : null;
     const ctrPrevious =
       previous && previous.impressions > 0 ? previous.clicks / previous.impressions : null;
+    const cvrCurrent = term.clicks > 0 ? term.orders / term.clicks : null;
+    const cvrPrevious = previous && previous.clicks > 0 ? previous.orders / previous.clicks : null;
     const acosCurrent = term.sales > 0 ? term.spend / term.sales : null;
     const acosPrevious = previous && previous.sales > 0 ? previous.spend / previous.sales : null;
+    const roasCurrent = term.spend > 0 ? term.sales / term.spend : null;
+    const roasPrevious = previous && previous.spend > 0 ? previous.sales / previous.spend : null;
     const primaryEvidence = term.sameText
       ? 'same'
       : term.evidenceTags.includes('Winning')
@@ -173,9 +180,12 @@ export const buildAdsOptimizerSearchTermTableRows = (
       impressions: buildSearchTermMetricCell(term.impressions, previous?.impressions ?? null, isNew),
       clicks: buildSearchTermMetricCell(term.clicks, previous?.clicks ?? null, isNew),
       ctr: buildSearchTermMetricCell(ctrCurrent, ctrPrevious, isNew),
+      cvr: buildSearchTermMetricCell(cvrCurrent, cvrPrevious, isNew),
       spend: buildSearchTermMetricCell(term.spend, previous?.spend ?? null, isNew),
+      sales: buildSearchTermMetricCell(term.sales, previous?.sales ?? null, isNew),
       orders: buildSearchTermMetricCell(term.orders, previous?.orders ?? null, isNew),
       acos: buildSearchTermMetricCell(acosCurrent, acosPrevious, isNew),
+      roas: buildSearchTermMetricCell(roasCurrent, roasPrevious, isNew),
     };
   });
 };

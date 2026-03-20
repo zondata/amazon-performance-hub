@@ -762,6 +762,24 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     const shellSource = fs.readFileSync(shellPath, 'utf-8');
     const searchTermTabSource = fs.readFileSync(searchTermTabPath, 'utf-8');
     const markup = renderFixtureSearchTermMarkup();
+    const orderedColumns = [
+      `Search term
+                </th>`,
+      `Evidence
+                </th>`,
+      "renderSortableHeader('STIS', 'stis')",
+      "renderSortableHeader('STIR', 'stir')",
+      "renderSortableHeader('Impr.', 'impressions')",
+      "renderSortableHeader('Clicks', 'clicks')",
+      "renderSortableHeader('CTR', 'ctr')",
+      "renderSortableHeader('CVR', 'cvr')",
+      "renderSortableHeader('Spend', 'spend')",
+      "renderSortableHeader('Sales', 'sales')",
+      "renderSortableHeader('Orders', 'orders')",
+      "renderSortableHeader('ACOS', 'acos')",
+      "renderSortableHeader('ROAS', 'roas')",
+    ];
+    const orderedColumnIndexes = orderedColumns.map((label) => searchTermTabSource.indexOf(label));
 
     expect(shellSource).toContain('<TargetSearchTermTab');
     expect(searchTermTabSource).toContain('buildAdsWorkspaceNavigationHref');
@@ -783,17 +801,37 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(markup).toContain('Impr.');
     expect(markup).toContain('Clicks');
     expect(markup).toContain('CTR');
+    expect(markup).toContain('CVR');
     expect(markup).toContain('Spend');
+    expect(markup).toContain('Sales');
     expect(markup).toContain('Orders');
     expect(markup).toContain('ACOS');
+    expect(markup).toContain('ROAS');
+    orderedColumnIndexes.forEach((index, position) => {
+      expect(index, `missing Search term column ${orderedColumns[position]}`).toBeGreaterThan(-1);
+    });
+    for (let index = 1; index < orderedColumnIndexes.length; index += 1) {
+      expect(orderedColumnIndexes[index]).toBeGreaterThan(orderedColumnIndexes[index - 1]!);
+    }
+    expect(searchTermTabSource).toContain("renderMetricLines({ kind: 'cvr', metric: row.cvr })");
+    expect(searchTermTabSource).toContain("renderMetricLines({ kind: 'sales', metric: row.sales })");
+    expect(searchTermTabSource).toContain("renderMetricLines({ kind: 'roas', metric: row.roas })");
+    expect(searchTermTabSource).toContain("data-show-previous-change={showPreviousAndChange ? 'true' : 'false'}");
+    expect(searchTermTabSource).toContain('min-w-[1375px]');
+    expect(searchTermTabSource).toContain('row.sameText ? (');
     expect(markup).toContain('Same');
+    expect(markup).toContain('Same Text');
     expect(markup).toContain('Winning');
     expect(markup).toContain('Losing');
     expect(markup).toContain('Isolate →');
     expect(markup).toContain('Negate →');
+    expect((markup.match(/Same Text/g) ?? [])).toHaveLength(1);
     expect(markup).toContain('42%');
     expect(markup).toContain('38');
     expect(markup).not.toContain('38%');
+    expect(markup).toContain('25.00%');
+    expect(markup).toContain('$200.00');
+    expect(markup).toContain('5.00');
     expect(markup).toContain('+25.0%');
     expect(markup).toContain('new');
     expect(markup).toContain('data-show-previous-change="true"');
@@ -808,6 +846,12 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(markup).toContain('campaign_scope_name=Brand+Campaign');
     expect(markup).toContain('ad_group_scope=ad-group-1');
     expect(markup).toContain('ad_group_scope_name=Hero+Ad+Group');
+    expect(searchTermTabSource.indexOf('{badgeProps.label}')).toBeLessThan(
+      searchTermTabSource.indexOf('Same Text')
+    );
+    expect(searchTermTabSource.indexOf('Same Text')).toBeLessThan(
+      searchTermTabSource.indexOf("row.actionHint === 'isolate' ? 'Isolate →' : 'Negate →'")
+    );
     expect(markup).not.toContain('Search-term evidence');
     expect(markup).not.toContain('Search-term diagnosis:');
     expect(markup).not.toContain('Representative term');
