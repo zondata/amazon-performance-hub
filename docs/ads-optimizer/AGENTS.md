@@ -180,6 +180,10 @@ For every phase:
   - Phase 6A remains the authoritative collapsed-row contract
   - Phase 6B.1 is the current expanded-row step
   - use `docs/ads-optimizer/ads_optimizer_v2_phase6b_expanded_row_build_plan.md` for the fixed-height tab shell with only the Why flagged tab active
+  - Phase 6D remains authoritative for the `Search term` tab
+  - Phase 6E remains authoritative for the `Placement` tab
+  - Phase 6F remains authoritative for the `SQP` tab
+  - use `docs/ads-optimizer/ads_optimizer_v2_phase6f_sqp_tab_build_plan.md` for the matched-query SQP expanded-row contract
 - Targets collapsed-row contract is locked:
   - The collapsed table keeps the same top-level column order: `Target`, `State`, `Economics`, `Contribution`, `Ranking`, `Role`, `Change summary`.
   - This change does not add a new top-level SQP column; `Contribution` remains a single collapsed-row column.
@@ -196,6 +200,24 @@ For every phase:
   - Contribution sort options include `SQP impression rank`.
   - Contribution ranks and SQP ranks must sort from persisted/computed market rank, not visible-row renumbering.
   - Filtering must not renumber contribution ranks or SQP ranks.
+- Targets expanded-row SQP tab contract is locked:
+  - Expanded-row tab order is `Why flagged`, `Change plan`, `Search term`, `Placement`, `SQP`, `Metrics`, `Advanced`.
+  - `SQP` is matched-query ASIN context, mapped through the deterministic resolved-keyword flow. It is not target-owned ad history.
+  - Targets that resolve to the same SQP query may legitimately show the same SQP values.
+  - The tab uses only persisted current and previous comparable snapshot payloads. Do not add tab-open fetches or alternate week lookups.
+  - Current and previous SQP week labels come from the current snapshot and previous comparable snapshot respectively. They may differ and must stay visible to the operator.
+  - SQP comparison is allowed only when both current and previous snapshots resolve to the same matched query.
+  - If the previous comparable resolves to a different matched query, show current values but suppress previous/change metrics and state: `Previous comparable resolved to a different SQP query, so previous and change are hidden.`
+  - The SQP tab uses no cards. It renders a metadata line, a deterministic 3-bullet `Summary`, one SQP KPI table, and a footer note line.
+  - The metadata line is fixed to `Matched SQP query`, `Current SQP week`, `Previous comparable SQP week`, and `Comparison basis: same matched query only`.
+  - The summary remains deterministic only. Do not add AI-generated SQP analysis.
+  - The summary bullets stay fixed in this order: `Demand`, `Funnel capture`, `Vs previous`.
+  - The SQP KPI table freezes the first `KPI` column while horizontal scrolling.
+  - The SQP table columns are fixed as `KPI`, `Market`, `Self`.
+  - The SQP table rows are fixed as `Impression`, `Impression share`, `Click`, `Click share`, `CTR`, `CVR`, `Purchase`, `Purchase share`.
+  - The `Market` and `Self` cells use the same stacked metric pattern as Placement: top = current, middle = previous, bottom = change.
+  - Previous and change lines must show values only for same-query comparisons; otherwise they stay `—`.
+  - Missing SQP data must remain explicit. Legacy snapshots without SQP detail should still render the shell and show missing values instead of crashing.
 
 ## When in doubt
 Choose the safer option that:

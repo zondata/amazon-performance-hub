@@ -23,6 +23,7 @@ import {
   type ProductRankingRow,
 } from '@/lib/ranking/getProductRankingDaily';
 import { mapPlacementModifierKey } from '@/lib/logbook/aiPack/aiPackV3Helpers';
+import { enrichSqpRow } from '@/lib/sqp/enrichSqpRow';
 import type { SqpKnownKeywordRow } from '@/lib/sqp/getProductSqpWeekly';
 import { normalizeSqpRow } from '@/lib/sqp/normalizeSqpRow';
 import { fetchAllRows } from '@/lib/supabaseFetchAll';
@@ -161,21 +162,94 @@ type TargetSqpContext = {
   marketImpressionRank: number | null;
   note: string | null;
 };
-type SqpMarketImpressionRow = Pick<
+type TargetSqpDetail = {
+  selectedWeekEnd: string | null;
+  matchedQueryRaw: string | null;
+  matchedQueryNorm: string | null;
+  searchQueryVolume: number | null;
+  searchQueryScore: number | null;
+  impressionsTotal: number | null;
+  impressionsSelf: number | null;
+  impressionsSelfShare: number | null;
+  clicksTotal: number | null;
+  clicksSelf: number | null;
+  clicksSelfShare: number | null;
+  cartAddsTotal: number | null;
+  cartAddsSelf: number | null;
+  cartAddsSelfShare: number | null;
+  purchasesTotal: number | null;
+  purchasesSelf: number | null;
+  purchasesSelfShare: number | null;
+  clicksRatePerQuery: number | null;
+  cartAddRatePerQuery: number | null;
+  purchasesRatePerQuery: number | null;
+  marketCtr: number | null;
+  selfCtr: number | null;
+  marketCvr: number | null;
+  selfCvr: number | null;
+  selfCtrIndex: number | null;
+  selfCvrIndex: number | null;
+  cartAddRateFromClicksMarket: number | null;
+  cartAddRateFromClicksSelf: number | null;
+  note: string | null;
+};
+type SqpAlignedWeekRow = Pick<
   SqpKnownKeywordRow,
-  'search_query_raw' | 'search_query_norm' | 'impressions_total'
+  | 'search_query_raw'
+  | 'search_query_norm'
+  | 'search_query_score'
+  | 'search_query_volume'
+  | 'impressions_total'
+  | 'impressions_self'
+  | 'impressions_self_share'
+  | 'clicks_total'
+  | 'clicks_rate_per_query'
+  | 'clicks_self'
+  | 'clicks_self_share'
+  | 'cart_adds_total'
+  | 'cart_add_rate_per_query'
+  | 'cart_adds_self'
+  | 'cart_adds_self_share'
+  | 'purchases_total'
+  | 'purchases_rate_per_query'
+  | 'purchases_self'
+  | 'purchases_self_share'
 >;
+type SqpAlignedMatchedRow = {
+  queryNorm: string;
+  searchQueryRaw: string | null;
+  searchQueryNorm: string | null;
+  searchQueryScore: number | null;
+  searchQueryVolume: number | null;
+  impressionsTotal: number | null;
+  impressionsSelf: number | null;
+  impressionsSelfShare: number | null;
+  clicksTotal: number | null;
+  clicksSelf: number | null;
+  clicksSelfShare: number | null;
+  cartAddsTotal: number | null;
+  cartAddsSelf: number | null;
+  cartAddsSelfShare: number | null;
+  purchasesTotal: number | null;
+  purchasesSelf: number | null;
+  purchasesSelfShare: number | null;
+  clicksRatePerQuery: number | null;
+  cartAddRatePerQuery: number | null;
+  purchasesRatePerQuery: number | null;
+  marketCtr: number | null;
+  selfCtr: number | null;
+  marketCvr: number | null;
+  selfCvr: number | null;
+  selfCtrIndex: number | null;
+  selfCvrIndex: number | null;
+  cartAddRateFromClicksMarket: number | null;
+  cartAddRateFromClicksSelf: number | null;
+};
 type AlignedSqpWeekContext = {
   selectedWeekEnd: string | null;
   trackedQueryCount: number;
   totalMarketImpressions: number | null;
-  matchedRowsByQueryNorm: Map<
-    string,
-    {
-      queryNorm: string;
-      impressionsTotal: number | null;
-    }
-  >;
+  matchedRowsByQueryNorm: Map<string, SqpAlignedMatchedRow>;
   rankByQueryNorm: Map<string, number>;
   error: string | null;
 };
@@ -244,6 +318,7 @@ export type AdsOptimizerTargetProfileSnapshotView = {
   };
   rankingContext?: TargetRankingContext;
   sqpContext?: TargetSqpContext;
+  sqpDetail?: TargetSqpDetail;
   demandProxies: {
     searchTermCount: number;
     sameTextSearchTermCount: number;
@@ -982,12 +1057,12 @@ const loadPlacementRowsByCampaignIds = async (args: {
   return rows;
 };
 
-const normalizeSqpQueryKey = (row: SqpMarketImpressionRow) =>
+const normalizeSqpQueryKey = (row: SqpAlignedWeekRow) =>
   normalizeIdentityToken(row.search_query_norm ?? row.search_query_raw);
 
 const compareSqpMatchedRow = (
-  left: { queryNorm: string; impressionsTotal: number | null },
-  right: { queryNorm: string; impressionsTotal: number | null }
+  left: SqpAlignedMatchedRow,
+  right: SqpAlignedMatchedRow
 ) => {
   const leftFinite = left.impressionsTotal !== null && Number.isFinite(left.impressionsTotal);
   const rightFinite = right.impressionsTotal !== null && Number.isFinite(right.impressionsTotal);
@@ -995,7 +1070,131 @@ const compareSqpMatchedRow = (
   if ((left.impressionsTotal ?? 0) !== (right.impressionsTotal ?? 0)) {
     return (right.impressionsTotal ?? 0) - (left.impressionsTotal ?? 0);
   }
-  return left.queryNorm.localeCompare(right.queryNorm);
+  const normalizedDiff = left.queryNorm.localeCompare(right.queryNorm);
+  if (normalizedDiff !== 0) return normalizedDiff;
+  return String(left.searchQueryRaw ?? '').localeCompare(String(right.searchQueryRaw ?? ''));
+};
+
+const buildAlignedSqpMatchedRow = (row: SqpAlignedWeekRow): SqpAlignedMatchedRow | null => {
+  const queryNorm = normalizeSqpQueryKey(row);
+  if (!queryNorm) return null;
+
+  const enrichedRow = enrichSqpRow(row);
+
+  return {
+    queryNorm,
+    searchQueryRaw: trimString(enrichedRow.search_query_raw),
+    searchQueryNorm: trimString(enrichedRow.search_query_norm),
+    searchQueryScore:
+      typeof enrichedRow.search_query_score === 'number' && Number.isFinite(enrichedRow.search_query_score)
+        ? enrichedRow.search_query_score
+        : null,
+    searchQueryVolume:
+      typeof enrichedRow.search_query_volume === 'number' &&
+      Number.isFinite(enrichedRow.search_query_volume)
+        ? enrichedRow.search_query_volume
+        : null,
+    impressionsTotal:
+      typeof enrichedRow.impressions_total === 'number' && Number.isFinite(enrichedRow.impressions_total)
+        ? enrichedRow.impressions_total
+        : null,
+    impressionsSelf:
+      typeof enrichedRow.impressions_self === 'number' && Number.isFinite(enrichedRow.impressions_self)
+        ? enrichedRow.impressions_self
+        : null,
+    impressionsSelfShare:
+      typeof enrichedRow.impressions_self_share === 'number' &&
+      Number.isFinite(enrichedRow.impressions_self_share)
+        ? enrichedRow.impressions_self_share
+        : null,
+    clicksTotal:
+      typeof enrichedRow.clicks_total === 'number' && Number.isFinite(enrichedRow.clicks_total)
+        ? enrichedRow.clicks_total
+        : null,
+    clicksSelf:
+      typeof enrichedRow.clicks_self === 'number' && Number.isFinite(enrichedRow.clicks_self)
+        ? enrichedRow.clicks_self
+        : null,
+    clicksSelfShare:
+      typeof enrichedRow.clicks_self_share === 'number' && Number.isFinite(enrichedRow.clicks_self_share)
+        ? enrichedRow.clicks_self_share
+        : null,
+    cartAddsTotal:
+      typeof enrichedRow.cart_adds_total === 'number' && Number.isFinite(enrichedRow.cart_adds_total)
+        ? enrichedRow.cart_adds_total
+        : null,
+    cartAddsSelf:
+      typeof enrichedRow.cart_adds_self === 'number' && Number.isFinite(enrichedRow.cart_adds_self)
+        ? enrichedRow.cart_adds_self
+        : null,
+    cartAddsSelfShare:
+      typeof enrichedRow.cart_adds_self_share === 'number' &&
+      Number.isFinite(enrichedRow.cart_adds_self_share)
+        ? enrichedRow.cart_adds_self_share
+        : null,
+    purchasesTotal:
+      typeof enrichedRow.purchases_total === 'number' && Number.isFinite(enrichedRow.purchases_total)
+        ? enrichedRow.purchases_total
+        : null,
+    purchasesSelf:
+      typeof enrichedRow.purchases_self === 'number' && Number.isFinite(enrichedRow.purchases_self)
+        ? enrichedRow.purchases_self
+        : null,
+    purchasesSelfShare:
+      typeof enrichedRow.purchases_self_share === 'number' &&
+      Number.isFinite(enrichedRow.purchases_self_share)
+        ? enrichedRow.purchases_self_share
+        : null,
+    clicksRatePerQuery:
+      typeof enrichedRow.clicks_rate_per_query === 'number' &&
+      Number.isFinite(enrichedRow.clicks_rate_per_query)
+        ? enrichedRow.clicks_rate_per_query
+        : null,
+    cartAddRatePerQuery:
+      typeof enrichedRow.cart_add_rate_per_query === 'number' &&
+      Number.isFinite(enrichedRow.cart_add_rate_per_query)
+        ? enrichedRow.cart_add_rate_per_query
+        : null,
+    purchasesRatePerQuery:
+      typeof enrichedRow.purchases_rate_per_query === 'number' &&
+      Number.isFinite(enrichedRow.purchases_rate_per_query)
+        ? enrichedRow.purchases_rate_per_query
+        : null,
+    marketCtr:
+      typeof enrichedRow.market_ctr === 'number' && Number.isFinite(enrichedRow.market_ctr)
+        ? enrichedRow.market_ctr
+        : null,
+    selfCtr:
+      typeof enrichedRow.self_ctr === 'number' && Number.isFinite(enrichedRow.self_ctr)
+        ? enrichedRow.self_ctr
+        : null,
+    marketCvr:
+      typeof enrichedRow.market_cvr === 'number' && Number.isFinite(enrichedRow.market_cvr)
+        ? enrichedRow.market_cvr
+        : null,
+    selfCvr:
+      typeof enrichedRow.self_cvr === 'number' && Number.isFinite(enrichedRow.self_cvr)
+        ? enrichedRow.self_cvr
+        : null,
+    selfCtrIndex:
+      typeof enrichedRow.self_ctr_index === 'number' && Number.isFinite(enrichedRow.self_ctr_index)
+        ? enrichedRow.self_ctr_index
+        : null,
+    selfCvrIndex:
+      typeof enrichedRow.self_cvr_index === 'number' && Number.isFinite(enrichedRow.self_cvr_index)
+        ? enrichedRow.self_cvr_index
+        : null,
+    cartAddRateFromClicksMarket:
+      typeof enrichedRow.cart_add_rate_from_clicks_market === 'number' &&
+      Number.isFinite(enrichedRow.cart_add_rate_from_clicks_market)
+        ? enrichedRow.cart_add_rate_from_clicks_market
+        : null,
+    cartAddRateFromClicksSelf:
+      typeof enrichedRow.cart_add_rate_from_clicks_self === 'number' &&
+      Number.isFinite(enrichedRow.cart_add_rate_from_clicks_self)
+        ? enrichedRow.cart_add_rate_from_clicks_self
+        : null,
+  };
 };
 
 const loadAlignedSqpWeekContext = async (args: {
@@ -1014,10 +1213,32 @@ const loadAlignedSqpWeekContext = async (args: {
   }
 
   try {
-    const fetchedRows = await fetchAllRows<SqpMarketImpressionRow>((from, to) =>
+    const fetchedRows = await fetchAllRows<SqpAlignedWeekRow>((from, to) =>
       supabaseAdmin
         .from('sqp_weekly_latest_known_keywords')
-        .select('search_query_raw,search_query_norm,impressions_total')
+        .select(
+          [
+            'search_query_raw',
+            'search_query_norm',
+            'search_query_score',
+            'search_query_volume',
+            'impressions_total',
+            'impressions_self',
+            'impressions_self_share',
+            'clicks_total',
+            'clicks_rate_per_query',
+            'clicks_self',
+            'clicks_self_share',
+            'cart_adds_total',
+            'cart_add_rate_per_query',
+            'cart_adds_self',
+            'cart_adds_self_share',
+            'purchases_total',
+            'purchases_rate_per_query',
+            'purchases_self',
+            'purchases_self_share',
+          ].join(',')
+        )
         .eq('account_id', env.accountId)
         .eq('marketplace', env.marketplace)
         .eq('scope_type', 'asin')
@@ -1026,34 +1247,25 @@ const loadAlignedSqpWeekContext = async (args: {
         .range(from, to)
     );
     const normalizedRows = fetchedRows.map((row) => normalizeSqpRow(row));
-    const matchedRowsByQueryNorm = new Map<
-      string,
-      {
-        queryNorm: string;
-        impressionsTotal: number | null;
-      }
-    >();
+    const matchedRowsByQueryNorm = new Map<string, SqpAlignedMatchedRow>();
 
     normalizedRows.forEach((row) => {
-      const queryNorm = normalizeSqpQueryKey(row);
-      if (!queryNorm) return;
+      const next = buildAlignedSqpMatchedRow(row);
+      if (!next) return;
 
-      const next = {
-        queryNorm,
-        impressionsTotal:
-          typeof row.impressions_total === 'number' && Number.isFinite(row.impressions_total)
-            ? row.impressions_total
-            : null,
-      };
-      const current = matchedRowsByQueryNorm.get(queryNorm);
+      const current = matchedRowsByQueryNorm.get(next.queryNorm);
       if (!current || compareSqpMatchedRow(next, current) < 0) {
-        matchedRowsByQueryNorm.set(queryNorm, next);
+        matchedRowsByQueryNorm.set(next.queryNorm, next);
       }
     });
 
     const rankedRows = [...matchedRowsByQueryNorm.values()]
       .filter(
-        (row): row is { queryNorm: string; impressionsTotal: number } =>
+        (
+          row
+        ): row is SqpAlignedMatchedRow & {
+          impressionsTotal: number;
+        } =>
           row.impressionsTotal !== null && Number.isFinite(row.impressionsTotal)
       )
       .sort(
@@ -1190,7 +1402,7 @@ const buildPlacementBreakdownPayload = (args: {
 const getRepresentativeSearchTerm = (searchTerms: SpTargetsWorkspaceChildRow[]) =>
   [...searchTerms].sort(compareRepresentativeSearchTerm)[0] ?? null;
 
-const buildTargetSqpContext = (args: {
+const resolveTargetSqpMatch = (args: {
   overview: AdsOptimizerOverviewData;
   rankingContext: TargetRankingContext;
   alignedSqpWeekContext: AlignedSqpWeekContext;
@@ -1201,13 +1413,10 @@ const buildTargetSqpContext = (args: {
 
   if (!selectedWeekEnd) {
     return {
-      selected_week_end: null,
-      matched_query_norm: null,
-      tracked_query_count: 0,
-      market_impressions_total: null,
-      total_market_impressions: null,
-      market_impression_share: null,
-      market_impression_rank: null,
+      selectedWeekEnd: null,
+      trackedQueryCount: 0,
+      totalMarketImpressions: null,
+      matchedRow: null,
       note:
         args.overview.visibility.sqpCoverage.detail ??
         'SQP market-impression context is unavailable because Overview did not resolve an aligned SQP week.',
@@ -1216,13 +1425,10 @@ const buildTargetSqpContext = (args: {
 
   if (args.alignedSqpWeekContext.error) {
     return {
-      selected_week_end: selectedWeekEnd,
-      matched_query_norm: null,
-      tracked_query_count: trackedQueryCount,
-      market_impressions_total: null,
-      total_market_impressions: null,
-      market_impression_share: null,
-      market_impression_rank: null,
+      selectedWeekEnd,
+      trackedQueryCount,
+      totalMarketImpressions,
+      matchedRow: null,
       note: args.alignedSqpWeekContext.error,
     };
   }
@@ -1230,13 +1436,10 @@ const buildTargetSqpContext = (args: {
   const resolvedKeywordNorm = args.rankingContext.resolvedKeywordNorm;
   if (!resolvedKeywordNorm) {
     return {
-      selected_week_end: selectedWeekEnd,
-      matched_query_norm: null,
-      tracked_query_count: trackedQueryCount,
-      market_impressions_total: null,
-      total_market_impressions: totalMarketImpressions,
-      market_impression_share: null,
-      market_impression_rank: null,
+      selectedWeekEnd,
+      trackedQueryCount,
+      totalMarketImpressions,
+      matchedRow: null,
       note:
         'SQP market-impression context is unavailable because no deterministic keyword mapping was resolved for this target.',
     };
@@ -1246,56 +1449,210 @@ const buildTargetSqpContext = (args: {
     args.alignedSqpWeekContext.matchedRowsByQueryNorm.get(resolvedKeywordNorm) ?? null;
   if (!matchedRow) {
     return {
-      selected_week_end: selectedWeekEnd,
-      matched_query_norm: null,
-      tracked_query_count: trackedQueryCount,
-      market_impressions_total: null,
-      total_market_impressions: totalMarketImpressions,
-      market_impression_share: null,
-      market_impression_rank: null,
+      selectedWeekEnd,
+      trackedQueryCount,
+      totalMarketImpressions,
+      matchedRow: null,
       note: `No aligned SQP query matched resolved keyword "${resolvedKeywordNorm}" for ${selectedWeekEnd}.`,
     };
   }
 
-  if (matchedRow.impressionsTotal === null || !Number.isFinite(matchedRow.impressionsTotal)) {
+  return {
+    selectedWeekEnd,
+    trackedQueryCount,
+    totalMarketImpressions,
+    matchedRow,
+    note: null,
+  };
+};
+
+const buildTargetSqpContext = (args: {
+  overview: AdsOptimizerOverviewData;
+  rankingContext: TargetRankingContext;
+  alignedSqpWeekContext: AlignedSqpWeekContext;
+}) => {
+  const resolvedMatch = resolveTargetSqpMatch(args);
+
+  if (!resolvedMatch.selectedWeekEnd) {
     return {
-      selected_week_end: selectedWeekEnd,
-      matched_query_norm: matchedRow.queryNorm,
-      tracked_query_count: trackedQueryCount,
+      selected_week_end: null,
+      matched_query_norm: null,
+      tracked_query_count: 0,
       market_impressions_total: null,
-      total_market_impressions: totalMarketImpressions,
+      total_market_impressions: null,
       market_impression_share: null,
       market_impression_rank: null,
-      note: `Matched SQP query "${matchedRow.queryNorm}" has no finite impressions_total for ${selectedWeekEnd}.`,
+      note: resolvedMatch.note,
+    };
+  }
+
+  if (resolvedMatch.note && !resolvedMatch.matchedRow) {
+    return {
+      selected_week_end: resolvedMatch.selectedWeekEnd,
+      matched_query_norm: null,
+      tracked_query_count: resolvedMatch.trackedQueryCount,
+      market_impressions_total: null,
+      total_market_impressions: resolvedMatch.totalMarketImpressions,
+      market_impression_share: null,
+      market_impression_rank: null,
+      note: resolvedMatch.note,
+    };
+  }
+
+  const matchedRow = resolvedMatch.matchedRow!;
+
+  if (matchedRow.impressionsTotal === null || !Number.isFinite(matchedRow.impressionsTotal)) {
+    return {
+      selected_week_end: resolvedMatch.selectedWeekEnd,
+      matched_query_norm: matchedRow.queryNorm,
+      tracked_query_count: resolvedMatch.trackedQueryCount,
+      market_impressions_total: null,
+      total_market_impressions: resolvedMatch.totalMarketImpressions,
+      market_impression_share: null,
+      market_impression_rank: null,
+      note: `Matched SQP query "${matchedRow.queryNorm}" has no finite impressions_total for ${resolvedMatch.selectedWeekEnd}.`,
     };
   }
 
   if (
-    totalMarketImpressions === null ||
-    !Number.isFinite(totalMarketImpressions) ||
-    totalMarketImpressions <= 0
+    resolvedMatch.totalMarketImpressions === null ||
+    !Number.isFinite(resolvedMatch.totalMarketImpressions) ||
+    resolvedMatch.totalMarketImpressions <= 0
   ) {
     return {
-      selected_week_end: selectedWeekEnd,
+      selected_week_end: resolvedMatch.selectedWeekEnd,
       matched_query_norm: matchedRow.queryNorm,
-      tracked_query_count: trackedQueryCount,
+      tracked_query_count: resolvedMatch.trackedQueryCount,
       market_impressions_total: matchedRow.impressionsTotal,
-      total_market_impressions: totalMarketImpressions,
+      total_market_impressions: resolvedMatch.totalMarketImpressions,
       market_impression_share: null,
       market_impression_rank: null,
-      note: `Aligned SQP market-impression totals are unavailable for ${selectedWeekEnd}.`,
+      note: `Aligned SQP market-impression totals are unavailable for ${resolvedMatch.selectedWeekEnd}.`,
     };
   }
 
   return {
-    selected_week_end: selectedWeekEnd,
+    selected_week_end: resolvedMatch.selectedWeekEnd,
     matched_query_norm: matchedRow.queryNorm,
-    tracked_query_count: trackedQueryCount,
+    tracked_query_count: resolvedMatch.trackedQueryCount,
     market_impressions_total: matchedRow.impressionsTotal,
-    total_market_impressions: totalMarketImpressions,
-    market_impression_share: safeRatio(matchedRow.impressionsTotal, totalMarketImpressions),
+    total_market_impressions: resolvedMatch.totalMarketImpressions,
+    market_impression_share: safeRatio(
+      matchedRow.impressionsTotal,
+      resolvedMatch.totalMarketImpressions
+    ),
     market_impression_rank:
       args.alignedSqpWeekContext.rankByQueryNorm.get(matchedRow.queryNorm) ?? null,
+    note: null,
+  };
+};
+
+const buildTargetSqpDetail = (args: {
+  overview: AdsOptimizerOverviewData;
+  rankingContext: TargetRankingContext;
+  alignedSqpWeekContext: AlignedSqpWeekContext;
+}) => {
+  const resolvedMatch = resolveTargetSqpMatch(args);
+
+  if (!resolvedMatch.selectedWeekEnd) {
+    return {
+      selected_week_end: null,
+      matched_query_raw: null,
+      matched_query_norm: null,
+      search_query_volume: null,
+      search_query_score: null,
+      impressions_total: null,
+      impressions_self: null,
+      impressions_self_share: null,
+      clicks_total: null,
+      clicks_self: null,
+      clicks_self_share: null,
+      cart_adds_total: null,
+      cart_adds_self: null,
+      cart_adds_self_share: null,
+      purchases_total: null,
+      purchases_self: null,
+      purchases_self_share: null,
+      clicks_rate_per_query: null,
+      cart_add_rate_per_query: null,
+      purchases_rate_per_query: null,
+      market_ctr: null,
+      self_ctr: null,
+      market_cvr: null,
+      self_cvr: null,
+      self_ctr_index: null,
+      self_cvr_index: null,
+      cart_add_rate_from_clicks_market: null,
+      cart_add_rate_from_clicks_self: null,
+      note: resolvedMatch.note,
+    };
+  }
+
+  if (resolvedMatch.note && !resolvedMatch.matchedRow) {
+    return {
+      selected_week_end: resolvedMatch.selectedWeekEnd,
+      matched_query_raw: null,
+      matched_query_norm: null,
+      search_query_volume: null,
+      search_query_score: null,
+      impressions_total: null,
+      impressions_self: null,
+      impressions_self_share: null,
+      clicks_total: null,
+      clicks_self: null,
+      clicks_self_share: null,
+      cart_adds_total: null,
+      cart_adds_self: null,
+      cart_adds_self_share: null,
+      purchases_total: null,
+      purchases_self: null,
+      purchases_self_share: null,
+      clicks_rate_per_query: null,
+      cart_add_rate_per_query: null,
+      purchases_rate_per_query: null,
+      market_ctr: null,
+      self_ctr: null,
+      market_cvr: null,
+      self_cvr: null,
+      self_ctr_index: null,
+      self_cvr_index: null,
+      cart_add_rate_from_clicks_market: null,
+      cart_add_rate_from_clicks_self: null,
+      note: resolvedMatch.note,
+    };
+  }
+
+  const matchedRow = resolvedMatch.matchedRow!;
+
+  return {
+    selected_week_end: resolvedMatch.selectedWeekEnd,
+    matched_query_raw: matchedRow.searchQueryRaw,
+    matched_query_norm: matchedRow.queryNorm,
+    search_query_volume: matchedRow.searchQueryVolume,
+    search_query_score: matchedRow.searchQueryScore,
+    impressions_total: matchedRow.impressionsTotal,
+    impressions_self: matchedRow.impressionsSelf,
+    impressions_self_share: matchedRow.impressionsSelfShare,
+    clicks_total: matchedRow.clicksTotal,
+    clicks_self: matchedRow.clicksSelf,
+    clicks_self_share: matchedRow.clicksSelfShare,
+    cart_adds_total: matchedRow.cartAddsTotal,
+    cart_adds_self: matchedRow.cartAddsSelf,
+    cart_adds_self_share: matchedRow.cartAddsSelfShare,
+    purchases_total: matchedRow.purchasesTotal,
+    purchases_self: matchedRow.purchasesSelf,
+    purchases_self_share: matchedRow.purchasesSelfShare,
+    clicks_rate_per_query: matchedRow.clicksRatePerQuery,
+    cart_add_rate_per_query: matchedRow.cartAddRatePerQuery,
+    purchases_rate_per_query: matchedRow.purchasesRatePerQuery,
+    market_ctr: matchedRow.marketCtr,
+    self_ctr: matchedRow.selfCtr,
+    market_cvr: matchedRow.marketCvr,
+    self_cvr: matchedRow.selfCvr,
+    self_ctr_index: matchedRow.selfCtrIndex,
+    self_cvr_index: matchedRow.selfCvrIndex,
+    cart_add_rate_from_clicks_market: matchedRow.cartAddRateFromClicksMarket,
+    cart_add_rate_from_clicks_self: matchedRow.cartAddRateFromClicksSelf,
     note: null,
   };
 };
@@ -1384,6 +1741,11 @@ const buildTargetProfileViewRow = (args: {
     (adOrderShare !== null && adOrderShare >= 0.2) ||
     (totalSalesShare !== null && totalSalesShare >= 0.08);
   const sqpContext = buildTargetSqpContext({
+    overview: args.overview,
+    rankingContext: args.rankingContext,
+    alignedSqpWeekContext: args.alignedSqpWeekContext,
+  });
+  const sqpDetail = buildTargetSqpDetail({
     overview: args.overview,
     rankingContext: args.rankingContext,
     alignedSqpWeekContext: args.alignedSqpWeekContext,
@@ -1538,6 +1900,7 @@ const buildTargetProfileViewRow = (args: {
         })),
       },
       sqp_context: sqpContext,
+      sqp_detail: sqpDetail,
       demand_proxies: {
         search_term_count: searchTermCount,
         same_text_search_term_count: sameTextSearchTerms.length,
@@ -1765,6 +2128,7 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
   const searchTermDiagnostics = asJsonObject(payload.search_term_diagnostics);
   const rankingContext = asJsonObject(payload.ranking_context);
   const sqpContext = asJsonObject(payload.sqp_context);
+  const sqpDetail = asJsonObject(payload.sqp_detail);
   const coverage = asJsonObject(payload.coverage);
   const statuses = asJsonObject(coverage?.statuses);
   const executionContext = asJsonObject(payload.execution_context);
@@ -1875,6 +2239,7 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
       organicObservedRanks.length > 0 ||
       sponsoredObservedRanks.length > 0);
   const hasSqpContextPayload = sqpContext !== null;
+  const hasSqpDetailPayload = sqpDetail !== null;
 
   const coverageNotes = coverageNotesRaw.filter((entry): entry is string => typeof entry === 'string');
   const criticalWarnings = criticalWarningsRaw.filter(
@@ -2003,6 +2368,45 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
           marketImpressionShare: readNestedNumber(sqpContext, 'market_impression_share'),
           marketImpressionRank: readNestedNumber(sqpContext, 'market_impression_rank'),
           note: readNestedString(sqpContext, 'note'),
+        }
+      : undefined,
+    sqpDetail: hasSqpDetailPayload
+      ? {
+          selectedWeekEnd: readNestedString(sqpDetail, 'selected_week_end'),
+          matchedQueryRaw: readNestedString(sqpDetail, 'matched_query_raw'),
+          matchedQueryNorm: readNestedString(sqpDetail, 'matched_query_norm'),
+          searchQueryVolume: readNestedNumber(sqpDetail, 'search_query_volume'),
+          searchQueryScore: readNestedNumber(sqpDetail, 'search_query_score'),
+          impressionsTotal: readNestedNumber(sqpDetail, 'impressions_total'),
+          impressionsSelf: readNestedNumber(sqpDetail, 'impressions_self'),
+          impressionsSelfShare: readNestedNumber(sqpDetail, 'impressions_self_share'),
+          clicksTotal: readNestedNumber(sqpDetail, 'clicks_total'),
+          clicksSelf: readNestedNumber(sqpDetail, 'clicks_self'),
+          clicksSelfShare: readNestedNumber(sqpDetail, 'clicks_self_share'),
+          cartAddsTotal: readNestedNumber(sqpDetail, 'cart_adds_total'),
+          cartAddsSelf: readNestedNumber(sqpDetail, 'cart_adds_self'),
+          cartAddsSelfShare: readNestedNumber(sqpDetail, 'cart_adds_self_share'),
+          purchasesTotal: readNestedNumber(sqpDetail, 'purchases_total'),
+          purchasesSelf: readNestedNumber(sqpDetail, 'purchases_self'),
+          purchasesSelfShare: readNestedNumber(sqpDetail, 'purchases_self_share'),
+          clicksRatePerQuery: readNestedNumber(sqpDetail, 'clicks_rate_per_query'),
+          cartAddRatePerQuery: readNestedNumber(sqpDetail, 'cart_add_rate_per_query'),
+          purchasesRatePerQuery: readNestedNumber(sqpDetail, 'purchases_rate_per_query'),
+          marketCtr: readNestedNumber(sqpDetail, 'market_ctr'),
+          selfCtr: readNestedNumber(sqpDetail, 'self_ctr'),
+          marketCvr: readNestedNumber(sqpDetail, 'market_cvr'),
+          selfCvr: readNestedNumber(sqpDetail, 'self_cvr'),
+          selfCtrIndex: readNestedNumber(sqpDetail, 'self_ctr_index'),
+          selfCvrIndex: readNestedNumber(sqpDetail, 'self_cvr_index'),
+          cartAddRateFromClicksMarket: readNestedNumber(
+            sqpDetail,
+            'cart_add_rate_from_clicks_market'
+          ),
+          cartAddRateFromClicksSelf: readNestedNumber(
+            sqpDetail,
+            'cart_add_rate_from_clicks_self'
+          ),
+          note: readNestedString(sqpDetail, 'note'),
         }
       : undefined,
     demandProxies: {

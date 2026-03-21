@@ -70,6 +70,7 @@ const state = {
   stisRows: [] as Array<Record<string, unknown>>,
   placementRows: [] as Array<Record<string, unknown>>,
   sqpRows: [] as Array<Record<string, unknown>>,
+  sqpRangeCalls: 0,
 };
 
 const resetState = () => {
@@ -78,6 +79,7 @@ const resetState = () => {
   state.stisRows = [];
   state.placementRows = [];
   state.sqpRows = [];
+  state.sqpRangeCalls = 0;
   rankingState.rows = [];
   rankingState.error = null;
   overviewState.data.visibility = {
@@ -156,10 +158,15 @@ const createQuery = (table: string) => {
       filters.push({ type: 'in', column, value });
       return query;
     },
-    range: async (from: number, to: number) => ({
-      data: readRows().slice(from, to + 1),
-      error: null,
-    }),
+    range: async (from: number, to: number) => {
+      if (table === 'sqp_weekly_latest_known_keywords') {
+        state.sqpRangeCalls += 1;
+      }
+      return {
+        data: readRows().slice(from, to + 1),
+        error: null,
+      };
+    },
   };
 
   return query;
@@ -664,6 +671,18 @@ describe('ads optimizer phase 5 target profile engine', () => {
       (rowsByTargetId.get('target-1')?.snapshotPayload.sqp_context as Record<string, unknown>)
         .market_impression_share
     ).toBeCloseTo(1000 / expectedTotalMarketImpressions);
+    expect(rowsByTargetId.get('target-1')?.snapshotPayload.sqp_detail).toMatchObject({
+      selected_week_end: '2026-03-08',
+      matched_query_raw: 'Blue Widget',
+      matched_query_norm: 'blue widget',
+      impressions_total: 1000,
+      impressions_self: null,
+      clicks_total: null,
+      purchases_total: null,
+      market_ctr: null,
+      self_ctr: null,
+      note: null,
+    });
     expect(rowsByTargetId.get('target-2')?.snapshotPayload.sqp_context).toMatchObject({
       selected_week_end: '2026-03-08',
       matched_query_norm: 'blue widget',
@@ -671,6 +690,13 @@ describe('ads optimizer phase 5 target profile engine', () => {
       market_impressions_total: 1000,
       total_market_impressions: expectedTotalMarketImpressions,
       market_impression_rank: 2,
+      note: null,
+    });
+    expect(rowsByTargetId.get('target-2')?.snapshotPayload.sqp_detail).toMatchObject({
+      selected_week_end: '2026-03-08',
+      matched_query_raw: 'Blue Widget',
+      matched_query_norm: 'blue widget',
+      impressions_total: 1000,
       note: null,
     });
     expect(rowsByTargetId.get('target-3')?.snapshotPayload.sqp_context).toMatchObject({
@@ -684,6 +710,16 @@ describe('ads optimizer phase 5 target profile engine', () => {
       note:
         'SQP market-impression context is unavailable because no deterministic keyword mapping was resolved for this target.',
     });
+    expect(rowsByTargetId.get('target-3')?.snapshotPayload.sqp_detail).toMatchObject({
+      selected_week_end: '2026-03-08',
+      matched_query_raw: null,
+      matched_query_norm: null,
+      impressions_total: null,
+      market_ctr: null,
+      note:
+        'SQP market-impression context is unavailable because no deterministic keyword mapping was resolved for this target.',
+    });
+    expect(state.sqpRangeCalls).toBe(2);
   });
 
   it('matches the Overview SQP week-selection semantics and persists the Overview-selected week into sqp_context', async () => {
@@ -811,6 +847,231 @@ describe('ads optimizer phase 5 target profile engine', () => {
         selected_week_end: scenario.selectedWeekEnd,
       });
     }
+  });
+
+  it('persists matched-query sqp_detail metrics from the aligned SQP week and derives funnel rates from the matched row only', async () => {
+    state.advertisedRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        advertised_asin_norm: 'B001TEST',
+        impressions: 100,
+        clicks: 10,
+        spend: 25,
+        sales: 120,
+        orders: 3,
+        units: 3,
+      },
+    ];
+    state.targetingRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        exported_at: '2026-03-10T00:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        target_id: 'target-1',
+        portfolio_name_raw: 'Portfolio',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: 'Ad Group 1',
+        targeting_raw: 'blue widget',
+        targeting_norm: 'blue widget',
+        match_type_norm: 'exact',
+        impressions: 80,
+        clicks: 8,
+        spend: 20,
+        sales: 90,
+        orders: 2,
+        units: 2,
+        top_of_search_impression_share: 0.34,
+      },
+    ];
+    rankingState.rows = [
+      {
+        observed_date: '2026-03-03',
+        keyword_raw: 'blue widget',
+        keyword_norm: 'blue widget',
+        keyword_id: 'kw-1',
+        organic_rank_value: 11,
+        organic_rank_kind: 'rank',
+        organic_rank_raw: '11',
+        sponsored_pos_value: 8,
+        sponsored_pos_kind: 'rank',
+        sponsored_pos_raw: '8',
+        search_volume: 2200,
+      },
+    ];
+    state.sqpRows = [
+      {
+        account_id: 'acct',
+        marketplace: 'US',
+        scope_type: 'asin',
+        scope_value: 'B001TEST',
+        week_end: '2026-03-08',
+        search_query_norm: 'blue widget',
+        search_query_raw: 'Blue Widget',
+        search_query_score: 95,
+        search_query_volume: 18000,
+        impressions_total: 1000,
+        impressions_self: 180,
+        impressions_self_share: 0.18,
+        clicks_total: 80,
+        clicks_self: 24,
+        clicks_self_share: 0.3,
+        clicks_rate_per_query: 80 / 18000,
+        cart_adds_total: 16,
+        cart_adds_self: 6,
+        cart_adds_self_share: 0.375,
+        cart_add_rate_per_query: 16 / 18000,
+        purchases_total: 8,
+        purchases_self: 3,
+        purchases_self_share: 0.375,
+        purchases_rate_per_query: 8 / 18000,
+      },
+      {
+        account_id: 'acct',
+        marketplace: 'US',
+        scope_type: 'asin',
+        scope_value: 'B001TEST',
+        week_end: '2026-03-08',
+        search_query_norm: 'alpha query',
+        search_query_raw: 'alpha query',
+        impressions_total: 1200,
+      },
+    ];
+
+    const result = await loadAdsOptimizerTargetProfiles({
+      asin: 'B001TEST',
+      start: '2026-03-01',
+      end: '2026-03-10',
+    });
+
+    expect(result.rows[0]?.snapshotPayload.sqp_detail).toMatchObject({
+      selected_week_end: '2026-03-08',
+      matched_query_raw: 'Blue Widget',
+      matched_query_norm: 'blue widget',
+      search_query_volume: 18000,
+      search_query_score: 95,
+      impressions_total: 1000,
+      impressions_self: 180,
+      impressions_self_share: 0.18,
+      clicks_total: 80,
+      clicks_self: 24,
+      clicks_self_share: 0.3,
+      cart_adds_total: 16,
+      cart_adds_self: 6,
+      cart_adds_self_share: 0.375,
+      purchases_total: 8,
+      purchases_self: 3,
+      purchases_self_share: 0.375,
+      clicks_rate_per_query: 80 / 18000,
+      cart_add_rate_per_query: 16 / 18000,
+      purchases_rate_per_query: 8 / 18000,
+      market_ctr: 0.08,
+      self_ctr: 24 / 180,
+      market_cvr: 8 / 80,
+      self_cvr: 3 / 24,
+      self_ctr_index: (24 / 180) / 0.08,
+      self_cvr_index: (3 / 24) / (8 / 80),
+      cart_add_rate_from_clicks_market: 16 / 80,
+      cart_add_rate_from_clicks_self: 6 / 24,
+      note: null,
+    });
+    expect(result.rows[0]?.snapshotPayload.sqp_context).toMatchObject({
+      selected_week_end: '2026-03-08',
+      matched_query_norm: 'blue widget',
+      market_impressions_total: 1000,
+      market_impression_share: 1000 / 2200,
+      market_impression_rank: 2,
+    });
+    expect(state.sqpRangeCalls).toBe(1);
+  });
+
+  it('persists null-safe sqp_detail values with an honest note when no aligned SQP query matches the resolved keyword', async () => {
+    state.advertisedRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        advertised_asin_norm: 'B001TEST',
+        impressions: 100,
+        clicks: 10,
+        spend: 25,
+        sales: 120,
+        orders: 3,
+        units: 3,
+      },
+    ];
+    state.targetingRows = [
+      {
+        account_id: 'acct',
+        date: '2026-03-03',
+        exported_at: '2026-03-10T00:00:00Z',
+        campaign_id: 'campaign-1',
+        ad_group_id: 'ad-group-1',
+        target_id: 'target-1',
+        portfolio_name_raw: 'Portfolio',
+        campaign_name_raw: 'Campaign 1',
+        ad_group_name_raw: 'Ad Group 1',
+        targeting_raw: 'blue widget',
+        targeting_norm: 'blue widget',
+        match_type_norm: 'exact',
+        impressions: 80,
+        clicks: 8,
+        spend: 20,
+        sales: 90,
+        orders: 2,
+        units: 2,
+        top_of_search_impression_share: 0.34,
+      },
+    ];
+    rankingState.rows = [
+      {
+        observed_date: '2026-03-03',
+        keyword_raw: 'blue widget',
+        keyword_norm: 'blue widget',
+        keyword_id: 'kw-1',
+        organic_rank_value: 11,
+        organic_rank_kind: 'rank',
+        organic_rank_raw: '11',
+        sponsored_pos_value: 8,
+        sponsored_pos_kind: 'rank',
+        sponsored_pos_raw: '8',
+        search_volume: 2200,
+      },
+    ];
+    state.sqpRows = [
+      {
+        account_id: 'acct',
+        marketplace: 'US',
+        scope_type: 'asin',
+        scope_value: 'B001TEST',
+        week_end: '2026-03-08',
+        search_query_norm: 'alpha query',
+        search_query_raw: 'alpha query',
+        impressions_total: 1200,
+      },
+    ];
+
+    const result = await loadAdsOptimizerTargetProfiles({
+      asin: 'B001TEST',
+      start: '2026-03-01',
+      end: '2026-03-10',
+    });
+
+    expect(result.rows[0]?.snapshotPayload.sqp_detail).toMatchObject({
+      selected_week_end: '2026-03-08',
+      matched_query_raw: null,
+      matched_query_norm: null,
+      impressions_total: null,
+      purchases_total: null,
+      market_ctr: null,
+      self_ctr: null,
+      note: 'No aligned SQP query matched resolved keyword "blue widget" for 2026-03-08.',
+    });
   });
 
   it('continues building target profiles when keyword-query ranking is unavailable', async () => {
@@ -1183,6 +1444,37 @@ describe('ads optimizer phase 5 target profile engine', () => {
           market_impression_rank: 2,
           note: null,
         },
+        sqp_detail: {
+          selected_week_end: '2026-03-08',
+          matched_query_raw: 'Blue Widget',
+          matched_query_norm: 'blue widget',
+          search_query_volume: 18000,
+          search_query_score: 95,
+          impressions_total: 1000,
+          impressions_self: 180,
+          impressions_self_share: 0.18,
+          clicks_total: 80,
+          clicks_self: 24,
+          clicks_self_share: 0.3,
+          cart_adds_total: 16,
+          cart_adds_self: 6,
+          cart_adds_self_share: 0.375,
+          purchases_total: 8,
+          purchases_self: 3,
+          purchases_self_share: 0.375,
+          clicks_rate_per_query: 80 / 18000,
+          cart_add_rate_per_query: 16 / 18000,
+          purchases_rate_per_query: 8 / 18000,
+          market_ctr: 0.08,
+          self_ctr: 24 / 180,
+          market_cvr: 8 / 80,
+          self_cvr: 3 / 24,
+          self_ctr_index: (24 / 180) / 0.08,
+          self_cvr_index: (3 / 24) / (8 / 80),
+          cart_add_rate_from_clicks_market: 16 / 80,
+          cart_add_rate_from_clicks_self: 6 / 24,
+          note: null,
+        },
         demand_proxies: {
           search_term_count: 1,
           same_text_search_term_count: 1,
@@ -1404,6 +1696,37 @@ describe('ads optimizer phase 5 target profile engine', () => {
       marketImpressionRank: 2,
       note: null,
     });
+    expect(row.sqpDetail).toMatchObject({
+      selectedWeekEnd: '2026-03-08',
+      matchedQueryRaw: 'Blue Widget',
+      matchedQueryNorm: 'blue widget',
+      searchQueryVolume: 18000,
+      searchQueryScore: 95,
+      impressionsTotal: 1000,
+      impressionsSelf: 180,
+      impressionsSelfShare: 0.18,
+      clicksTotal: 80,
+      clicksSelf: 24,
+      clicksSelfShare: 0.3,
+      cartAddsTotal: 16,
+      cartAddsSelf: 6,
+      cartAddsSelfShare: 0.375,
+      purchasesTotal: 8,
+      purchasesSelf: 3,
+      purchasesSelfShare: 0.375,
+      clicksRatePerQuery: 80 / 18000,
+      cartAddRatePerQuery: 16 / 18000,
+      purchasesRatePerQuery: 8 / 18000,
+      marketCtr: 0.08,
+      selfCtr: 24 / 180,
+      marketCvr: 8 / 80,
+      selfCvr: 3 / 24,
+      selfCtrIndex: (24 / 180) / 0.08,
+      selfCvrIndex: (3 / 24) / (8 / 80),
+      cartAddRateFromClicksMarket: 16 / 80,
+      cartAddRateFromClicksSelf: 6 / 24,
+      note: null,
+    });
     expect(row.nonAdditiveDiagnostics.tosIs.latestObservedDate).toBe('2026-03-03');
     expect(row.nonAdditiveDiagnostics.stis.previousValue).toBe(0.18);
     expect(row.nonAdditiveDiagnostics.stir.direction).toBe('down');
@@ -1502,6 +1825,7 @@ describe('ads optimizer phase 5 target profile engine', () => {
 
     expect(row.rankingContext).toBeUndefined();
     expect(row.sqpContext).toBeUndefined();
+    expect(row.sqpDetail).toBeUndefined();
   });
 
   it('falls back from legacy placement_context into a three-row placement breakdown', () => {

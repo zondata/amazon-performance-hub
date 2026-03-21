@@ -53,6 +53,7 @@ import TargetChangePlanTab, {
 import TargetExpandedPanel from './TargetExpandedPanel';
 import TargetPlacementTab from './TargetPlacementTab';
 import TargetSearchTermTab from './TargetSearchTermTab';
+import TargetSqpTab from './TargetSqpTab';
 import TargetExpandedTabs, {
   TARGET_EXPANDED_TAB_DEFINITIONS,
   getTargetExpandedTabId,
@@ -1360,6 +1361,8 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
               );
             case 'placement':
               return <TargetPlacementTab row={activeRow} allRows={props.rows} />;
+            case 'sqp':
+              return <TargetSqpTab row={activeRow} />;
             case 'metrics':
               return (
                 <div className="grid gap-4 xl:grid-cols-3">

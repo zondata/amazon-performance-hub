@@ -5,6 +5,9 @@ import {
   buildAdsOptimizerPlacementEvidenceRows,
   buildAdsOptimizerPlacementTableRows,
   buildAdsOptimizerPlacementTotalsRow,
+  buildAdsOptimizerSqpComparisonState,
+  buildAdsOptimizerSqpKpiRows,
+  buildAdsOptimizerSqpSummaryLines,
   buildAdsOptimizerSearchTermEvidenceRows,
   buildAdsOptimizerSearchTermTableRows,
   buildAdsOptimizerSearchTermsEmptyState,
@@ -17,6 +20,47 @@ const buildRow = (): AdsOptimizerTargetReviewRow =>
     campaignId: 'campaign-1',
     targetId: 'target-1',
     targetText: 'hero exact',
+    sqpContext: {
+      selectedWeekEnd: '2026-03-08',
+      matchedQueryNorm: 'hero exact',
+      trackedQueryCount: 2400,
+      marketImpressionsTotal: 5000,
+      totalMarketImpressions: 60000,
+      marketImpressionShare: 5000 / 60000,
+      marketImpressionRank: 8,
+      note: null,
+    },
+    sqpDetail: {
+      selectedWeekEnd: '2026-03-08',
+      matchedQueryRaw: 'Hero Exact',
+      matchedQueryNorm: 'hero exact',
+      searchQueryVolume: 18000,
+      searchQueryScore: 95,
+      impressionsTotal: 5000,
+      impressionsSelf: 900,
+      impressionsSelfShare: 0.18,
+      clicksTotal: 400,
+      clicksSelf: 96,
+      clicksSelfShare: 0.24,
+      cartAddsTotal: 80,
+      cartAddsSelf: 24,
+      cartAddsSelfShare: 0.3,
+      purchasesTotal: 40,
+      purchasesSelf: 14,
+      purchasesSelfShare: 0.35,
+      clicksRatePerQuery: 400 / 18000,
+      cartAddRatePerQuery: 80 / 18000,
+      purchasesRatePerQuery: 40 / 18000,
+      marketCtr: 400 / 5000,
+      selfCtr: 96 / 900,
+      marketCvr: 40 / 400,
+      selfCvr: 14 / 96,
+      selfCtrIndex: (96 / 900) / (400 / 5000),
+      selfCvrIndex: (14 / 96) / (40 / 400),
+      cartAddRateFromClicksMarket: 80 / 400,
+      cartAddRateFromClicksSelf: 24 / 96,
+      note: null,
+    },
     currentCampaignBiddingStrategy: 'dynamic down only',
     placementContext: {
       topOfSearchModifierPct: 25,
@@ -115,6 +159,47 @@ const buildRow = (): AdsOptimizerTargetReviewRow =>
       ],
     },
     previousComparable: {
+      sqpContext: {
+        selectedWeekEnd: '2026-03-01',
+        matchedQueryNorm: 'hero exact',
+        trackedQueryCount: 2200,
+        marketImpressionsTotal: 4000,
+        totalMarketImpressions: 56000,
+        marketImpressionShare: 4000 / 56000,
+        marketImpressionRank: 11,
+        note: null,
+      },
+      sqpDetail: {
+        selectedWeekEnd: '2026-03-01',
+        matchedQueryRaw: 'Hero Exact',
+        matchedQueryNorm: 'hero exact',
+        searchQueryVolume: 15000,
+        searchQueryScore: 91,
+        impressionsTotal: 4000,
+        impressionsSelf: 700,
+        impressionsSelfShare: 0.175,
+        clicksTotal: 350,
+        clicksSelf: 70,
+        clicksSelfShare: 0.2,
+        cartAddsTotal: 70,
+        cartAddsSelf: 14,
+        cartAddsSelfShare: 0.2,
+        purchasesTotal: 35,
+        purchasesSelf: 10,
+        purchasesSelfShare: 10 / 35,
+        clicksRatePerQuery: 350 / 15000,
+        cartAddRatePerQuery: 70 / 15000,
+        purchasesRatePerQuery: 35 / 15000,
+        marketCtr: 350 / 4000,
+        selfCtr: 70 / 700,
+        marketCvr: 35 / 350,
+        selfCvr: 10 / 70,
+        selfCtrIndex: (70 / 700) / (350 / 4000),
+        selfCvrIndex: (10 / 70) / (35 / 350),
+        cartAddRateFromClicksMarket: 70 / 350,
+        cartAddRateFromClicksSelf: 14 / 70,
+        note: null,
+      },
       placementBreakdown: {
         note: 'Placement metrics remain campaign-level context only. They are shared across targets in the same campaign and must not be treated as target-owned history.',
         rows: [
@@ -538,6 +623,350 @@ describe('ads optimizer target decision surface helpers', () => {
     expect(totals.acos).toBeCloseTo(148 / 420);
     expect(totals.roas).toBeCloseTo(420 / 148);
     expect(count).toBe(2);
+  });
+
+  it('builds SQP KPI rows in exact order and maps each row into stacked market and self metric cells', () => {
+    const rows = buildAdsOptimizerSqpKpiRows(buildRow());
+
+    expect(rows.map((row) => row.kpi)).toEqual([
+      'Impression',
+      'Impression share',
+      'Click',
+      'Click share',
+      'CTR',
+      'CVR',
+      'Purchase',
+      'Purchase share',
+    ]);
+    expect(rows.every((row) => 'market' in row && 'self' in row)).toBe(true);
+    expect(
+      rows.every(
+        (row) =>
+          'current' in row.market &&
+          'previous' in row.market &&
+          'changePercent' in row.market &&
+          'current' in row.self &&
+          'previous' in row.self &&
+          'changePercent' in row.self
+      )
+    ).toBe(true);
+    expect(rows[0]).toMatchObject({
+      kpi: 'Impression',
+      kind: 'count',
+      market: {
+        current: 5000,
+        previous: 4000,
+        changeTone: 'favorable',
+      },
+      self: {
+        current: 900,
+        previous: 700,
+        changeTone: 'favorable',
+      },
+    });
+    expect(rows[0]?.market.changePercent).toBe(25);
+    expect(rows[0]?.self.changePercent).toBeCloseTo(28.5714285714);
+
+    expect(rows[1]).toMatchObject({
+      kpi: 'Impression share',
+      kind: 'percent',
+      market: {
+        current: null,
+        previous: null,
+        changePercent: null,
+        changeTone: 'muted',
+      },
+      self: {
+        current: 0.18,
+        previous: 0.175,
+        changeTone: 'favorable',
+      },
+    });
+    expect(rows[1]?.self.changePercent).toBeCloseTo(2.8571428571);
+
+    expect(rows[2]).toMatchObject({
+      kpi: 'Click',
+      kind: 'count',
+      market: {
+        current: 400,
+        previous: 350,
+        changeTone: 'favorable',
+      },
+      self: {
+        current: 96,
+        previous: 70,
+        changeTone: 'favorable',
+      },
+    });
+    expect(rows[2]?.market.changePercent).toBeCloseTo(14.2857142857);
+    expect(rows[2]?.self.changePercent).toBeCloseTo(37.1428571429);
+
+    expect(rows[3]).toMatchObject({
+      kpi: 'Click share',
+      kind: 'percent',
+      market: {
+        current: null,
+        previous: null,
+        changePercent: null,
+        changeTone: 'muted',
+      },
+      self: {
+        current: 0.24,
+        previous: 0.2,
+        changeTone: 'favorable',
+      },
+    });
+    expect(rows[3]?.self.changePercent).toBeCloseTo(20);
+
+    expect(rows[4]).toMatchObject({
+      kpi: 'CTR',
+      kind: 'percent',
+      market: {
+        current: 0.08,
+        previous: 0.0875,
+        changeTone: 'unfavorable',
+      },
+      self: {
+        current: 96 / 900,
+        previous: 0.1,
+        changeTone: 'favorable',
+      },
+    });
+    expect(rows[4]?.market.changePercent).toBeCloseTo(-8.5714285714);
+    expect(rows[4]?.self.changePercent).toBeCloseTo(6.6666666667);
+
+    expect(rows[5]).toMatchObject({
+      kpi: 'CVR',
+      kind: 'percent',
+      market: {
+        current: 0.1,
+        previous: 0.1,
+        changeTone: 'muted',
+      },
+      self: {
+        current: 14 / 96,
+        previous: 10 / 70,
+        changeTone: 'favorable',
+      },
+    });
+    expect(rows[5]?.market.changePercent).toBe(0);
+    expect(rows[5]?.self.changePercent).toBeCloseTo(2.0833333333);
+
+    expect(rows[6]).toMatchObject({
+      kpi: 'Purchase',
+      kind: 'count',
+      market: {
+        current: 40,
+        previous: 35,
+        changeTone: 'favorable',
+      },
+      self: {
+        current: 14,
+        previous: 10,
+        changeTone: 'favorable',
+      },
+    });
+    expect(rows[6]?.market.changePercent).toBeCloseTo(14.2857142857);
+    expect(rows[6]?.self.changePercent).toBe(40);
+
+    expect(rows[7]).toMatchObject({
+      kpi: 'Purchase share',
+      kind: 'percent',
+      market: {
+        current: null,
+        previous: null,
+        changePercent: null,
+        changeTone: 'muted',
+      },
+      self: {
+        current: 0.35,
+        previous: 10 / 35,
+        changeTone: 'favorable',
+      },
+    });
+    expect(rows[7]?.self.changePercent).toBeCloseTo(22.5);
+  });
+
+  it('uses same-query-only SQP comparison and suppresses previous/change when the previous query differs', () => {
+    const row = buildRow();
+    row.previousComparable = {
+      ...(row.previousComparable ?? {}),
+      sqpContext: {
+        ...(row.previousComparable?.sqpContext ?? {}),
+        matchedQueryNorm: 'other query',
+        selectedWeekEnd: '2026-03-01',
+      },
+      sqpDetail: {
+        ...(row.previousComparable?.sqpDetail ?? {}),
+        matchedQueryNorm: 'other query',
+        selectedWeekEnd: '2026-03-01',
+      },
+    } as AdsOptimizerTargetReviewRow['previousComparable'];
+
+    const comparison = buildAdsOptimizerSqpComparisonState(row);
+    const rows = buildAdsOptimizerSqpKpiRows(row);
+    const summary = buildAdsOptimizerSqpSummaryLines(row);
+
+    expect(comparison.comparisonAllowed).toBe(false);
+    expect(comparison.status).toBe('different_query');
+    expect(comparison.note).toBe(
+      'Previous comparable resolved to a different SQP query, so previous and change are hidden.'
+    );
+    expect(rows.every((entry) => entry.market.previous === null)).toBe(true);
+    expect(rows.every((entry) => entry.self.previous === null)).toBe(true);
+    expect(rows.every((entry) => entry.market.changePercent === null)).toBe(true);
+    expect(rows.every((entry) => entry.self.changePercent === null)).toBe(true);
+    expect(summary[2]).toBe(
+      'Vs previous: Previous comparable resolved to a different SQP query, so previous and change are hidden.'
+    );
+  });
+
+  it('builds deterministic SQP summary lines in the required order', () => {
+    const summary = buildAdsOptimizerSqpSummaryLines(buildRow());
+
+    expect(summary).toHaveLength(3);
+    expect(summary).toEqual([
+      'Demand: High volume. Market impressions 5,000. Market impression share 8.3%. Market rank 8.',
+      'Funnel capture: strengthens. Self impression share 18.0%. Self click share 24.0%. Self purchase share 35.0%. Self CTR 10.7% vs market CTR 8.0%. Self CVR 14.6% vs market CVR 10.0%.',
+      'Vs previous: Impression +28.6%. Click +37.1%. Purchase +40.0%. CTR +6.7%. CVR +2.1%.',
+    ]);
+  });
+
+  it('applies the SQP demand classification thresholds exactly', () => {
+    const high = buildAdsOptimizerSqpSummaryLines(buildRow())[0];
+
+    const midRow = buildRow();
+    midRow.sqpContext = {
+      ...(midRow.sqpContext ?? {}),
+      marketImpressionShare: 0.005,
+      marketImpressionRank: 25,
+    };
+    midRow.sqpDetail = {
+      ...(midRow.sqpDetail ?? {}),
+      impressionsTotal: 1200,
+    };
+
+    const lowerRow = buildRow();
+    lowerRow.sqpContext = {
+      ...(lowerRow.sqpContext ?? {}),
+      marketImpressionShare: 0.005,
+      marketImpressionRank: 80,
+    };
+    lowerRow.sqpDetail = {
+      ...(lowerRow.sqpDetail ?? {}),
+      impressionsTotal: 500,
+    };
+
+    expect(high).toContain('Demand: High volume.');
+    expect(buildAdsOptimizerSqpSummaryLines(midRow)[0]).toContain('Demand: Mid volume.');
+    expect(buildAdsOptimizerSqpSummaryLines(lowerRow)[0]).toContain('Demand: Lower volume.');
+  });
+
+  it('applies the SQP funnel-capture classifications exactly', () => {
+    const strengthens = buildAdsOptimizerSqpSummaryLines(buildRow())[1];
+
+    const weakensRow = buildRow();
+    weakensRow.sqpDetail = {
+      ...(weakensRow.sqpDetail ?? {}),
+      purchasesSelfShare: 0.12,
+    };
+
+    const holdsRow = buildRow();
+    holdsRow.sqpDetail = {
+      ...(holdsRow.sqpDetail ?? {}),
+      purchasesSelfShare: 0.19,
+    };
+
+    expect(strengthens).toContain('Funnel capture: strengthens.');
+    expect(strengthens).toContain('Self impression share 18.0%.');
+    expect(strengthens).toContain('Self click share 24.0%.');
+    expect(strengthens).toContain('Self purchase share 35.0%.');
+    expect(strengthens).toContain('Self CTR 10.7% vs market CTR 8.0%.');
+    expect(strengthens).toContain('Self CVR 14.6% vs market CVR 10.0%.');
+    expect(buildAdsOptimizerSqpSummaryLines(weakensRow)[1]).toContain(
+      'Funnel capture: weakens.'
+    );
+    expect(buildAdsOptimizerSqpSummaryLines(holdsRow)[1]).toContain('Funnel capture: holds.');
+  });
+
+  it('applies directional change tones to both market and self stacked metric cells', () => {
+    const rows = buildAdsOptimizerSqpKpiRows(buildRow());
+
+    expect(rows[0]).toMatchObject({
+      kpi: 'Impression',
+      market: { changeTone: 'favorable' },
+      self: { changeTone: 'favorable' },
+    });
+    expect(rows[1]).toMatchObject({
+      kpi: 'Impression share',
+      market: { changeTone: 'muted' },
+      self: { changeTone: 'favorable' },
+    });
+    expect(rows[4]).toMatchObject({
+      kpi: 'CTR',
+      market: { changeTone: 'unfavorable' },
+      self: { changeTone: 'favorable' },
+    });
+    expect(rows[5]).toMatchObject({
+      kpi: 'CVR',
+      market: { changeTone: 'muted' },
+      self: { changeTone: 'favorable' },
+    });
+
+    const negativeRow = buildRow();
+    negativeRow.sqpDetail = {
+      ...(negativeRow.sqpDetail ?? {}),
+      impressionsTotal: 3500,
+      clicksTotal: 300,
+      marketCtr: 0.07,
+      selfCtr: 0.09,
+      marketCvr: 0.09,
+      selfCvr: 0.08,
+      purchasesSelfShare: 0.2,
+      purchasesSelf: 8,
+    };
+
+    const negativeRows = buildAdsOptimizerSqpKpiRows(negativeRow);
+
+    expect(negativeRows[0]).toMatchObject({
+      kpi: 'Impression',
+      market: { changeTone: 'unfavorable' },
+      self: { changeTone: 'favorable' },
+    });
+    expect(negativeRows[2]).toMatchObject({
+      kpi: 'Click',
+      market: { changeTone: 'unfavorable' },
+      self: { changeTone: 'favorable' },
+    });
+    expect(negativeRows[4]).toMatchObject({
+      kpi: 'CTR',
+      market: { changeTone: 'unfavorable' },
+      self: { changeTone: 'unfavorable' },
+    });
+    expect(negativeRows[5]).toMatchObject({
+      kpi: 'CVR',
+      market: { changeTone: 'unfavorable' },
+      self: { changeTone: 'unfavorable' },
+    });
+    expect(negativeRows[6]).toMatchObject({
+      kpi: 'Purchase',
+      market: { changeTone: 'favorable' },
+      self: { changeTone: 'unfavorable' },
+    });
+    expect(negativeRows[7]).toMatchObject({
+      kpi: 'Purchase share',
+      market: { changeTone: 'muted' },
+      self: { changeTone: 'unfavorable' },
+    });
+  });
+
+  it('returns the no-previous SQP summary when no previous comparable snapshot exists', () => {
+    const row = buildRow();
+    row.previousComparable = null;
+
+    expect(buildAdsOptimizerSqpSummaryLines(row)[2]).toBe(
+      'Vs previous: no previous comparable SQP snapshot.'
+    );
   });
 
   it('returns null placement change values when the matched previous row is missing or zero', () => {

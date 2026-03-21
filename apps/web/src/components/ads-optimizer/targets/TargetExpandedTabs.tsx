@@ -5,6 +5,7 @@ export type TargetExpandedTabKey =
   | 'change_plan'
   | 'search_term'
   | 'placement'
+  | 'sqp'
   | 'metrics'
   | 'advanced';
 
@@ -24,6 +25,7 @@ export const TARGET_EXPANDED_TAB_DEFINITIONS: TargetExpandedTabDefinition[] = [
   { key: 'change_plan', label: 'Change plan' },
   { key: 'search_term', label: 'Search term' },
   { key: 'placement', label: 'Placement' },
+  { key: 'sqp', label: 'SQP' },
   { key: 'metrics', label: 'Metrics' },
   { key: 'advanced', label: 'Advanced' },
 ];

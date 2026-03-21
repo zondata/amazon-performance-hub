@@ -497,3 +497,361 @@ export const buildAdsOptimizerPlacementCampaignTargetCount = (
   rows: AdsOptimizerTargetReviewRow[],
   campaignId: string
 ) => rows.filter((row) => row.campaignId === campaignId).length;
+
+export type AdsOptimizerSqpChangeTone = 'muted' | 'favorable' | 'unfavorable';
+
+export type AdsOptimizerSqpTableRow = {
+  kpi:
+    | 'Impression'
+    | 'Impression share'
+    | 'Click'
+    | 'Click share'
+    | 'CTR'
+    | 'CVR'
+    | 'Purchase'
+    | 'Purchase share';
+  kind: 'count' | 'percent';
+  market: AdsOptimizerSqpMetricCell;
+  self: AdsOptimizerSqpMetricCell;
+};
+
+export type AdsOptimizerSqpMetricCell = {
+  current: number | null;
+  previous: number | null;
+  changePercent: number | null;
+  changeTone: AdsOptimizerSqpChangeTone;
+};
+
+export type AdsOptimizerSqpComparisonState = {
+  currentWeekEnd: string | null;
+  previousWeekEnd: string | null;
+  currentMatchedQueryNorm: string | null;
+  previousMatchedQueryNorm: string | null;
+  comparisonAllowed: boolean;
+  status: 'same_query' | 'no_previous' | 'different_query' | 'missing_query';
+  note: string | null;
+};
+
+const isFiniteNumber = (value: number | null | undefined): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+const buildPercentChange = (current: number | null, previous: number | null) =>
+  current === null || previous === null || previous === 0 ? null : ((current - previous) / previous) * 100;
+
+const buildSqpDirectionalChangeTone = (value: number | null): AdsOptimizerSqpChangeTone => {
+  if (value === null || !Number.isFinite(value) || value === 0) return 'muted';
+  return value > 0 ? 'favorable' : 'unfavorable';
+};
+
+const buildSqpChangeValue = (args: {
+  comparisonAllowed: boolean;
+  current: number | null;
+  previous: number | null;
+}) => (args.comparisonAllowed ? buildPercentChange(args.current, args.previous) : null);
+
+const SQP_NO_PREVIOUS_NOTE = 'no previous comparable SQP snapshot.';
+const SQP_DIFFERENT_QUERY_NOTE =
+  'Previous comparable resolved to a different SQP query, so previous and change are hidden.';
+const SQP_MISSING_QUERY_NOTE =
+  'same-query SQP comparison is unavailable because one snapshot did not resolve a matched SQP query.';
+
+const formatSummaryInteger = (value: number | null) => {
+  if (!isFiniteNumber(value)) return '—';
+  return value.toLocaleString('en-US', { maximumFractionDigits: 0 });
+};
+
+const formatSummaryPercent = (value: number | null) => {
+  if (!isFiniteNumber(value)) return '—';
+  return `${(value * 100).toFixed(1)}%`;
+};
+
+const formatSummaryChange = (value: number | null) => {
+  if (!isFiniteNumber(value)) return '—';
+  const rounded = Number(value.toFixed(1));
+  if (rounded === 0 || Object.is(rounded, -0)) return '0.0%';
+  return `${rounded > 0 ? '+' : ''}${rounded.toFixed(1)}%`;
+};
+
+export function buildAdsOptimizerSqpComparisonState(
+  row: AdsOptimizerTargetReviewRow
+): AdsOptimizerSqpComparisonState {
+  const currentMatchedQueryNorm = row.sqpDetail?.matchedQueryNorm ?? null;
+  const previousMatchedQueryNorm = row.previousComparable?.sqpDetail?.matchedQueryNorm ?? null;
+
+  if (!row.previousComparable) {
+    return {
+      currentWeekEnd: row.sqpDetail?.selectedWeekEnd ?? row.sqpContext?.selectedWeekEnd ?? null,
+      previousWeekEnd: null,
+      currentMatchedQueryNorm,
+      previousMatchedQueryNorm: null,
+      comparisonAllowed: false,
+      status: 'no_previous',
+      note: SQP_NO_PREVIOUS_NOTE,
+    };
+  }
+
+  if (
+    currentMatchedQueryNorm !== null &&
+    previousMatchedQueryNorm !== null &&
+    currentMatchedQueryNorm === previousMatchedQueryNorm
+  ) {
+    return {
+      currentWeekEnd: row.sqpDetail?.selectedWeekEnd ?? row.sqpContext?.selectedWeekEnd ?? null,
+      previousWeekEnd:
+        row.previousComparable.sqpDetail?.selectedWeekEnd ??
+        row.previousComparable.sqpContext?.selectedWeekEnd ??
+        null,
+      currentMatchedQueryNorm,
+      previousMatchedQueryNorm,
+      comparisonAllowed: true,
+      status: 'same_query',
+      note: null,
+    };
+  }
+
+  if (
+    currentMatchedQueryNorm !== null &&
+    previousMatchedQueryNorm !== null &&
+    currentMatchedQueryNorm !== previousMatchedQueryNorm
+  ) {
+    return {
+      currentWeekEnd: row.sqpDetail?.selectedWeekEnd ?? row.sqpContext?.selectedWeekEnd ?? null,
+      previousWeekEnd:
+        row.previousComparable.sqpDetail?.selectedWeekEnd ??
+        row.previousComparable.sqpContext?.selectedWeekEnd ??
+        null,
+      currentMatchedQueryNorm,
+      previousMatchedQueryNorm,
+      comparisonAllowed: false,
+      status: 'different_query',
+      note: SQP_DIFFERENT_QUERY_NOTE,
+    };
+  }
+
+  return {
+    currentWeekEnd: row.sqpDetail?.selectedWeekEnd ?? row.sqpContext?.selectedWeekEnd ?? null,
+    previousWeekEnd:
+      row.previousComparable.sqpDetail?.selectedWeekEnd ??
+      row.previousComparable.sqpContext?.selectedWeekEnd ??
+      null,
+    currentMatchedQueryNorm,
+    previousMatchedQueryNorm,
+    comparisonAllowed: false,
+    status: 'missing_query',
+    note: SQP_MISSING_QUERY_NOTE,
+  };
+}
+
+const buildSqpTableRow = (args: {
+  kpi: AdsOptimizerSqpTableRow['kpi'];
+  kind: AdsOptimizerSqpTableRow['kind'];
+  comparisonAllowed: boolean;
+  currentMarket: number | null;
+  currentSelf: number | null;
+  previousMarket: number | null;
+  previousSelf: number | null;
+}): AdsOptimizerSqpTableRow => {
+  const buildMetricCell = (current: number | null, previous: number | null): AdsOptimizerSqpMetricCell => {
+    const previousValue = args.comparisonAllowed ? previous : null;
+    const changePercent = buildSqpChangeValue({
+      comparisonAllowed: args.comparisonAllowed,
+      current,
+      previous,
+    });
+
+    return {
+      current,
+      previous: previousValue,
+      changePercent,
+      changeTone: buildSqpDirectionalChangeTone(changePercent),
+    };
+  };
+
+  return {
+    kpi: args.kpi,
+    kind: args.kind,
+    market: buildMetricCell(args.currentMarket, args.previousMarket),
+    self: buildMetricCell(args.currentSelf, args.previousSelf),
+  };
+};
+
+export function buildAdsOptimizerSqpKpiRows(
+  row: AdsOptimizerTargetReviewRow
+): AdsOptimizerSqpTableRow[] {
+  const comparison = buildAdsOptimizerSqpComparisonState(row);
+  const current = row.sqpDetail;
+  const previousDetail = comparison.comparisonAllowed ? row.previousComparable?.sqpDetail ?? null : null;
+
+  return [
+    buildSqpTableRow({
+      kpi: 'Impression',
+      kind: 'count',
+      comparisonAllowed: comparison.comparisonAllowed,
+      currentMarket: current?.impressionsTotal ?? null,
+      currentSelf: current?.impressionsSelf ?? null,
+      previousMarket: previousDetail?.impressionsTotal ?? null,
+      previousSelf: previousDetail?.impressionsSelf ?? null,
+    }),
+    buildSqpTableRow({
+      kpi: 'Impression share',
+      kind: 'percent',
+      comparisonAllowed: comparison.comparisonAllowed,
+      currentMarket: null,
+      currentSelf: current?.impressionsSelfShare ?? null,
+      previousMarket: null,
+      previousSelf: previousDetail?.impressionsSelfShare ?? null,
+    }),
+    buildSqpTableRow({
+      kpi: 'Click',
+      kind: 'count',
+      comparisonAllowed: comparison.comparisonAllowed,
+      currentMarket: current?.clicksTotal ?? null,
+      currentSelf: current?.clicksSelf ?? null,
+      previousMarket: previousDetail?.clicksTotal ?? null,
+      previousSelf: previousDetail?.clicksSelf ?? null,
+    }),
+    buildSqpTableRow({
+      kpi: 'Click share',
+      kind: 'percent',
+      comparisonAllowed: comparison.comparisonAllowed,
+      currentMarket: null,
+      currentSelf: current?.clicksSelfShare ?? null,
+      previousMarket: null,
+      previousSelf: previousDetail?.clicksSelfShare ?? null,
+    }),
+    buildSqpTableRow({
+      kpi: 'CTR',
+      kind: 'percent',
+      comparisonAllowed: comparison.comparisonAllowed,
+      currentMarket: current?.marketCtr ?? null,
+      currentSelf: current?.selfCtr ?? null,
+      previousMarket: previousDetail?.marketCtr ?? null,
+      previousSelf: previousDetail?.selfCtr ?? null,
+    }),
+    buildSqpTableRow({
+      kpi: 'CVR',
+      kind: 'percent',
+      comparisonAllowed: comparison.comparisonAllowed,
+      currentMarket: current?.marketCvr ?? null,
+      currentSelf: current?.selfCvr ?? null,
+      previousMarket: previousDetail?.marketCvr ?? null,
+      previousSelf: previousDetail?.selfCvr ?? null,
+    }),
+    buildSqpTableRow({
+      kpi: 'Purchase',
+      kind: 'count',
+      comparisonAllowed: comparison.comparisonAllowed,
+      currentMarket: current?.purchasesTotal ?? null,
+      currentSelf: current?.purchasesSelf ?? null,
+      previousMarket: previousDetail?.purchasesTotal ?? null,
+      previousSelf: previousDetail?.purchasesSelf ?? null,
+    }),
+    buildSqpTableRow({
+      kpi: 'Purchase share',
+      kind: 'percent',
+      comparisonAllowed: comparison.comparisonAllowed,
+      currentMarket: null,
+      currentSelf: current?.purchasesSelfShare ?? null,
+      previousMarket: null,
+      previousSelf: previousDetail?.purchasesSelfShare ?? null,
+    }),
+  ];
+}
+
+export function buildAdsOptimizerSqpSummaryLines(
+  row: AdsOptimizerTargetReviewRow
+): [string, string, string] {
+  const rank = row.sqpContext?.marketImpressionRank ?? null;
+  const share = row.sqpContext?.marketImpressionShare ?? null;
+  const marketImpressions = row.sqpDetail?.impressionsTotal ?? null;
+
+  const demandLine = (() => {
+    if (isFiniteNumber(rank) && isFiniteNumber(share) && isFiniteNumber(marketImpressions)) {
+      const demandLabel =
+        rank <= 10 || share >= 0.05 ? 'High volume' : rank <= 50 || share >= 0.01 ? 'Mid volume' : 'Lower volume';
+      return `Demand: ${demandLabel}. Market impressions ${formatSummaryInteger(marketImpressions)}. Market impression share ${formatSummaryPercent(share)}. Market rank ${formatSummaryInteger(rank)}.`;
+    }
+    if (isFiniteNumber(marketImpressions)) {
+      return `Demand: Market impressions ${formatSummaryInteger(marketImpressions)}. Market rank/share unavailable.`;
+    }
+    return 'Demand: unavailable.';
+  })();
+
+  const funnelCaptureLine = (() => {
+    const impressionShare = row.sqpDetail?.impressionsSelfShare ?? null;
+    const clicksShare = row.sqpDetail?.clicksSelfShare ?? null;
+    const purchaseShare = row.sqpDetail?.purchasesSelfShare ?? null;
+    const selfCtr = row.sqpDetail?.selfCtr ?? null;
+    const marketCtr = row.sqpDetail?.marketCtr ?? null;
+    const selfCvr = row.sqpDetail?.selfCvr ?? null;
+    const marketCvr = row.sqpDetail?.marketCvr ?? null;
+
+    if (
+      isFiniteNumber(impressionShare) &&
+      isFiniteNumber(clicksShare) &&
+      isFiniteNumber(purchaseShare) &&
+      impressionShare > 0
+    ) {
+      const purchaseToImpressionRatio = purchaseShare / impressionShare;
+      const captureLabel =
+        purchaseToImpressionRatio >= 1.15
+          ? 'strengthens'
+          : purchaseToImpressionRatio <= 0.85
+            ? 'weakens'
+            : 'holds';
+      const detailSegments = [
+        `Self impression share ${formatSummaryPercent(impressionShare)}.`,
+        `Self click share ${formatSummaryPercent(clicksShare)}.`,
+        `Self purchase share ${formatSummaryPercent(purchaseShare)}.`,
+        isFiniteNumber(selfCtr) && isFiniteNumber(marketCtr)
+          ? `Self CTR ${formatSummaryPercent(selfCtr)} vs market CTR ${formatSummaryPercent(marketCtr)}.`
+          : null,
+        isFiniteNumber(selfCvr) && isFiniteNumber(marketCvr)
+          ? `Self CVR ${formatSummaryPercent(selfCvr)} vs market CVR ${formatSummaryPercent(marketCvr)}.`
+          : null,
+      ]
+        .filter((segment): segment is string => segment !== null)
+        .join(' ');
+      return `Funnel capture: ${captureLabel}. ${detailSegments}`;
+    }
+    return 'Funnel capture: unavailable.';
+  })();
+
+  const comparison = buildAdsOptimizerSqpComparisonState(row);
+  const vsPreviousLine = (() => {
+    if (!comparison.comparisonAllowed) {
+      return `Vs previous: ${comparison.note ?? SQP_NO_PREVIOUS_NOTE}`;
+    }
+
+    return `Vs previous: Impression ${formatSummaryChange(
+      buildPercentChange(
+        row.sqpDetail?.impressionsSelf ?? null,
+        row.previousComparable?.sqpDetail?.impressionsSelf ?? null
+      )
+    )}. Click ${formatSummaryChange(
+      buildPercentChange(
+        row.sqpDetail?.clicksSelf ?? null,
+        row.previousComparable?.sqpDetail?.clicksSelf ?? null
+      )
+    )}. Purchase ${formatSummaryChange(
+      buildPercentChange(
+        row.sqpDetail?.purchasesSelf ?? null,
+        row.previousComparable?.sqpDetail?.purchasesSelf ?? null
+      )
+    )}. CTR ${formatSummaryChange(
+      buildPercentChange(row.sqpDetail?.selfCtr ?? null, row.previousComparable?.sqpDetail?.selfCtr ?? null)
+    )}. CVR ${formatSummaryChange(
+      buildPercentChange(row.sqpDetail?.selfCvr ?? null, row.previousComparable?.sqpDetail?.selfCvr ?? null)
+    )}.`;
+  })();
+
+  return [demandLine, funnelCaptureLine, vsPreviousLine];
+}
+
+export function buildAdsOptimizerSqpEmptyState(row: AdsOptimizerTargetReviewRow) {
+  return (
+    row.sqpDetail?.note ??
+    row.sqpContext?.note ??
+    'No aligned SQP funnel metrics were captured for this target in the selected run.'
+  );
+}

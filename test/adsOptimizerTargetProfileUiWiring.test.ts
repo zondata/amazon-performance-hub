@@ -12,6 +12,7 @@ import TargetChangePlanTab, {
 } from '../apps/web/src/components/ads-optimizer/targets/TargetChangePlanTab';
 import TargetPlacementTab from '../apps/web/src/components/ads-optimizer/targets/TargetPlacementTab';
 import TargetSearchTermTab from '../apps/web/src/components/ads-optimizer/targets/TargetSearchTermTab';
+import TargetSqpTab from '../apps/web/src/components/ads-optimizer/targets/TargetSqpTab';
 import type { AdsOptimizerTargetReviewRow } from '../apps/web/src/lib/ads-optimizer/runtime';
 
 const pagePath = path.join(process.cwd(), 'apps/web/src/app/ads/optimizer/page.tsx');
@@ -51,6 +52,10 @@ const placementTabPath = path.join(
   process.cwd(),
   'apps/web/src/components/ads-optimizer/targets/TargetPlacementTab.tsx'
 );
+const sqpTabPath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads-optimizer/targets/TargetSqpTab.tsx'
+);
 const runtimePath = path.join(
   process.cwd(),
   'apps/web/src/lib/ads-optimizer/runtime.ts'
@@ -70,6 +75,10 @@ const phase6dDocPath = path.join(
 const phase6eDocPath = path.join(
   process.cwd(),
   'docs/ads-optimizer/ads_optimizer_v2_phase6e_placement_tab_build_plan.md'
+);
+const phase6fDocPath = path.join(
+  process.cwd(),
+  'docs/ads-optimizer/ads_optimizer_v2_phase6f_sqp_tab_build_plan.md'
 );
 
 const requireFromWeb = createRequire(path.join(process.cwd(), 'apps/web/package.json'));
@@ -510,6 +519,106 @@ const renderFixturePlacementMarkup = (allRows = makePlacementFixtureRows()) =>
     })
   );
 
+const makeSqpFixtureRow = (): AdsOptimizerTargetReviewRow => {
+  const row = makePlacementFixtureRow();
+
+  return {
+    ...row,
+    sqpContext: {
+      selectedWeekEnd: '2026-03-08',
+      matchedQueryNorm: 'hero exact',
+      trackedQueryCount: 2400,
+      marketImpressionsTotal: 5000,
+      totalMarketImpressions: 60000,
+      marketImpressionShare: 5000 / 60000,
+      marketImpressionRank: 8,
+      note: null,
+    },
+    sqpDetail: {
+      selectedWeekEnd: '2026-03-08',
+      matchedQueryRaw: 'Hero Exact',
+      matchedQueryNorm: 'hero exact',
+      searchQueryVolume: 18000,
+      searchQueryScore: 95,
+      impressionsTotal: 5000,
+      impressionsSelf: 900,
+      impressionsSelfShare: 0.18,
+      clicksTotal: 400,
+      clicksSelf: 96,
+      clicksSelfShare: 0.24,
+      cartAddsTotal: 80,
+      cartAddsSelf: 24,
+      cartAddsSelfShare: 0.3,
+      purchasesTotal: 40,
+      purchasesSelf: 14,
+      purchasesSelfShare: 0.35,
+      clicksRatePerQuery: 400 / 18000,
+      cartAddRatePerQuery: 80 / 18000,
+      purchasesRatePerQuery: 40 / 18000,
+      marketCtr: 400 / 5000,
+      selfCtr: 96 / 900,
+      marketCvr: 40 / 400,
+      selfCvr: 14 / 96,
+      selfCtrIndex: (96 / 900) / (400 / 5000),
+      selfCvrIndex: (14 / 96) / (40 / 400),
+      cartAddRateFromClicksMarket: 80 / 400,
+      cartAddRateFromClicksSelf: 24 / 96,
+      note: null,
+    },
+    previousComparable: {
+      ...(row.previousComparable ?? {}),
+      sqpContext: {
+        selectedWeekEnd: '2026-03-01',
+        matchedQueryNorm: 'hero exact',
+        trackedQueryCount: 2200,
+        marketImpressionsTotal: 4000,
+        totalMarketImpressions: 56000,
+        marketImpressionShare: 4000 / 56000,
+        marketImpressionRank: 11,
+        note: null,
+      },
+      sqpDetail: {
+        selectedWeekEnd: '2026-03-01',
+        matchedQueryRaw: 'Hero Exact',
+        matchedQueryNorm: 'hero exact',
+        searchQueryVolume: 15000,
+        searchQueryScore: 91,
+        impressionsTotal: 4000,
+        impressionsSelf: 700,
+        impressionsSelfShare: 0.175,
+        clicksTotal: 350,
+        clicksSelf: 70,
+        clicksSelfShare: 0.2,
+        cartAddsTotal: 70,
+        cartAddsSelf: 14,
+        cartAddsSelfShare: 0.2,
+        purchasesTotal: 35,
+        purchasesSelf: 10,
+        purchasesSelfShare: 10 / 35,
+        clicksRatePerQuery: 350 / 15000,
+        cartAddRatePerQuery: 70 / 15000,
+        purchasesRatePerQuery: 35 / 15000,
+        marketCtr: 350 / 4000,
+        selfCtr: 70 / 700,
+        marketCvr: 35 / 350,
+        selfCvr: 10 / 70,
+        selfCtrIndex: (70 / 700) / (350 / 4000),
+        selfCvrIndex: (10 / 70) / (35 / 350),
+        cartAddRateFromClicksMarket: 70 / 350,
+        cartAddRateFromClicksSelf: 14 / 70,
+        note: null,
+      },
+    },
+  } as AdsOptimizerTargetReviewRow;
+};
+
+const renderFixtureSqpMarkup = () =>
+  renderToStaticMarkup(
+    React.createElement(TargetSqpTab, {
+      row: makeSqpFixtureRow(),
+    })
+  );
+
 describe('ads optimizer phase 6 inline target review wiring', () => {
   it('loads targets view data only for the targets view and renders the inline targets panel', () => {
     const source = fs.readFileSync(pagePath, 'utf-8');
@@ -536,6 +645,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     const changePlanTabSource = fs.readFileSync(changePlanTabPath, 'utf-8');
     const searchTermTabSource = fs.readFileSync(searchTermTabPath, 'utf-8');
     const placementTabSource = fs.readFileSync(placementTabPath, 'utf-8');
+    const sqpTabSource = fs.readFileSync(sqpTabPath, 'utf-8');
 
     expect(wrapperSource).toContain('TargetsPageShell');
     expect(shellSource).toContain('buildAdsOptimizerTargetRowTableSummaries');
@@ -546,6 +656,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(shellSource).toContain('<TargetExpandedTabs');
     expect(shellSource).toContain('<TargetChangePlanTab');
     expect(shellSource).toContain('<TargetSearchTermTab');
+    expect(shellSource).toContain('<TargetSqpTab');
     expect(shellSource).not.toContain('<TargetOverrideForm');
     expect(shellSource).toContain('Targets review');
     expect(shellSource).toContain('buildWhyFlaggedNarrative');
@@ -700,6 +811,40 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(placementTabSource).toContain('TOP OF SEARCH IMPRESSION SHARE (TOS IS)');
     expect(placementTabSource).toContain('CAMPAIGN CONTEXT');
     expect(placementTabSource).toContain("data-show-previous-change={showPreviousAndChange ? 'true' : 'false'}");
+    expect(sqpTabSource).toContain('Summary');
+    expect(sqpTabSource).toContain('KPI');
+    expect(sqpTabSource).toContain('Market');
+    expect(sqpTabSource).toContain('Self');
+    expect(sqpTabSource).toContain('Impression');
+    expect(sqpTabSource).toContain('Impression share');
+    expect(sqpTabSource).toContain('Click');
+    expect(sqpTabSource).toContain('Click share');
+    expect(sqpTabSource).toContain('CTR');
+    expect(sqpTabSource).toContain('CVR');
+    expect(sqpTabSource).toContain('Purchase');
+    expect(sqpTabSource).toContain('Purchase share');
+    expect(sqpTabSource).toContain('metric-current');
+    expect(sqpTabSource).toContain('metric-prev');
+    expect(sqpTabSource).toContain('metric-change');
+    expect(sqpTabSource).toContain('Top = current · Middle = previous · Bottom = change %');
+    expect(sqpTabSource).toContain(
+      'Green = increase · Red = decrease · Gray = no change or unavailable'
+    );
+    expect(sqpTabSource).toContain('sticky left-0 z-30');
+    expect(sqpTabSource).toContain('sticky left-0 z-20');
+    expect(sqpTabSource).toContain(
+      'SQP is matched-query ASIN context. Targets that resolve to the same query can share the same SQP values.'
+    );
+    expect(sqpTabSource).not.toContain('SQP CONTEXT');
+    expect(sqpTabSource).not.toContain('SQP SUMMARY');
+    expect(sqpTabSource).not.toContain('Previous & change');
+    expect(sqpTabSource).not.toContain("role=\"switch\"");
+    expect(sqpTabSource).not.toContain('Current market');
+    expect(sqpTabSource).not.toContain('Current self');
+    expect(sqpTabSource).not.toContain('Previous market');
+    expect(sqpTabSource).not.toContain('Previous self');
+    expect(sqpTabSource).not.toContain('Change market');
+    expect(sqpTabSource).not.toContain('Change self');
   });
 
   it('renders the tabbed expanded row as a fixed-height shell with one active panel at a time', () => {
@@ -717,16 +862,33 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
       "label: 'Change plan'",
       "label: 'Search term'",
       "label: 'Placement'",
+      "label: 'SQP'",
       "label: 'Metrics'",
       "label: 'Advanced'",
     ];
+    const orderedTabKeys = [
+      "key: 'why_flagged'",
+      "key: 'change_plan'",
+      "key: 'search_term'",
+      "key: 'placement'",
+      "key: 'sqp'",
+      "key: 'metrics'",
+      "key: 'advanced'",
+    ];
     const indexes = orderedTabLabels.map((label) => expandedTabsSource.indexOf(label));
+    const keyIndexes = orderedTabKeys.map((key) => expandedTabsSource.indexOf(key));
 
     indexes.forEach((index, position) => {
       expect(index, `missing tab label ${orderedTabLabels[position]}`).toBeGreaterThan(-1);
     });
     for (let index = 1; index < indexes.length; index += 1) {
       expect(indexes[index]).toBeGreaterThan(indexes[index - 1]!);
+    }
+    keyIndexes.forEach((index, position) => {
+      expect(index, `missing tab key ${orderedTabKeys[position]}`).toBeGreaterThan(-1);
+    });
+    for (let index = 1; index < keyIndexes.length; index += 1) {
+      expect(keyIndexes[index]).toBeGreaterThan(keyIndexes[index - 1]!);
     }
 
     expect(normalizedTabsSource).toContain(
@@ -739,6 +901,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(expandedSource).toContain("case 'change_plan'");
     expect(expandedSource).toContain("case 'search_term'");
     expect(expandedSource).toContain("case 'placement'");
+    expect(expandedSource).toContain("case 'sqp'");
     expect(expandedSource).toContain("case 'metrics'");
     expect(expandedSource).toContain("case 'advanced'");
     expect(expandedSource).not.toContain("case 'override'");
@@ -748,6 +911,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(expandedSource).toContain('No persisted reason codes');
     expect(expandedSource).toContain('<TargetSearchTermTab');
     expect(expandedSource).toContain('<TargetPlacementTab');
+    expect(expandedSource).toContain('<TargetSqpTab');
     expect(expandedSource).toContain('<TargetChangePlanTab');
     expect(expandedSource).not.toContain('<TargetOverrideForm');
     expect(expandedSource).toContain('TargetAdvancedSection');
@@ -815,6 +979,28 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(source).toContain('No synthetic TOS IS window average is allowed.');
   });
 
+  it('documents Phase 6F as an SQP tab-only addition inside the fixed expanded shell', () => {
+    const source = fs.readFileSync(phase6fDocPath, 'utf-8');
+    const agentsSource = fs.readFileSync(
+      path.join(process.cwd(), 'docs/ads-optimizer/AGENTS.md'),
+      'utf-8'
+    );
+
+    expect(source).toContain('Phase 6A remains authoritative for the collapsed row.');
+    expect(source).toContain('Phase 6B remains authoritative for the fixed-height expanded shell.');
+    expect(source).toContain('Phase 6D remains authoritative for the Search term tab.');
+    expect(source).toContain('Phase 6E remains authoritative for the Placement tab.');
+    expect(source).toContain('This phase changes only the new SQP tab.');
+    expect(source).toContain('SQP is matched-query ASIN context, not target-owned history.');
+    expect(source).toContain('The tab uses persisted snapshot payload, not tab-open fetches.');
+    expect(source).toContain('Comparison is same matched query only.');
+    expect(source).toContain(
+      'Current and previous SQP week labels come from the current snapshot and previous comparable snapshot respectively.'
+    );
+    expect(source).toContain('Deterministic summary only. No AI call.');
+    expect(agentsSource).toContain('ads_optimizer_v2_phase6f_sqp_tab_build_plan.md');
+  });
+
   it('renders the split Change plan contract with the fixture-specific default OFF state', () => {
     const shellSource = fs.readFileSync(shellPath, 'utf-8');
     const expandedTabsSource = fs.readFileSync(expandedTabsPath, 'utf-8');
@@ -825,6 +1011,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
       'Change plan',
       'Search term',
       'Placement',
+      'SQP',
       'Metrics',
       'Advanced',
     ];
@@ -1169,6 +1356,94 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(sharedMarkup).not.toContain('Current avg');
     expect(sharedMarkup).not.toContain('Previous avg');
     expect(sharedMarkup).not.toContain('<polyline points="2 12 5.5 7 9 9.5 14 3"');
+  });
+
+  it('renders the SQP tab as metadata, summary, and a single KPI comparison table', () => {
+    const shellSource = fs.readFileSync(shellPath, 'utf-8');
+    const sqpTabSource = fs.readFileSync(sqpTabPath, 'utf-8');
+    const markup = renderFixtureSqpMarkup();
+    const tableMarkup = markup.slice(markup.indexOf('<table'));
+    const orderedColumns = ['KPI', 'Market', 'Self'];
+    const orderedRows = [
+      'Impression',
+      'Impression share',
+      'Click',
+      'Click share',
+      'CTR',
+      'CVR',
+      'Purchase',
+      'Purchase share',
+    ];
+
+    expect(shellSource).toContain('<TargetSqpTab');
+    expect(sqpTabSource).toContain('buildAdsOptimizerSqpComparisonState');
+    expect(sqpTabSource).toContain('buildAdsOptimizerSqpKpiRows');
+    expect(sqpTabSource).toContain('buildAdsOptimizerSqpSummaryLines');
+    expect(markup).toContain('Matched SQP query:');
+    expect(markup).toContain('Current SQP week:');
+    expect(markup).toContain('Previous comparable SQP week:');
+    expect(markup).toContain('Comparison basis:');
+    expect(markup).toContain('Hero Exact');
+    expect(markup).toContain('Week ending 8 Mar 2026');
+    expect(markup).toContain('Week ending 1 Mar 2026');
+    expect(markup).toContain('same matched query only');
+    expect(markup).toContain('Summary');
+    expect(markup).toContain(
+      'SQP is matched-query ASIN context. Targets that resolve to the same query can share the same SQP values.'
+    );
+    expect(markup).toContain('Impression share');
+    expect(markup).toContain('Demand: High volume.');
+    expect(markup).toContain('Funnel capture: strengthens.');
+    expect(markup).toContain('Vs previous: Impression +28.6%.');
+    expect(markup).toContain('Top = current · Middle = previous · Bottom = change %');
+    expect(markup).toContain(
+      'Green = increase · Red = decrease · Gray = no change or unavailable'
+    );
+    expect(markup).toContain('KPI');
+    expect(markup).toContain('Market');
+    expect(markup).toContain('Self');
+    expect(markup).toContain('Impression');
+    expect(markup).toContain('Click');
+    expect(markup).toContain('CTR');
+    expect(markup).toContain('CVR');
+    expect(markup).toContain('Purchase');
+    expect(markup).toContain('Purchase share');
+    expect(markup).toContain('metric-current');
+    expect(markup).toContain('metric-prev');
+    expect(markup).toContain('metric-change');
+    expect(markup).toContain('sticky left-0 z-30');
+    expect(markup).toContain('sticky left-0 z-20');
+    expect((sqpTabSource.match(/sticky left-0/g) ?? [])).toHaveLength(2);
+    expect(markup).not.toMatch(/<th class="sticky[^"]*">\s*Market\s*<\/th>/);
+    expect(markup).not.toMatch(/<th class="sticky[^"]*">\s*Self\s*<\/th>/);
+    expect(sqpTabSource).not.toContain('Current market');
+    expect(sqpTabSource).not.toContain('Current self');
+    expect(sqpTabSource).not.toContain('Previous market');
+    expect(sqpTabSource).not.toContain('Previous self');
+    expect(sqpTabSource).not.toContain('Change market');
+    expect(sqpTabSource).not.toContain('Change self');
+    expect(markup).not.toContain('SQP CONTEXT');
+    expect(markup).not.toContain('SQP SUMMARY');
+    expect(markup).not.toContain('Previous &amp; change');
+    expect(markup).not.toContain('Cart adds');
+    expect(markup).not.toContain('CTR Index');
+    expect(markup).not.toContain('Conversion index');
+
+    const columnIndexes = orderedColumns.map((label) => tableMarkup.indexOf(`>${label}<`));
+    columnIndexes.forEach((index, position) => {
+      expect(index, `missing SQP header ${orderedColumns[position]}`).toBeGreaterThan(-1);
+    });
+    for (let index = 1; index < columnIndexes.length; index += 1) {
+      expect(columnIndexes[index]).toBeGreaterThan(columnIndexes[index - 1]!);
+    }
+
+    const rowIndexes = orderedRows.map((label) => tableMarkup.indexOf(`>${label}<`));
+    rowIndexes.forEach((index, position) => {
+      expect(index, `missing SQP row ${orderedRows[position]}`).toBeGreaterThan(-1);
+    });
+    for (let index = 1; index < rowIndexes.length; index += 1) {
+      expect(rowIndexes[index]).toBeGreaterThan(rowIndexes[index - 1]!);
+    }
   });
 
   it('pulls exact-window run snapshots plus persisted recommendations and role history', () => {
