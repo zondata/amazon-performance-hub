@@ -14,6 +14,8 @@ import {
 import type { AdsOptimizerTargetReviewRow } from '@/lib/ads-optimizer/runtime';
 import { formatUiDate } from '@/lib/time/formatUiDate';
 
+import ExpandedTabTable, { type ColumnDef } from './ExpandedTabTable';
+
 type TargetSqpTabProps = {
   row: AdsOptimizerTargetReviewRow;
 };
@@ -104,6 +106,33 @@ export default function TargetSqpTab(props: TargetSqpTabProps) {
   const footerText = props.row.sqpDetail?.matchedQueryNorm
     ? SQP_SCOPE_NOTE
     : `${SQP_SCOPE_NOTE} ${emptyState}`;
+  const sqpColumns: ColumnDef<AdsOptimizerSqpTableRow>[] = [
+    {
+      key: 'kpi',
+      label: 'KPI',
+      width: { strategy: 'content-fit', minPx: 100, maxPx: 180 },
+      frozen: true,
+      render: (row, rowIndex) => (
+        <div className="text-[13px] font-medium text-foreground">
+          {SQP_KPI_ROW_ORDER[rowIndex] ?? row.kpi}
+        </div>
+      ),
+    },
+    {
+      key: 'market',
+      label: 'Market',
+      width: { strategy: 'content-fit', minPx: 100, maxPx: 200 },
+      align: 'right',
+      render: (row) => renderMetricLines({ row, metric: row.market }),
+    },
+    {
+      key: 'self',
+      label: 'Self',
+      width: { strategy: 'content-fit', minPx: 100, maxPx: 200 },
+      align: 'right',
+      render: (row) => renderMetricLines({ row, metric: row.self }),
+    },
+  ];
 
   return (
     <div
@@ -132,50 +161,15 @@ export default function TargetSqpTab(props: TargetSqpTabProps) {
           <div>{STACKED_VALUE_LEGEND}</div>
           <div>{CHANGE_LEGEND}</div>
         </div>
-        <div
-          data-aph-hscroll
-          data-aph-hscroll-axis="x"
-          className="min-h-0 h-full overflow-x-auto overflow-y-auto rounded-xl border border-border/70 bg-surface"
-        >
-          <table className="min-w-[640px] w-full table-fixed border-collapse">
-            <colgroup>
-              <col style={{ width: '28%' }} />
-              <col style={{ width: '36%' }} />
-              <col style={{ width: '36%' }} />
-            </colgroup>
-            <thead className="sticky top-0 z-[1]">
-              <tr>
-                <th className="sticky left-0 z-30 border-b-[0.5px] border-r-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-left text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  KPI
-                </th>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  Market
-                </th>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  Self
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {kpiRows.map((row, index) => (
-                <tr
-                  key={`${props.row.targetSnapshotId}:${row.kpi}`}
-                  className={index === kpiRows.length - 1 ? '' : 'border-b-[0.5px] border-border/70'}
-                >
-                  <td className="sticky left-0 z-20 border-r-[0.5px] border-border/70 bg-surface px-2 py-[9px] text-[13px] font-medium text-foreground">
-                    {SQP_KPI_ROW_ORDER[index] ?? row.kpi}
-                  </td>
-                  <td className="px-2 py-[9px] text-right align-top">
-                    {renderMetricLines({ row, metric: row.market })}
-                  </td>
-                  <td className="px-2 py-[9px] text-right align-top">
-                    {renderMetricLines({ row, metric: row.self })}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ExpandedTabTable
+          columns={sqpColumns}
+          rows={kpiRows}
+          maxHeight={380}
+          wrapperDataAttributes={{
+            'data-aph-hscroll': '',
+            'data-aph-hscroll-axis': 'x',
+          }}
+        />
       </section>
 
       <div className="pt-2 text-[11px] text-muted">{footerText}</div>

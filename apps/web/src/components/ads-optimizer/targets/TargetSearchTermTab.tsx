@@ -12,6 +12,11 @@ import {
 } from '@/lib/ads-optimizer/targetDecisionSurface';
 import type { AdsOptimizerTargetReviewRow } from '@/lib/ads-optimizer/runtime';
 
+import ExpandedTabTable, {
+  type ColumnDef,
+  type SortState,
+} from './ExpandedTabTable';
+
 type TargetSearchTermTabProps = {
   row: AdsOptimizerTargetReviewRow;
   asin: string;
@@ -303,29 +308,120 @@ export default function TargetSearchTermTab(props: TargetSearchTermTabProps) {
     props.start,
   ]);
 
-  const handleSortChange = (nextKey: SearchTermSortKey) => {
-    if (nextKey === sortKey) {
-      setSortDirection((current) => (current === 'desc' ? 'asc' : 'desc'));
-      return;
-    }
-    setSortKey(nextKey);
-    setSortDirection('desc');
+  const handleSortChange = (nextSort: SortState) => {
+    setSortKey(nextSort.key as SearchTermSortKey);
+    setSortDirection(nextSort.direction);
   };
 
-  const renderSortableHeader = (label: string, key: SearchTermSortKey) => {
-    const isActive = sortKey === key;
-
-    return (
-      <button
-        type="button"
-        onClick={() => handleSortChange(key)}
-        className="inline-flex w-full cursor-pointer items-center justify-end text-right"
-      >
-        <span>{label}</span>
-        {isActive ? <span className="ml-[2px]">{sortDirection === 'desc' ? '▼' : '▲'}</span> : null}
-      </button>
-    );
-  };
+  const searchTermColumns: ColumnDef<AdsOptimizerSearchTermTableRow>[] = [
+    {
+      key: 'searchTerm',
+      label: 'Search term',
+      width: { strategy: 'content-fit', minPx: 160, maxPx: 320 },
+      frozen: true,
+      render: (row) => (
+        <div className="text-[13px] font-medium text-foreground">{row.searchTerm}</div>
+      ),
+    },
+    {
+      key: 'evidence',
+      label: 'Evidence',
+      width: { strategy: 'content-fit', minPx: 90, maxPx: 130 },
+      render: (row) => renderEvidenceBadge(row),
+    },
+    {
+      key: 'stis',
+      label: 'STIS',
+      width: { strategy: 'fixed', px: 60 },
+      align: 'right',
+      sortable: true,
+      render: (row) => (
+        <div className="text-[13px] font-medium text-foreground">{formatWholePercent(row.stis)}</div>
+      ),
+    },
+    {
+      key: 'stir',
+      label: 'STIR',
+      width: { strategy: 'fixed', px: 55 },
+      align: 'right',
+      sortable: true,
+      render: (row) => (
+        <div className="text-[13px] font-medium text-foreground">{formatInteger(row.stir)}</div>
+      ),
+    },
+    {
+      key: 'impressions',
+      label: 'Impr.',
+      width: { strategy: 'content-fit', minPx: 70, maxPx: 100 },
+      align: 'right',
+      sortable: true,
+      render: (row) => renderMetricLines({ kind: 'impressions', metric: row.impressions }),
+    },
+    {
+      key: 'clicks',
+      label: 'Clicks',
+      width: { strategy: 'content-fit', minPx: 55, maxPx: 85 },
+      align: 'right',
+      sortable: true,
+      render: (row) => renderMetricLines({ kind: 'clicks', metric: row.clicks }),
+    },
+    {
+      key: 'ctr',
+      label: 'CTR',
+      width: { strategy: 'content-fit', minPx: 60, maxPx: 85 },
+      align: 'right',
+      sortable: true,
+      render: (row) => renderMetricLines({ kind: 'ctr', metric: row.ctr }),
+    },
+    {
+      key: 'cvr',
+      label: 'CVR',
+      width: { strategy: 'content-fit', minPx: 60, maxPx: 85 },
+      align: 'right',
+      sortable: true,
+      render: (row) => renderMetricLines({ kind: 'cvr', metric: row.cvr }),
+    },
+    {
+      key: 'spend',
+      label: 'Spend',
+      width: { strategy: 'content-fit', minPx: 65, maxPx: 100 },
+      align: 'right',
+      sortable: true,
+      render: (row) => renderMetricLines({ kind: 'spend', metric: row.spend }),
+    },
+    {
+      key: 'sales',
+      label: 'Sales',
+      width: { strategy: 'content-fit', minPx: 65, maxPx: 100 },
+      align: 'right',
+      sortable: true,
+      render: (row) => renderMetricLines({ kind: 'sales', metric: row.sales }),
+    },
+    {
+      key: 'orders',
+      label: 'Orders',
+      width: { strategy: 'content-fit', minPx: 55, maxPx: 80 },
+      align: 'right',
+      sortable: true,
+      render: (row) => renderMetricLines({ kind: 'orders', metric: row.orders }),
+    },
+    {
+      key: 'acos',
+      label: 'ACOS',
+      width: { strategy: 'content-fit', minPx: 60, maxPx: 90 },
+      align: 'right',
+      sortable: true,
+      render: (row) => renderMetricLines({ kind: 'acos', metric: row.acos }),
+    },
+    {
+      key: 'roas',
+      label: 'ROAS',
+      width: { strategy: 'content-fit', minPx: 55, maxPx: 80 },
+      align: 'right',
+      sortable: true,
+      render: (row) => renderMetricLines({ kind: 'roas', metric: row.roas }),
+    },
+  ];
 
   return (
     <div
@@ -398,126 +494,25 @@ export default function TargetSearchTermTab(props: TargetSearchTermTabProps) {
         </div>
       </div>
 
-      <div
-        data-show-previous-change={showPreviousAndChange ? 'true' : 'false'}
-        data-aph-hscroll
-        data-aph-hscroll-axis="x"
-        className="min-h-0 overflow-x-auto overflow-y-auto rounded-xl border border-border/70 bg-surface"
-      >
+      <div className="min-h-0">
         {sortedRows.length > 0 ? (
-          <table className="min-w-[1375px] w-full table-fixed border-collapse">
-            <colgroup>
-              <col style={{ width: '280px' }} />
-              <col style={{ width: '120px' }} />
-              <col style={{ width: '70px' }} />
-              <col style={{ width: '70px' }} />
-              <col style={{ width: '95px' }} />
-              <col style={{ width: '90px' }} />
-              <col style={{ width: '90px' }} />
-              <col style={{ width: '90px' }} />
-              <col style={{ width: '100px' }} />
-              <col style={{ width: '100px' }} />
-              <col style={{ width: '90px' }} />
-              <col style={{ width: '90px' }} />
-              <col style={{ width: '90px' }} />
-            </colgroup>
-            <thead className="sticky top-0 z-[1]">
-              <tr>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-left text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  Search term
-                </th>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-left text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  Evidence
-                </th>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  {renderSortableHeader('STIS', 'stis')}
-                </th>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  {renderSortableHeader('STIR', 'stir')}
-                </th>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  {renderSortableHeader('Impr.', 'impressions')}
-                </th>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  {renderSortableHeader('Clicks', 'clicks')}
-                </th>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  {renderSortableHeader('CTR', 'ctr')}
-                </th>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  {renderSortableHeader('CVR', 'cvr')}
-                </th>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  {renderSortableHeader('Spend', 'spend')}
-                </th>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  {renderSortableHeader('Sales', 'sales')}
-                </th>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  {renderSortableHeader('Orders', 'orders')}
-                </th>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  {renderSortableHeader('ACOS', 'acos')}
-                </th>
-                <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium uppercase tracking-[0.3px] text-muted">
-                  {renderSortableHeader('ROAS', 'roas')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedRows.map((row, index) => (
-                <tr
-                  key={`${props.row.targetSnapshotId}:${row.searchTerm}:${row.sameText}`}
-                  className={index === sortedRows.length - 1 ? '' : 'border-b-[0.5px] border-border/70'}
-                >
-                  <td className="px-2 py-[10px] align-top">
-                    <div className="text-[13px] font-medium text-foreground">{row.searchTerm}</div>
-                  </td>
-                  <td className="px-2 py-[10px] align-top">{renderEvidenceBadge(row)}</td>
-                  <td className="px-2 py-[10px] text-right align-top">
-                    <div className="text-[13px] font-medium text-foreground">
-                      {formatWholePercent(row.stis)}
-                    </div>
-                  </td>
-                  <td className="px-2 py-[10px] text-right align-top">
-                    <div className="text-[13px] font-medium text-foreground">
-                      {formatInteger(row.stir)}
-                    </div>
-                  </td>
-                  <td className="px-2 py-[10px] text-right align-top">
-                    {renderMetricLines({ kind: 'impressions', metric: row.impressions })}
-                  </td>
-                  <td className="px-2 py-[10px] text-right align-top">
-                    {renderMetricLines({ kind: 'clicks', metric: row.clicks })}
-                  </td>
-                  <td className="px-2 py-[10px] text-right align-top">
-                    {renderMetricLines({ kind: 'ctr', metric: row.ctr })}
-                  </td>
-                  <td className="px-2 py-[10px] text-right align-top">
-                    {renderMetricLines({ kind: 'cvr', metric: row.cvr })}
-                  </td>
-                  <td className="px-2 py-[10px] text-right align-top">
-                    {renderMetricLines({ kind: 'spend', metric: row.spend })}
-                  </td>
-                  <td className="px-2 py-[10px] text-right align-top">
-                    {renderMetricLines({ kind: 'sales', metric: row.sales })}
-                  </td>
-                  <td className="px-2 py-[10px] text-right align-top">
-                    {renderMetricLines({ kind: 'orders', metric: row.orders })}
-                  </td>
-                  <td className="px-2 py-[10px] text-right align-top">
-                    {renderMetricLines({ kind: 'acos', metric: row.acos })}
-                  </td>
-                  <td className="px-2 py-[10px] text-right align-top">
-                    {renderMetricLines({ kind: 'roas', metric: row.roas })}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ExpandedTabTable
+            columns={searchTermColumns}
+            rows={sortedRows}
+            sort={{ key: sortKey, direction: sortDirection }}
+            onSortChange={handleSortChange}
+            maxHeight={380}
+            wrapperDataAttributes={{
+              'data-show-previous-change': showPreviousAndChange ? 'true' : 'false',
+              'data-aph-hscroll': '',
+              'data-aph-hscroll-axis': 'x',
+            }}
+          />
         ) : (
-          <div className="m-3 rounded-lg border border-dashed border-border px-4 py-4 text-sm text-muted">
-            {emptyState}
+          <div className="min-h-0 overflow-x-auto overflow-y-auto rounded-xl border border-border/70 bg-surface">
+            <div className="m-3 rounded-lg border border-dashed border-border px-4 py-4 text-sm text-muted">
+              {emptyState}
+            </div>
           </div>
         )}
       </div>

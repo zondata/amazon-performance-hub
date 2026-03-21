@@ -12,6 +12,11 @@ import {
 import type { AdsOptimizerTargetReviewRow } from '@/lib/ads-optimizer/runtime';
 import { formatUiDate } from '@/lib/time/formatUiDate';
 
+import ExpandedTabTable, {
+  type ColumnDef,
+  type SortState,
+} from './ExpandedTabTable';
+
 type TargetPlacementTabProps = {
   row: AdsOptimizerTargetReviewRow;
   allRows: AdsOptimizerTargetReviewRow[];
@@ -279,28 +284,9 @@ export default function TargetPlacementTab(props: TargetPlacementTabProps) {
     [tableRows]
   );
 
-  const handleSortChange = (nextKey: PlacementSortKey) => {
-    if (nextKey === sortKey) {
-      setSortDirection((current) => (current === 'desc' ? 'asc' : 'desc'));
-      return;
-    }
-    setSortKey(nextKey);
-    setSortDirection('desc');
-  };
-
-  const renderSortableHeader = (label: string, key: PlacementSortKey) => {
-    const isActive = sortKey === key;
-
-    return (
-      <button
-        type="button"
-        onClick={() => handleSortChange(key)}
-        className="cursor-pointer text-inherit transition-colors hover:text-foreground"
-      >
-        {label}
-        {isActive ? <span className="ml-[2px]">{sortDirection === 'desc' ? '▼' : '▲'}</span> : null}
-      </button>
-    );
+  const handleSortChange = (nextSort: SortState) => {
+    setSortKey(nextSort.key as PlacementSortKey);
+    setSortDirection(nextSort.direction);
   };
 
   const tosIs = props.row.nonAdditiveDiagnostics.tosIs;
@@ -334,8 +320,120 @@ export default function TargetPlacementTab(props: TargetPlacementTabProps) {
       ? props.row.currentCampaignBiddingStrategy
       : 'Not captured';
 
+  const placementColumns: ColumnDef<AdsOptimizerPlacementTableRow>[] = [
+    {
+      key: 'placement',
+      label: 'Placement',
+      width: { strategy: 'content-fit', minPx: 120, maxPx: 220 },
+      frozen: true,
+      render: (placement) => (
+        <>
+          <div className="text-[13px] font-medium text-foreground">{placement.placementName}</div>
+          {placement.modifierPct !== null && placement.modifierPct !== 0 ? (
+            <div className="mt-[2px] text-[10px] text-muted">
+              Modifier: {placement.modifierPct > 0 ? '+' : ''}
+              {Number.isInteger(placement.modifierPct)
+                ? placement.modifierPct.toFixed(0)
+                : placement.modifierPct.toFixed(1)}
+              %
+            </div>
+          ) : null}
+        </>
+      ),
+    },
+    {
+      key: 'bidStrategy',
+      label: 'Bid strategy',
+      width: { strategy: 'content-fit', minPx: 120, maxPx: 180 },
+      render: () => (
+        <div className="text-[11px] leading-[1.4] text-foreground/80">{bidStrategyText}</div>
+      ),
+    },
+    {
+      key: 'evidence',
+      label: 'Evidence',
+      width: { strategy: 'content-fit', minPx: 70, maxPx: 100 },
+      render: (placement) => renderEvidenceBadge(placement.evidence),
+    },
+    {
+      key: 'impressions',
+      label: 'Impr.',
+      width: { strategy: 'content-fit', minPx: 60, maxPx: 90 },
+      align: 'right',
+      sortable: true,
+      render: (placement) => renderMetricLines({ kind: 'impressions', metric: placement.impressions }),
+    },
+    {
+      key: 'clicks',
+      label: 'Clicks',
+      width: { strategy: 'content-fit', minPx: 55, maxPx: 80 },
+      align: 'right',
+      sortable: true,
+      render: (placement) => renderMetricLines({ kind: 'clicks', metric: placement.clicks }),
+    },
+    {
+      key: 'ctr',
+      label: 'CTR',
+      width: { strategy: 'content-fit', minPx: 60, maxPx: 85 },
+      align: 'right',
+      sortable: true,
+      render: (placement) => renderMetricLines({ kind: 'ctr', metric: placement.ctr }),
+    },
+    {
+      key: 'cvr',
+      label: 'CVR',
+      width: { strategy: 'content-fit', minPx: 60, maxPx: 85 },
+      align: 'right',
+      sortable: true,
+      render: (placement) => renderMetricLines({ kind: 'cvr', metric: placement.cvr }),
+    },
+    {
+      key: 'spend',
+      label: 'Spend',
+      width: { strategy: 'content-fit', minPx: 65, maxPx: 100 },
+      align: 'right',
+      sortable: true,
+      render: (placement) => renderMetricLines({ kind: 'spend', metric: placement.spend }),
+    },
+    {
+      key: 'sales',
+      label: 'Sales',
+      width: { strategy: 'content-fit', minPx: 65, maxPx: 100 },
+      align: 'right',
+      sortable: true,
+      render: (placement) => renderMetricLines({ kind: 'sales', metric: placement.sales }),
+    },
+    {
+      key: 'orders',
+      label: 'Orders',
+      width: { strategy: 'content-fit', minPx: 55, maxPx: 80 },
+      align: 'right',
+      sortable: true,
+      render: (placement) => renderMetricLines({ kind: 'orders', metric: placement.orders }),
+    },
+    {
+      key: 'acos',
+      label: 'ACOS',
+      width: { strategy: 'content-fit', minPx: 60, maxPx: 90 },
+      align: 'right',
+      sortable: true,
+      render: (placement) => renderMetricLines({ kind: 'acos', metric: placement.acos }),
+    },
+    {
+      key: 'roas',
+      label: 'ROAS',
+      width: { strategy: 'content-fit', minPx: 55, maxPx: 80 },
+      align: 'right',
+      sortable: true,
+      render: (placement) => renderMetricLines({ kind: 'roas', metric: placement.roas }),
+    },
+  ];
+
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto]">
+    <div
+      data-ads-optimizer-placement-tab="true"
+      className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto]"
+    >
       <div className="mb-3 flex gap-3">
         <section className="flex-[0_0_340px] rounded-lg bg-surface-2 px-[14px] py-[10px]">
           <div className="mb-[6px] text-[10px] font-medium tracking-[0.3px] text-muted uppercase">
@@ -459,179 +557,111 @@ export default function TargetPlacementTab(props: TargetPlacementTabProps) {
         </button>
       </div>
 
-      <div
-        className="placement-table-region min-h-0 overflow-x-auto overflow-y-auto rounded-xl border border-border/70 bg-surface"
-        data-aph-hscroll
-        data-aph-hscroll-axis="x"
-        data-show-previous-change={showPreviousAndChange ? 'true' : 'false'}
-      >
+      <div className="min-h-0">
         <style>{`
-          .placement-table-region [data-row-kind="data"] .metric-prev,
-          .placement-table-region [data-row-kind="data"] .metric-change {
+          [data-ads-optimizer-placement-tab='true'] [data-expanded-tab-table-row='data'] .metric-prev,
+          [data-ads-optimizer-placement-tab='true'] [data-expanded-tab-table-row='data'] .metric-change {
             transition: opacity 0.15s ease, max-height 0.2s ease, margin-top 0.15s ease;
             overflow: hidden;
           }
-          .placement-table-region[data-show-previous-change="true"] [data-row-kind="data"] .metric-prev {
+          [data-ads-optimizer-placement-tab='true'] [data-show-previous-change='true'] [data-expanded-tab-table-row='data'] .metric-prev {
             opacity: 1;
             max-height: 24px;
             margin-top: 2px;
           }
-          .placement-table-region[data-show-previous-change="true"] [data-row-kind="data"] .metric-change {
+          [data-ads-optimizer-placement-tab='true'] [data-show-previous-change='true'] [data-expanded-tab-table-row='data'] .metric-change {
             opacity: 1;
             max-height: 24px;
             margin-top: 1px;
           }
-          .placement-table-region[data-show-previous-change="false"] [data-row-kind="data"] .metric-prev,
-          .placement-table-region[data-show-previous-change="false"] [data-row-kind="data"] .metric-change {
+          [data-ads-optimizer-placement-tab='true'] [data-show-previous-change='false'] [data-expanded-tab-table-row='data'] .metric-prev,
+          [data-ads-optimizer-placement-tab='true'] [data-show-previous-change='false'] [data-expanded-tab-table-row='data'] .metric-change {
             opacity: 0;
             max-height: 0;
             margin-top: 0;
           }
         `}</style>
 
-        <table className="min-w-[960px] w-full table-fixed border-collapse">
-          <colgroup>
-            <col style={{ width: '14%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '6%' }} />
-            <col style={{ width: '6%' }} />
-            <col style={{ width: '6%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '6%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '6%' }} />
-          </colgroup>
-          <thead className="sticky top-0 z-[1]">
-            <tr>
-              <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-left text-[10px] font-medium tracking-[0.3px] text-muted uppercase">
-                Placement
-              </th>
-              <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-left text-[10px] font-medium tracking-[0.3px] text-muted uppercase">
-                Bid strategy
-              </th>
-              <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-left text-[10px] font-medium tracking-[0.3px] text-muted uppercase">
-                Evidence
-              </th>
-              <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium tracking-[0.3px] text-muted uppercase">
-                {renderSortableHeader('Impr.', 'impressions')}
-              </th>
-              <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium tracking-[0.3px] text-muted uppercase">
-                {renderSortableHeader('Clicks', 'clicks')}
-              </th>
-              <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium tracking-[0.3px] text-muted uppercase">
-                {renderSortableHeader('CTR', 'ctr')}
-              </th>
-              <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium tracking-[0.3px] text-muted uppercase">
-                {renderSortableHeader('CVR', 'cvr')}
-              </th>
-              <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium tracking-[0.3px] text-muted uppercase">
-                {renderSortableHeader('Spend', 'spend')}
-              </th>
-              <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium tracking-[0.3px] text-muted uppercase">
-                {renderSortableHeader('Sales', 'sales')}
-              </th>
-              <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium tracking-[0.3px] text-muted uppercase">
-                {renderSortableHeader('Orders', 'orders')}
-              </th>
-              <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium tracking-[0.3px] text-muted uppercase">
-                {renderSortableHeader('ACOS', 'acos')}
-              </th>
-              <th className="border-b-[0.5px] border-border/70 bg-surface px-2 py-[6px] text-right text-[10px] font-medium tracking-[0.3px] text-muted uppercase">
-                {renderSortableHeader('ROAS', 'roas')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedRows.map((placement, index) => (
-              <tr
-                key={placement.placementCode}
-                data-row-kind="data"
-                className={index === sortedRows.length - 1 ? '' : 'border-b-[0.5px] border-border/70'}
-              >
-                <td className="px-2 py-[10px] align-top">
-                  <div className="text-[13px] font-medium text-foreground">{placement.placementName}</div>
-                  {placement.modifierPct !== null && placement.modifierPct !== 0 ? (
-                    <div className="mt-[2px] text-[10px] text-muted">
-                      Modifier: {placement.modifierPct > 0 ? '+' : ''}
-                      {Number.isInteger(placement.modifierPct)
-                        ? placement.modifierPct.toFixed(0)
-                        : placement.modifierPct.toFixed(1)}
-                      %
+        <ExpandedTabTable
+          columns={placementColumns}
+          rows={sortedRows}
+          sort={{ key: sortKey, direction: sortDirection }}
+          onSortChange={handleSortChange}
+          maxHeight={380}
+          totalRow={{
+            render: (column) => {
+              switch (column.key) {
+                case 'placement':
+                  return (
+                    <div className="text-[12px] font-medium text-foreground/80">
+                      Total: {totalsRow.placementCount}
                     </div>
-                  ) : null}
-                </td>
-                <td className="px-2 py-[10px] align-top text-[11px] leading-[1.4] text-foreground/80">
-                  {bidStrategyText}
-                </td>
-                <td className="px-2 py-[10px] align-top">{renderEvidenceBadge(placement.evidence)}</td>
-                <td className="px-2 py-[10px] text-right align-top">
-                  {renderMetricLines({ kind: 'impressions', metric: placement.impressions })}
-                </td>
-                <td className="px-2 py-[10px] text-right align-top">
-                  {renderMetricLines({ kind: 'clicks', metric: placement.clicks })}
-                </td>
-                <td className="px-2 py-[10px] text-right align-top">
-                  {renderMetricLines({ kind: 'ctr', metric: placement.ctr })}
-                </td>
-                <td className="px-2 py-[10px] text-right align-top">
-                  {renderMetricLines({ kind: 'cvr', metric: placement.cvr })}
-                </td>
-                <td className="px-2 py-[10px] text-right align-top">
-                  {renderMetricLines({ kind: 'spend', metric: placement.spend })}
-                </td>
-                <td className="px-2 py-[10px] text-right align-top">
-                  {renderMetricLines({ kind: 'sales', metric: placement.sales })}
-                </td>
-                <td className="px-2 py-[10px] text-right align-top">
-                  {renderMetricLines({ kind: 'orders', metric: placement.orders })}
-                </td>
-                <td className="px-2 py-[10px] text-right align-top">
-                  {renderMetricLines({ kind: 'acos', metric: placement.acos })}
-                </td>
-                <td className="px-2 py-[10px] text-right align-top">
-                  {renderMetricLines({ kind: 'roas', metric: placement.roas })}
-                </td>
-              </tr>
-            ))}
-            <tr className="border-t border-border">
-              <td className="px-2 py-[10px] align-top text-[12px] font-medium text-foreground/80">
-                Total: 3
-              </td>
-              <td className="px-2 py-[10px] align-top" />
-              <td className="px-2 py-[10px] align-top" />
-              <td className="px-2 py-[10px] text-right align-top text-[13px] font-medium text-foreground">
-                {formatMetricValue('impressions', totalsRow.impressions)}
-              </td>
-              <td className="px-2 py-[10px] text-right align-top text-[13px] font-medium text-foreground">
-                {formatMetricValue('clicks', totalsRow.clicks)}
-              </td>
-              <td className="px-2 py-[10px] text-right align-top text-[13px] font-medium text-foreground">
-                {formatMetricValue('ctr', totalsRow.ctr)}
-              </td>
-              <td className="px-2 py-[10px] text-right align-top text-[13px] font-medium text-foreground">
-                {formatMetricValue('cvr', totalsRow.cvr)}
-              </td>
-              <td className="px-2 py-[10px] text-right align-top text-[13px] font-medium text-foreground">
-                {formatMetricValue('spend', totalsRow.spend)}
-              </td>
-              <td className="px-2 py-[10px] text-right align-top text-[13px] font-medium text-foreground">
-                {formatMetricValue('sales', totalsRow.sales)}
-              </td>
-              <td className="px-2 py-[10px] text-right align-top text-[13px] font-medium text-foreground">
-                {formatMetricValue('orders', totalsRow.orders)}
-              </td>
-              <td className="px-2 py-[10px] text-right align-top text-[13px] font-medium text-foreground">
-                {formatMetricValue('acos', totalsRow.acos)}
-              </td>
-              <td className="px-2 py-[10px] text-right align-top text-[13px] font-medium text-foreground">
-                {formatMetricValue('roas', totalsRow.roas)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                  );
+                case 'impressions':
+                  return (
+                    <div className="text-[13px] font-medium text-foreground">
+                      {formatMetricValue('impressions', totalsRow.impressions)}
+                    </div>
+                  );
+                case 'clicks':
+                  return (
+                    <div className="text-[13px] font-medium text-foreground">
+                      {formatMetricValue('clicks', totalsRow.clicks)}
+                    </div>
+                  );
+                case 'ctr':
+                  return (
+                    <div className="text-[13px] font-medium text-foreground">
+                      {formatMetricValue('ctr', totalsRow.ctr)}
+                    </div>
+                  );
+                case 'cvr':
+                  return (
+                    <div className="text-[13px] font-medium text-foreground">
+                      {formatMetricValue('cvr', totalsRow.cvr)}
+                    </div>
+                  );
+                case 'spend':
+                  return (
+                    <div className="text-[13px] font-medium text-foreground">
+                      {formatMetricValue('spend', totalsRow.spend)}
+                    </div>
+                  );
+                case 'sales':
+                  return (
+                    <div className="text-[13px] font-medium text-foreground">
+                      {formatMetricValue('sales', totalsRow.sales)}
+                    </div>
+                  );
+                case 'orders':
+                  return (
+                    <div className="text-[13px] font-medium text-foreground">
+                      {formatMetricValue('orders', totalsRow.orders)}
+                    </div>
+                  );
+                case 'acos':
+                  return (
+                    <div className="text-[13px] font-medium text-foreground">
+                      {formatMetricValue('acos', totalsRow.acos)}
+                    </div>
+                  );
+                case 'roas':
+                  return (
+                    <div className="text-[13px] font-medium text-foreground">
+                      {formatMetricValue('roas', totalsRow.roas)}
+                    </div>
+                  );
+                default:
+                  return null;
+              }
+            },
+          }}
+          wrapperDataAttributes={{
+            'data-show-previous-change': showPreviousAndChange ? 'true' : 'false',
+            'data-aph-hscroll': '',
+            'data-aph-hscroll-axis': 'x',
+          }}
+        />
       </div>
 
       <div className="flex items-center justify-between pt-2 text-[11px] text-muted">
