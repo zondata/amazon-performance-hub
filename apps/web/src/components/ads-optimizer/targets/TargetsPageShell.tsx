@@ -974,17 +974,26 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
     ? readAdsOptimizerRunEffectiveVersionContext(props.run.input_summary_json)
     : null;
   const isTargetColumnFrozen = tableLayoutPrefs.frozenColumns.includes('target');
+  const stickyHeaderCellClass =
+    'sticky top-0 border-b border-border bg-surface align-top';
   const targetHeaderClass = isTargetColumnFrozen
-    ? 'sticky left-0 z-30 shadow-[8px_0_12px_-12px_rgba(15,23,42,0.18)]'
-    : '';
+    ? `${stickyHeaderCellClass} left-0 z-50`
+    : `${stickyHeaderCellClass} z-40`;
+  const standardHeaderCellClass = `${stickyHeaderCellClass} z-40`;
   const columnWidthStyle = (key: AdsOptimizerTargetTableColumnKey) => ({
     width: `${tableLayoutPrefs.widths[key]}px`,
     minWidth: `${tableLayoutPrefs.widths[key]}px`,
     maxWidth: `${tableLayoutPrefs.widths[key]}px`,
   });
-  const headerCellStyle = (key: AdsOptimizerTargetTableColumnKey) => ({
+  const headerCellStyle = (
+    key: AdsOptimizerTargetTableColumnKey,
+    options?: { stickyFrozenTarget?: boolean }
+  ) => ({
     ...columnWidthStyle(key),
     backgroundColor: 'var(--color-surface)',
+    boxShadow: options?.stickyFrozenTarget
+      ? '8px 0 12px -12px rgba(15, 23, 42, 0.18), inset 0 -1px 0 0 var(--color-border)'
+      : 'inset 0 -1px 0 0 var(--color-border)',
   });
   const tableWidthPx = ADS_OPTIMIZER_TARGET_TABLE_COLUMNS.reduce(
     (sum, column) => sum + tableLayoutPrefs.widths[column.key],
@@ -2413,9 +2422,11 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
         </div>
 
         <div
-          className="mt-4 overflow-x-auto overflow-y-visible"
+          className="relative isolate mt-4 max-h-[91vh] overflow-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-aph-hscroll
-          data-aph-hscroll-axis="x"
+          data-aph-hscroll-axis="both"
+          tabIndex={0}
+          aria-label="Targets table viewport"
         >
           <table
             className="min-w-full table-fixed border-collapse text-left text-sm"
@@ -2433,10 +2444,14 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                   return (
                     <th
                       key={column.key}
-                      className={`relative overflow-hidden border-b border-border bg-surface py-2 font-semibold whitespace-nowrap ${
-                        isTargetColumn ? `${targetHeaderClass} pl-4 pr-5` : 'px-3 pr-5'
+                      className={`overflow-hidden py-2 font-semibold whitespace-nowrap ${
+                        isTargetColumn
+                          ? `${targetHeaderClass} pl-4 pr-5`
+                          : `${standardHeaderCellClass} px-3 pr-5`
                       }`}
-                      style={headerCellStyle(column.key)}
+                      style={headerCellStyle(column.key, {
+                        stickyFrozenTarget: isTargetColumn && isTargetColumnFrozen,
+                      })}
                     >
                       {column.key === 'target' ? (
                         <div className="flex min-w-0 flex-col gap-1 pr-5">
