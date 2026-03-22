@@ -1,11 +1,21 @@
 'use client';
 
-import { useReducer } from 'react';
+import { useActionState, useEffect, useReducer, useRef } from 'react';
 
+import {
+  INITIAL_ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_INLINE_ACTION_STATE,
+  type SaveAdsOptimizerRecommendationOverrideInlineAction,
+} from '@/lib/ads-optimizer/recommendationOverrideInlineState';
+import type { AdsOptimizerRecommendationOverride } from '@/lib/ads-optimizer/types';
 import type {
   AdsOptimizerRecommendationOverrideActionType,
   AdsOptimizerRecommendationOverrideScope,
 } from '@/lib/ads-optimizer/types';
+
+export type TargetChangePlanPlacementCode =
+  | 'PLACEMENT_TOP'
+  | 'PLACEMENT_REST_OF_SEARCH'
+  | 'PLACEMENT_PRODUCT_PAGE';
 
 export type TargetChangePlanProposalItem = {
   key: string;
@@ -23,12 +33,20 @@ export type TargetChangePlanOverrideActionOption = {
   label: string;
 };
 
+export type TargetChangePlanOverrideHiddenField = {
+  name: string;
+  value: string;
+};
+
 export type TargetChangePlanOverrideActionItem = {
-  key: AdsOptimizerRecommendationOverrideActionType;
+  rowId: string;
+  actionType: AdsOptimizerRecommendationOverrideActionType;
+  placementCode: TargetChangePlanPlacementCode | null;
   title: string;
   currentLine: string;
   enabledFieldName: string;
   valueFieldName: string;
+  hiddenFields?: TargetChangePlanOverrideHiddenField[];
   inputType: 'number' | 'select';
   initialChecked: boolean;
   initialValue: string;
@@ -49,8 +67,6 @@ export type TargetChangePlanHiddenInputs = {
   campaignId: string;
   currentState: string | null;
   currentBid: number | null;
-  currentPlacementCode: string;
-  currentPlacementPercentage: number | null;
 };
 
 type TargetChangePlanDraftActionState = {
@@ -62,10 +78,7 @@ export type TargetChangePlanDraftState = {
   isOverrideActive: boolean;
   scope: AdsOptimizerRecommendationOverrideScope;
   operatorNote: string;
-  actions: Record<
-    AdsOptimizerRecommendationOverrideActionType,
-    TargetChangePlanDraftActionState
-  >;
+  actions: Record<string, TargetChangePlanDraftActionState>;
 };
 
 export type TargetChangePlanDraftSeed = {
@@ -89,12 +102,12 @@ export type TargetChangePlanDraftAction =
     }
   | {
       type: 'set_action_checked';
-      actionKey: AdsOptimizerRecommendationOverrideActionType;
+      rowId: string;
       value: boolean;
     }
   | {
       type: 'set_action_value';
-      actionKey: AdsOptimizerRecommendationOverrideActionType;
+      rowId: string;
       value: string;
     };
 
@@ -108,7 +121,8 @@ type TargetChangePlanTabProps = {
   hiddenInputs: TargetChangePlanHiddenInputs;
   canSave: boolean;
   formUnavailableNote?: string | null;
-  saveRecommendationOverrideAction: (formData: FormData) => Promise<void>;
+  saveRecommendationOverrideAction: SaveAdsOptimizerRecommendationOverrideInlineAction;
+  onSavedOverride: (override: AdsOptimizerRecommendationOverride) => void;
 };
 
 const createEmptyActionState = (): TargetChangePlanDraftActionState => ({
@@ -119,17 +133,10 @@ const createEmptyActionState = (): TargetChangePlanDraftActionState => ({
 export const createTargetChangePlanDraftState = (
   seed: TargetChangePlanDraftSeed
 ): TargetChangePlanDraftState => {
-  const actions: Record<
-    AdsOptimizerRecommendationOverrideActionType,
-    TargetChangePlanDraftActionState
-  > = {
-    update_target_bid: createEmptyActionState(),
-    update_target_state: createEmptyActionState(),
-    update_placement_modifier: createEmptyActionState(),
-  };
+  const actions: Record<string, TargetChangePlanDraftActionState> = {};
 
   for (const row of seed.overrideRows) {
-    actions[row.key] = {
+    actions[row.rowId] = {
       checked: row.initialChecked,
       value: row.initialValue,
     };
@@ -173,8 +180,8 @@ export const reduceTargetChangePlanDraftState = (
       ...state,
       actions: {
         ...state.actions,
-        [action.actionKey]: {
-          ...state.actions[action.actionKey],
+        [action.rowId]: {
+          ...(state.actions[action.rowId] ?? createEmptyActionState()),
           checked: action.value,
         },
       },
@@ -185,8 +192,8 @@ export const reduceTargetChangePlanDraftState = (
     ...state,
     actions: {
       ...state.actions,
-      [action.actionKey]: {
-        ...state.actions[action.actionKey],
+      [action.rowId]: {
+        ...(state.actions[action.rowId] ?? createEmptyActionState()),
         value: action.value,
       },
     },
@@ -211,6 +218,12 @@ const valueInputClass = (args: { hasValue: boolean; disabled: boolean }) =>
   ].join(' ');
 
 export default function TargetChangePlanTab(props: TargetChangePlanTabProps) {
+  const { onSavedOverride } = props;
+  const [state, formAction, isPending] = useActionState(
+    props.saveRecommendationOverrideAction,
+    INITIAL_ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_INLINE_ACTION_STATE
+  );
+  const lastHandledOverrideId = useRef<string>('');
   const [draftState, dispatch] = useReducer(
     reduceTargetChangePlanDraftState,
     {
@@ -220,7 +233,15 @@ export default function TargetChangePlanTab(props: TargetChangePlanTabProps) {
     },
     createTargetChangePlanDraftState
   );
-  const isFormEnabled = draftState.isOverrideActive && props.canSave;
+  const isFormEnabled = draftState.isOverrideActive && props.canSave && !isPending;
+
+  useEffect(() => {
+    if (!state.ok || !state.override) return;
+    const overrideId = state.override.recommendation_override_id;
+    if (lastHandledOverrideId.current === overrideId) return;
+    lastHandledOverrideId.current = overrideId;
+    onSavedOverride(state.override);
+  }, [onSavedOverride, state.ok, state.override]);
 
   return (
     <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_0.5px_minmax(0,1fr)]">
@@ -310,7 +331,7 @@ export default function TargetChangePlanTab(props: TargetChangePlanTabProps) {
           </div>
         </div>
 
-        <form action={props.saveRecommendationOverrideAction}>
+        <form action={formAction}>
           <input type="hidden" name="return_to" value={props.hiddenInputs.returnTo} />
           <input type="hidden" name="product_id" value={props.hiddenInputs.productId ?? ''} />
           <input type="hidden" name="asin" value={props.hiddenInputs.asin} />
@@ -329,16 +350,6 @@ export default function TargetChangePlanTab(props: TargetChangePlanTabProps) {
           <input type="hidden" name="campaign_id" value={props.hiddenInputs.campaignId} />
           <input type="hidden" name="current_state" value={props.hiddenInputs.currentState ?? ''} />
           <input type="hidden" name="current_bid" value={props.hiddenInputs.currentBid ?? ''} />
-          <input
-            type="hidden"
-            name="current_placement_code"
-            value={props.hiddenInputs.currentPlacementCode}
-          />
-          <input
-            type="hidden"
-            name="current_placement_percentage"
-            value={props.hiddenInputs.currentPlacementPercentage ?? ''}
-          />
 
           <div
             className={`mb-[10px] flex items-center justify-between rounded-[8px] px-[10px] py-2 transition-[background-color,border-color] duration-200 ${
@@ -353,7 +364,7 @@ export default function TargetChangePlanTab(props: TargetChangePlanTabProps) {
                 role="switch"
                 aria-checked={draftState.isOverrideActive}
                 aria-label="Toggle manual override"
-                disabled={!props.canSave}
+                disabled={!props.canSave || isPending}
                 onClick={() =>
                   dispatch({
                     type: 'set_override_active',
@@ -423,23 +434,31 @@ export default function TargetChangePlanTab(props: TargetChangePlanTabProps) {
 
             <div>
               {props.overrideRows.map((row, index) => {
-                const actionDraft = draftState.actions[row.key] ?? createEmptyActionState();
+                const actionDraft = draftState.actions[row.rowId] ?? createEmptyActionState();
                 const hasValue = actionDraft.value.trim().length > 0;
                 const hasEnabledValue = actionDraft.checked && hasValue;
                 const valueClass = valueInputClass({
                   hasValue: hasEnabledValue,
                   disabled: !isFormEnabled,
                 });
-                const inputId = `target-change-plan-${row.key}-${props.hiddenInputs.targetSnapshotId}`;
+                const inputId = `target-change-plan-${row.rowId}-${props.hiddenInputs.targetSnapshotId}`;
                 const rowClass = hasEnabledValue ? 'border-primary' : 'border-border/70';
 
                 return (
                   <div
-                    key={row.key}
+                    key={row.rowId}
                     className={`flex items-start gap-2 rounded-[8px] border-[0.5px] px-[10px] py-2 ${
                       index === props.overrideRows.length - 1 ? '' : 'mb-[6px]'
                     } ${rowClass}`}
                   >
+                    {row.hiddenFields?.map((field) => (
+                      <input
+                        key={`${row.rowId}:${field.name}`}
+                        type="hidden"
+                        name={field.name}
+                        value={field.value}
+                      />
+                    ))}
                     <input
                       type="checkbox"
                       name={row.enabledFieldName}
@@ -449,7 +468,7 @@ export default function TargetChangePlanTab(props: TargetChangePlanTabProps) {
                       onChange={(event) =>
                         dispatch({
                           type: 'set_action_checked',
-                          actionKey: row.key,
+                          rowId: row.rowId,
                           value: event.target.checked,
                         })
                       }
@@ -467,7 +486,7 @@ export default function TargetChangePlanTab(props: TargetChangePlanTabProps) {
                           onChange={(event) =>
                             dispatch({
                               type: 'set_action_value',
-                              actionKey: row.key,
+                              rowId: row.rowId,
                               value: event.target.value,
                             })
                           }
@@ -492,7 +511,7 @@ export default function TargetChangePlanTab(props: TargetChangePlanTabProps) {
                           onChange={(event) =>
                             dispatch({
                               type: 'set_action_value',
-                              actionKey: row.key,
+                              rowId: row.rowId,
                               value: event.target.value,
                             })
                           }
@@ -522,6 +541,24 @@ export default function TargetChangePlanTab(props: TargetChangePlanTabProps) {
               placeholder="Required. Explain why the staged bundle is being replaced."
               className="min-h-[48px] w-full resize-y rounded-[6px] border-[0.5px] border-border bg-surface px-2 py-[6px] text-[11px] text-foreground outline-none transition-colors duration-200 focus:border-primary"
             />
+
+            {state.error ? (
+              <div
+                role="alert"
+                className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-3 text-[11px] text-rose-800"
+              >
+                {state.error}
+              </div>
+            ) : null}
+
+            {!state.error && state.ok && state.notice ? (
+              <div
+                aria-live="polite"
+                className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-[11px] text-emerald-800"
+              >
+                {state.notice}
+              </div>
+            ) : null}
           </div>
 
           {props.formUnavailableNote ? (
@@ -536,7 +573,7 @@ export default function TargetChangePlanTab(props: TargetChangePlanTabProps) {
               disabled={!isFormEnabled}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Save override bundle
+              {isPending ? 'Saving…' : 'Save override bundle'}
             </button>
             <div className="text-[10px] text-muted">
               Supported override actions: bid, target state, and placement modifier only.

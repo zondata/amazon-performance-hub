@@ -56,6 +56,10 @@ const sqpTabPath = path.join(
   process.cwd(),
   'apps/web/src/components/ads-optimizer/targets/TargetSqpTab.tsx'
 );
+const expandedTabTablePath = path.join(
+  process.cwd(),
+  'apps/web/src/components/ads-optimizer/targets/ExpandedTabTable.tsx'
+);
 const runtimePath = path.join(
   process.cwd(),
   'apps/web/src/lib/ads-optimizer/runtime.ts'
@@ -114,7 +118,9 @@ const makeChangePlanProposalRows = (): TargetChangePlanProposalItem[] => [
 
 const makeChangePlanOverrideRows = (): TargetChangePlanOverrideActionItem[] => [
   {
-    key: 'update_target_bid',
+    rowId: 'update_target_bid::default',
+    actionType: 'update_target_bid',
+    placementCode: null,
     title: 'Update target bid',
     currentLine: 'Current: —',
     enabledFieldName: 'override_bid_enabled',
@@ -127,7 +133,9 @@ const makeChangePlanOverrideRows = (): TargetChangePlanOverrideActionItem[] => [
     step: '0.01',
   },
   {
-    key: 'update_target_state',
+    rowId: 'update_target_state::default',
+    actionType: 'update_target_state',
+    placementCode: null,
     title: 'Update target state',
     currentLine: 'Current: enabled',
     enabledFieldName: 'override_state_enabled',
@@ -142,11 +150,61 @@ const makeChangePlanOverrideRows = (): TargetChangePlanOverrideActionItem[] => [
     ],
   },
   {
-    key: 'update_placement_modifier',
-    title: 'Update placement modifier',
-    currentLine: 'Top of Search · current 0%',
-    enabledFieldName: 'override_placement_enabled',
-    valueFieldName: 'override_placement_next_percentage',
+    rowId: 'update_placement_modifier::PLACEMENT_TOP',
+    actionType: 'update_placement_modifier',
+    placementCode: 'PLACEMENT_TOP',
+    title: 'TOS · Update placement modifier',
+    currentLine: 'Top of Search · Current: 0%',
+    enabledFieldName: 'override_placement_enabled__PLACEMENT_TOP',
+    valueFieldName: 'override_placement_next_percentage__PLACEMENT_TOP',
+    hiddenFields: [
+      { name: 'current_placement_code__PLACEMENT_TOP', value: 'PLACEMENT_TOP' },
+      { name: 'current_placement_percentage__PLACEMENT_TOP', value: '0' },
+    ],
+    inputType: 'number',
+    initialChecked: false,
+    initialValue: '',
+    placeholder: 'Next placement percentage',
+    min: '0',
+    step: '1',
+  },
+  {
+    rowId: 'update_placement_modifier::PLACEMENT_REST_OF_SEARCH',
+    actionType: 'update_placement_modifier',
+    placementCode: 'PLACEMENT_REST_OF_SEARCH',
+    title: 'ROS · Update placement modifier',
+    currentLine: 'Rest of Search · Current: 5%',
+    enabledFieldName: 'override_placement_enabled__PLACEMENT_REST_OF_SEARCH',
+    valueFieldName: 'override_placement_next_percentage__PLACEMENT_REST_OF_SEARCH',
+    hiddenFields: [
+      {
+        name: 'current_placement_code__PLACEMENT_REST_OF_SEARCH',
+        value: 'PLACEMENT_REST_OF_SEARCH',
+      },
+      {
+        name: 'current_placement_percentage__PLACEMENT_REST_OF_SEARCH',
+        value: '5',
+      },
+    ],
+    inputType: 'number',
+    initialChecked: false,
+    initialValue: '',
+    placeholder: 'Next placement percentage',
+    min: '0',
+    step: '1',
+  },
+  {
+    rowId: 'update_placement_modifier::PLACEMENT_PRODUCT_PAGE',
+    actionType: 'update_placement_modifier',
+    placementCode: 'PLACEMENT_PRODUCT_PAGE',
+    title: 'PP · Update placement modifier',
+    currentLine: 'Product Pages · Current: —',
+    enabledFieldName: 'override_placement_enabled__PLACEMENT_PRODUCT_PAGE',
+    valueFieldName: 'override_placement_next_percentage__PLACEMENT_PRODUCT_PAGE',
+    hiddenFields: [
+      { name: 'current_placement_code__PLACEMENT_PRODUCT_PAGE', value: 'PLACEMENT_PRODUCT_PAGE' },
+      { name: 'current_placement_percentage__PLACEMENT_PRODUCT_PAGE', value: '' },
+    ],
     inputType: 'number',
     initialChecked: false,
     initialValue: '',
@@ -176,11 +234,10 @@ const renderFixtureChangePlanMarkup = () =>
         campaignId: 'campaign-1',
         currentState: 'enabled',
         currentBid: null,
-        currentPlacementCode: 'PLACEMENT_TOP',
-        currentPlacementPercentage: 0,
       },
       canSave: true,
-      saveRecommendationOverrideAction: async () => {},
+      saveRecommendationOverrideAction: async (prevState) => prevState,
+      onSavedOverride: () => {},
     })
   );
 
@@ -630,7 +687,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(source).toContain('<OptimizerTargetsPanel');
     expect(source).toContain('Inline target review');
     expect(source).toContain('handoffAdsOptimizerToWorkspaceAction');
-    expect(source).toContain('saveAdsOptimizerRecommendationOverrideAction');
+    expect(source).toContain('saveAdsOptimizerRecommendationOverrideInlineAction');
     expect(source).toContain("paramValue('override_error') === '1'");
     expect(source).toContain('runId: requestedRunId');
   });
@@ -646,6 +703,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     const searchTermTabSource = fs.readFileSync(searchTermTabPath, 'utf-8');
     const placementTabSource = fs.readFileSync(placementTabPath, 'utf-8');
     const sqpTabSource = fs.readFileSync(sqpTabPath, 'utf-8');
+    const expandedTabTableSource = fs.readFileSync(expandedTabTablePath, 'utf-8');
 
     expect(wrapperSource).toContain('TargetsPageShell');
     expect(shellSource).toContain('buildAdsOptimizerTargetRowTableSummaries');
@@ -657,6 +715,17 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(shellSource).toContain('<TargetChangePlanTab');
     expect(shellSource).toContain('<TargetSearchTermTab');
     expect(shellSource).toContain('<TargetSqpTab');
+    expect(shellSource).toContain('const [savedOverrideOverlay, setSavedOverrideOverlay]');
+    expect(shellSource).toContain('const effectiveRows = useMemo(');
+    expect(shellSource).toContain(
+      'applyAdsOptimizerRecommendationOverrideOverlay(props.rows, savedOverrideOverlay)'
+    );
+    expect(shellSource).toContain('buildAdsOptimizerTargetRowTableSummaries(effectiveRows)');
+    expect(shellSource).toContain('new Map(effectiveRows.map((row) => [row.targetSnapshotId, row]))');
+    expect(shellSource).toContain('const stageableRows = effectiveRows.filter(');
+    expect(shellSource).toContain('const selectedStageableRows = effectiveRows.filter(');
+    expect(shellSource).toContain('onSavedOverride={handleSavedOverride}');
+    expect(shellSource).toContain('<TargetPlacementTab row={activeRow} allRows={effectiveRows} />');
     expect(shellSource).not.toContain('<TargetOverrideForm');
     expect(shellSource).toContain('Targets review');
     expect(shellSource).toContain('buildWhyFlaggedNarrative');
@@ -805,13 +874,27 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(expandedTabsSource).toContain('target-expanded-tabpanel-');
     expect(expandedPanelSource).not.toContain('Target detail drawer');
     expect(changePlanTabSource).toContain('Save override bundle');
+    expect(changePlanTabSource).toContain('useActionState');
+    expect(changePlanTabSource).toContain('const [state, formAction, isPending] = useActionState(');
+    expect(changePlanTabSource).toContain('<form action={formAction}>');
+    expect(changePlanTabSource).toContain('role="alert"');
+    expect(changePlanTabSource).toContain('aria-live="polite"');
+    expect(changePlanTabSource).toContain("{isPending ? 'Saving…' : 'Save override bundle'}");
+    expect(changePlanTabSource).toContain('onSavedOverride');
+    expect(changePlanTabSource).toContain('onSavedOverride(state.override);');
     expect(changePlanTabSource).toContain('Replacement actions');
     expect(searchTermTabSource).toContain('buildAdsWorkspaceNavigationHref');
+    expect(searchTermTabSource).toContain('ExpandedTabTable');
     expect(searchTermTabSource).toContain("Top = current · Middle = previous · Bottom = change %");
     expect(placementTabSource).toContain('TOP OF SEARCH IMPRESSION SHARE (TOS IS)');
     expect(placementTabSource).toContain('CAMPAIGN CONTEXT');
-    expect(placementTabSource).toContain("data-show-previous-change={showPreviousAndChange ? 'true' : 'false'}");
+    expect(placementTabSource).toContain('ExpandedTabTable');
+    expect(placementTabSource).toContain(
+      "'data-show-previous-change': showPreviousAndChange ? 'true' : 'false'"
+    );
+    expect(placementTabSource).toContain("[data-expanded-tab-table-row='data'] .metric-prev");
     expect(sqpTabSource).toContain('Summary');
+    expect(sqpTabSource).toContain('ExpandedTabTable');
     expect(sqpTabSource).toContain('KPI');
     expect(sqpTabSource).toContain('Market');
     expect(sqpTabSource).toContain('Self');
@@ -830,8 +913,11 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(sqpTabSource).toContain(
       'Green = increase · Red = decrease · Gray = no change or unavailable'
     );
-    expect(sqpTabSource).toContain('sticky left-0 z-30');
-    expect(sqpTabSource).toContain('sticky left-0 z-20');
+    expect(sqpTabSource).toContain("label: 'KPI'");
+    expect(sqpTabSource).toContain('frozen: true');
+    expect(sqpTabSource).toContain('maxHeight={380}');
+    expect(expandedTabTableSource).toContain('sticky left-0 z-30');
+    expect(expandedTabTableSource).toContain('sticky left-0 z-20');
     expect(sqpTabSource).toContain(
       'SQP is matched-query ASIN context. Targets that resolve to the same query can share the same SQP values.'
     );
@@ -1035,6 +1121,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     );
     expect(changePlanTabSource).toContain('pointer-events-none opacity-[0.35]');
     expect(changePlanTabSource).toContain('disabled={!isFormEnabled}');
+    expect(changePlanTabSource).toContain('disabled={!props.canSave || isPending}');
     expect(changePlanTabSource).toContain(
       'Overridden — manual override is active. This proposal remains visible for audit.'
     );
@@ -1062,12 +1149,26 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(markup).toContain('Current cadence is not persisted in this snapshot.');
     expect(markup).toContain('Update target bid');
     expect(markup).toContain('Update placement modifier');
+    expect(markup).toContain('TOS');
+    expect(markup).toContain('ROS');
+    expect(markup).toContain('PP');
+    expect(markup).toContain('Top of Search');
+    expect(markup).toContain('Rest of Search');
+    expect(markup).toContain('Product Pages');
     expect(markup).toContain('Current: —');
     expect(markup).toContain('Current: enabled');
-    expect(markup).toContain('Top of Search · current 0%');
+    expect(markup).toContain('Top of Search · Current: 0%');
+    expect(markup).toContain('Rest of Search · Current: 5%');
+    expect(markup).toContain('Product Pages · Current: —');
     expect(markup).toContain('Next bid');
     expect(markup).toContain('Paused');
     expect(markup).toContain('Next placement percentage');
+    expect(markup).toContain('override_placement_enabled__PLACEMENT_TOP');
+    expect(markup).toContain('override_placement_enabled__PLACEMENT_REST_OF_SEARCH');
+    expect(markup).toContain('override_placement_enabled__PLACEMENT_PRODUCT_PAGE');
+    expect(markup).toContain('override_placement_next_percentage__PLACEMENT_TOP');
+    expect(markup).toContain('override_placement_next_percentage__PLACEMENT_REST_OF_SEARCH');
+    expect(markup).toContain('override_placement_next_percentage__PLACEMENT_PRODUCT_PAGE');
     expect(markup).toMatch(/Override is <span class="font-medium">off<\/span>/);
     expect(markup).toContain('role="switch"');
     expect(markup).toContain('aria-checked="false"');
@@ -1086,23 +1187,47 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
       /name="override_state_enabled"[^>]*disabled|disabled=""[^>]*name="override_state_enabled"/
     );
     expect(markup).toMatch(
-      /name="override_placement_enabled"[^>]*disabled|disabled=""[^>]*name="override_placement_enabled"/
+      /name="override_placement_enabled__PLACEMENT_TOP"[^>]*disabled|disabled=""[^>]*name="override_placement_enabled__PLACEMENT_TOP"/
+    );
+    expect(markup).toMatch(
+      /name="override_placement_enabled__PLACEMENT_REST_OF_SEARCH"[^>]*disabled|disabled=""[^>]*name="override_placement_enabled__PLACEMENT_REST_OF_SEARCH"/
+    );
+    expect(markup).toMatch(
+      /name="override_placement_enabled__PLACEMENT_PRODUCT_PAGE"[^>]*disabled|disabled=""[^>]*name="override_placement_enabled__PLACEMENT_PRODUCT_PAGE"/
     );
     expect(markup).toMatch(/name="operator_note"[^>]*disabled|disabled=""[^>]*name="operator_note"/);
+    const placementRowOrder = [
+      'override_placement_enabled__PLACEMENT_TOP',
+      'override_placement_enabled__PLACEMENT_REST_OF_SEARCH',
+      'override_placement_enabled__PLACEMENT_PRODUCT_PAGE',
+    ].map((fieldName) => markup.indexOf(fieldName));
+    placementRowOrder.forEach((index) => {
+      expect(index).toBeGreaterThan(-1);
+    });
+    expect(placementRowOrder[1]).toBeGreaterThan(placementRowOrder[0]!);
+    expect(placementRowOrder[2]).toBeGreaterThan(placementRowOrder[1]!);
     expect(shellSource).toContain('saveRecommendationOverrideAction={props.saveRecommendationOverrideAction}');
   });
 
   it('keeps the override draft values when the manual override switch toggles on and off', () => {
+    const overrideRows = makeChangePlanOverrideRows();
+    const bidRow = overrideRows.find((row) => row.actionType === 'update_target_bid')!;
+    const stateRow = overrideRows.find((row) => row.actionType === 'update_target_state')!;
+    const tosRow = overrideRows.find((row) => row.placementCode === 'PLACEMENT_TOP')!;
+    const rosRow = overrideRows.find(
+      (row) => row.placementCode === 'PLACEMENT_REST_OF_SEARCH'
+    )!;
+    const ppRow = overrideRows.find((row) => row.placementCode === 'PLACEMENT_PRODUCT_PAGE')!;
     const initial = createTargetChangePlanDraftState({
       initialScope: 'persistent',
       initialOperatorNote: 'Document the staged bundle replacement before shipping.',
-      overrideRows: makeChangePlanOverrideRows(),
+      overrideRows,
     });
 
     expect(initial.isOverrideActive).toBe(false);
     expect(initial.scope).toBe('persistent');
-    expect(initial.actions.update_target_state.checked).toBe(true);
-    expect(initial.actions.update_target_state.value).toBe('paused');
+    expect(initial.actions[stateRow.rowId]?.checked).toBe(true);
+    expect(initial.actions[stateRow.rowId]?.value).toBe('paused');
 
     const overrideOn = reduceTargetChangePlanDraftState(initial, {
       type: 'set_override_active',
@@ -1114,25 +1239,55 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     });
     const bidChecked = reduceTargetChangePlanDraftState(scopeEdited, {
       type: 'set_action_checked',
-      actionKey: 'update_target_bid',
+      rowId: bidRow.rowId,
       value: true,
     });
     const bidEdited = reduceTargetChangePlanDraftState(bidChecked, {
       type: 'set_action_value',
-      actionKey: 'update_target_bid',
+      rowId: bidRow.rowId,
       value: '0.82',
     });
-    const placementChecked = reduceTargetChangePlanDraftState(bidEdited, {
+    const tosChecked = reduceTargetChangePlanDraftState(bidEdited, {
       type: 'set_action_checked',
-      actionKey: 'update_placement_modifier',
+      rowId: tosRow.rowId,
       value: true,
     });
-    const placementEdited = reduceTargetChangePlanDraftState(placementChecked, {
+    const tosEdited = reduceTargetChangePlanDraftState(tosChecked, {
       type: 'set_action_value',
-      actionKey: 'update_placement_modifier',
+      rowId: tosRow.rowId,
       value: '12',
     });
-    const noteEdited = reduceTargetChangePlanDraftState(placementEdited, {
+    const rosChecked = reduceTargetChangePlanDraftState(tosEdited, {
+      type: 'set_action_checked',
+      rowId: rosRow.rowId,
+      value: true,
+    });
+    const rosEdited = reduceTargetChangePlanDraftState(rosChecked, {
+      type: 'set_action_value',
+      rowId: rosRow.rowId,
+      value: '7',
+    });
+    const ppChecked = reduceTargetChangePlanDraftState(rosEdited, {
+      type: 'set_action_checked',
+      rowId: ppRow.rowId,
+      value: true,
+    });
+    const ppEdited = reduceTargetChangePlanDraftState(ppChecked, {
+      type: 'set_action_value',
+      rowId: ppRow.rowId,
+      value: '4',
+    });
+    const rosUnchecked = reduceTargetChangePlanDraftState(ppEdited, {
+      type: 'set_action_checked',
+      rowId: rosRow.rowId,
+      value: false,
+    });
+    const rosRechecked = reduceTargetChangePlanDraftState(rosUnchecked, {
+      type: 'set_action_checked',
+      rowId: rosRow.rowId,
+      value: true,
+    });
+    const noteEdited = reduceTargetChangePlanDraftState(rosRechecked, {
       type: 'set_operator_note',
       value: 'Pause now, but keep a manual note for the replacement bundle.',
     });
@@ -1140,16 +1295,33 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
       type: 'set_override_active',
       value: false,
     });
+    const overrideOnAgain = reduceTargetChangePlanDraftState(overrideOff, {
+      type: 'set_override_active',
+      value: true,
+    });
 
     expect(overrideOn.isOverrideActive).toBe(true);
     expect(overrideOff.isOverrideActive).toBe(false);
     expect(overrideOff.scope).toBe('one_time');
-    expect(overrideOff.actions.update_target_bid.checked).toBe(true);
-    expect(overrideOff.actions.update_target_bid.value).toBe('0.82');
-    expect(overrideOff.actions.update_target_state.checked).toBe(true);
-    expect(overrideOff.actions.update_target_state.value).toBe('paused');
-    expect(overrideOff.actions.update_placement_modifier.checked).toBe(true);
-    expect(overrideOff.actions.update_placement_modifier.value).toBe('12');
+    expect(rosRechecked.actions[tosRow.rowId]?.checked).toBe(true);
+    expect(rosRechecked.actions[tosRow.rowId]?.value).toBe('12');
+    expect(rosRechecked.actions[rosRow.rowId]?.checked).toBe(true);
+    expect(rosRechecked.actions[rosRow.rowId]?.value).toBe('7');
+    expect(rosRechecked.actions[ppRow.rowId]?.checked).toBe(true);
+    expect(rosRechecked.actions[ppRow.rowId]?.value).toBe('4');
+    expect(overrideOff.actions[bidRow.rowId]?.checked).toBe(true);
+    expect(overrideOff.actions[bidRow.rowId]?.value).toBe('0.82');
+    expect(overrideOff.actions[stateRow.rowId]?.checked).toBe(true);
+    expect(overrideOff.actions[stateRow.rowId]?.value).toBe('paused');
+    expect(overrideOff.actions[tosRow.rowId]?.checked).toBe(true);
+    expect(overrideOff.actions[tosRow.rowId]?.value).toBe('12');
+    expect(overrideOff.actions[rosRow.rowId]?.checked).toBe(true);
+    expect(overrideOff.actions[rosRow.rowId]?.value).toBe('7');
+    expect(overrideOff.actions[ppRow.rowId]?.checked).toBe(true);
+    expect(overrideOff.actions[ppRow.rowId]?.value).toBe('4');
+    expect(overrideOnAgain.actions[tosRow.rowId]?.value).toBe('12');
+    expect(overrideOnAgain.actions[rosRow.rowId]?.value).toBe('7');
+    expect(overrideOnAgain.actions[ppRow.rowId]?.value).toBe('4');
     expect(overrideOff.operatorNote).toBe(
       'Pause now, but keep a manual note for the replacement bundle.'
     );
@@ -1160,26 +1332,26 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     const searchTermTabSource = fs.readFileSync(searchTermTabPath, 'utf-8');
     const markup = renderFixtureSearchTermMarkup();
     const orderedColumns = [
-      `Search term
-                </th>`,
-      `Evidence
-                </th>`,
-      "renderSortableHeader('STIS', 'stis')",
-      "renderSortableHeader('STIR', 'stir')",
-      "renderSortableHeader('Impr.', 'impressions')",
-      "renderSortableHeader('Clicks', 'clicks')",
-      "renderSortableHeader('CTR', 'ctr')",
-      "renderSortableHeader('CVR', 'cvr')",
-      "renderSortableHeader('Spend', 'spend')",
-      "renderSortableHeader('Sales', 'sales')",
-      "renderSortableHeader('Orders', 'orders')",
-      "renderSortableHeader('ACOS', 'acos')",
-      "renderSortableHeader('ROAS', 'roas')",
+      "label: 'Search term'",
+      "label: 'Evidence'",
+      "label: 'STIS'",
+      "label: 'STIR'",
+      "label: 'Impr.'",
+      "label: 'Clicks'",
+      "label: 'CTR'",
+      "label: 'CVR'",
+      "label: 'Spend'",
+      "label: 'Sales'",
+      "label: 'Orders'",
+      "label: 'ACOS'",
+      "label: 'ROAS'",
     ];
     const orderedColumnIndexes = orderedColumns.map((label) => searchTermTabSource.indexOf(label));
 
     expect(shellSource).toContain('<TargetSearchTermTab');
     expect(searchTermTabSource).toContain('buildAdsWorkspaceNavigationHref');
+    expect(searchTermTabSource).toContain('ExpandedTabTable');
+    expect(searchTermTabSource).toContain('columns={searchTermColumns}');
     expect(searchTermTabSource).toContain("role=\"switch\"");
     expect(searchTermTabSource).toContain("pathname: '/ads/performance'");
     expect(searchTermTabSource).toContain("level: 'targets'");
@@ -1213,8 +1385,10 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(searchTermTabSource).toContain("renderMetricLines({ kind: 'cvr', metric: row.cvr })");
     expect(searchTermTabSource).toContain("renderMetricLines({ kind: 'sales', metric: row.sales })");
     expect(searchTermTabSource).toContain("renderMetricLines({ kind: 'roas', metric: row.roas })");
-    expect(searchTermTabSource).toContain("data-show-previous-change={showPreviousAndChange ? 'true' : 'false'}");
-    expect(searchTermTabSource).toContain('min-w-[1375px]');
+    expect(searchTermTabSource).toContain(
+      "'data-show-previous-change': showPreviousAndChange ? 'true' : 'false'"
+    );
+    expect(searchTermTabSource).toContain('maxHeight={380}');
     expect(searchTermTabSource).toContain('row.sameText ? (');
     expect(markup).toContain('Same');
     expect(markup).toContain('Same Text');
@@ -1260,31 +1434,32 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     const sharedMarkup = renderFixturePlacementMarkup();
     const exclusiveMarkup = renderFixturePlacementMarkup([makePlacementFixtureRow()]);
     const orderedColumns = [
-      `Placement
-              </th>`,
-      `Bid strategy
-              </th>`,
-      `Evidence
-              </th>`,
-      "renderSortableHeader('Impr.', 'impressions')",
-      "renderSortableHeader('Clicks', 'clicks')",
-      "renderSortableHeader('CTR', 'ctr')",
-      "renderSortableHeader('CVR', 'cvr')",
-      "renderSortableHeader('Spend', 'spend')",
-      "renderSortableHeader('Sales', 'sales')",
-      "renderSortableHeader('Orders', 'orders')",
-      "renderSortableHeader('ACOS', 'acos')",
-      "renderSortableHeader('ROAS', 'roas')",
+      "label: 'Placement'",
+      "label: 'Bid strategy'",
+      "label: 'Evidence'",
+      "label: 'Impr.'",
+      "label: 'Clicks'",
+      "label: 'CTR'",
+      "label: 'CVR'",
+      "label: 'Spend'",
+      "label: 'Sales'",
+      "label: 'Orders'",
+      "label: 'ACOS'",
+      "label: 'ROAS'",
     ];
     const orderedColumnIndexes = orderedColumns.map((label) => placementTabSource.indexOf(label));
 
     expect(shellSource).toContain('<TargetPlacementTab');
+    expect(placementTabSource).toContain('ExpandedTabTable');
+    expect(placementTabSource).toContain('columns={placementColumns}');
     expect(placementTabSource).toContain("role=\"switch\"");
     expect(placementTabSource).toContain("formatUiDate(tosIs.latestObservedDate)");
     expect(placementTabSource).toContain('buildAdsOptimizerPlacementCampaignTargetCount');
-    expect(placementTabSource).toContain("data-show-previous-change={showPreviousAndChange ? 'true' : 'false'}");
-    expect(placementTabSource).toContain('[data-row-kind="data"] .metric-prev');
-    expect(placementTabSource).toContain('[data-row-kind="data"] .metric-change');
+    expect(placementTabSource).toContain(
+      "'data-show-previous-change': showPreviousAndChange ? 'true' : 'false'"
+    );
+    expect(placementTabSource).toContain("[data-expanded-tab-table-row='data'] .metric-prev");
+    expect(placementTabSource).toContain("[data-expanded-tab-table-row='data'] .metric-change");
     expect(placementTabSource).toContain("renderMetricLines({ kind: 'cvr', metric: placement.cvr })");
     expect(placementTabSource).toContain(
       "renderMetricLines({ kind: 'sales', metric: placement.sales })"
@@ -1361,6 +1536,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
   it('renders the SQP tab as metadata, summary, and a single KPI comparison table', () => {
     const shellSource = fs.readFileSync(shellPath, 'utf-8');
     const sqpTabSource = fs.readFileSync(sqpTabPath, 'utf-8');
+    const expandedTabTableSource = fs.readFileSync(expandedTabTablePath, 'utf-8');
     const markup = renderFixtureSqpMarkup();
     const tableMarkup = markup.slice(markup.indexOf('<table'));
     const orderedColumns = ['KPI', 'Market', 'Self'];
@@ -1413,7 +1589,13 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(markup).toContain('metric-change');
     expect(markup).toContain('sticky left-0 z-30');
     expect(markup).toContain('sticky left-0 z-20');
-    expect((sqpTabSource.match(/sticky left-0/g) ?? [])).toHaveLength(2);
+    expect(sqpTabSource).toContain('ExpandedTabTable');
+    expect(sqpTabSource).toContain("label: 'KPI'");
+    expect(sqpTabSource).toContain('frozen: true');
+    expect(sqpTabSource).toContain('maxHeight={380}');
+    expect((expandedTabTableSource.match(/sticky left-0/g) ?? []).length).toBeGreaterThanOrEqual(
+      2
+    );
     expect(markup).not.toMatch(/<th class="sticky[^"]*">\s*Market\s*<\/th>/);
     expect(markup).not.toMatch(/<th class="sticky[^"]*">\s*Self\s*<\/th>/);
     expect(sqpTabSource).not.toContain('Current market');

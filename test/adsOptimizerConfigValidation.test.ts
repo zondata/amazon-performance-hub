@@ -135,4 +135,141 @@ describe('ads optimizer config validation', () => {
       },
     });
   });
+
+  it('accepts three placement modifier overrides when each placement code is unique', () => {
+    const override = validateSaveAdsOptimizerRecommendationOverridePayload({
+      product_id: 'product-1',
+      asin: 'B001TEST',
+      target_id: 'target-1',
+      run_id: 'run-1',
+      target_snapshot_id: 'target-snapshot-1',
+      recommendation_snapshot_id: 'recommendation-1',
+      override_scope: 'persistent',
+      replacement_action_bundle_json: {
+        actions: [
+          {
+            action_type: 'update_placement_modifier',
+            entity_context_json: {
+              campaign_id: 'campaign-1',
+              placement_code: 'PLACEMENT_TOP',
+              current_percentage: 25,
+            },
+            proposed_change_json: {
+              placement_code: 'PLACEMENT_TOP',
+              next_percentage: 35,
+            },
+          },
+          {
+            action_type: 'update_placement_modifier',
+            entity_context_json: {
+              campaign_id: 'campaign-1',
+              placement_code: 'PLACEMENT_REST_OF_SEARCH',
+              current_percentage: 10,
+            },
+            proposed_change_json: {
+              placement_code: 'PLACEMENT_REST_OF_SEARCH',
+              next_percentage: 15,
+            },
+          },
+          {
+            action_type: 'update_placement_modifier',
+            entity_context_json: {
+              campaign_id: 'campaign-1',
+              placement_code: 'PLACEMENT_PRODUCT_PAGE',
+              current_percentage: 5,
+            },
+            proposed_change_json: {
+              placement_code: 'PLACEMENT_PRODUCT_PAGE',
+              next_percentage: 8,
+            },
+          },
+        ],
+      },
+      operator_note: 'Override all three placement modifiers together for one controlled test.',
+    });
+
+    expect(
+      override.replacement_action_bundle_json.actions.map((action) =>
+        action.proposed_change_json.placement_code
+      )
+    ).toEqual([
+      'PLACEMENT_TOP',
+      'PLACEMENT_REST_OF_SEARCH',
+      'PLACEMENT_PRODUCT_PAGE',
+    ]);
+  });
+
+  it('rejects duplicate placement modifier overrides for the same placement code', () => {
+    expect(() =>
+      validateSaveAdsOptimizerRecommendationOverridePayload({
+        product_id: 'product-1',
+        asin: 'B001TEST',
+        target_id: 'target-1',
+        run_id: 'run-1',
+        target_snapshot_id: 'target-snapshot-1',
+        recommendation_snapshot_id: 'recommendation-1',
+        override_scope: 'one_time',
+        replacement_action_bundle_json: {
+          actions: [
+            {
+              action_type: 'update_placement_modifier',
+              entity_context_json: {
+                campaign_id: 'campaign-1',
+                placement_code: 'PLACEMENT_TOP',
+                current_percentage: 25,
+              },
+              proposed_change_json: {
+                placement_code: 'PLACEMENT_TOP',
+                next_percentage: 35,
+              },
+            },
+            {
+              action_type: 'update_placement_modifier',
+              entity_context_json: {
+                campaign_id: 'campaign-1',
+                placement_code: 'PLACEMENT_TOP',
+                current_percentage: 25,
+              },
+              proposed_change_json: {
+                placement_code: 'PLACEMENT_TOP',
+                next_percentage: 40,
+              },
+            },
+          ],
+        },
+        operator_note: 'Duplicate TOS placement rows should be rejected.',
+      })
+    ).toThrow('can only appear once per placement_code');
+  });
+
+  it('rejects invalid placement codes in placement modifier overrides', () => {
+    expect(() =>
+      validateSaveAdsOptimizerRecommendationOverridePayload({
+        product_id: 'product-1',
+        asin: 'B001TEST',
+        target_id: 'target-1',
+        run_id: 'run-1',
+        target_snapshot_id: 'target-snapshot-1',
+        recommendation_snapshot_id: 'recommendation-1',
+        override_scope: 'one_time',
+        replacement_action_bundle_json: {
+          actions: [
+            {
+              action_type: 'update_placement_modifier',
+              entity_context_json: {
+                campaign_id: 'campaign-1',
+                placement_code: 'PLACEMENT_SIDE',
+                current_percentage: 25,
+              },
+              proposed_change_json: {
+                placement_code: 'PLACEMENT_SIDE',
+                next_percentage: 35,
+              },
+            },
+          ],
+        },
+        operator_note: 'Invalid placement code should fail validation.',
+      })
+    ).toThrow('must be one of: PLACEMENT_TOP, PLACEMENT_REST_OF_SEARCH, PLACEMENT_PRODUCT_PAGE');
+  });
 });

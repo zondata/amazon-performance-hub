@@ -40,6 +40,11 @@ import {
   type AdsOptimizerTargetTableColumnKey,
   type AdsOptimizerTargetTableLayoutPrefs,
 } from '@/lib/ads-optimizer/targetTableLayoutPrefs';
+import {
+  applyAdsOptimizerRecommendationOverrideOverlay,
+  type AdsOptimizerRecommendationOverrideOverlay,
+} from '@/lib/ads-optimizer/recommendationOverrideOverlay';
+import type { SaveAdsOptimizerRecommendationOverrideInlineAction } from '@/lib/ads-optimizer/recommendationOverrideInlineState';
 import type { AdsOptimizerRecommendationOverride } from '@/lib/ads-optimizer/types';
 import {
   formatUiDateRange,
@@ -48,6 +53,7 @@ import {
 import TargetAdvancedSection from './TargetAdvancedSection';
 import TargetChangePlanTab, {
   type TargetChangePlanOverrideActionItem,
+  type TargetChangePlanPlacementCode,
   type TargetChangePlanProposalItem,
 } from './TargetChangePlanTab';
 import TargetExpandedPanel from './TargetExpandedPanel';
@@ -83,7 +89,7 @@ export type OptimizerTargetsPanelProps = {
   error: string | null;
   overrideError: boolean;
   handoffAction: (formData: FormData) => Promise<void>;
-  saveRecommendationOverrideAction: (formData: FormData) => Promise<void>;
+  saveRecommendationOverrideAction: SaveAdsOptimizerRecommendationOverrideInlineAction;
 };
 
 type WorkspaceSupportedActionType =
@@ -125,6 +131,26 @@ const GLOBAL_METHODOLOGY_NOTES = [
   'Ads Optimizer remains recommendation-first. Ads Workspace is still the only staging and execution boundary.',
 ];
 const NOT_CAPTURED = 'Not captured';
+const CHANGE_PLAN_PLACEMENT_CODES: TargetChangePlanPlacementCode[] = [
+  'PLACEMENT_TOP',
+  'PLACEMENT_REST_OF_SEARCH',
+  'PLACEMENT_PRODUCT_PAGE',
+];
+const CHANGE_PLAN_PLACEMENT_SHORT_CODES: Record<TargetChangePlanPlacementCode, string> = {
+  PLACEMENT_TOP: 'TOS',
+  PLACEMENT_REST_OF_SEARCH: 'ROS',
+  PLACEMENT_PRODUCT_PAGE: 'PP',
+};
+const CHANGE_PLAN_PLACEMENT_LABELS: Record<TargetChangePlanPlacementCode, string> = {
+  PLACEMENT_TOP: 'Top of Search',
+  PLACEMENT_REST_OF_SEARCH: 'Rest of Search',
+  PLACEMENT_PRODUCT_PAGE: 'Product Pages',
+};
+const CHANGE_PLAN_PLACEMENT_ROW_IDS: Record<TargetChangePlanPlacementCode, string> = {
+  PLACEMENT_TOP: 'update_placement_modifier::PLACEMENT_TOP',
+  PLACEMENT_REST_OF_SEARCH: 'update_placement_modifier::PLACEMENT_REST_OF_SEARCH',
+  PLACEMENT_PRODUCT_PAGE: 'update_placement_modifier::PLACEMENT_PRODUCT_PAGE',
+};
 const STATE_HEADER_SORT_OPTIONS: HeaderSortOption[] = [
   { value: 'state_current_profit_loss', label: 'P&L (current)' },
   { value: 'state_current_acos', label: 'ACoS (current)' },
@@ -382,6 +408,13 @@ const isWorkspaceSupportedActionType = (
   value === 'update_target_state' ||
   value === 'update_placement_modifier';
 
+const isTargetChangePlanPlacementCode = (
+  value: string | null
+): value is TargetChangePlanPlacementCode =>
+  value === 'PLACEMENT_TOP' ||
+  value === 'PLACEMENT_REST_OF_SEARCH' ||
+  value === 'PLACEMENT_PRODUCT_PAGE';
+
 const getWorkspaceSupportedActions = (row: AdsOptimizerTargetReviewRow) =>
   (
     row.manualOverride?.replacement_action_bundle_json.actions.map((action) => ({
@@ -391,11 +424,6 @@ const getWorkspaceSupportedActions = (row: AdsOptimizerTargetReviewRow) =>
     []
   ).filter((action) =>
     isWorkspaceSupportedActionType(action.actionType)
-  );
-
-const getUnsupportedReviewOnlyActions = (row: AdsOptimizerTargetReviewRow) =>
-  (row.recommendation?.actions ?? []).filter(
-    (action) => !isWorkspaceSupportedActionType(action.actionType)
   );
 
 const getOverrideActions = (override: AdsOptimizerRecommendationOverride | null | undefined) =>
@@ -411,9 +439,32 @@ const readJsonNumber = (value: Record<string, unknown> | null, key: string) => {
   return Number.isFinite(numeric) ? numeric : null;
 };
 
+const readPlacementCodeFromActionPayload = (
+  entityContext: Record<string, unknown> | null,
+  proposedChange: Record<string, unknown> | null
+): TargetChangePlanPlacementCode | null => {
+  const placementCode =
+    readJsonString(entityContext, 'placement_code') ??
+    readJsonString(proposedChange, 'placement_code');
+  return isTargetChangePlanPlacementCode(placementCode) ? placementCode : null;
+};
+
+const getCurrentPlacementPercentage = (
+  row: AdsOptimizerTargetReviewRow,
+  placementCode: TargetChangePlanPlacementCode
+) =>
+  row.placementBreakdown.rows.find((placement) => placement.placementCode === placementCode)
+    ?.modifierPct ?? null;
+
 const sentenceCase = (value: string | null) => {
   if (!value) return NOT_CAPTURED;
   return labelize(value).toLowerCase();
+};
+
+const formatOverridePlacementPercent = (value: number | null) => {
+  if (value === null || !Number.isFinite(value)) return '—';
+  const digits = Number.isInteger(value) ? 0 : 1;
+  return `${value.toFixed(digits)}%`;
 };
 
 const buildActionCards = (args: {
@@ -460,9 +511,15 @@ const buildActionCards = (args: {
     }
 
     if (action.actionType === 'update_placement_modifier') {
+      const placementCode = readPlacementCodeFromActionPayload(
+        action.entityContext,
+        action.proposedChange
+      );
       cards.push({
-        key: `${args.cardKeyPrefix}:placement`,
-        title: 'Update placement modifier',
+        key: `${args.cardKeyPrefix}:placement:${placementCode ?? 'unknown'}`,
+        title: placementCode
+          ? `Update placement modifier · ${CHANGE_PLAN_PLACEMENT_SHORT_CODES[placementCode]}`
+          : 'Update placement modifier',
         category: 'execution',
         reviewOnly: false,
         currentValue: formatWholePercent(readJsonNumber(action.entityContext, 'current_percentage')),
@@ -569,10 +626,18 @@ const buildTargetChangePlanProposalRows = (
 
 const getActionEditorSource = (
   row: AdsOptimizerTargetReviewRow,
-  actionType: WorkspaceSupportedActionType
+  actionType: WorkspaceSupportedActionType,
+  placementCode?: TargetChangePlanPlacementCode
 ) => {
   const overrideAction = getOverrideActions(row.manualOverride).find(
-    (action) => action.action_type === actionType
+    (action) =>
+      action.action_type === actionType &&
+      (actionType !== 'update_placement_modifier' ||
+        placementCode === undefined ||
+        readPlacementCodeFromActionPayload(
+          action.entity_context_json,
+          action.proposed_change_json
+        ) === placementCode)
   );
   if (overrideAction) {
     return {
@@ -583,7 +648,14 @@ const getActionEditorSource = (
   }
 
   const recommendationAction =
-    row.recommendation?.actions.find((action) => action.actionType === actionType) ?? null;
+    row.recommendation?.actions.find(
+      (action) =>
+        action.actionType === actionType &&
+        (actionType !== 'update_placement_modifier' ||
+          placementCode === undefined ||
+          readPlacementCodeFromActionPayload(action.entityContext, action.proposedChange) ===
+            placementCode)
+    ) ?? null;
 
   return {
     entityContext: recommendationAction?.entityContext ?? null,
@@ -592,27 +664,19 @@ const getActionEditorSource = (
   };
 };
 
-const formatPlacementLabel = (value: string | null) => {
-  if (value === 'PLACEMENT_TOP') return 'Top of Search';
-  if (value === 'PLACEMENT_REST_OF_SEARCH') return 'Rest of Search';
-  if (value === 'PLACEMENT_PRODUCT_PAGE') return 'Product Pages';
-  return labelize(value);
-};
-
 const buildTargetChangePlanOverrideRows = (args: {
+  row: AdsOptimizerTargetReviewRow;
   bidActionEditor: ReturnType<typeof getActionEditorSource>;
   stateActionEditor: ReturnType<typeof getActionEditorSource>;
-  placementActionEditor: ReturnType<typeof getActionEditorSource>;
   currentBid: number | null;
   nextBid: number | null;
   currentState: string | null;
   nextState: string | null;
-  currentPlacementCode: string;
-  currentPlacementPercentage: number | null;
-  nextPlacementPercentage: number | null;
 }): TargetChangePlanOverrideActionItem[] => [
   {
-    key: 'update_target_bid',
+    rowId: 'update_target_bid::default',
+    actionType: 'update_target_bid',
+    placementCode: null,
     title: 'Update target bid',
     currentLine: `Current: ${formatCurrency(args.currentBid)}`,
     enabledFieldName: 'override_bid_enabled',
@@ -625,7 +689,9 @@ const buildTargetChangePlanOverrideRows = (args: {
     step: '0.01',
   },
   {
-    key: 'update_target_state',
+    rowId: 'update_target_state::default',
+    actionType: 'update_target_state',
+    placementCode: null,
     title: 'Update target state',
     currentLine: `Current: ${sentenceCase(args.currentState)}`,
     enabledFieldName: 'override_state_enabled',
@@ -639,22 +705,48 @@ const buildTargetChangePlanOverrideRows = (args: {
       { value: 'archived', label: 'Archived' },
     ],
   },
-  {
-    key: 'update_placement_modifier',
-    title: 'Update placement modifier',
-    currentLine: `${formatPlacementLabel(args.currentPlacementCode)} · current ${formatWholePercent(
-      args.currentPlacementPercentage
-    )}`,
-    enabledFieldName: 'override_placement_enabled',
-    valueFieldName: 'override_placement_next_percentage',
-    inputType: 'number',
-    initialChecked: args.placementActionEditor.source !== 'none',
-    initialValue:
-      args.nextPlacementPercentage === null ? '' : String(args.nextPlacementPercentage),
-    placeholder: 'Next placement percentage',
-    min: '0',
-    step: '1',
-  },
+  ...CHANGE_PLAN_PLACEMENT_CODES.map((placementCode) => {
+    const placementActionEditor = getActionEditorSource(
+      args.row,
+      'update_placement_modifier',
+      placementCode
+    );
+    const currentPlacementPercentage = getCurrentPlacementPercentage(args.row, placementCode);
+    const nextPlacementPercentage = readJsonNumber(
+      placementActionEditor.proposedChange,
+      'next_percentage'
+    );
+
+    return {
+      rowId: CHANGE_PLAN_PLACEMENT_ROW_IDS[placementCode],
+      actionType: 'update_placement_modifier',
+      placementCode,
+      title: `${CHANGE_PLAN_PLACEMENT_SHORT_CODES[placementCode]} · Update placement modifier`,
+      currentLine: `${CHANGE_PLAN_PLACEMENT_LABELS[placementCode]} · Current: ${formatOverridePlacementPercent(
+        currentPlacementPercentage
+      )}`,
+      enabledFieldName: `override_placement_enabled__${placementCode}`,
+      valueFieldName: `override_placement_next_percentage__${placementCode}`,
+      hiddenFields: [
+        {
+          name: `current_placement_code__${placementCode}`,
+          value: placementCode,
+        },
+        {
+          name: `current_placement_percentage__${placementCode}`,
+          value:
+            currentPlacementPercentage === null ? '' : String(currentPlacementPercentage),
+        },
+      ],
+      inputType: 'number',
+      initialChecked: placementActionEditor.source !== 'none',
+      initialValue:
+        nextPlacementPercentage === null ? '' : String(nextPlacementPercentage),
+      placeholder: 'Next placement percentage',
+      min: '0',
+      step: '1',
+    } satisfies TargetChangePlanOverrideActionItem;
+  }),
 ];
 
 const buildTargetActivityFact = (row: AdsOptimizerTargetReviewRow) => {
@@ -804,13 +896,19 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
   const [activeColumnResize, setActiveColumnResize] = useState<ActiveColumnResize | null>(null);
   const [activeExpandedTab, setActiveExpandedTab] =
     useState<TargetExpandedTabKey>('why_flagged');
+  const [savedOverrideOverlay, setSavedOverrideOverlay] =
+    useState<AdsOptimizerRecommendationOverrideOverlay>({});
+  const effectiveRows = useMemo(
+    () => applyAdsOptimizerRecommendationOverrideOverlay(props.rows, savedOverrideOverlay),
+    [props.rows, savedOverrideOverlay]
+  );
   const rowSummaries = useMemo(
-    () => buildAdsOptimizerTargetRowTableSummaries(props.rows),
-    [props.rows]
+    () => buildAdsOptimizerTargetRowTableSummaries(effectiveRows),
+    [effectiveRows]
   );
   const rowLookup = useMemo(
-    () => new Map(props.rows.map((row) => [row.targetSnapshotId, row])),
-    [props.rows]
+    () => new Map(effectiveRows.map((row) => [row.targetSnapshotId, row])),
+    [effectiveRows]
   );
   const filteredRowSummaries = useMemo(
     () =>
@@ -894,6 +992,10 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
   );
 
   useEffect(() => {
+    setSavedOverrideOverlay({});
+  }, [props.asin, props.end, props.run?.run_id, props.start]);
+
+  useEffect(() => {
     try {
       setTableLayoutPrefs(
         parseAdsOptimizerTargetTableLayoutPrefs(
@@ -975,6 +1077,19 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
     );
   };
 
+  const handleSavedOverride = (override: AdsOptimizerRecommendationOverride) => {
+    setSavedOverrideOverlay((current) => {
+      const existing = current[override.target_snapshot_id];
+      if (existing?.recommendation_override_id === override.recommendation_override_id) {
+        return current;
+      }
+      return {
+        ...current,
+        [override.target_snapshot_id]: override,
+      };
+    });
+  };
+
   if (props.asin === 'all') {
     return (
       <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
@@ -1027,18 +1142,18 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
     );
   }
 
-  const persistedRecommendationRows = props.rows.filter((row) => row.recommendation).length;
-  const actionCount = props.rows.reduce(
+  const persistedRecommendationRows = effectiveRows.filter((row) => row.recommendation).length;
+  const actionCount = effectiveRows.reduce(
     (sum, row) => sum + (row.recommendation?.actionCount ?? 0),
     0
   );
-  const coverageWarnings = props.rows.reduce(
+  const coverageWarnings = effectiveRows.reduce(
     (count, row) => count + getActionableWarningCount(row),
     0
   );
-  const topRiskRows = buildTopList(props.rows, 'risk');
-  const topOpportunityRows = buildTopList(props.rows, 'opportunity');
-  const stageableRows = props.rows.filter((row) => getWorkspaceSupportedActions(row).length > 0);
+  const topRiskRows = buildTopList(effectiveRows, 'risk');
+  const topOpportunityRows = buildTopList(effectiveRows, 'opportunity');
+  const stageableRows = effectiveRows.filter((row) => getWorkspaceSupportedActions(row).length > 0);
   const visibleStageableRows = filteredRows.filter(
     (row) => getWorkspaceSupportedActions(row).length > 0
   );
@@ -1048,7 +1163,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
   const allVisibleStageableSelected =
     visibleStageableRows.length > 0 &&
     selectedVisibleStageableIds.length === visibleStageableRows.length;
-  const selectedStageableRows = props.rows.filter((row) =>
+  const selectedStageableRows = effectiveRows.filter((row) =>
     selectedForHandoff.includes(row.targetSnapshotId)
   );
   const selectedStageableActionCount = selectedStageableRows.reduce(
@@ -1056,9 +1171,9 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
     0
   );
   const portfolioReference =
-    props.rows.find((row) => row.recommendation?.portfolioControls)?.recommendation
+    effectiveRows.find((row) => row.recommendation?.portfolioControls)?.recommendation
       ?.portfolioControls ?? null;
-  const budgetShareExceptions = props.rows.filter(
+  const budgetShareExceptions = effectiveRows.filter(
     (row) => row.recommendation?.portfolioControls?.budgetShareExceeded
   ).length;
   const exceptionEntries = filteredRows
@@ -1202,14 +1317,10 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
   };
 
   const activeExpandedContent = activeRow
-    ? (() => {
+      ? (() => {
         const changePlanProposalRows = buildTargetChangePlanProposalRows(activeRow);
         const bidActionEditor = getActionEditorSource(activeRow, 'update_target_bid');
         const stateActionEditor = getActionEditorSource(activeRow, 'update_target_state');
-        const placementActionEditor = getActionEditorSource(
-          activeRow,
-          'update_placement_modifier'
-        );
         const currentBidForOverride =
           readJsonNumber(bidActionEditor.entityContext, 'current_bid') ?? activeRow.raw.cpc;
         const nextBidForOverride = readJsonNumber(bidActionEditor.proposedChange, 'next_bid');
@@ -1218,36 +1329,24 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
           'current_state'
         );
         const nextStateForOverride = readJsonString(stateActionEditor.proposedChange, 'next_state');
-        const currentPlacementCodeForOverride =
-          readJsonString(placementActionEditor.entityContext, 'placement_code') ??
-          readJsonString(placementActionEditor.proposedChange, 'placement_code') ??
-          activeRow.recommendation?.placementDiagnostics?.currentPlacementCode ??
-          'PLACEMENT_TOP';
-        const currentPlacementPctForOverride =
-          readJsonNumber(placementActionEditor.entityContext, 'current_percentage') ??
-          activeRow.recommendation?.placementDiagnostics?.currentPercentage ??
-          activeRow.placementContext.topOfSearchModifierPct;
-        const nextPlacementPctForOverride = readJsonNumber(
-          placementActionEditor.proposedChange,
-          'next_percentage'
-        );
         const whyFlaggedNarrative = buildWhyFlaggedNarrative({
           row: activeRow,
           productState: props.productState,
         });
-        const stageableCount = getWorkspaceSupportedActions(activeRow).length;
-        const reviewOnlyCount = getUnsupportedReviewOnlyActions(activeRow).length;
+        const stageableCount = (activeRow.recommendation?.actions ?? []).filter((action) =>
+          isWorkspaceSupportedActionType(action.actionType)
+        ).length;
+        const reviewOnlyCount = (activeRow.recommendation?.actions ?? []).filter(
+          (action) => !isWorkspaceSupportedActionType(action.actionType)
+        ).length;
         const changePlanOverrideRows = buildTargetChangePlanOverrideRows({
+          row: activeRow,
           bidActionEditor,
           stateActionEditor,
-          placementActionEditor,
           currentBid: currentBidForOverride,
           nextBid: nextBidForOverride,
           currentState: currentStateForOverride,
           nextState: nextStateForOverride,
-          currentPlacementCode: currentPlacementCodeForOverride,
-          currentPlacementPercentage: currentPlacementPctForOverride,
-          nextPlacementPercentage: nextPlacementPctForOverride,
         });
         const changePlanFormUnavailableNote =
           props.productId && activeRow.recommendation
@@ -1342,12 +1441,11 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                     campaignId: activeRow.campaignId,
                     currentState: currentStateForOverride,
                     currentBid: currentBidForOverride,
-                    currentPlacementCode: currentPlacementCodeForOverride,
-                    currentPlacementPercentage: currentPlacementPctForOverride,
                   }}
                   canSave={Boolean(props.productId && activeRow.recommendation)}
                   formUnavailableNote={changePlanFormUnavailableNote}
                   saveRecommendationOverrideAction={props.saveRecommendationOverrideAction}
+                  onSavedOverride={handleSavedOverride}
                 />
               );
             case 'search_term':
@@ -1360,7 +1458,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                 />
               );
             case 'placement':
-              return <TargetPlacementTab row={activeRow} allRows={props.rows} />;
+              return <TargetPlacementTab row={activeRow} allRows={effectiveRows} />;
             case 'sqp':
               return <TargetSqpTab row={activeRow} />;
             case 'metrics':
@@ -1776,7 +1874,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
         />
         <SummaryCard
           label="Persisted targets"
-          value={formatNumber(props.rows.length)}
+          value={formatNumber(effectiveRows.length)}
           detail={`Exact run window ${formatUiDateRange(props.run.date_start, props.run.date_end)}`}
         />
         <SummaryCard
@@ -2153,7 +2251,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                     type="button"
                     className="w-full rounded-lg border border-border/70 bg-surface-2 px-3 py-2 text-left transition hover:border-primary/40"
                     onClick={() => {
-                      const match = props.rows.find((row) => row.targetId === entry.targetId);
+                      const match = effectiveRows.find((row) => row.targetId === entry.targetId);
                       if (match) expandTargetRow(match.targetSnapshotId);
                     }}
                   >
@@ -2285,7 +2383,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
             sortBy={sortBy}
             sortDirection={sortDirection}
             filteredRowCount={filteredRows.length}
-            totalRowCount={props.rows.length}
+            totalRowCount={effectiveRows.length}
             persistedRecommendationRows={persistedRecommendationRows}
             stageableRowCount={stageableRows.length}
             selectedCount={selectedForHandoff.length}

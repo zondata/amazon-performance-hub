@@ -86,6 +86,31 @@ describe('ads optimizer phase 4 runtime wiring', () => {
     expect(source).toContain('Diagnostics were saved to history.');
   });
 
+  it('wires inline override saves through a non-redirecting action-state server action', () => {
+    const pageSource = fs.readFileSync(pagePath, 'utf-8');
+    const actionsSource = fs.readFileSync(actionsPath, 'utf-8');
+    const inlineActionStart = actionsSource.indexOf(
+      'export async function saveAdsOptimizerRecommendationOverrideInlineAction'
+    );
+    const inlineActionEnd = actionsSource.indexOf(
+      'export async function saveAdsOptimizerDraftVersionAction'
+    );
+    expect(inlineActionStart).toBeGreaterThan(-1);
+    expect(inlineActionEnd).toBeGreaterThan(inlineActionStart);
+    const inlineActionSource = actionsSource.slice(inlineActionStart, inlineActionEnd);
+
+    expect(pageSource).toContain('saveAdsOptimizerRecommendationOverrideInlineAction');
+    expect(pageSource).toContain(
+      'saveRecommendationOverrideAction={saveAdsOptimizerRecommendationOverrideInlineAction}'
+    );
+    expect(actionsSource).toContain('export async function saveAdsOptimizerRecommendationOverrideInlineAction');
+    expect(inlineActionSource).toContain('saveAdsOptimizerRecommendationOverride(payload)');
+    expect(inlineActionSource).toContain('notice: `Saved manual override for ${override.target_id}.`');
+    expect(inlineActionSource).not.toContain('redirect(');
+    expect(inlineActionSource).not.toContain('redirectWithFlash');
+    expect(inlineActionSource).not.toContain("revalidatePath('/ads/optimizer')");
+  });
+
   it('keeps the history panel honest about snapshot-only behavior', () => {
     const source = fs.readFileSync(panelPath, 'utf-8');
 

@@ -150,6 +150,41 @@ const makeRow = (overrides: Partial<AdsOptimizerTargetReviewRow> = {}) =>
       spend: 10,
       note: 'Campaign-level placement context.',
     },
+    placementBreakdown: {
+      note: 'Placement modifiers and campaign-level metrics by canonical placement code.',
+      rows: [
+        {
+          placementCode: 'PLACEMENT_TOP',
+          placementLabel: 'Top of search',
+          modifierPct: 25,
+          impressions: 50,
+          clicks: 5,
+          orders: 1,
+          sales: 45,
+          spend: 10,
+        },
+        {
+          placementCode: 'PLACEMENT_REST_OF_SEARCH',
+          placementLabel: 'Rest of search',
+          modifierPct: 10,
+          impressions: 35,
+          clicks: 3,
+          orders: 1,
+          sales: 20,
+          spend: 6,
+        },
+        {
+          placementCode: 'PLACEMENT_PRODUCT_PAGE',
+          placementLabel: 'Product pages',
+          modifierPct: 5,
+          impressions: 15,
+          clicks: 1,
+          orders: 0,
+          sales: 5,
+          spend: 2,
+        },
+      ],
+    },
     searchTermDiagnostics: {
       representativeSearchTerm: 'blue widget',
       representativeSameText: true,
@@ -560,6 +595,121 @@ describe('ads optimizer workspace handoff', () => {
     });
     expect(plan.skippedUnsupportedActionTypes).toEqual([]);
     expect(plan.skippedUnsupportedActionCount).toBe(0);
+  });
+
+  it('stages one placement item per manual override placement action with placement-specific metadata', () => {
+    const row = makeRow({
+      manualOverride: makeManualOverride({
+        replacement_action_bundle_json: {
+          actions: [
+            {
+              action_type: 'update_placement_modifier',
+              entity_context_json: {
+                campaign_id: 'campaign-1',
+                placement_code: 'PLACEMENT_TOP',
+                current_percentage: 25,
+              },
+              proposed_change_json: {
+                placement_code: 'PLACEMENT_TOP',
+                next_percentage: 35,
+              },
+            },
+            {
+              action_type: 'update_placement_modifier',
+              entity_context_json: {
+                campaign_id: 'campaign-1',
+                placement_code: 'PLACEMENT_REST_OF_SEARCH',
+                current_percentage: 10,
+              },
+              proposed_change_json: {
+                placement_code: 'PLACEMENT_REST_OF_SEARCH',
+                next_percentage: 15,
+              },
+            },
+            {
+              action_type: 'update_placement_modifier',
+              entity_context_json: {
+                campaign_id: 'campaign-1',
+                placement_code: 'PLACEMENT_PRODUCT_PAGE',
+                current_percentage: 5,
+              },
+              proposed_change_json: {
+                placement_code: 'PLACEMENT_PRODUCT_PAGE',
+                next_percentage: 8,
+              },
+            },
+          ],
+        },
+      }),
+    });
+
+    const plan = buildAdsOptimizerWorkspaceHandoffPlan({
+      asin: 'B001TEST',
+      start: '2026-03-01',
+      end: '2026-03-10',
+      runId: 'run-1',
+      objective: 'Scale Profit',
+      rows: [row],
+      createdAt: '2026-03-11T10:00:00Z',
+    });
+
+    const placementItems = plan.itemPayloads.filter(
+      (item) => item.action_type === 'update_placement_modifier'
+    );
+
+    expect(placementItems).toHaveLength(3);
+    expect(placementItems.map((item) => item.placement_code)).toEqual([
+      'PLACEMENT_TOP',
+      'PLACEMENT_REST_OF_SEARCH',
+      'PLACEMENT_PRODUCT_PAGE',
+    ]);
+    expect(placementItems.map((item) => item.entity_key)).toEqual([
+      'campaign-1::PLACEMENT_TOP',
+      'campaign-1::PLACEMENT_REST_OF_SEARCH',
+      'campaign-1::PLACEMENT_PRODUCT_PAGE',
+    ]);
+    expect(placementItems[0]).toMatchObject({
+      before_json: {
+        placement_code: 'PLACEMENT_TOP',
+        percentage: 25,
+      },
+      after_json: {
+        placement_code: 'PLACEMENT_TOP',
+        percentage: 35,
+      },
+      ui_context_json: {
+        placement_label: 'Top of Search',
+        placement_modifier_pct: 25,
+      },
+    });
+    expect(placementItems[1]).toMatchObject({
+      before_json: {
+        placement_code: 'PLACEMENT_REST_OF_SEARCH',
+        percentage: 10,
+      },
+      after_json: {
+        placement_code: 'PLACEMENT_REST_OF_SEARCH',
+        percentage: 15,
+      },
+      ui_context_json: {
+        placement_label: 'Rest of Search',
+        placement_modifier_pct: 10,
+      },
+    });
+    expect(placementItems[2]).toMatchObject({
+      before_json: {
+        placement_code: 'PLACEMENT_PRODUCT_PAGE',
+        percentage: 5,
+      },
+      after_json: {
+        placement_code: 'PLACEMENT_PRODUCT_PAGE',
+        percentage: 8,
+      },
+      ui_context_json: {
+        placement_label: 'Product Pages',
+        placement_modifier_pct: 5,
+      },
+    });
   });
 
   it('creates a normal Ads Workspace change set and items during handoff', async () => {

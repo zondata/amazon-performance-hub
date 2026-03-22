@@ -25,6 +25,14 @@ import {
   type SaveAdsOptimizerProductSettingsPayload,
 } from './types';
 
+const CANONICAL_PLACEMENT_CODES = [
+  'PLACEMENT_TOP',
+  'PLACEMENT_REST_OF_SEARCH',
+  'PLACEMENT_PRODUCT_PAGE',
+] as const;
+
+type CanonicalPlacementCode = (typeof CANONICAL_PLACEMENT_CODES)[number];
+
 const trimToNull = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -144,6 +152,22 @@ const asRecommendationOverrideActionType = (
     );
   }
   return trimmed as AdsOptimizerRecommendationOverrideActionType;
+};
+
+const asCanonicalPlacementCode = (
+  value: unknown,
+  fieldName: string
+): CanonicalPlacementCode => {
+  const trimmed = trimToNull(value);
+  if (!trimmed) {
+    throw new Error(`${fieldName} is required.`);
+  }
+  if (!CANONICAL_PLACEMENT_CODES.includes(trimmed as CanonicalPlacementCode)) {
+    throw new Error(
+      `${fieldName} must be one of: ${CANONICAL_PLACEMENT_CODES.join(', ')}.`
+    );
+  }
+  return trimmed as CanonicalPlacementCode;
 };
 
 const validateLossMakerPolicy = (value: unknown): Partial<AdsOptimizerLossMakerPolicy> | null => {
@@ -397,7 +421,10 @@ export const validateSaveAdsOptimizerRecommendationOverridePayload = (
     throw new Error('replacement_action_bundle_json.actions must include at least one action.');
   }
 
-  const seenActionTypes = new Set<string>();
+  const seenSingleActionTypes = new Set<
+    Exclude<AdsOptimizerRecommendationOverrideActionType, 'update_placement_modifier'>
+  >();
+  const seenPlacementCodes = new Set<CanonicalPlacementCode>();
   const actions = rawActions.map((entry, index) => {
     const action = asJsonObject(
       entry,
@@ -407,10 +434,6 @@ export const validateSaveAdsOptimizerRecommendationOverridePayload = (
       action.action_type,
       `replacement_action_bundle_json.actions[${index}].action_type`
     );
-    if (seenActionTypes.has(actionType)) {
-      throw new Error(`replacement action ${actionType} can only appear once per override.`);
-    }
-    seenActionTypes.add(actionType);
 
     const entityContext =
       action.entity_context_json === null || action.entity_context_json === undefined
@@ -425,11 +448,19 @@ export const validateSaveAdsOptimizerRecommendationOverridePayload = (
     );
 
     if (actionType === 'update_target_bid') {
+      if (seenSingleActionTypes.has(actionType)) {
+        throw new Error(`replacement action ${actionType} can only appear once per override.`);
+      }
+      seenSingleActionTypes.add(actionType);
       const nextBid = Number(proposedChange.next_bid);
       if (!Number.isFinite(nextBid) || nextBid <= 0) {
         throw new Error('update_target_bid override requires a positive next_bid.');
       }
     } else if (actionType === 'update_target_state') {
+      if (seenSingleActionTypes.has(actionType)) {
+        throw new Error(`replacement action ${actionType} can only appear once per override.`);
+      }
+      seenSingleActionTypes.add(actionType);
       const nextState = trimToNull(proposedChange.next_state);
       if (!nextState || !['enabled', 'paused', 'archived'].includes(nextState)) {
         throw new Error(
@@ -438,11 +469,21 @@ export const validateSaveAdsOptimizerRecommendationOverridePayload = (
       }
     } else if (actionType === 'update_placement_modifier') {
       const nextPercentage = Number(proposedChange.next_percentage);
-      const placementCode =
+      const placementCodeRaw =
         trimToNull(proposedChange.placement_code) ?? trimToNull(entityContext?.placement_code);
-      if (!placementCode) {
+      if (!placementCodeRaw) {
         throw new Error('update_placement_modifier override requires placement_code.');
       }
+      const placementCode = asCanonicalPlacementCode(
+        placementCodeRaw,
+        'update_placement_modifier override placement_code'
+      );
+      if (seenPlacementCodes.has(placementCode)) {
+        throw new Error(
+          `update_placement_modifier override can only appear once per placement_code (${placementCode}).`
+        );
+      }
+      seenPlacementCodes.add(placementCode);
       if (!Number.isFinite(nextPercentage) || nextPercentage < 0) {
         throw new Error(
           'update_placement_modifier override requires next_percentage of 0 or greater.'

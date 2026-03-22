@@ -17,7 +17,7 @@ import {
   saveAdsOptimizerDraftVersionAction,
   saveAdsOptimizerProductSettingsAction,
   saveAdsOptimizerHeroQueryAction,
-  saveAdsOptimizerRecommendationOverrideAction,
+  saveAdsOptimizerRecommendationOverrideInlineAction,
   seedAdsOptimizerStarterVersionsAction,
 } from '@/app/ads/optimizer/actions';
 import { isAdsOptimizerEnabled } from '@/lib/ads-optimizer/featureFlag';
@@ -442,7 +442,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           error={error}
           overrideError={overrideError}
           handoffAction={handoffAdsOptimizerToWorkspaceAction}
-          saveRecommendationOverrideAction={saveAdsOptimizerRecommendationOverrideAction}
+          saveRecommendationOverrideAction={saveAdsOptimizerRecommendationOverrideInlineAction}
         />
       ) : (
         <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">

@@ -62,6 +62,14 @@ type ExecuteAdsOptimizerWorkspaceHandoffDeps = {
   markRecommendationOverridesApplied: typeof markAdsOptimizerRecommendationOverridesApplied;
 };
 
+const CANONICAL_PLACEMENT_CODES = [
+  'PLACEMENT_TOP',
+  'PLACEMENT_REST_OF_SEARCH',
+  'PLACEMENT_PRODUCT_PAGE',
+] as const;
+
+type CanonicalPlacementCode = (typeof CANONICAL_PLACEMENT_CODES)[number];
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const defaultDeps: ExecuteAdsOptimizerWorkspaceHandoffDeps = {
@@ -106,6 +114,10 @@ const trimToNull = (value: unknown) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const isCanonicalPlacementCode = (value: string | null): value is CanonicalPlacementCode =>
+  value !== null &&
+  CANONICAL_PLACEMENT_CODES.includes(value as CanonicalPlacementCode);
+
 const readString = (value: JsonObject | null, key: string) =>
   typeof value?.[key] === 'string' ? (value[key] as string) : null;
 
@@ -114,6 +126,26 @@ const readNumber = (value: JsonObject | null, key: string) => {
   if (raw === null || raw === undefined || raw === '') return null;
   const numeric = Number(raw);
   return Number.isFinite(numeric) ? numeric : null;
+};
+
+const readPlacementCode = (
+  entityContext: JsonObject | null,
+  proposedChange: JsonObject | null
+): CanonicalPlacementCode | null => {
+  const placementCode =
+    readString(entityContext, 'placement_code') ?? readString(proposedChange, 'placement_code');
+  return isCanonicalPlacementCode(placementCode) ? placementCode : null;
+};
+
+const getPlacementModifierPct = (
+  row: AdsOptimizerTargetReviewRow,
+  placementCode: CanonicalPlacementCode | null
+) => {
+  if (!placementCode) return null;
+  return (
+    row.placementBreakdown.rows.find((placement) => placement.placementCode === placementCode)
+      ?.modifierPct ?? null
+  );
 };
 
 const normalizeHandoffInput = (input: ExecuteAdsOptimizerWorkspaceHandoffInput) => {
@@ -284,10 +316,7 @@ const buildPlacementItemPayload = (args: {
   notes: string;
   reviewAfterDays: number | null;
 }) => {
-  const placementCode = trimToNull(
-    readString(args.entityContext, 'placement_code') ??
-      readString(args.proposedChange, 'placement_code')
-  );
+  const placementCode = readPlacementCode(args.entityContext, args.proposedChange);
   const nextPercentage = readNumber(args.proposedChange, 'next_percentage');
 
   if (!placementCode) {
@@ -313,7 +342,9 @@ const buildPlacementItemPayload = (args: {
     action_type: 'update_placement_modifier',
     before_json: {
       placement_code: placementCode,
-      percentage: readNumber(args.entityContext, 'current_percentage'),
+      percentage:
+        readNumber(args.entityContext, 'current_percentage') ??
+        getPlacementModifierPct(args.row, placementCode),
     },
     after_json: {
       placement_code: placementCode,
@@ -340,50 +371,58 @@ const buildUiContextJson = (args: {
   end: string;
   recommendationReasonCodes: string[];
   actionReasonCodes: string[];
-}) => ({
-  surface: 'ads_optimizer_handoff',
-  row_surface: 'targets',
-  campaign_name: args.row.campaignName,
-  ad_group_name: args.row.adGroupName,
-  target_text: args.row.targetText,
-  match_type: args.row.matchType,
-  placement_label:
+}) => {
+  const placementCode =
     args.actionType === 'update_placement_modifier'
-      ? formatPlacementCode(
-          readString(args.actionEntityContext, 'placement_code') ??
-            readString(args.actionProposedChange, 'placement_code')
-        )
-      : null,
-  placement_modifier_pct: args.row.placementContext.topOfSearchModifierPct,
-  coverage_note: args.row.coverage.criticalWarnings[0] ?? args.row.coverage.notes[0] ?? null,
-  optimizer_handoff: {
-    phase: 10,
-    source: 'ads_optimizer',
-    run_id: args.runId,
-    selected_asin: args.asin,
-    date_start: args.start,
-    date_end: args.end,
-    target_snapshot_id: args.row.targetSnapshotId,
-    recommendation_snapshot_id: args.row.recommendation?.recommendationSnapshotId ?? null,
-    recommendation_status: args.row.recommendation?.status ?? null,
-    action_type: args.actionType,
-    spend_direction: args.row.recommendation?.spendDirection ?? null,
-    recommendation_reason_codes: args.recommendationReasonCodes,
-    action_reason_codes: args.actionReasonCodes,
-    source_execution_boundary: args.row.recommendation?.executionBoundary ?? null,
-    source_workspace_handoff: args.row.recommendation?.workspaceHandoff ?? null,
-    human_override:
-      args.row.manualOverride
-        ? {
-            recommendation_override_id: args.row.manualOverride.recommendation_override_id,
-            override_scope: args.row.manualOverride.override_scope,
-            operator_note: args.row.manualOverride.operator_note,
-            created_at: args.row.manualOverride.created_at,
-            apply_count_before_handoff: args.row.manualOverride.apply_count,
-          }
+      ? readPlacementCode(args.actionEntityContext, args.actionProposedChange)
+      : null;
+
+  return {
+    surface: 'ads_optimizer_handoff',
+    row_surface: 'targets',
+    campaign_name: args.row.campaignName,
+    ad_group_name: args.row.adGroupName,
+    target_text: args.row.targetText,
+    match_type: args.row.matchType,
+    placement_label:
+      args.actionType === 'update_placement_modifier'
+        ? formatPlacementCode(placementCode)
         : null,
-  },
-} satisfies JsonObject);
+    placement_modifier_pct:
+      args.actionType === 'update_placement_modifier'
+        ? readNumber(args.actionEntityContext, 'current_percentage') ??
+          getPlacementModifierPct(args.row, placementCode)
+        : null,
+    coverage_note: args.row.coverage.criticalWarnings[0] ?? args.row.coverage.notes[0] ?? null,
+    optimizer_handoff: {
+      phase: 10,
+      source: 'ads_optimizer',
+      run_id: args.runId,
+      selected_asin: args.asin,
+      date_start: args.start,
+      date_end: args.end,
+      target_snapshot_id: args.row.targetSnapshotId,
+      recommendation_snapshot_id: args.row.recommendation?.recommendationSnapshotId ?? null,
+      recommendation_status: args.row.recommendation?.status ?? null,
+      action_type: args.actionType,
+      spend_direction: args.row.recommendation?.spendDirection ?? null,
+      recommendation_reason_codes: args.recommendationReasonCodes,
+      action_reason_codes: args.actionReasonCodes,
+      source_execution_boundary: args.row.recommendation?.executionBoundary ?? null,
+      source_workspace_handoff: args.row.recommendation?.workspaceHandoff ?? null,
+      human_override:
+        args.row.manualOverride
+          ? {
+              recommendation_override_id: args.row.manualOverride.recommendation_override_id,
+              override_scope: args.row.manualOverride.override_scope,
+              operator_note: args.row.manualOverride.operator_note,
+              created_at: args.row.manualOverride.created_at,
+              apply_count_before_handoff: args.row.manualOverride.apply_count,
+            }
+          : null,
+    },
+  } satisfies JsonObject;
+};
 
 const buildDraftPayloadsForRow = (args: {
   row: AdsOptimizerTargetReviewRow;
