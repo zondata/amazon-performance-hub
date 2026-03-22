@@ -2536,7 +2536,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                           ? activeExpandedContent
                           : null
                       }
-                      colSpan={7}
+                      colSpan={ADS_OPTIMIZER_TARGET_TABLE_COLUMNS.length}
                       onSelect={() => toggleTargetRow(summary.targetSnapshotId)}
                       onToggleSelect={(checked) =>
                         toggleSelectedRow(summary.targetSnapshotId, checked)

@@ -133,6 +133,19 @@ export type AdsOptimizerTargetRowTableSummary = {
     nextValue: AdsOptimizerTargetRole | null;
     nextLabel: string;
   };
+  lastChange: {
+    detectedDate: string | null;
+    items: Array<{
+      key: string;
+      label: string;
+      previousDisplay: string;
+      currentDisplay: string;
+      deltaPercentLabel: string | null;
+      deltaDirection: 'positive' | 'negative' | null;
+    }>;
+    overflowCount: number;
+    emptyMessage: string | null;
+  };
   changeSummary: {
     lines: string[];
     overflowCount: number;
@@ -885,6 +898,38 @@ const buildChangeSummary = (row: TargetReviewRowLike) => {
   };
 };
 
+const buildLastChangeSummary = (row: TargetReviewRowLike) => {
+  const lastDetectedChange = row.lastDetectedChange ?? {
+    detectedDate: null,
+    items: [],
+    overflowCount: 0,
+    emptyMessage: 'No detected tracked change',
+  };
+
+  if (lastDetectedChange.items.length === 0) {
+    return {
+      detectedDate: lastDetectedChange.detectedDate,
+      items: [],
+      overflowCount: 0,
+      emptyMessage: lastDetectedChange.emptyMessage ?? 'No detected tracked change',
+    };
+  }
+
+  return {
+    detectedDate: lastDetectedChange.detectedDate,
+    items: lastDetectedChange.items.slice(0, 2).map((item) => ({
+      key: item.key,
+      label: item.label,
+      previousDisplay: item.previousDisplay,
+      currentDisplay: item.currentDisplay,
+      deltaPercentLabel: item.deltaPercentLabel,
+      deltaDirection: item.deltaDirection,
+    })),
+    overflowCount: lastDetectedChange.overflowCount,
+    emptyMessage: null,
+  };
+};
+
 const buildTableSummary = (
   row: TargetReviewRowLike,
   context: {
@@ -951,6 +996,7 @@ const buildTableSummary = (
       nextValue: row.role.desiredRole.value,
       nextLabel: row.role.desiredRole.value ? row.role.desiredRole.label : '—',
     },
+    lastChange: buildLastChangeSummary(row),
     changeSummary: buildChangeSummary(row),
     handoff: {
       stageable: stageableActions.length > 0,

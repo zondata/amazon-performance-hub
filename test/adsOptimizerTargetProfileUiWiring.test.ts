@@ -732,7 +732,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(shellSource).toContain("useState<TargetExpandedTabKey>('why_flagged')");
     expect(shellSource).toContain("setActiveExpandedTab('why_flagged');");
     expect(shellSource).toContain('expandedContent={');
-    expect(shellSource).toContain('colSpan={7}');
+    expect(shellSource).not.toContain('colSpan={7}');
     expect(shellSource).toContain('data-aph-hscroll');
     expect(shellSource).toContain('overflow-x-auto overflow-y-visible');
     expect(shellSource).toContain('min-w-full table-fixed');
@@ -786,6 +786,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
       "label: 'Contribution'",
       "label: 'Ranking'",
       "label: 'Role'",
+      "label: 'Last change'",
       "label: 'Change summary'",
     ];
     const orderedIndexes = orderedHeaders.map((label) => tableLayoutPrefsSource.indexOf(label));
@@ -813,6 +814,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
       "backgroundColor: 'color-mix(in srgb, var(--color-surface-2) 35%, var(--color-surface))'"
     );
     expect(summaryRowSource).toContain("columnStyle('target')");
+    expect(summaryRowSource).toContain("columnStyle('last_change')");
     expect(summaryRowSource).toContain('maxWidth');
     expect(summaryRowSource).toContain('w-full min-w-0 max-w-full');
     expect(summaryRowSource).toContain('overflow-hidden');
@@ -1660,13 +1662,14 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     const source = fs.readFileSync(tableLayoutPrefsPath, 'utf-8');
 
     expect(source).toContain('ADS_OPTIMIZER_TARGET_TABLE_LAYOUT_STORAGE_KEY');
-    expect(source).toContain("'aph.adsOptimizerTargetsCollapsedTableLayout.v2'");
+    expect(source).toContain("'aph.adsOptimizerTargetsCollapsedTableLayout.v3'");
     expect(source).toContain("key: 'target'");
     expect(source).toContain("key: 'state'");
     expect(source).toContain("key: 'economics'");
     expect(source).toContain("key: 'contribution'");
     expect(source).toContain("key: 'ranking'");
     expect(source).toContain("key: 'role'");
+    expect(source).toContain("key: 'last_change'");
     expect(source).toContain("key: 'change_summary'");
     expect(source).toContain('defaultWidth');
     expect(source).toContain('minWidth');
@@ -1680,6 +1683,9 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(source).toContain('defaultWidth: 170');
     expect(source).toContain('defaultWidth: 150');
     expect(source).toContain('defaultWidth: 120');
+    expect(source).toContain('minWidth: 220');
+    expect(source).toContain('defaultWidth: 260');
+    expect(source).toContain('maxWidth: 420');
     expect(source).toContain('defaultWidth: 200');
     expect(source).toContain('parseAdsOptimizerTargetTableLayoutPrefs');
     expect(source).toContain('serializeAdsOptimizerTargetTableLayoutPrefs');

@@ -19,6 +19,10 @@ const targetProfileState = vi.hoisted(() => ({
   mapTargetProfileRowToSnapshotView: vi.fn(),
 }));
 
+const lastDetectedChangeState = vi.hoisted(() => ({
+  load: vi.fn(),
+}));
+
 vi.mock('../apps/web/src/lib/env', () => ({
   env: {
     supabaseUrl: 'https://example.supabase.co',
@@ -81,6 +85,16 @@ vi.mock('../apps/web/src/lib/ads-optimizer/targetProfile', () => ({
   loadAdsOptimizerTargetProfiles: targetProfileState.loadTargetProfiles,
   mapTargetSnapshotToProfileView: targetProfileState.mapTargetSnapshotToProfileView,
   mapTargetProfileRowToSnapshotView: targetProfileState.mapTargetProfileRowToSnapshotView,
+}));
+
+vi.mock('../apps/web/src/lib/ads-optimizer/lastDetectedChange', () => ({
+  createEmptyAdsOptimizerLastDetectedChange: vi.fn(() => ({
+    detectedDate: null,
+    items: [],
+    overflowCount: 0,
+    emptyMessage: 'No detected tracked change',
+  })),
+  loadAdsOptimizerLastDetectedChangesForTargets: lastDetectedChangeState.load,
 }));
 
 vi.mock('../apps/web/src/lib/ads-workspace/repoChangeSets', () => ({
@@ -329,6 +343,8 @@ describe('ads optimizer targets run context', () => {
     });
     targetProfileState.mapTargetSnapshotToProfileView.mockReset();
     targetProfileState.mapTargetProfileRowToSnapshotView.mockReset();
+    lastDetectedChangeState.load.mockReset();
+    lastDetectedChangeState.load.mockResolvedValue(new Map());
   });
 
   it('prefers runId over incoming ASIN/date values and loads that persisted run', async () => {
@@ -556,5 +572,121 @@ describe('ads optimizer targets run context', () => {
     expect(repoState.listTargetSnapshotsByRun).toHaveBeenCalledWith('run-0');
     expect(result.rows[0]?.previousComparable?.raw.spend).toBe(80);
     expect(result.rows[0]?.previousComparable?.raw.spend).not.toBe(999);
+  });
+
+  it('attaches lastDetectedChange to current rows while leaving previousComparable behavior unchanged', async () => {
+    const run = makeRun();
+    repoState.listRuns.mockResolvedValue([run]);
+    repoState.listTargetSnapshotsByRun.mockResolvedValue([
+      {
+        target_snapshot_id: 'snap-1',
+        run_id: 'run-1',
+        created_at: '2026-03-10T00:00:00Z',
+        asin: 'B001TEST',
+        campaign_id: 'cmp-1',
+        ad_group_id: 'ag-1',
+        target_id: 'target-1',
+        coverage_note: null,
+        snapshot_payload_json: {},
+      },
+      {
+        target_snapshot_id: 'snap-2',
+        run_id: 'run-1',
+        created_at: '2026-03-10T00:00:00Z',
+        asin: 'B001TEST',
+        campaign_id: 'cmp-1',
+        ad_group_id: 'ag-2',
+        target_id: 'target-2',
+        coverage_note: null,
+        snapshot_payload_json: {},
+      },
+    ]);
+    targetProfileState.mapTargetSnapshotToProfileView
+      .mockReturnValueOnce(
+        makeProfileView({
+          targetSnapshotId: 'snap-1',
+          targetId: 'target-1',
+          adGroupId: 'ag-1',
+          adGroupName: 'Exact Group',
+        })
+      )
+      .mockReturnValueOnce(
+        makeProfileView({
+          targetSnapshotId: 'snap-2',
+          targetId: 'target-2',
+          adGroupId: 'ag-2',
+          adGroupName: 'Phrase Group',
+          targetText: 'hero phrase',
+        })
+      );
+    targetProfileState.loadTargetProfiles.mockResolvedValue({
+      rows: [makeTargetProfileRow({ targetId: 'target-1' }), makeTargetProfileRow({ targetId: 'target-2' })],
+      zeroTargetDiagnostics: null,
+    });
+    targetProfileState.mapTargetProfileRowToSnapshotView.mockReturnValue(
+      makeProfileView({
+        targetSnapshotId: 'previous-period:target-1',
+        runId: 'previous-period:2026-02-19:2026-02-28',
+        raw: {
+          ...makeProfileView().raw,
+          spend: 80,
+        },
+      })
+    );
+    lastDetectedChangeState.load.mockResolvedValue(
+      new Map([
+        [
+          'snap-1',
+          {
+            detectedDate: '2026-03-21',
+            items: [
+              {
+                key: 'campaign_bidding_strategy:cmp-1:2026-03-21',
+                kind: 'campaign_bidding_strategy',
+                label: 'Strategy',
+                previousDisplay: 'fixed bids',
+                currentDisplay: 'dynamic down only',
+                deltaPercentLabel: null,
+                deltaDirection: null,
+              },
+            ],
+            overflowCount: 0,
+            emptyMessage: null,
+          },
+        ],
+        [
+          'snap-2',
+          {
+            detectedDate: '2026-03-21',
+            items: [
+              {
+                key: 'campaign_bidding_strategy:cmp-1:2026-03-21',
+                kind: 'campaign_bidding_strategy',
+                label: 'Strategy',
+                previousDisplay: 'fixed bids',
+                currentDisplay: 'dynamic down only',
+                deltaPercentLabel: null,
+                deltaDirection: null,
+              },
+            ],
+            overflowCount: 0,
+            emptyMessage: null,
+          },
+        ],
+      ])
+    );
+
+    const result = await getAdsOptimizerTargetsViewData({
+      asin: 'B001TEST',
+      start: '2026-03-01',
+      end: '2026-03-10',
+    });
+
+    expect(lastDetectedChangeState.load).toHaveBeenCalled();
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows[0]?.lastDetectedChange?.detectedDate).toBe('2026-03-21');
+    expect(result.rows[1]?.lastDetectedChange?.items[0]?.label).toBe('Strategy');
+    expect(result.rows[0]?.previousComparable?.raw.spend).toBe(80);
+    expect(result.rows[1]?.lastDetectedChange).toEqual(result.rows[0]?.lastDetectedChange);
   });
 });

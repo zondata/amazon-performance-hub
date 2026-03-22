@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import type { AdsOptimizerTargetReviewRow } from '@/lib/ads-optimizer/runtime';
 import type { AdsOptimizerTargetTableColumnWidths } from '@/lib/ads-optimizer/targetTableLayoutPrefs';
 import type { AdsOptimizerTargetRowTableSummary } from '@/lib/ads-optimizer/targetRowTableSummary';
+import { formatUiDate } from '@/lib/time/formatUiDate';
 
 const toneClass = (tone: 'good' | 'bad' | 'neutral' | 'missing') => {
   if (tone === 'good') return 'text-emerald-700';
@@ -31,6 +32,12 @@ const rankToneClass = (trend: string) => {
   if (trend === 'Rising') return 'text-emerald-700';
   if (trend === 'Decline') return 'text-rose-700';
   if (trend === 'Maintain') return 'text-foreground';
+  return 'text-muted';
+};
+
+const deltaDirectionClass = (direction: 'positive' | 'negative' | null) => {
+  if (direction === 'positive') return 'text-emerald-700';
+  if (direction === 'negative') return 'text-rose-700';
   return 'text-muted';
 };
 
@@ -124,6 +131,7 @@ type TargetSummaryRowProps = {
 export default function TargetSummaryRow(props: TargetSummaryRowProps) {
   const { row, summary } = props;
   const changeItems = summary.changeSummary.lines;
+  const lastChangeItems = summary.lastChange.items;
   const stickyCellBackgroundStyle = props.isActive
     ? {
         backgroundColor: 'color-mix(in srgb, var(--color-primary) 5%, var(--color-surface))',
@@ -325,6 +333,50 @@ export default function TargetSummaryRow(props: TargetSummaryRowProps) {
               </div>
             </div>
           </div>
+        </td>
+
+        <td
+          className="overflow-hidden px-3 py-3 align-top"
+          style={columnStyle('last_change')}
+        >
+          {lastChangeItems.length === 0 ? (
+            <div className="w-full min-w-0 max-w-full break-words text-[11px] text-muted">
+              {summary.lastChange.emptyMessage}
+            </div>
+          ) : (
+            <div className="w-full min-w-0 max-w-full space-y-1.5 overflow-hidden text-[11px] leading-5">
+              {summary.lastChange.detectedDate ? (
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+                  {formatUiDate(summary.lastChange.detectedDate)}
+                </div>
+              ) : null}
+              {lastChangeItems.map((item) => (
+                <div key={item.key} className="min-w-0">
+                  <div className="truncate text-[10px] font-semibold tracking-wide text-muted">
+                    {item.label}
+                  </div>
+                  <div className="break-words text-foreground">
+                    <span>{item.previousDisplay}</span>
+                    <span className="text-muted"> → </span>
+                    <span>{item.currentDisplay}</span>
+                    {item.deltaPercentLabel ? (
+                      <>
+                        <span className="text-muted"> </span>
+                        <span className={deltaDirectionClass(item.deltaDirection)}>
+                          {item.deltaPercentLabel}
+                        </span>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+              {summary.lastChange.overflowCount > 0 ? (
+                <div className="break-words text-muted">
+                  +{summary.lastChange.overflowCount} more changes on this date
+                </div>
+              ) : null}
+            </div>
+          )}
         </td>
 
         <td

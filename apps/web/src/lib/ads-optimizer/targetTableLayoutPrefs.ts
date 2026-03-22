@@ -1,5 +1,5 @@
 export const ADS_OPTIMIZER_TARGET_TABLE_LAYOUT_STORAGE_KEY =
-  'aph.adsOptimizerTargetsCollapsedTableLayout.v2';
+  'aph.adsOptimizerTargetsCollapsedTableLayout.v3';
 
 export const ADS_OPTIMIZER_TARGET_TABLE_COLUMNS = [
   {
@@ -48,6 +48,14 @@ export const ADS_OPTIMIZER_TARGET_TABLE_COLUMNS = [
     minWidth: 100,
     defaultWidth: 120,
     maxWidth: 200,
+    freezable: false,
+  },
+  {
+    key: 'last_change',
+    label: 'Last change',
+    minWidth: 220,
+    defaultWidth: 260,
+    maxWidth: 420,
     freezable: false,
   },
   {

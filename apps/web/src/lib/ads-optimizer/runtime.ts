@@ -28,6 +28,11 @@ import {
   readAdsOptimizerTargetRunRole,
   type AdsOptimizerTargetRole,
 } from './role';
+import {
+  createEmptyAdsOptimizerLastDetectedChange,
+  loadAdsOptimizerLastDetectedChangesForTargets,
+  type AdsOptimizerLastDetectedChange,
+} from './lastDetectedChange';
 import { buildAdsOptimizerRecommendationSnapshots } from './recommendation';
 import {
   createAdsOptimizerRun,
@@ -153,6 +158,7 @@ export type AdsOptimizerTargetReviewRow = AdsOptimizerTargetProfileSnapshotView 
   persistedTargetKey: string;
   recommendation: AdsOptimizerRecommendationSnapshotView | null;
   manualOverride?: AdsOptimizerRecommendationOverride | null;
+  lastDetectedChange?: AdsOptimizerLastDetectedChange;
   previousComparable?: AdsOptimizerTargetProfileSnapshotView | null;
   roleHistory: AdsOptimizerTargetRoleHistoryEntry[];
   queue: {
@@ -421,6 +427,7 @@ const buildTargetReviewRows = (args: {
       persistedTargetKey: snapshot.target_id,
       recommendation,
       manualOverride,
+      lastDetectedChange: createEmptyAdsOptimizerLastDetectedChange(),
       roleHistory: args.roleHistoryByTargetId.get(snapshot.target_id) ?? [],
       queue: {
         priority: recommendation?.actions[0]?.priority ?? null,
@@ -1116,6 +1123,15 @@ export const getAdsOptimizerTargetsViewData = async (args: {
     roleHistoryByTargetId,
     activeOverrides,
   });
+  const lastDetectedChangeByTargetSnapshotId =
+    rows.length > 0 ? await loadAdsOptimizerLastDetectedChangesForTargets(rows) : new Map();
+  const rowsWithLastDetectedChange = rows.map((row) => ({
+    ...row,
+    lastDetectedChange:
+      lastDetectedChangeByTargetSnapshotId.get(row.targetSnapshotId) ??
+      row.lastDetectedChange ??
+      createEmptyAdsOptimizerLastDetectedChange(),
+  }));
   const previousRows = previousComparableRun
     ? buildTargetReviewRows({
         snapshots: previousSnapshots,
@@ -1133,7 +1149,7 @@ export const getAdsOptimizerTargetsViewData = async (args: {
       }),
     ] as const)
   );
-  const currentRows = rows.map((row) => ({
+  const currentRows = rowsWithLastDetectedChange.map((row) => ({
     ...row,
     previousComparable: previousRowsByKey.get(row.persistedTargetKey) ?? null,
   }));

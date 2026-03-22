@@ -152,6 +152,19 @@ describe('ads optimizer phase 4 runtime wiring', () => {
   it('loads prior comparable runs and handoff audit into the targets trust layer', () => {
     const runtimeSource = fs.readFileSync(runtimePath, 'utf-8');
 
+    expect(runtimeSource).toContain("from './lastDetectedChange'");
+    expect(runtimeSource).toContain('loadAdsOptimizerLastDetectedChangesForTargets');
+    expect(runtimeSource).toContain('createEmptyAdsOptimizerLastDetectedChange');
+    expect(runtimeSource).toContain('const lastDetectedChangeByTargetSnapshotId =');
+    expect(runtimeSource).toContain(
+      'rows.length > 0 ? await loadAdsOptimizerLastDetectedChangesForTargets(rows) : new Map()'
+    );
+    expect(runtimeSource).toContain('const rowsWithLastDetectedChange = rows.map((row) => ({');
+    expect(runtimeSource).toContain('lastDetectedChange:');
+    expect(runtimeSource).toContain('row.lastDetectedChange ??');
+    expect(runtimeSource).not.toContain('previousComparable: loadAdsOptimizerLastDetectedChangesForTargets');
+    expect(runtimeSource).not.toContain('previousComparableRun.lastDetectedChange');
+
     expect(runtimeSource).toContain('previousComparableRun');
     expect(runtimeSource).toContain('buildAdsOptimizerOverviewComparisonWindow');
     expect(runtimeSource).toContain('loadAdsOptimizerTargetProfiles');

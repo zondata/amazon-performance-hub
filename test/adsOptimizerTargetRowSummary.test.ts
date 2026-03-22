@@ -262,6 +262,12 @@ const buildRow = (
       ],
     },
     manualOverride: null,
+    lastDetectedChange: {
+      detectedDate: null,
+      items: [],
+      overflowCount: 0,
+      emptyMessage: 'No detected tracked change',
+    },
     previousComparable: null,
     roleHistory: [],
     queue: {
@@ -397,6 +403,167 @@ describe('ads optimizer target row table summary', () => {
     expect(summary.ranking.organic.trendLabel).toBe('Rising');
     expect(summary.ranking.sponsored.latestLabel).toBe('#16');
     expect(summary.ranking.sponsored.trendLabel).toBe('Maintain');
+  });
+
+  it('maps the empty last-change state when no tracked history is available', () => {
+    const row = buildRow();
+
+    const summary = buildAdsOptimizerTargetRowTableSummary(row, [row]);
+
+    expect(summary.lastChange.detectedDate).toBeNull();
+    expect(summary.lastChange.items).toEqual([]);
+    expect(summary.lastChange.overflowCount).toBe(0);
+    expect(summary.lastChange.emptyMessage).toBe('No detected tracked change');
+  });
+
+  it('maps a single latest bid change with date, values, and signed delta percent', () => {
+    const row = buildRow({
+      lastDetectedChange: {
+        detectedDate: '2026-03-19',
+        items: [
+          {
+            key: 'target_bid:target-1:2026-03-19',
+            kind: 'target_bid',
+            label: 'Bid',
+            previousDisplay: '$1.20',
+            currentDisplay: '$1.50',
+            deltaPercentLabel: '+25%',
+            deltaDirection: 'positive',
+          },
+        ],
+        overflowCount: 0,
+        emptyMessage: null,
+      },
+    });
+
+    const summary = buildAdsOptimizerTargetRowTableSummary(row, [row]);
+
+    expect(summary.lastChange.detectedDate).toBe('2026-03-19');
+    expect(summary.lastChange.items).toEqual([
+      {
+        key: 'target_bid:target-1:2026-03-19',
+        label: 'Bid',
+        previousDisplay: '$1.20',
+        currentDisplay: '$1.50',
+        deltaPercentLabel: '+25%',
+        deltaDirection: 'positive',
+      },
+    ]);
+    expect(summary.lastChange.emptyMessage).toBeNull();
+  });
+
+  it('keeps same-date bid and TOS change items in required order', () => {
+    const row = buildRow({
+      lastDetectedChange: {
+        detectedDate: '2026-03-20',
+        items: [
+          {
+            key: 'target_bid:target-1:2026-03-20',
+            kind: 'target_bid',
+            label: 'Bid',
+            previousDisplay: '$1.00',
+            currentDisplay: '$1.25',
+            deltaPercentLabel: '+25%',
+            deltaDirection: 'positive',
+          },
+          {
+            key: 'placement_modifier:cmp-1:PLACEMENT_TOP:2026-03-20',
+            kind: 'placement_modifier',
+            label: 'TOS modifier',
+            previousDisplay: '0%',
+            currentDisplay: '25%',
+            deltaPercentLabel: null,
+            deltaDirection: null,
+          },
+        ],
+        overflowCount: 0,
+        emptyMessage: null,
+      },
+    });
+
+    const summary = buildAdsOptimizerTargetRowTableSummary(row, [row]);
+
+    expect(summary.lastChange.items.map((item) => item.label)).toEqual(['Bid', 'TOS modifier']);
+  });
+
+  it('maps state and strategy last-change items without delta percent text', () => {
+    const row = buildRow({
+      lastDetectedChange: {
+        detectedDate: '2026-03-21',
+        items: [
+          {
+            key: 'target_state:target-1:2026-03-21',
+            kind: 'target_state',
+            label: 'State',
+            previousDisplay: 'enabled',
+            currentDisplay: 'paused',
+            deltaPercentLabel: null,
+            deltaDirection: null,
+          },
+          {
+            key: 'campaign_bidding_strategy:cmp-1:2026-03-21',
+            kind: 'campaign_bidding_strategy',
+            label: 'Strategy',
+            previousDisplay: 'fixed bids',
+            currentDisplay: 'dynamic down only',
+            deltaPercentLabel: null,
+            deltaDirection: null,
+          },
+        ],
+        overflowCount: 0,
+        emptyMessage: null,
+      },
+    });
+
+    const summary = buildAdsOptimizerTargetRowTableSummary(row, [row]);
+
+    expect(summary.lastChange.items).toHaveLength(2);
+    expect(summary.lastChange.items[0]?.deltaPercentLabel).toBeNull();
+    expect(summary.lastChange.items[1]?.deltaPercentLabel).toBeNull();
+  });
+
+  it('keeps only two rendered last-change items and preserves overflow count', () => {
+    const row = buildRow({
+      lastDetectedChange: {
+        detectedDate: '2026-03-22',
+        items: [
+          {
+            key: 'target_bid:target-1:2026-03-22',
+            kind: 'target_bid',
+            label: 'Bid',
+            previousDisplay: '$1.00',
+            currentDisplay: '$1.10',
+            deltaPercentLabel: '+10%',
+            deltaDirection: 'positive',
+          },
+          {
+            key: 'target_state:target-1:2026-03-22',
+            kind: 'target_state',
+            label: 'State',
+            previousDisplay: 'enabled',
+            currentDisplay: 'paused',
+            deltaPercentLabel: null,
+            deltaDirection: null,
+          },
+          {
+            key: 'placement_modifier:cmp-1:PLACEMENT_TOP:2026-03-22',
+            kind: 'placement_modifier',
+            label: 'TOS modifier',
+            previousDisplay: '0%',
+            currentDisplay: '20%',
+            deltaPercentLabel: null,
+            deltaDirection: null,
+          },
+        ],
+        overflowCount: 1,
+        emptyMessage: null,
+      },
+    });
+
+    const summary = buildAdsOptimizerTargetRowTableSummary(row, [row]);
+
+    expect(summary.lastChange.items.map((item) => item.label)).toEqual(['Bid', 'State']);
+    expect(summary.lastChange.overflowCount).toBe(1);
   });
 
   it('keeps contribution share and rank stable against the full run, not the filtered subset', () => {
