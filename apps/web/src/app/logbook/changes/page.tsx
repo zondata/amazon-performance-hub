@@ -46,7 +46,7 @@ export default async function ChangesPage({ searchParams }: ChangesPageProps) {
   ]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Changes"
         subtitle="Operational changes, experiments, and bulk edits."
@@ -133,7 +133,7 @@ export default async function ChangesPage({ searchParams }: ChangesPageProps) {
         </InlineFilters>
       </form>
 
-      <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
         <Table
           headers={['Occurred', 'Channel', 'Type', 'Summary', 'Source']}
           rows={rows}

@@ -185,7 +185,7 @@ export default function ProductKivBacklogManager({
   };
 
   return (
-    <div className="space-y-4 rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+    <div className="space-y-4 rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
       <div>
         <div className="text-xs uppercase tracking-[0.3em] text-muted">KIV backlog</div>
         <div className="mt-1 text-lg font-semibold text-foreground">Keep-in-view items for {asin}</div>

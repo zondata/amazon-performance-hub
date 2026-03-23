@@ -85,7 +85,7 @@ const formatDateWindow = (startDate: string | null, endDate: string | null) =>
   startDate && endDate ? formatUiDateRange(startDate, endDate) : 'Not captured';
 
 const Section = (props: { title: string; children: ReactNode; detail?: string }) => (
-  <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+  <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
     <div className="text-xs uppercase tracking-[0.3em] text-muted">{props.title}</div>
     {props.detail ? <div className="mt-2 max-w-4xl text-sm text-muted">{props.detail}</div> : null}
     <div className="mt-4">{props.children}</div>
@@ -100,7 +100,7 @@ export default function OptimizerOutcomeReviewDetail(
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">Outcome review detail</div>

@@ -118,7 +118,7 @@ export default async function ExperimentsPage({ searchParams }: ExperimentsPageP
   ]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Experiments"
         subtitle="Track hypotheses, evaluation windows, and linked changes."
@@ -213,7 +213,7 @@ export default async function ExperimentsPage({ searchParams }: ExperimentsPageP
         </InlineFilters>
       </form>
 
-      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <Table
           headers={[
             'Status',

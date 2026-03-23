@@ -73,7 +73,7 @@ export default function ExperimentEventsTimeline({ events, interruptionEventIds 
   }, [filter, interruptionIdSet, sortedEvents]);
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+    <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-sm font-semibold text-foreground">Events timeline</div>

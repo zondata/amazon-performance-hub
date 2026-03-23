@@ -79,7 +79,7 @@ const renderUploadTable = (
   rows: ImportsHealthSourceDisplayRow[]
 ) => {
   return (
-    <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+    <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-base font-semibold text-foreground">{title}</h2>
         <span className="text-xs uppercase tracking-[0.2em] text-muted">
@@ -268,14 +268,14 @@ export default async function ImportsHealthPage({
   });
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       <ImportBatchUploader
         asinOptions={asinOptions}
         spawnEnabled={env.enableBulkgenSpawn}
         initialIgnoredSourceTypes={importSettings.ignored_source_types}
       />
 
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -311,7 +311,7 @@ export default async function ImportsHealthPage({
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">
             Account
           </div>
@@ -322,7 +322,7 @@ export default async function ImportsHealthPage({
             Marketplace {data.marketplace}
           </div>
         </div>
-        <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">
             Mapping issues (latest)
           </div>
@@ -350,7 +350,7 @@ export default async function ImportsHealthPage({
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">
             Reconcile queue
           </div>
@@ -366,7 +366,7 @@ export default async function ImportsHealthPage({
       </section>
 
       {data.spendReconciliation ? (
-        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -398,7 +398,7 @@ export default async function ImportsHealthPage({
         </section>
       ) : null}
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         {groupedSections.map((section) => (
           <div key={section.title}>
             {renderUploadTable(section.title, section.rows)}

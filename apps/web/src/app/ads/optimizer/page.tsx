@@ -298,7 +298,7 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           : 'Recommendation shell only';
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       <OptimizerRunScopeHeader
         accountId={env.accountId}
         marketplace={env.marketplace}
@@ -328,12 +328,12 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
         />
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">Scope guardrail</div>
             <div className="mt-2 text-lg font-semibold text-foreground">SP only in V1</div>
-            <div className="mt-2 max-w-3xl text-sm text-muted">
+            <div className="mt-2 max-w-3xl text-sm text-muted hidden">
               Sponsored Products is the only supported channel for the optimizer in V1. SB, SD,
               execution flows, and optimizer-owned tables remain out of scope in this phase.
             </div>
@@ -445,11 +445,11 @@ export default async function AdsOptimizerPage({ searchParams }: AdsOptimizerPag
           saveRecommendationOverrideAction={saveAdsOptimizerRecommendationOverrideInlineAction}
         />
       ) : (
-        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">{emptyState.eyebrow}</div>
           <div className="mt-2 text-lg font-semibold text-foreground">{emptyState.title}</div>
-          <div className="mt-2 max-w-3xl text-sm text-muted">{emptyState.body}</div>
-          <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
+          <div className="mt-2 max-w-3xl text-sm text-muted hidden">{emptyState.body}</div>
+          <div className="mt-4 rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted hidden">
             No optimizer tables or recommendation rows are queried in this view yet. The selected
             view remains interactive via URL state only so later loaders and engines can plug into
             this shell without changing the route contract.

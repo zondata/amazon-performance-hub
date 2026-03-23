@@ -341,7 +341,7 @@ export default function AdsTargetsWorkspaceClient(props: AdsTargetsWorkspaceClie
         adGroupScopeLabel={props.adGroupScopeLabel}
       />
 
-      <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="text-xs uppercase tracking-[0.25em] text-muted">

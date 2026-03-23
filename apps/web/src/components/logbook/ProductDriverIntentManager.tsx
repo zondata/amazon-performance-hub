@@ -162,7 +162,7 @@ export default function ProductDriverIntentManager({ asin, initialRows }: Props)
   };
 
   return (
-    <div className="space-y-4 rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+    <div className="space-y-4 rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
       <div>
         <div className="text-xs uppercase tracking-[0.3em] text-muted">Driver campaign intents</div>
         <div className="mt-1 text-lg font-semibold text-foreground">Campaign-level intent classifications</div>

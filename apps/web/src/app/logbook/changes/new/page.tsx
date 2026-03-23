@@ -85,14 +85,14 @@ export default async function NewChangePage({ searchParams }: NewChangePageProps
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="New change"
         subtitle="Capture campaign and operational changes with context."
       />
 
-      <form action={handleSubmit} className="space-y-6">
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+      <form action={handleSubmit} className="space-y-4">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-xs uppercase tracking-wider text-slate-400">Occurred at</label>
@@ -150,7 +150,7 @@ export default async function NewChangePage({ searchParams }: NewChangePageProps
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <JSONTextarea
               label="Before JSON"
@@ -165,7 +165,7 @@ export default async function NewChangePage({ searchParams }: NewChangePageProps
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="mb-4 text-xs uppercase tracking-wider text-slate-400">Entity links</div>
           <EntityLinksEditor initialProductId={initialProductId} />
         </div>

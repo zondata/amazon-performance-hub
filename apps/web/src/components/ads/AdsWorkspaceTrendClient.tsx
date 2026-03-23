@@ -214,7 +214,7 @@ function TrendInspectorPanel({
 }: TrendInspectorPanelProps) {
   return (
     <section
-      className={`rounded-2xl border border-border bg-surface/95 p-5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-surface/85 ${className ?? ''}`}
+      className={`rounded-2xl border border-border bg-surface/95 p-4 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-surface/85 ${className ?? ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -377,6 +377,17 @@ export default function AdsWorkspaceTrendClient({
     return { kind: 'empty' };
   }, [activeMarkerDate, activeMarkers, hovered]);
 
+  const trendColWidth = useMemo(() => {
+    const n = trendData.dates.length;
+    const barW = Math.max(4, Math.min(12, Math.floor(140 / Math.max(n, 1))));
+    const gapW = n <= 14 ? 2 : 1;
+    const total = Math.max(80, Math.min(280, n * (barW + gapW) + 24));
+    return {
+      px: `${total}px`,
+      gap: `${gapW}px`,
+    };
+  }, [trendData.dates.length]);
+
   const setHoveredMetric = (
     metric: { key: string; label: string; kind: string; support_note: string | null },
     cell: SpTrendMetricCell
@@ -459,7 +470,7 @@ export default function AdsWorkspaceTrendClient({
         adGroupScopeLabel={adGroupScopeLabel}
       />
 
-      <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="text-xs uppercase tracking-[0.25em] text-muted">
@@ -528,10 +539,10 @@ export default function AdsWorkspaceTrendClient({
             <table
               className="w-full table-fixed border-separate border-spacing-0 text-left text-sm"
               style={{
-                minWidth: 'calc(180px + 120px + 160px + 96px * 7)',
+                minWidth: `calc(180px + 120px + ${trendColWidth.px} + 96px * ${trendData.dates.length})`,
                 ['--metric-col-w' as string]: '180px',
                 ['--summary-col-w' as string]: '120px',
-                ['--trend-col-w' as string]: '160px',
+                ['--trend-col-w' as string]: trendColWidth.px,
                 ['--day-col-w' as string]: '96px',
               }}
             >
@@ -630,14 +641,14 @@ export default function AdsWorkspaceTrendClient({
                         }}
                       >
                         {miniBars.hasData ? (
-                          <div className="relative h-9 w-[var(--trend-col-w)]">
+                          <div className="relative h-9 w-full">
                             {miniBars.hasNegative ? (
                               <div
                                 className="absolute left-0 right-0 h-px bg-border"
                                 style={{ top: `${miniBars.baseline}px` }}
                               />
                             ) : null}
-                            <div className="flex h-full items-stretch gap-[2px]">
+                            <div className="flex h-full items-stretch" style={{ gap: trendColWidth.gap }}>
                               {metric.cells.map((cell, index) => {
                                 const height = miniBars.bars[index];
                                 const isNegative = (cell.value ?? 0) < 0;

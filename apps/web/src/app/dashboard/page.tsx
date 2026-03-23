@@ -56,8 +56,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const hasSeries = data.dailySeries.length > 0;
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -112,7 +112,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       </section>
 
       <section className="grid gap-4 lg:grid-cols-4">
-        <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.25em] text-muted">
             Total sales
           </div>
@@ -120,7 +120,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             {formatCurrency(data.kpis.total_sales)}
           </div>
         </div>
-        <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.25em] text-muted">
             PPC cost
           </div>
@@ -131,7 +131,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             TACoS {formatPercent(data.kpis.tacos)}
           </div>
         </div>
-        <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.25em] text-muted">
             Orders
           </div>
@@ -142,7 +142,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             Units {formatNumber(data.kpis.total_units)}
           </div>
         </div>
-        <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.25em] text-muted">
             Avg price
           </div>
@@ -158,7 +158,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -182,7 +182,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">
             Data notes
           </div>
@@ -197,7 +197,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </p>
           </div>
         </div>
-        <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">
             Spend reconciliation
           </div>

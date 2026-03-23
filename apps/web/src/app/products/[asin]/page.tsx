@@ -1302,8 +1302,8 @@ export default async function ProductDetailPage({
   const hasLogbookEntries = logbookExperiments.length > 0 || logbookUnassigned.length > 0;
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -1374,9 +1374,9 @@ export default async function ProductDetailPage({
             </section>
           ) : null}
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-            <div className="space-y-6">
+            <div className="space-y-4">
               <KpiCards items={kpiItems} />
-              <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+              <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
                 <div className="mb-4">
                   <div className="text-xs uppercase tracking-[0.3em] text-muted">
                     Sales vs PPC cost
@@ -1394,7 +1394,7 @@ export default async function ProductDetailPage({
                 )}
               </section>
             </div>
-            <div className="space-y-6">
+            <div className="space-y-4">
               <ProductProfileSkillsIntentEditor
                 asin={asin}
                 displayName={displayName}
@@ -1418,7 +1418,7 @@ export default async function ProductDetailPage({
       ) : null}
 
       {tab === 'sales' ? (
-        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="mb-4 text-lg font-semibold text-foreground">Daily sales</div>
           {data.salesSeries.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
@@ -1471,8 +1471,8 @@ export default async function ProductDetailPage({
       ) : null}
 
       {tab === 'logbook' ? (
-        <section className="space-y-6">
-          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <section className="space-y-4">
+          <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -1526,7 +1526,7 @@ export default async function ProductDetailPage({
             </div>
           </section>
 
-          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
             <div className="mb-3 text-sm font-semibold text-foreground">Experiments</div>
             {logbookExperiments.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-5 text-sm text-muted">
@@ -2182,7 +2182,7 @@ export default async function ProductDetailPage({
             )}
           </section>
 
-          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
             <div className="mb-3 text-sm font-semibold text-foreground">Unassigned changes</div>
             {logbookUnassigned.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-5 text-sm text-muted">
@@ -2281,8 +2281,8 @@ export default async function ProductDetailPage({
       ) : null}
 
       {tab === 'changes' ? (
-        <section className="space-y-6">
-          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <section className="space-y-4">
+          <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -2375,7 +2375,7 @@ export default async function ProductDetailPage({
             </form>
           </section>
 
-          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
             {changesExplorerRows.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
                 No changes match this filter set.
@@ -2511,8 +2511,8 @@ export default async function ProductDetailPage({
       ) : null}
 
       {tab === 'costs' ? (
-        <section className="space-y-6">
-          <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <section className="space-y-4">
+          <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
             <div className="mb-3 text-lg font-semibold text-foreground">Current cost</div>
             {data.currentCosts.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
@@ -2554,7 +2554,7 @@ export default async function ProductDetailPage({
             )}
           </div>
 
-          <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
             <div className="mb-3 text-lg font-semibold text-foreground">Cost history</div>
             {data.costHistory.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
@@ -2603,7 +2603,7 @@ export default async function ProductDetailPage({
       ) : null}
 
       {tab === 'ads' ? (
-        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-lg font-semibold text-foreground">Coming soon</div>
           <div className="mt-2 text-sm text-muted">
             This section will be wired once the next facts layer is ready.
@@ -2612,9 +2612,9 @@ export default async function ProductDetailPage({
       ) : null}
 
       {tab === 'keywords' && keywordGroups ? (
-        <section className="space-y-6">
+        <section className="space-y-4">
           <KeywordGroupImport action={importKeywordGroups} />
-          <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
             <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
               <div>
                 <div className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -2697,7 +2697,7 @@ export default async function ProductDetailPage({
       ) : null}
 
       {tab === 'sqp' && sqpWeekly ? (
-        <section className="space-y-6">
+        <section className="space-y-4">
           <ProductSqpTable
             availableWeeks={sqpWeekly.availableWeeks}
             selectedWeekEnd={sqpWeekly.selectedWeekEnd}
@@ -2716,7 +2716,7 @@ export default async function ProductDetailPage({
       ) : null}
 
       {tab === 'ranking' ? (
-        <section className="space-y-6">
+        <section className="space-y-4">
           <ProductRankingHeatmap
             asin={asin}
             start={start}

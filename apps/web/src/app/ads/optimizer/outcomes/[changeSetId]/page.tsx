@@ -56,8 +56,8 @@ export default async function AdsOptimizerOutcomeReviewDetailPage(
 
   if (detail.kind === 'not_optimizer') {
     return (
-      <div className="space-y-6">
-        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <div className="space-y-4">
+        <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">Outcome review detail</div>
           <div className="mt-2 text-xl font-semibold text-foreground">
             This change set is not optimizer-originated.

@@ -236,7 +236,7 @@ export default function OptimizerConfigManager(props: OptimizerConfigManagerProp
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">Config boundary</div>
@@ -256,7 +256,7 @@ export default function OptimizerConfigManager(props: OptimizerConfigManagerProp
       </section>
 
       {props.rulePack ? (
-        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="text-xs uppercase tracking-[0.3em] text-muted">Rule pack</div>
@@ -282,14 +282,14 @@ export default function OptimizerConfigManager(props: OptimizerConfigManagerProp
           </div>
         </section>
       ) : (
-        <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="rounded-lg border border-dashed border-border bg-surface-2 px-4 py-6 text-sm text-muted">
             No optimizer rule pack exists yet for this account/marketplace.
           </div>
         </section>
       )}
 
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">Product settings</div>
@@ -565,7 +565,7 @@ export default function OptimizerConfigManager(props: OptimizerConfigManagerProp
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">Active version</div>
           {props.activeVersion ? (
             <div className="mt-4 space-y-4">
@@ -621,7 +621,7 @@ export default function OptimizerConfigManager(props: OptimizerConfigManagerProp
           )}
         </div>
 
-        <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">Create draft</div>
             <div className="mt-2 text-sm text-muted">
               Edit previous version means clone to draft, then edit the draft. Draft creation is
@@ -709,7 +709,7 @@ export default function OptimizerConfigManager(props: OptimizerConfigManagerProp
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="text-xs uppercase tracking-[0.3em] text-muted">Version history</div>
         <div className="mt-2 text-sm text-muted">
           Version history is append-only. Drafts can be edited here through the structured rule

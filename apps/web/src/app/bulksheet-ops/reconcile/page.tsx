@@ -41,7 +41,7 @@ export default async function ReconcilePage() {
   const missingConfig = !pendingDir || !reconciledDir || !failedDir;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {missingConfig ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
           Configure BULKGEN_PENDING_RECONCILE_DIR, BULKGEN_RECONCILED_DIR, and
@@ -52,19 +52,19 @@ export default async function ReconcilePage() {
       <ReconcileRunner action={action} defaultSnapshotDate={today()} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-wider text-slate-400">Pending</div>
           <div className="mt-2 text-2xl font-semibold text-slate-900">
             {pendingList.length}
           </div>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-wider text-slate-400">Reconciled</div>
           <div className="mt-2 text-2xl font-semibold text-slate-900">
             {reconciledList.length}
           </div>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-wider text-slate-400">Failed</div>
           <div className="mt-2 text-2xl font-semibold text-slate-900">
             {failedList.length}
@@ -73,7 +73,7 @@ export default async function ReconcilePage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-wider text-slate-400">Pending manifests</div>
           <div className="mt-3 space-y-2 text-sm text-slate-600">
             {pendingList.length === 0 ? (
@@ -91,7 +91,7 @@ export default async function ReconcilePage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-wider text-slate-400">Reconciled results</div>
           <div className="mt-3 space-y-2 text-sm text-slate-600">
             {reconciledList.length === 0 ? (
@@ -113,7 +113,7 @@ export default async function ReconcilePage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-wider text-slate-400">Failed manifests</div>
           <div className="mt-3 space-y-2 text-sm text-slate-600">
             {failedList.length === 0 ? (

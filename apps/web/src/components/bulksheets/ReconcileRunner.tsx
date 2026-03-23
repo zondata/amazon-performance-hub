@@ -19,7 +19,7 @@ export default function ReconcileRunner(props: {
   const [state, formAction] = React.useActionState(props.action, { summary: null, error: null });
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
       <form action={formAction} className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <label className="text-xs uppercase tracking-wider text-slate-400">Snapshot date</label>

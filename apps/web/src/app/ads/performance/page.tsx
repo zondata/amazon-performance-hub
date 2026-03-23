@@ -556,8 +556,8 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
     : [];
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <div className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -566,7 +566,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
             <div className="mt-2 text-lg font-semibold text-foreground">
               {formatUiDateRange(start, end)}
             </div>
-            <div className="mt-2 max-w-3xl text-sm text-muted">
+            <div className="mt-2 max-w-3xl text-sm text-muted hidden">
               SP-first workspace shell. Table mode is operational for campaigns, ad groups, targets, placements, and search terms. Phase 7 currently ships a diagnostic-first trend slice for Campaigns and Targets.
             </div>
           </div>
@@ -708,7 +708,7 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
              adGroupScopeLabel={adGroupScopeLabel}
           />
         ) : (
-          <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+          <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
             <div className="text-lg font-semibold text-foreground">
               Trend mode is currently supported on Campaigns and Targets.
             </div>

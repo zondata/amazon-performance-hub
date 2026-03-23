@@ -19,7 +19,7 @@ export default function KeywordGroupImport(props: {
   });
 
   return (
-    <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+    <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="text-xs uppercase tracking-[0.3em] text-muted">

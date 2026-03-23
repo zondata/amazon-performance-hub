@@ -142,7 +142,7 @@ export default async function ExperimentDetailPage({
 
   if (!experimentId || !isUuid(experimentId)) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <PageHeader
           title="Experiment not found"
           subtitle="The experiment id is missing or invalid."
@@ -155,7 +155,7 @@ export default async function ExperimentDetailPage({
             </Link>
           }
         />
-        <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface p-4 text-sm text-muted shadow-sm">
           Please check the URL or return to the experiment list.
         </div>
       </div>
@@ -218,7 +218,7 @@ export default async function ExperimentDetailPage({
 
   if (!context) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <PageHeader
           title="Could not load experiment"
           subtitle="The experiment detail call failed."
@@ -231,7 +231,7 @@ export default async function ExperimentDetailPage({
             </Link>
           }
         />
-        <pre className="whitespace-pre-wrap rounded-2xl border border-border bg-surface p-6 text-xs text-muted shadow-sm">
+        <pre className="whitespace-pre-wrap rounded-2xl border border-border bg-surface p-4 text-xs text-muted shadow-sm">
           {loadError}
         </pre>
       </div>
@@ -372,7 +372,7 @@ export default async function ExperimentDetailPage({
   const interruptionSignals = context.interruptions.slice(0, 12);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={context.experiment.name}
         subtitle={context.experiment.objective}
@@ -428,18 +428,18 @@ export default async function ExperimentDetailPage({
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
           <div className="text-xs uppercase tracking-wider text-muted">Status</div>
           <div className="mt-2 text-lg font-semibold text-foreground">{context.status}</div>
         </div>
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
           <div className="text-xs uppercase tracking-wider text-muted">Window</div>
           <div className="mt-2 text-sm font-semibold text-foreground">
             {formatUiDateRange(context.date_window.startDate, context.date_window.endDate)}
           </div>
           <div className="mt-1 text-xs text-muted">Source: {context.date_window.source}</div>
         </div>
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
           <div className="text-xs uppercase tracking-wider text-muted">Outcome</div>
           <div className="mt-2">
             <span
@@ -457,7 +457,7 @@ export default async function ExperimentDetailPage({
               : ''}
           </div>
         </div>
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
           <div className="text-xs uppercase tracking-wider text-muted">Last Evaluated</div>
           <div className="mt-2 text-sm font-semibold text-foreground">
             {formatDateTime(context.latest_evaluation?.evaluated_at)}
@@ -473,7 +473,7 @@ export default async function ExperimentDetailPage({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <div className="mb-4 text-sm font-semibold text-foreground">Evaluation Output Upload</div>
         <ExperimentEvaluationOutputPackImport
           experimentId={context.experiment.experiment_id}
@@ -481,7 +481,7 @@ export default async function ExperimentDetailPage({
         />
       </div>
 
-      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <div className="mb-4 text-sm font-semibold text-foreground">Output Contract V1</div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div>
@@ -577,7 +577,7 @@ export default async function ExperimentDetailPage({
         initialUiSettings={initialReviewUiSettings}
       />
 
-      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-2">
           <div className="text-sm font-semibold text-foreground">Phases</div>
           <div className="text-xs text-muted">{sortedPhases.length} rows</div>
@@ -612,7 +612,7 @@ export default async function ExperimentDetailPage({
         />
       </div>
 
-      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <div className="mb-4 text-sm font-semibold text-foreground">Timeline signals</div>
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <div className="space-y-3">
@@ -678,7 +678,7 @@ export default async function ExperimentDetailPage({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <div className="mb-3 text-sm font-semibold text-foreground">Evaluations</div>
         {context.evaluations.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted">
@@ -726,7 +726,7 @@ export default async function ExperimentDetailPage({
         )}
       </div>
 
-      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <div className="text-xs uppercase tracking-wider text-muted">Hypothesis</div>
@@ -751,7 +751,7 @@ export default async function ExperimentDetailPage({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <div className="text-xs uppercase tracking-wider text-muted">Linked changes</div>
@@ -771,7 +771,7 @@ export default async function ExperimentDetailPage({
         />
       </div>
 
-      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <div className="text-xs uppercase tracking-wider text-muted">Link existing changes</div>

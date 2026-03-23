@@ -11,8 +11,8 @@ export default async function LogbookAiPacksSettingsPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+    <div className="space-y-4">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="text-xs uppercase tracking-[0.3em] text-muted">Settings</div>
         <h1 className="mt-2 text-2xl font-semibold text-foreground">
           Product Logbook Prompt Pack Templates
@@ -23,7 +23,7 @@ export default async function LogbookAiPacksSettingsPage() {
         </p>
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <ProductExperimentPromptTemplateEditor initialTemplates={templates} />
       </section>
     </div>

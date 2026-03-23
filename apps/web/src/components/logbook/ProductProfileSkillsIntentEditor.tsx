@@ -396,7 +396,7 @@ export default function ProductProfileSkillsIntentEditor({
   const chipsToRender = isEditing ? editSkills : savedSkills;
 
   return (
-    <div className="space-y-4 rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+    <div className="space-y-4 rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-xs uppercase tracking-[0.3em] text-muted">Profile context</div>

@@ -35,7 +35,7 @@ export default function KeywordGroupSetManager(props: {
         : null;
 
   return (
-    <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+    <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <div className="text-lg font-semibold text-foreground">Keyword set management</div>
       </div>

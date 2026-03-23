@@ -121,7 +121,7 @@ export default function ExperimentQuickLogEventPanel({ experimentId, runIds }: P
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+    <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
       <div className="text-sm font-semibold text-foreground">Quick Log Event</div>
       <div className="mt-1 text-xs text-muted">Capture guardrails and interventions in seconds.</div>
 

@@ -565,7 +565,7 @@ export default function ExperimentReviewPatchManager(props: Props) {
   };
 
   return (
-    <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+    <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="text-sm font-semibold text-foreground">Review Proposed Changes</div>

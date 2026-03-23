@@ -82,7 +82,7 @@ export default function ExperimentSkillsOverrideManager({
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+    <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
       <div className="mb-3 text-sm font-semibold text-foreground">Experiment skills override</div>
       {options.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-surface-2 px-3 py-3 text-sm text-muted">

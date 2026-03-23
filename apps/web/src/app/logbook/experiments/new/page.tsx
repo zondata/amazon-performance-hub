@@ -58,15 +58,15 @@ export default async function NewExperimentPage({ searchParams }: NewExperimentP
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="New experiment"
         subtitle="Define the experiment, evaluation window, and success criteria."
       />
 
-      <form action={handleSubmit} className="space-y-6">
+      <form action={handleSubmit} className="space-y-4">
         <input type="hidden" name="product_id" value={initialProductId ?? ''} />
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2 md:col-span-2">
               <label className="text-xs uppercase tracking-wider text-slate-400">Name</label>
@@ -136,7 +136,7 @@ export default async function NewExperimentPage({ searchParams }: NewExperimentP
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <JSONTextarea
               label="Primary metrics"

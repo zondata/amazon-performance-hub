@@ -42,7 +42,7 @@ export default function SpCreateRunner(props: {
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.8fr]">
       <form action={formAction} className="space-y-6">
         <input type="hidden" name="mode" value={mode} />
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2 md:col-span-2">
               <label className="text-xs uppercase tracking-wider text-slate-400">Template</label>
@@ -86,7 +86,7 @@ export default function SpCreateRunner(props: {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-xs uppercase tracking-wider text-slate-400">Create inputs</div>
@@ -206,7 +206,7 @@ export default function SpCreateRunner(props: {
           )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-xs uppercase tracking-wider text-slate-400">Experiment</label>
@@ -250,7 +250,7 @@ export default function SpCreateRunner(props: {
       </form>
 
       <div className="space-y-4">
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-wider text-slate-400">Latest run</div>
           {state.error ? (
             <div className="mt-3 text-sm text-red-500">{state.error}</div>

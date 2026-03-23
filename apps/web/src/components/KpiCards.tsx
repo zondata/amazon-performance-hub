@@ -14,7 +14,7 @@ export default function KpiCards({ items }: KpiCardsProps) {
       {items.map((item) => (
         <div
           key={item.label}
-          className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm"
+          className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm"
         >
           <div className="text-xs uppercase tracking-[0.25em] text-muted">
             {item.label}

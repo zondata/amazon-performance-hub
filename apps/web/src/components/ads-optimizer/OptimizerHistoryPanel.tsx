@@ -87,7 +87,7 @@ export default function OptimizerHistoryPanel(props: OptimizerHistoryPanelProps)
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">Run boundary</div>
@@ -108,7 +108,7 @@ export default function OptimizerHistoryPanel(props: OptimizerHistoryPanelProps)
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">Run now</div>
           <div className="mt-2 text-sm text-muted">
             New runs are append-only. Each run freezes the selected date window, ASIN scope, and
@@ -161,7 +161,7 @@ export default function OptimizerHistoryPanel(props: OptimizerHistoryPanelProps)
           </form>
         </div>
 
-        <div className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">History</div>
           <div className="mt-2 text-sm text-muted">
             {props.asin === 'all'

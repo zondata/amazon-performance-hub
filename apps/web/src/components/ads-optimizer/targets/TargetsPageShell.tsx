@@ -1101,7 +1101,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
 
   if (props.asin === 'all') {
     return (
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="text-xs uppercase tracking-[0.3em] text-muted">Targets scope</div>
         <div className="mt-2 text-lg font-semibold text-foreground">
           Select one ASIN to open the optimizer command center.
@@ -1118,7 +1118,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
 
   if (!props.run) {
     return (
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="text-xs uppercase tracking-[0.3em] text-muted">Targets run state</div>
         <div className="mt-2 text-lg font-semibold text-foreground">
           {props.runLookupError
@@ -1730,7 +1730,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">Targets review</div>
@@ -1794,7 +1794,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
         </section>
       ) : null}
 
-      <details className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+      <details className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <summary className="cursor-pointer list-none text-sm font-semibold text-foreground">
           How to read the Targets page
         </summary>
@@ -1894,7 +1894,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm xl:col-span-2">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm xl:col-span-2">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">Review boundary</div>
           <div className="mt-2 text-sm text-foreground">
             Handoff from this panel creates staged draft items inside Ads Workspace only. The
@@ -1921,7 +1921,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
           <div className="text-xs uppercase tracking-[0.3em] text-muted">Actionable warnings</div>
           <div className="mt-2 text-2xl font-semibold text-foreground">{formatNumber(coverageWarnings)}</div>
           <div className="mt-2 text-sm text-muted">
@@ -2352,7 +2352,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
         </TargetAdvancedSection>
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">Targets review</div>

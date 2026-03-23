@@ -66,7 +66,7 @@ export default function ExperimentPhaseActions({ experimentId, runIds }: Props) 
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+    <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
       <div className="mb-4 text-sm font-semibold text-foreground">Phase actions</div>
 
       {uniqueRunIds.length === 0 ? (

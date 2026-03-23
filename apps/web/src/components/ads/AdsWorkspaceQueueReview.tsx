@@ -104,7 +104,7 @@ export default function AdsWorkspaceQueueReview(props: AdsWorkspaceQueueReviewPr
 
   return (
     <section className="space-y-6">
-      <div className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="text-xs uppercase tracking-[0.25em] text-muted">Queue review</div>
@@ -172,7 +172,7 @@ export default function AdsWorkspaceQueueReview(props: AdsWorkspaceQueueReviewPr
             </div>
           ) : (
             <>
-              <section className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+              <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-3">
@@ -281,7 +281,7 @@ export default function AdsWorkspaceQueueReview(props: AdsWorkspaceQueueReviewPr
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+              <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="text-xs uppercase tracking-[0.2em] text-muted">Queued items</div>
@@ -526,7 +526,7 @@ export default function AdsWorkspaceQueueReview(props: AdsWorkspaceQueueReviewPr
                 )}
               </section>
 
-              <section className="rounded-2xl border border-border bg-surface/80 p-5 shadow-sm">
+              <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
                 <div className="text-xs uppercase tracking-[0.2em] text-muted">Generation</div>
                 <div className="mt-1 text-sm text-foreground">
                   Use the existing SP generator stack. Successful generation freezes logbook facts exactly once.

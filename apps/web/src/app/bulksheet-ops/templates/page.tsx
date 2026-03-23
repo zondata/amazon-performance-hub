@@ -177,12 +177,12 @@ export default async function BulksheetTemplatesPage({
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 text-sm text-slate-600 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm text-slate-600 shadow-sm">
         Templates are resolved from Supabase Storage at generation time. Object paths are:
         <code className="ml-1">{'<accountId>/<marketplace>/<template>.xlsx'}</code>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 text-sm text-slate-600 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm text-slate-600 shadow-sm">
         <div className="text-xs uppercase tracking-wider text-slate-400">Import from local folder</div>
         {spawnDisabled ? (
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-800">
@@ -224,7 +224,7 @@ export default async function BulksheetTemplatesPage({
           return (
             <div
               key={templateKey}
-              className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm"
+              className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>

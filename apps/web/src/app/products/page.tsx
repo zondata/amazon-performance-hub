@@ -177,8 +177,8 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   ];
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -298,7 +298,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
 
       <KpiCards items={kpiItems} />
 
-      <section className="rounded-2xl border border-border bg-surface/80 p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.3em] text-muted">
