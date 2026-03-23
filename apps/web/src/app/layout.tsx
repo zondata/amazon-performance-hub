@@ -67,7 +67,7 @@ export default function RootLayout({
           {themeInitScript}
         </Script>
         <div className="flex min-h-screen">
-          <aside className="aph-sidebar fixed inset-y-0 left-0 z-40 border-r border-border/70 bg-surface/80 backdrop-blur relative">
+          <aside className="aph-sidebar fixed top-0 left-0 h-screen z-40 border-r border-border/70 bg-surface/80 backdrop-blur">
             <SidebarCollapseToggle className="absolute -right-3 top-20 z-50" />
             <div className="h-full overflow-y-auto px-4 py-8">
               <div className="mb-8">
