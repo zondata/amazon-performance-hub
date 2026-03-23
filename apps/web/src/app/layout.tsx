@@ -67,7 +67,7 @@ export default function RootLayout({
           {themeInitScript}
         </Script>
         <div className="flex min-h-screen">
-          <aside className="aph-sidebar sticky top-0 h-dvh self-start shrink-0 border-r border-border/70 bg-surface/80 backdrop-blur relative">
+          <aside className="aph-sidebar fixed inset-y-0 left-0 z-40 border-r border-border/70 bg-surface/80 backdrop-blur relative">
             <SidebarCollapseToggle className="absolute -right-3 top-20 z-50" />
             <div className="h-full overflow-y-auto px-4 py-8">
               <div className="mb-8">
@@ -87,7 +87,10 @@ export default function RootLayout({
             </div>
           </aside>
 
-          <div className="flex min-h-screen flex-1 min-w-0 flex-col">
+          <div
+            className="flex min-h-screen min-w-0 flex-1 flex-col"
+            style={{ marginLeft: 'var(--aph-sidebar-width)' }}
+          >
             <header className="flex items-center justify-between border-b border-border/70 bg-surface/70 px-8 py-4 backdrop-blur">
               <div>
                 <div className="text-xs uppercase tracking-[0.35em] text-muted">
