@@ -27,6 +27,7 @@ import {
   buildSpDraftMutationPlan,
   type SpChangeComposerContext,
 } from '@/lib/ads-workspace/spChangeComposer';
+import { readAdsWorkspaceGeneratedArtifact } from '@/lib/ads-workspace/generatedArtifact';
 import {
   buildSpDraftItemPatch,
   mapChangeSetItemsToSpUpdateActions,
@@ -451,7 +452,14 @@ export const generateQueueChangeSetAction = async (formData: FormData) => {
     const changeSet = await requireChangeSet(changeSetId);
     ensureStatus(changeSet, ['review_ready']);
 
-    if (changeSet.generated_run_id || changeSet.generated_artifact_json) {
+    const generatedArtifact = readAdsWorkspaceGeneratedArtifact(
+      changeSet.generated_artifact_json
+    );
+    if (
+      (typeof changeSet.generated_run_id === 'string' &&
+        changeSet.generated_run_id.trim().length > 0) ||
+      generatedArtifact
+    ) {
       throw new Error('This change set has already been generated.');
     }
 

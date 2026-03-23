@@ -7,6 +7,7 @@ import {
   createChangeSetItems,
   listChangeSetItems,
 } from '@/lib/ads-workspace/repoChangeSetItems';
+import { ADS_OPTIMIZER_PHASE10_HANDOFF_SOURCE } from '@/lib/ads-workspace/generatedArtifact';
 import type { ChangeSetItemPayload, ChangeSetPayload, JsonObject } from '@/lib/ads-workspace/types';
 
 import {
@@ -621,7 +622,7 @@ export const buildAdsOptimizerWorkspaceHandoffPlan = (args: {
       review_after_days: itemReviewDays.length > 0 ? Math.min(...itemReviewDays) : null,
       notes: sharedReasoning.notes,
       filters_json: {
-        source: 'ads_optimizer_phase10_handoff',
+        source: ADS_OPTIMIZER_PHASE10_HANDOFF_SOURCE,
         channel: 'sp',
         level: 'targets',
         asin: args.asin,
@@ -631,18 +632,19 @@ export const buildAdsOptimizerWorkspaceHandoffPlan = (args: {
         target_snapshot_ids: args.rows.map((row) => row.targetSnapshotId),
         recommendation_snapshot_ids: recommendationSnapshotIds,
         recommendation_override_ids: appliedOverrideIds,
+        handoff_meta: {
+          source: ADS_OPTIMIZER_PHASE10_HANDOFF_SOURCE,
+          optimizer_run_id: args.runId,
+          selected_row_count: args.rows.length,
+          staged_action_count: itemPayloads.length,
+          deduped_action_count: dedupedCount,
+          skipped_unsupported_action_types: skippedUnsupportedActionTypes,
+          recommendation_override_ids: appliedOverrideIds,
+          overridden_row_count: appliedOverrideIds.length,
+        },
       },
       generated_run_id: null,
-      generated_artifact_json: {
-        source: 'ads_optimizer_phase10_handoff',
-        optimizer_run_id: args.runId,
-        selected_row_count: args.rows.length,
-        staged_action_count: itemPayloads.length,
-        deduped_action_count: dedupedCount,
-        skipped_unsupported_action_types: skippedUnsupportedActionTypes,
-        recommendation_override_ids: appliedOverrideIds,
-        overridden_row_count: appliedOverrideIds.length,
-      },
+      generated_artifact_json: null,
     },
     itemPayloads,
     selectedRowCount: args.rows.length,

@@ -588,11 +588,13 @@ describe('ads optimizer workspace handoff', () => {
     });
     expect(plan.changeSetPayload.filters_json).toMatchObject({
       recommendation_override_ids: ['override-1'],
+      handoff_meta: {
+        source: 'ads_optimizer_phase10_handoff',
+        recommendation_override_ids: ['override-1'],
+        overridden_row_count: 1,
+      },
     });
-    expect(plan.changeSetPayload.generated_artifact_json).toMatchObject({
-      recommendation_override_ids: ['override-1'],
-      overridden_row_count: 1,
-    });
+    expect(plan.changeSetPayload.generated_artifact_json).toBeNull();
     expect(plan.skippedUnsupportedActionTypes).toEqual([]);
     expect(plan.skippedUnsupportedActionCount).toBe(0);
   });
@@ -791,6 +793,32 @@ describe('ads optimizer workspace handoff', () => {
     );
 
     expect(createChangeSet).toHaveBeenCalledTimes(1);
+    expect(createChangeSet.mock.calls[0]?.[0]).toMatchObject({
+      filters_json: {
+        source: 'ads_optimizer_phase10_handoff',
+        channel: 'sp',
+        level: 'targets',
+        asin: 'B001TEST',
+        start: '2026-03-01',
+        end: '2026-03-10',
+        optimizer_run_id: 'run-1',
+        target_snapshot_ids: ['target-snapshot-1'],
+        recommendation_snapshot_ids: ['recommendation-1'],
+        recommendation_override_ids: [],
+        handoff_meta: {
+          source: 'ads_optimizer_phase10_handoff',
+          optimizer_run_id: 'run-1',
+          selected_row_count: 1,
+          staged_action_count: 1,
+          deduped_action_count: 0,
+          skipped_unsupported_action_types: ['negative_candidate', 'change_review_cadence'],
+          recommendation_override_ids: [],
+          overridden_row_count: 0,
+        },
+      },
+      generated_run_id: null,
+      generated_artifact_json: null,
+    });
     expect(createChangeSetItems).toHaveBeenCalledTimes(1);
     expect(createChangeSetItems.mock.calls[0]?.[0]).toBe('change-set-1');
     expect(createChangeSetItems.mock.calls[0]?.[1]?.[0]).toMatchObject({

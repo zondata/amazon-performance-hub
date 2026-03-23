@@ -19,6 +19,7 @@ vi.mock('../apps/web/src/lib/supabaseAdmin', () => ({
 
 import {
   buildAdsOptimizerOutcomeReviewPhaseSummaries,
+  buildAdsOptimizerOutcomeReviewReviewOnlyNotes,
   buildAdsOptimizerOutcomeReviewSegments,
 } from '../apps/web/src/lib/ads-optimizer/outcomeReview';
 
@@ -35,11 +36,17 @@ describe('ads optimizer outcome review phase summaries', () => {
             asin: 'B001TEST',
             optimizer_run_id: 'opt-run-1',
             target_snapshot_ids: ['ts-1', 'ts-2'],
+            handoff_meta: {
+              source: 'ads_optimizer_phase10_handoff',
+              selected_row_count: 2,
+              staged_action_count: 4,
+            },
           },
           generated_run_id: 'bulk-run-1',
           generated_artifact_json: {
-            staged_action_count: 4,
-            selected_row_count: 2,
+            generator: 'bulkgen:sp:update',
+            generated_at: '2026-03-10T10:30:00Z',
+            review_path: 'bulk-run-1/review.xlsx',
           },
           created_at: '2026-03-10T10:00:00Z',
         },
@@ -67,6 +74,7 @@ describe('ads optimizer outcome review phase summaries', () => {
           },
           generated_run_id: null,
           generated_artifact_json: {
+            source: 'ads_optimizer_phase10_handoff',
             staged_action_count: 1,
             selected_row_count: 1,
           },
@@ -222,6 +230,47 @@ describe('ads optimizer outcome review phase summaries', () => {
         total: 0,
       },
     });
+  });
+
+  it('reads skipped review-only notes from new handoff_meta and legacy handoff metadata, but not from real generated artifacts', () => {
+    expect(
+      buildAdsOptimizerOutcomeReviewReviewOnlyNotes({
+        filters_json: {
+          handoff_meta: {
+            source: 'ads_optimizer_phase10_handoff',
+            skipped_unsupported_action_types: ['change_review_cadence'],
+          },
+        },
+        generated_artifact_json: null,
+      })
+    ).toEqual([
+      'Review-only action types were present but not staged into Ads Workspace: change_review_cadence.',
+    ]);
+
+    expect(
+      buildAdsOptimizerOutcomeReviewReviewOnlyNotes({
+        filters_json: {},
+        generated_artifact_json: {
+          source: 'ads_optimizer_phase10_handoff',
+          skipped_unsupported_action_types: ['change_review_cadence'],
+        },
+      })
+    ).toEqual([
+      'Review-only action types were present but not staged into Ads Workspace: change_review_cadence.',
+    ]);
+
+    expect(
+      buildAdsOptimizerOutcomeReviewReviewOnlyNotes({
+        filters_json: {},
+        generated_artifact_json: {
+          source: 'ads_optimizer_phase10_handoff',
+          generator: 'bulkgen:sp:update',
+          generated_at: '2026-03-12T10:00:00Z',
+          review_path: 'runs/review.xlsx',
+          skipped_unsupported_action_types: ['change_review_cadence'],
+        },
+      })
+    ).toEqual([]);
   });
 
   it('builds segment summaries with score filters and caution states for the index page', () => {

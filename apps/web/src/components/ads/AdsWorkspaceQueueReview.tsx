@@ -9,10 +9,10 @@ import {
   describeSpDraftItem,
   getSpDraftItemFieldSpec,
 } from '@/lib/ads-workspace/spDraftReview';
+import { readAdsWorkspaceGeneratedArtifact } from '@/lib/ads-workspace/generatedArtifact';
 import type {
   AdsChangeSet,
   AdsChangeSetItem,
-  JsonObject,
 } from '@/lib/ads-workspace/types';
 import type { ExperimentOption } from '@/lib/logbook/getExperimentOptions';
 import { formatUiDateTime as formatDateTime } from '@/lib/time/formatUiDate';
@@ -53,25 +53,6 @@ const statusClassName = (status: string) => {
   return 'border-border bg-surface-2 text-foreground';
 };
 
-const readArtifact = (value: JsonObject | null) => {
-  if (!value) return null;
-  const reviewPath = typeof value.review_path === 'string' ? value.review_path : null;
-  const uploadPath =
-    typeof value.upload_strict_path === 'string' ? value.upload_strict_path : null;
-  const generatedAt = typeof value.generated_at === 'string' ? value.generated_at : null;
-  const actionCount = typeof value.action_count === 'number' ? value.action_count : null;
-  const logCreated = typeof value.log_created === 'number' ? value.log_created : null;
-  const logSkipped = typeof value.log_skipped === 'number' ? value.log_skipped : null;
-  return {
-    reviewPath,
-    uploadPath,
-    generatedAt,
-    actionCount,
-    logCreated,
-    logSkipped,
-  };
-};
-
 const fileLink = (relativePath: string | null) => {
   if (!relativePath) return null;
   return `/api/files?path=${encodeURIComponent(relativePath)}`;
@@ -86,7 +67,9 @@ type QueueItemGroup = {
 export default function AdsWorkspaceQueueReview(props: AdsWorkspaceQueueReviewProps) {
   const selected = props.selectedChangeSet;
   const editable = selected?.status === 'draft' || selected?.status === 'review_ready';
-  const artifact = selected ? readArtifact(selected.generated_artifact_json) : null;
+  const artifact = selected
+    ? readAdsWorkspaceGeneratedArtifact(selected.generated_artifact_json)
+    : null;
   const groupedItems = props.selectedItems.reduce<QueueItemGroup[]>((groups, item) => {
     const descriptor = describeSpDraftItem(item);
     const existing = groups.find((group) => group.key === descriptor.groupKey);

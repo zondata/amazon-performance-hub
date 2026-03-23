@@ -15,6 +15,10 @@ import {
   scoreAdsOptimizerOutcomeReview,
   summarizeOutcomeTrendPoints,
 } from '@/lib/ads-optimizer/outcomeReviewScoring';
+import {
+  ADS_OPTIMIZER_PHASE10_HANDOFF_SOURCE as HANDOFF_SOURCE,
+  readAdsWorkspaceHandoffMeta,
+} from '@/lib/ads-workspace/generatedArtifact';
 import { buildAdsOptimizerHref } from '@/lib/ads-optimizer/shell';
 import { readAdsOptimizerProductRunState } from '@/lib/ads-optimizer/state';
 import type { JsonObject as OptimizerJsonObject } from '@/lib/ads-optimizer/types';
@@ -91,7 +95,6 @@ type BuildPhaseSummariesArgs = {
   validations: OutcomeReviewValidationRow[];
 };
 
-const HANDOFF_SOURCE = 'ads_optimizer_phase10_handoff';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TODAY = '2026-03-12';
 
@@ -376,9 +379,15 @@ const summarizeChangeItem = (item: OutcomeReviewChangeSetItemRow): AdsOptimizerO
   };
 };
 
-const buildReviewOnlyNotes = (changeSet: OutcomeReviewChangeSetRow) => {
-  const artifact = asObject(changeSet.generated_artifact_json);
-  const skippedTypes = asStringArray(artifact?.skipped_unsupported_action_types);
+export const buildAdsOptimizerOutcomeReviewReviewOnlyNotes = (changeSet: {
+  filters_json: unknown;
+  generated_artifact_json: unknown | null;
+}) => {
+  const handoffMeta = readAdsWorkspaceHandoffMeta(
+    changeSet.filters_json,
+    changeSet.generated_artifact_json
+  );
+  const skippedTypes = handoffMeta?.skippedUnsupportedActionTypes ?? [];
   if (skippedTypes.length === 0) return [];
   return [
     `Review-only action types were present but not staged into Ads Workspace: ${skippedTypes.join(', ')}.`,
@@ -594,7 +603,10 @@ export const buildAdsOptimizerOutcomeReviewPhaseSummaries = ({
     .sort((left, right) => right.created_at.localeCompare(left.created_at))
     .map((changeSet) => {
       const filters = asObject(changeSet.filters_json) ?? {};
-      const artifact = asObject(changeSet.generated_artifact_json) ?? {};
+      const handoffMeta = readAdsWorkspaceHandoffMeta(
+        changeSet.filters_json,
+        changeSet.generated_artifact_json
+      );
       const runId = asString(filters.optimizer_run_id);
       const phaseChanges = changeSet.generated_run_id
         ? linkedChangesByRunId.get(changeSet.generated_run_id) ?? []
@@ -625,12 +637,12 @@ export const buildAdsOptimizerOutcomeReviewPhaseSummaries = ({
         )
       );
       const stagedActionCount =
-        asNumber(artifact.staged_action_count) ??
+        handoffMeta?.stagedActionCount ??
         (itemsByChangeSetId.get(changeSet.id) ?? []).length;
       const targetCount =
         filterTargetSnapshotIds.length > 0
           ? filterTargetSnapshotIds.length
-          : asNumber(artifact.selected_row_count) ?? uniqueTargetIds.size;
+          : handoffMeta?.selectedRowCount ?? uniqueTargetIds.size;
 
       const firstValidatedDate =
         validatedDates.length > 0 ? [...validatedDates].sort()[0] ?? null : null;
@@ -1011,7 +1023,7 @@ export const getAdsOptimizerOutcomeReviewDetailData = async (args: {
     horizon: args.horizon,
     phase,
     stagedChanges,
-    reviewOnlyNotes: buildReviewOnlyNotes(typedChangeSet),
+    reviewOnlyNotes: buildAdsOptimizerOutcomeReviewReviewOnlyNotes(typedChangeSet),
     objectiveContext: {
       archetype,
       atChange: objectiveAtChange,
