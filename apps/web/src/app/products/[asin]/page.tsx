@@ -1770,6 +1770,17 @@ export default async function ProductDetailPage({
                               const bulksheetColumns = orderedBulksheetColumns(
                                 preview.bulksheet_rows
                               );
+                              const productNameSegment = displayName.trim() || asin;
+                              const channelSegment = preview.channel.trim() || 'channel';
+                              const runIdSegment = preview.run_id.trim() || 'run';
+                              const strictDownloadFilename = `${asin}_${productNameSegment}_${channelSegment}_${runIdSegment}_upload_strict.xlsx`;
+                              const reviewDownloadFilename = `${asin}_${productNameSegment}_${channelSegment}_${runIdSegment}_review.xlsx`;
+                              const strictDownloadHref = `/api/files?path=${encodeURIComponent(
+                                `${preview.run_id}/upload_strict.xlsx`
+                              )}&filename=${encodeURIComponent(strictDownloadFilename)}`;
+                              const reviewDownloadHref = `/api/files?path=${encodeURIComponent(
+                                `${preview.run_id}/review.xlsx`
+                              )}&filename=${encodeURIComponent(reviewDownloadFilename)}`;
                               return (
                                 <div
                                   key={`${group.experiment.experiment_id}-plan-${preview.channel}-${preview.run_id}-${previewIndex}`}
@@ -1817,13 +1828,13 @@ export default async function ProductDetailPage({
                                         </button>
                                       </form>
                                       <a
-                                        href={`/api/files?path=${encodeURIComponent(`${preview.run_id}/upload_strict.xlsx`)}`}
+                                        href={strictDownloadHref}
                                         className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground hover:bg-surface-2"
                                       >
                                         Download upload
                                       </a>
                                       <a
-                                        href={`/api/files?path=${encodeURIComponent(`${preview.run_id}/review.xlsx`)}`}
+                                        href={reviewDownloadHref}
                                         className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground hover:bg-surface-2"
                                       >
                                         Download review
