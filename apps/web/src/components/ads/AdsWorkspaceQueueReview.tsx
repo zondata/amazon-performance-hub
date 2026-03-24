@@ -34,6 +34,8 @@ type AdsWorkspaceQueueReviewProps = {
   missingOutRoot: boolean;
   spawnDisabled: boolean;
   templateMissing: boolean;
+  queueDownloadAsin: string | null;
+  queueDownloadShortName: string | null;
   returnTo: string;
   notice: string | null;
   error: string | null;
@@ -53,9 +55,28 @@ const statusClassName = (status: string) => {
   return 'border-border bg-surface-2 text-foreground';
 };
 
-const fileLink = (relativePath: string | null) => {
+const fileLink = (relativePath: string | null, downloadFilename?: string | null) => {
   if (!relativePath) return null;
-  return `/api/files?path=${encodeURIComponent(relativePath)}`;
+  const params = new URLSearchParams({ path: relativePath });
+  if (downloadFilename) {
+    params.set('filename', downloadFilename);
+  }
+  return `/api/files?${params.toString()}`;
+};
+
+const buildQueueDownloadFilename = (
+  asin: string | null,
+  shortName: string | null,
+  suffix: 'upload_strict' | 'review'
+) => {
+  if (!asin) return null;
+  const trimmedShortName = shortName?.trim() ?? '';
+  const segments = [asin];
+  if (trimmedShortName) {
+    segments.push(trimmedShortName);
+  }
+  segments.push(suffix);
+  return `${segments.join('_')}.xlsx`;
 };
 
 type QueueItemGroup = {
@@ -70,6 +91,22 @@ export default function AdsWorkspaceQueueReview(props: AdsWorkspaceQueueReviewPr
   const artifact = selected
     ? readAdsWorkspaceGeneratedArtifact(selected.generated_artifact_json)
     : null;
+  const reviewDownloadLink = fileLink(
+    artifact?.reviewPath ?? null,
+    buildQueueDownloadFilename(
+      props.queueDownloadAsin,
+      props.queueDownloadShortName,
+      'review'
+    )
+  );
+  const strictDownloadLink = fileLink(
+    artifact?.uploadPath ?? null,
+    buildQueueDownloadFilename(
+      props.queueDownloadAsin,
+      props.queueDownloadShortName,
+      'upload_strict'
+    )
+  );
   const groupedItems = props.selectedItems.reduce<QueueItemGroup[]>((groups, item) => {
     const descriptor = describeSpDraftItem(item);
     const existing = groups.find((group) => group.key === descriptor.groupKey);
@@ -572,17 +609,17 @@ export default function AdsWorkspaceQueueReview(props: AdsWorkspaceQueueReviewPr
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-3 pt-2">
-                      {fileLink(artifact.reviewPath) ? (
+                      {reviewDownloadLink ? (
                         <a
-                          href={fileLink(artifact.reviewPath) ?? undefined}
+                          href={reviewDownloadLink}
                           className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground"
                         >
                           Download review.xlsx
                         </a>
                       ) : null}
-                      {fileLink(artifact.uploadPath) ? (
+                      {strictDownloadLink ? (
                         <a
-                          href={fileLink(artifact.uploadPath) ?? undefined}
+                          href={strictDownloadLink}
                           className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground"
                         >
                           Download upload_strict.xlsx

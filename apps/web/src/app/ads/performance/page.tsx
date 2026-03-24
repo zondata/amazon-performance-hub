@@ -12,7 +12,7 @@ import { listObjectivePresets } from '@/lib/ads-workspace/repoObjectivePresets';
 import { getTemplateStatus } from '@/lib/bulksheets/templateStore';
 import { env } from '@/lib/env';
 import { getExperimentOptions } from '@/lib/logbook/getExperimentOptions';
-import { fetchAsinOptions } from '@/lib/products/fetchAsinOptions';
+import { fetchAsinOptions, type AsinOption } from '@/lib/products/fetchAsinOptions';
 import { getDefaultMarketplaceDateRange } from '@/lib/time/defaultDateRange';
 import { formatUiDateRange, formatUiDateTime } from '@/lib/time/formatUiDate';
 import { getPageSettings } from '@/lib/uiSettings/getPageSettings';
@@ -25,6 +25,7 @@ import type {
 import type { SpTargetsWorkspaceRow } from '@/lib/ads/spTargetsWorkspaceModel';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const ASIN_OPTION_LABEL_SEPARATOR = ' — ';
 
 const normalizeDate = (value?: string): string | undefined => {
   if (!value) return undefined;
@@ -181,6 +182,28 @@ const resolveInitialComposerRow = (params: {
   return null;
 };
 
+const resolveQueueDownloadAsin = (asin: string): string | null => {
+  const trimmed = asin.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'all') return null;
+  return trimmed;
+};
+
+const resolveQueueDownloadShortName = (
+  asinOptions: AsinOption[],
+  queueDownloadAsin: string | null
+): string | null => {
+  if (!queueDownloadAsin) return null;
+  const label = asinOptions.find((option) => option.asin === queueDownloadAsin)?.label ?? null;
+  if (!label || label === queueDownloadAsin) return null;
+  if (label.startsWith(`${queueDownloadAsin}${ASIN_OPTION_LABEL_SEPARATOR}`)) {
+    return null;
+  }
+  const suffix = `${ASIN_OPTION_LABEL_SEPARATOR}${queueDownloadAsin}`;
+  if (!label.endsWith(suffix)) return null;
+  const shortName = label.slice(0, -suffix.length).trim();
+  return shortName.length > 0 ? shortName : null;
+};
+
 export default async function AdsPerformancePage({ searchParams }: AdsPageProps) {
   const params = searchParams ? await searchParams : undefined;
   const paramValue = (key: string): string | undefined => {
@@ -273,6 +296,8 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
   const asinOptions =
     workspaceData?.asinOptions ??
     (await fetchAsinOptions(env.accountId, env.marketplace));
+  const queueDownloadAsin = resolveQueueDownloadAsin(asin);
+  const queueDownloadShortName = resolveQueueDownloadShortName(asinOptions, queueDownloadAsin);
   const [spObjectivePresets, globalObjectivePresets] = shouldLoadWorkspaceData
     ? await Promise.all([
         listObjectivePresets({ channel: 'sp' }),
@@ -659,6 +684,8 @@ export default async function AdsPerformancePage({ searchParams }: AdsPageProps)
           missingOutRoot={missingOutRoot}
           spawnDisabled={spawnDisabled}
           templateMissing={templateMissing}
+          queueDownloadAsin={queueDownloadAsin}
+          queueDownloadShortName={queueDownloadShortName}
           returnTo={buildHref({
             start,
             end,
