@@ -27,6 +27,7 @@ type PlacementSortKey =
   | 'clicks'
   | 'ctr'
   | 'cvr'
+  | 'cpc'
   | 'spend'
   | 'sales'
   | 'orders'
@@ -41,6 +42,7 @@ const SORT_LABELS: Record<PlacementSortKey, string> = {
   clicks: 'clicks',
   ctr: 'ctr',
   cvr: 'cvr',
+  cpc: 'cpc',
   spend: 'spend',
   sales: 'sales',
   orders: 'orders',
@@ -66,6 +68,8 @@ const getSortValue = (row: AdsOptimizerPlacementTableRow, key: PlacementSortKey)
       return row.ctr.current;
     case 'cvr':
       return row.cvr.current;
+    case 'cpc':
+      return row.cpc.current;
     case 'spend':
       return row.spend.current;
     case 'sales':
@@ -123,7 +127,7 @@ const formatMetricValue = (kind: PlacementMetricKind, value: number | null) => {
   if (kind === 'clicks' || kind === 'orders') return formatInteger(value, false);
   if (kind === 'ctr') return formatPercent(value, 2);
   if (kind === 'cvr' || kind === 'acos') return formatPercent(value, 1);
-  if (kind === 'spend' || kind === 'sales') return formatUsd(value);
+  if (kind === 'cpc' || kind === 'spend' || kind === 'sales') return formatUsd(value);
   return formatRatio(value);
 };
 
@@ -388,6 +392,14 @@ export default function TargetPlacementTab(props: TargetPlacementTabProps) {
       render: (placement) => renderMetricLines({ kind: 'cvr', metric: placement.cvr }),
     },
     {
+      key: 'cpc',
+      label: 'CPC',
+      width: { strategy: 'content-fit', minPx: 60, maxPx: 90 },
+      align: 'right',
+      sortable: true,
+      render: (placement) => renderMetricLines({ kind: 'cpc', metric: placement.cpc }),
+    },
+    {
       key: 'spend',
       label: 'Spend',
       width: { strategy: 'content-fit', minPx: 65, maxPx: 100 },
@@ -619,6 +631,12 @@ export default function TargetPlacementTab(props: TargetPlacementTabProps) {
                   return (
                     <div className="text-[13px] font-medium text-foreground">
                       {formatMetricValue('cvr', totalsRow.cvr)}
+                    </div>
+                  );
+                case 'cpc':
+                  return (
+                    <div className="text-[13px] font-medium text-foreground">
+                      {formatMetricValue('cpc', totalsRow.cpc)}
                     </div>
                   );
                 case 'spend':

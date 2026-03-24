@@ -70,6 +70,7 @@ export type AdsOptimizerPlacementTableRow = {
   clicks: AdsOptimizerPlacementMetricCell;
   ctr: AdsOptimizerPlacementMetricCell;
   cvr: AdsOptimizerPlacementMetricCell;
+  cpc: AdsOptimizerPlacementMetricCell;
   spend: AdsOptimizerPlacementMetricCell;
   sales: AdsOptimizerPlacementMetricCell;
   orders: AdsOptimizerPlacementMetricCell;
@@ -83,6 +84,7 @@ export type AdsOptimizerPlacementTotalsRow = {
   clicks: number | null;
   ctr: number | null;
   cvr: number | null;
+  cpc: number | null;
   spend: number | null;
   sales: number | null;
   orders: number | null;
@@ -438,6 +440,8 @@ export const buildAdsOptimizerPlacementTableRows = (
     const ctrPrevious = deriveRatio(previous?.clicks ?? null, previous?.impressions ?? null);
     const cvrCurrent = deriveRatio(current?.orders ?? null, current?.clicks ?? null);
     const cvrPrevious = deriveRatio(previous?.orders ?? null, previous?.clicks ?? null);
+    const cpcCurrent = deriveRatio(current?.spend ?? null, current?.clicks ?? null);
+    const cpcPrevious = deriveRatio(previous?.spend ?? null, previous?.clicks ?? null);
     const acosCurrent = deriveRatio(current?.spend ?? null, current?.sales ?? null);
     const acosPrevious = deriveRatio(previous?.spend ?? null, previous?.sales ?? null);
     const roasCurrent = deriveRatio(current?.sales ?? null, current?.spend ?? null);
@@ -461,6 +465,7 @@ export const buildAdsOptimizerPlacementTableRows = (
       clicks: buildPlacementMetricCell(current?.clicks ?? null, previous?.clicks ?? null),
       ctr: buildPlacementMetricCell(ctrCurrent, ctrPrevious),
       cvr: buildPlacementMetricCell(cvrCurrent, cvrPrevious),
+      cpc: buildPlacementMetricCell(cpcCurrent, cpcPrevious),
       spend: buildPlacementMetricCell(current?.spend ?? null, previous?.spend ?? null),
       sales: buildPlacementMetricCell(current?.sales ?? null, previous?.sales ?? null),
       orders: buildPlacementMetricCell(current?.orders ?? null, previous?.orders ?? null),
@@ -485,6 +490,7 @@ export const buildAdsOptimizerPlacementTotalsRow = (
     clicks,
     ctr: deriveRatio(clicks, impressions),
     cvr: deriveRatio(orders, clicks),
+    cpc: deriveRatio(spend, clicks),
     spend,
     sales,
     orders,

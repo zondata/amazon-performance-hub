@@ -559,6 +559,8 @@ describe('ads optimizer target decision surface helpers', () => {
     expect(rows[0]?.ctr.previous).toBeCloseTo(48 / 1200);
     expect(rows[0]?.cvr.current).toBeCloseTo(9 / 64);
     expect(rows[0]?.cvr.previous).toBeCloseTo(6 / 48);
+    expect(rows[0]?.cpc.current).toBeCloseTo(96 / 64);
+    expect(rows[0]?.cpc.previous).toBeCloseTo(90 / 48);
     expect(rows[0]?.acos.current).toBeCloseTo(96 / 420);
     expect(rows[0]?.acos.previous).toBeCloseTo(90 / 300);
     expect(rows[0]?.roas.current).toBeCloseTo(420 / 96);
@@ -575,6 +577,7 @@ describe('ads optimizer target decision surface helpers', () => {
     expect(rows[1]?.ctr.previous).toBeCloseTo(35 / 800);
     expect(rows[1]?.cvr.current).toBe(0);
     expect(rows[1]?.cvr.previous).toBeCloseTo(2 / 35);
+    expect(rows[1]?.cpc.current).toBeCloseTo(52 / 40);
     expect(rows[1]?.sales.current).toBe(0);
     expect(rows[1]?.sales.previous).toBe(40);
     expect(rows[1]?.sales.changePercent).toBe(-100);
@@ -593,6 +596,7 @@ describe('ads optimizer target decision surface helpers', () => {
     expect(rows[2]?.clicks.changePercent).toBe(null);
     expect(rows[2]?.ctr.previous).toBe(0);
     expect(rows[2]?.cvr.previous).toBe(null);
+    expect(rows[2]?.cpc.current).toBe(null);
     expect(rows[2]?.acos.previous).toBe(null);
     expect(rows[2]?.roas.previous).toBe(null);
     expect(rows[2]?.roas.changePercent).toBe(null);
@@ -620,6 +624,7 @@ describe('ads optimizer target decision surface helpers', () => {
     });
     expect(totals.ctr).toBeCloseTo(104 / 2500);
     expect(totals.cvr).toBeCloseTo(9 / 104);
+    expect(totals.cpc).toBeCloseTo(148 / 104);
     expect(totals.acos).toBeCloseTo(148 / 420);
     expect(totals.roas).toBeCloseTo(420 / 148);
     expect(count).toBe(2);
