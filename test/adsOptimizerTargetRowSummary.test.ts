@@ -1494,4 +1494,53 @@ describe('ads optimizer target row table summary', () => {
     expect(summary.handoff.stageable).toBe(true);
     expect(summary.handoff.workspaceActionCount).toBe(3);
   });
+
+  it('treats a manual campaign bidding strategy override as a supported stageable handoff action', () => {
+    const row = buildRow({
+      currentCampaignBiddingStrategy: 'dynamic down only',
+      manualOverride: {
+        recommendation_override_id: 'override-1',
+        account_id: 'acct',
+        marketplace: 'US',
+        product_id: 'product-1',
+        asin: 'B000TEST',
+        target_id: 'target-1',
+        run_id: 'run-1',
+        target_snapshot_id: 'snap-1',
+        recommendation_snapshot_id: 'rec-1',
+        override_scope: 'persistent',
+        replacement_action_bundle_json: {
+          actions: [
+            {
+              action_type: 'update_campaign_bidding_strategy',
+              entity_context_json: {
+                campaign_id: 'cmp-1',
+                current_bidding_strategy: 'dynamic down only',
+              },
+              proposed_change_json: {
+                new_strategy: 'Fixed bids',
+              },
+            },
+          ],
+        },
+        operator_note: 'Hold the campaign on fixed bids for this cycle.',
+        is_archived: false,
+        last_applied_at: null,
+        last_applied_change_set_id: null,
+        apply_count: 0,
+        created_at: '2026-03-18T00:00:00Z',
+        updated_at: '2026-03-18T00:00:00Z',
+        archived_at: null,
+      },
+    });
+
+    const summary = buildAdsOptimizerTargetRowTableSummary(row, [row]);
+
+    expect(summary.handoff.stageable).toBe(true);
+    expect(summary.handoff.workspaceActionCount).toBe(1);
+    expect(summary.changeSummary.overflowCount).toBe(0);
+    expect(summary.changeSummary.lines).toEqual([
+      'Change campaign strategy from dynamic down only to Fixed bids',
+    ]);
+  });
 });

@@ -150,6 +150,24 @@ const makeChangePlanOverrideRows = (): TargetChangePlanOverrideActionItem[] => [
     ],
   },
   {
+    rowId: 'update_campaign_bidding_strategy::default',
+    actionType: 'update_campaign_bidding_strategy',
+    placementCode: null,
+    title: 'Update campaign bidding strategy',
+    currentLine: 'Current: dynamic down only',
+    enabledFieldName: 'override_campaign_bidding_strategy_enabled',
+    valueFieldName: 'override_campaign_bidding_strategy_new_strategy',
+    inputType: 'select',
+    initialChecked: false,
+    initialValue: 'dynamic down only',
+    options: [
+      { value: 'dynamic down only', label: 'dynamic down only' },
+      { value: 'Dynamic bids - down only', label: 'Dynamic bids - down only' },
+      { value: 'Dynamic bids - up and down', label: 'Dynamic bids - up and down' },
+      { value: 'Fixed bids', label: 'Fixed bids' },
+    ],
+  },
+  {
     rowId: 'update_placement_modifier::PLACEMENT_TOP',
     actionType: 'update_placement_modifier',
     placementCode: 'PLACEMENT_TOP',
@@ -234,6 +252,7 @@ const renderFixtureChangePlanMarkup = () =>
         campaignId: 'campaign-1',
         currentState: 'enabled',
         currentBid: null,
+        currentCampaignBiddingStrategy: 'dynamic down only',
       },
       canSave: true,
       saveRecommendationOverrideAction: async (prevState) => prevState,
@@ -1150,6 +1169,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(markup).toContain('Review');
     expect(markup).toContain('Current cadence is not persisted in this snapshot.');
     expect(markup).toContain('Update target bid');
+    expect(markup).toContain('Update campaign bidding strategy');
     expect(markup).toContain('Update placement modifier');
     expect(markup).toContain('TOS');
     expect(markup).toContain('ROS');
@@ -1159,12 +1179,19 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(markup).toContain('Product Pages');
     expect(markup).toContain('Current: —');
     expect(markup).toContain('Current: enabled');
+    expect(markup).toContain('Current: dynamic down only');
     expect(markup).toContain('Top of Search · Current: 0%');
     expect(markup).toContain('Rest of Search · Current: 5%');
     expect(markup).toContain('Product Pages · Current: —');
     expect(markup).toContain('Next bid');
     expect(markup).toContain('Paused');
+    expect(markup).toContain('dynamic down only');
+    expect(markup).toContain('Dynamic bids - down only');
+    expect(markup).toContain('Dynamic bids - up and down');
+    expect(markup).toContain('Fixed bids');
     expect(markup).toContain('Next placement percentage');
+    expect(markup).toContain('override_campaign_bidding_strategy_enabled');
+    expect(markup).toContain('override_campaign_bidding_strategy_new_strategy');
     expect(markup).toContain('override_placement_enabled__PLACEMENT_TOP');
     expect(markup).toContain('override_placement_enabled__PLACEMENT_REST_OF_SEARCH');
     expect(markup).toContain('override_placement_enabled__PLACEMENT_PRODUCT_PAGE');
@@ -1189,6 +1216,9 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
       /name="override_state_enabled"[^>]*disabled|disabled=""[^>]*name="override_state_enabled"/
     );
     expect(markup).toMatch(
+      /name="override_campaign_bidding_strategy_enabled"[^>]*disabled|disabled=""[^>]*name="override_campaign_bidding_strategy_enabled"/
+    );
+    expect(markup).toMatch(
       /name="override_placement_enabled__PLACEMENT_TOP"[^>]*disabled|disabled=""[^>]*name="override_placement_enabled__PLACEMENT_TOP"/
     );
     expect(markup).toMatch(
@@ -1199,6 +1229,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     );
     expect(markup).toMatch(/name="operator_note"[^>]*disabled|disabled=""[^>]*name="operator_note"/);
     const placementRowOrder = [
+      'override_campaign_bidding_strategy_enabled',
       'override_placement_enabled__PLACEMENT_TOP',
       'override_placement_enabled__PLACEMENT_REST_OF_SEARCH',
       'override_placement_enabled__PLACEMENT_PRODUCT_PAGE',
@@ -1208,6 +1239,13 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     });
     expect(placementRowOrder[1]).toBeGreaterThan(placementRowOrder[0]!);
     expect(placementRowOrder[2]).toBeGreaterThan(placementRowOrder[1]!);
+    expect(placementRowOrder[3]).toBeGreaterThan(placementRowOrder[2]!);
+    expect(shellSource).toContain('SP_BIDDING_STRATEGY_OPTIONS');
+    expect(shellSource).toContain("actionType: 'update_campaign_bidding_strategy'");
+    expect(shellSource).toContain(
+      "enabledFieldName: 'override_campaign_bidding_strategy_enabled'"
+    );
+    expect(shellSource).toContain('currentCampaignBiddingStrategy');
     expect(shellSource).toContain('saveRecommendationOverrideAction={props.saveRecommendationOverrideAction}');
   });
 
@@ -1215,6 +1253,9 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     const overrideRows = makeChangePlanOverrideRows();
     const bidRow = overrideRows.find((row) => row.actionType === 'update_target_bid')!;
     const stateRow = overrideRows.find((row) => row.actionType === 'update_target_state')!;
+    const campaignStrategyRow = overrideRows.find(
+      (row) => row.actionType === 'update_campaign_bidding_strategy'
+    )!;
     const tosRow = overrideRows.find((row) => row.placementCode === 'PLACEMENT_TOP')!;
     const rosRow = overrideRows.find(
       (row) => row.placementCode === 'PLACEMENT_REST_OF_SEARCH'
@@ -1230,6 +1271,8 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(initial.scope).toBe('persistent');
     expect(initial.actions[stateRow.rowId]?.checked).toBe(true);
     expect(initial.actions[stateRow.rowId]?.value).toBe('paused');
+    expect(initial.actions[campaignStrategyRow.rowId]?.checked).toBe(false);
+    expect(initial.actions[campaignStrategyRow.rowId]?.value).toBe('dynamic down only');
 
     const overrideOn = reduceTargetChangePlanDraftState(initial, {
       type: 'set_override_active',
@@ -1249,7 +1292,17 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
       rowId: bidRow.rowId,
       value: '0.82',
     });
-    const tosChecked = reduceTargetChangePlanDraftState(bidEdited, {
+    const campaignStrategyChecked = reduceTargetChangePlanDraftState(bidEdited, {
+      type: 'set_action_checked',
+      rowId: campaignStrategyRow.rowId,
+      value: true,
+    });
+    const campaignStrategyEdited = reduceTargetChangePlanDraftState(campaignStrategyChecked, {
+      type: 'set_action_value',
+      rowId: campaignStrategyRow.rowId,
+      value: 'Fixed bids',
+    });
+    const tosChecked = reduceTargetChangePlanDraftState(campaignStrategyEdited, {
       type: 'set_action_checked',
       rowId: tosRow.rowId,
       value: true,
@@ -1315,12 +1368,15 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(overrideOff.actions[bidRow.rowId]?.value).toBe('0.82');
     expect(overrideOff.actions[stateRow.rowId]?.checked).toBe(true);
     expect(overrideOff.actions[stateRow.rowId]?.value).toBe('paused');
+    expect(overrideOff.actions[campaignStrategyRow.rowId]?.checked).toBe(true);
+    expect(overrideOff.actions[campaignStrategyRow.rowId]?.value).toBe('Fixed bids');
     expect(overrideOff.actions[tosRow.rowId]?.checked).toBe(true);
     expect(overrideOff.actions[tosRow.rowId]?.value).toBe('12');
     expect(overrideOff.actions[rosRow.rowId]?.checked).toBe(true);
     expect(overrideOff.actions[rosRow.rowId]?.value).toBe('7');
     expect(overrideOff.actions[ppRow.rowId]?.checked).toBe(true);
     expect(overrideOff.actions[ppRow.rowId]?.value).toBe('4');
+    expect(overrideOnAgain.actions[campaignStrategyRow.rowId]?.value).toBe('Fixed bids');
     expect(overrideOnAgain.actions[tosRow.rowId]?.value).toBe('12');
     expect(overrideOnAgain.actions[rosRow.rowId]?.value).toBe('7');
     expect(overrideOnAgain.actions[ppRow.rowId]?.value).toBe('4');

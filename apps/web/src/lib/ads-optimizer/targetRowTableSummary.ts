@@ -34,6 +34,7 @@ export type AdsOptimizerTargetExceptionFilterValue =
 type WorkspaceSupportedActionType =
   | 'update_target_bid'
   | 'update_target_state'
+  | 'update_campaign_bidding_strategy'
   | 'update_placement_modifier';
 
 type SummaryTone = 'good' | 'bad' | 'neutral' | 'missing';
@@ -333,6 +334,7 @@ const isWorkspaceSupportedActionType = (
 ): value is WorkspaceSupportedActionType =>
   value === 'update_target_bid' ||
   value === 'update_target_state' ||
+  value === 'update_campaign_bidding_strategy' ||
   value === 'update_placement_modifier';
 
 const getEffectiveStageableActions = (row: TargetReviewRowLike) =>
@@ -561,6 +563,16 @@ const buildActionLine = (action: ReturnType<typeof getEffectiveStageableActions>
     }
     if (nextState) return `Change state to ${nextState}`;
     return 'Change state';
+  }
+
+  if (action.actionType === 'update_campaign_bidding_strategy') {
+    const currentStrategy = readActionString(action.entityContext, 'current_bidding_strategy');
+    const newStrategy = readActionString(action.proposedChange, 'new_strategy');
+    if (currentStrategy && newStrategy) {
+      return `Change campaign strategy from ${currentStrategy} to ${newStrategy}`;
+    }
+    if (newStrategy) return `Set campaign strategy to ${newStrategy}`;
+    return 'Change campaign strategy';
   }
 
   const placementCode =

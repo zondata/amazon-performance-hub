@@ -467,6 +467,17 @@ export const validateSaveAdsOptimizerRecommendationOverridePayload = (
           'update_target_state override requires next_state of enabled, paused, or archived.'
         );
       }
+    } else if (actionType === 'update_campaign_bidding_strategy') {
+      if (seenSingleActionTypes.has(actionType)) {
+        throw new Error(`replacement action ${actionType} can only appear once per override.`);
+      }
+      seenSingleActionTypes.add(actionType);
+      const newStrategy = trimToNull(proposedChange.new_strategy);
+      if (!newStrategy) {
+        throw new Error(
+          'update_campaign_bidding_strategy override requires new_strategy.'
+        );
+      }
     } else if (actionType === 'update_placement_modifier') {
       const nextPercentage = Number(proposedChange.next_percentage);
       const placementCodeRaw =

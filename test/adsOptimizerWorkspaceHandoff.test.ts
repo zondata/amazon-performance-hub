@@ -599,6 +599,114 @@ describe('ads optimizer workspace handoff', () => {
     expect(plan.skippedUnsupportedActionCount).toBe(0);
   });
 
+  it('stages a manual campaign bidding strategy override as one campaign-level workspace action', () => {
+    const row = makeRow({
+      currentCampaignBiddingStrategy: 'dynamic down only',
+      manualOverride: makeManualOverride({
+        replacement_action_bundle_json: {
+          actions: [
+            {
+              action_type: 'update_campaign_bidding_strategy',
+              entity_context_json: {
+                campaign_id: 'campaign-1',
+                current_bidding_strategy: 'dynamic down only',
+              },
+              proposed_change_json: {
+                new_strategy: 'Fixed bids',
+              },
+            },
+          ],
+        },
+      }),
+    });
+
+    const plan = buildAdsOptimizerWorkspaceHandoffPlan({
+      asin: 'B001TEST',
+      start: '2026-03-01',
+      end: '2026-03-10',
+      runId: 'run-1',
+      objective: 'Scale Profit',
+      rows: [row],
+      createdAt: '2026-03-11T10:00:00Z',
+    });
+
+    expect(plan.itemPayloads).toHaveLength(1);
+    expect(plan.itemPayloads[0]).toMatchObject({
+      entity_level: 'campaign',
+      entity_key: 'campaign-1',
+      campaign_id: 'campaign-1',
+      action_type: 'update_campaign_bidding_strategy',
+      before_json: {
+        bidding_strategy: 'dynamic down only',
+      },
+      after_json: {
+        bidding_strategy: 'Fixed bids',
+      },
+    });
+    expect(plan.skippedUnsupportedActionTypes).toEqual([]);
+  });
+
+  it('blocks conflicting manual campaign bidding strategy overrides for the same campaign', () => {
+    const rowA = makeRow({
+      targetSnapshotId: 'target-snapshot-a',
+      targetId: 'target-1',
+      persistedTargetKey: 'target-1',
+      currentCampaignBiddingStrategy: 'dynamic down only',
+      manualOverride: makeManualOverride({
+        replacement_action_bundle_json: {
+          actions: [
+            {
+              action_type: 'update_campaign_bidding_strategy',
+              entity_context_json: {
+                campaign_id: 'campaign-1',
+                current_bidding_strategy: 'dynamic down only',
+              },
+              proposed_change_json: {
+                new_strategy: 'Fixed bids',
+              },
+            },
+          ],
+        },
+      }),
+    });
+    const rowB = makeRow({
+      targetSnapshotId: 'target-snapshot-b',
+      targetId: 'target-2',
+      persistedTargetKey: 'target-2',
+      currentCampaignBiddingStrategy: 'dynamic down only',
+      manualOverride: makeManualOverride({
+        target_id: 'target-2',
+        target_snapshot_id: 'target-snapshot-b',
+        replacement_action_bundle_json: {
+          actions: [
+            {
+              action_type: 'update_campaign_bidding_strategy',
+              entity_context_json: {
+                campaign_id: 'campaign-1',
+                current_bidding_strategy: 'dynamic down only',
+              },
+              proposed_change_json: {
+                new_strategy: 'Dynamic bids - up and down',
+              },
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(() =>
+      buildAdsOptimizerWorkspaceHandoffPlan({
+        asin: 'B001TEST',
+        start: '2026-03-01',
+        end: '2026-03-10',
+        runId: 'run-1',
+        objective: 'Scale Profit',
+        rows: [rowA, rowB],
+        createdAt: '2026-03-11T10:00:00Z',
+      })
+    ).toThrow('Selected optimizer recommendations conflict');
+  });
+
   it('stages one placement item per manual override placement action with placement-specific metadata', () => {
     const row = makeRow({
       manualOverride: makeManualOverride({

@@ -10,6 +10,7 @@ export const ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_SCOPES = [
 export const ADS_OPTIMIZER_RECOMMENDATION_OVERRIDE_ACTION_TYPES = [
   'update_target_bid',
   'update_target_state',
+  'update_campaign_bidding_strategy',
   'update_placement_modifier',
 ] as const;
 

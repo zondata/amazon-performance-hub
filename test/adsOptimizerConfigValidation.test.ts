@@ -199,6 +199,45 @@ describe('ads optimizer config validation', () => {
     ]);
   });
 
+  it('accepts one campaign bidding strategy override with the persisted strategy keys', () => {
+    const override = validateSaveAdsOptimizerRecommendationOverridePayload({
+      product_id: 'product-1',
+      asin: 'B001TEST',
+      target_id: 'target-1',
+      run_id: 'run-1',
+      target_snapshot_id: 'target-snapshot-1',
+      recommendation_snapshot_id: 'recommendation-1',
+      override_scope: 'persistent',
+      replacement_action_bundle_json: {
+        actions: [
+          {
+            action_type: 'update_campaign_bidding_strategy',
+            entity_context_json: {
+              campaign_id: 'campaign-1',
+              current_bidding_strategy: 'dynamic down only',
+            },
+            proposed_change_json: {
+              new_strategy: 'Fixed bids',
+            },
+          },
+        ],
+      },
+      operator_note: 'Lock strategy manually for this campaign before the next review.',
+    });
+
+    expect(override.replacement_action_bundle_json.actions).toHaveLength(1);
+    expect(override.replacement_action_bundle_json.actions[0]).toMatchObject({
+      action_type: 'update_campaign_bidding_strategy',
+      entity_context_json: {
+        campaign_id: 'campaign-1',
+        current_bidding_strategy: 'dynamic down only',
+      },
+      proposed_change_json: {
+        new_strategy: 'Fixed bids',
+      },
+    });
+  });
+
   it('rejects duplicate placement modifier overrides for the same placement code', () => {
     expect(() =>
       validateSaveAdsOptimizerRecommendationOverridePayload({

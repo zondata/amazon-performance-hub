@@ -46,6 +46,7 @@ import {
 } from '@/lib/ads-optimizer/recommendationOverrideOverlay';
 import type { SaveAdsOptimizerRecommendationOverrideInlineAction } from '@/lib/ads-optimizer/recommendationOverrideInlineState';
 import type { AdsOptimizerRecommendationOverride } from '@/lib/ads-optimizer/types';
+import { SP_BIDDING_STRATEGY_OPTIONS } from '@/lib/ads-workspace/spPlacementModifiers';
 import {
   formatUiDateRange,
   formatUiDateTime as formatDateTime,
@@ -53,6 +54,7 @@ import {
 import TargetAdvancedSection from './TargetAdvancedSection';
 import TargetChangePlanTab, {
   type TargetChangePlanOverrideActionItem,
+  type TargetChangePlanOverrideActionOption,
   type TargetChangePlanPlacementCode,
   type TargetChangePlanProposalItem,
 } from './TargetChangePlanTab';
@@ -95,6 +97,7 @@ export type OptimizerTargetsPanelProps = {
 type WorkspaceSupportedActionType =
   | 'update_target_bid'
   | 'update_target_state'
+  | 'update_campaign_bidding_strategy'
   | 'update_placement_modifier';
 type ProposedChangeDetail =
   | {
@@ -406,6 +409,7 @@ const isWorkspaceSupportedActionType = (
 ): value is WorkspaceSupportedActionType =>
   value === 'update_target_bid' ||
   value === 'update_target_state' ||
+  value === 'update_campaign_bidding_strategy' ||
   value === 'update_placement_modifier';
 
 const isTargetChangePlanPlacementCode = (
@@ -459,6 +463,33 @@ const getCurrentPlacementPercentage = (
 const sentenceCase = (value: string | null) => {
   if (!value) return NOT_CAPTURED;
   return labelize(value).toLowerCase();
+};
+
+const trimStringToNull = (value: string | null | undefined) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const buildCampaignBiddingStrategyOptions = (
+  currentStrategy: string | null
+): TargetChangePlanOverrideActionOption[] => {
+  const options: TargetChangePlanOverrideActionOption[] = [];
+  const seen = new Set<string>();
+
+  const appendOption = (value: string) => {
+    if (seen.has(value)) return;
+    seen.add(value);
+    options.push({ value, label: value });
+  };
+
+  const currentRawStrategy = trimStringToNull(currentStrategy);
+  if (currentRawStrategy) {
+    appendOption(currentRawStrategy);
+  }
+
+  SP_BIDDING_STRATEGY_OPTIONS.forEach((strategy) => appendOption(strategy));
+  return options;
 };
 
 const formatOverridePlacementPercent = (value: number | null) => {
@@ -668,6 +699,7 @@ const buildTargetChangePlanOverrideRows = (args: {
   row: AdsOptimizerTargetReviewRow;
   bidActionEditor: ReturnType<typeof getActionEditorSource>;
   stateActionEditor: ReturnType<typeof getActionEditorSource>;
+  biddingStrategyActionEditor: ReturnType<typeof getActionEditorSource>;
   currentBid: number | null;
   nextBid: number | null;
   currentState: string | null;
@@ -705,6 +737,37 @@ const buildTargetChangePlanOverrideRows = (args: {
       { value: 'archived', label: 'Archived' },
     ],
   },
+  (() => {
+    const currentCampaignBiddingStrategy = trimStringToNull(
+      args.row.currentCampaignBiddingStrategy
+    );
+    const existingOverrideNewStrategy =
+      args.biddingStrategyActionEditor.source === 'override'
+        ? readJsonString(args.biddingStrategyActionEditor.proposedChange, 'new_strategy')
+        : null;
+
+    return {
+      rowId: 'update_campaign_bidding_strategy::default',
+      actionType: 'update_campaign_bidding_strategy',
+      placementCode: null,
+      title: 'Update campaign bidding strategy',
+      currentLine: `Current: ${currentCampaignBiddingStrategy ?? NOT_CAPTURED}`,
+      enabledFieldName: 'override_campaign_bidding_strategy_enabled',
+      valueFieldName: 'override_campaign_bidding_strategy_new_strategy',
+      inputType: 'select',
+      initialChecked: args.biddingStrategyActionEditor.source === 'override',
+      initialValue:
+        readJsonString(args.biddingStrategyActionEditor.proposedChange, 'new_strategy') ??
+        currentCampaignBiddingStrategy ??
+        '',
+      options: [
+        ...(!currentCampaignBiddingStrategy && !existingOverrideNewStrategy
+          ? [{ value: '', label: 'Select strategy' }]
+          : []),
+        ...buildCampaignBiddingStrategyOptions(currentCampaignBiddingStrategy),
+      ],
+    } satisfies TargetChangePlanOverrideActionItem;
+  })(),
   ...CHANGE_PLAN_PLACEMENT_CODES.map((placementCode) => {
     const placementActionEditor = getActionEditorSource(
       args.row,
@@ -1330,6 +1393,10 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
         const changePlanProposalRows = buildTargetChangePlanProposalRows(activeRow);
         const bidActionEditor = getActionEditorSource(activeRow, 'update_target_bid');
         const stateActionEditor = getActionEditorSource(activeRow, 'update_target_state');
+        const biddingStrategyActionEditor = getActionEditorSource(
+          activeRow,
+          'update_campaign_bidding_strategy'
+        );
         const currentBidForOverride =
           readJsonNumber(bidActionEditor.entityContext, 'current_bid') ?? activeRow.raw.cpc;
         const nextBidForOverride = readJsonNumber(bidActionEditor.proposedChange, 'next_bid');
@@ -1352,6 +1419,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
           row: activeRow,
           bidActionEditor,
           stateActionEditor,
+          biddingStrategyActionEditor,
           currentBid: currentBidForOverride,
           nextBid: nextBidForOverride,
           currentState: currentStateForOverride,
@@ -1450,6 +1518,8 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                     campaignId: activeRow.campaignId,
                     currentState: currentStateForOverride,
                     currentBid: currentBidForOverride,
+                    currentCampaignBiddingStrategy:
+                      activeRow.currentCampaignBiddingStrategy,
                   }}
                   canSave={Boolean(props.productId && activeRow.recommendation)}
                   formUnavailableNote={changePlanFormUnavailableNote}

@@ -67,6 +67,7 @@ export type TargetChangePlanHiddenInputs = {
   campaignId: string;
   currentState: string | null;
   currentBid: number | null;
+  currentCampaignBiddingStrategy: string | null;
 };
 
 type TargetChangePlanDraftActionState = {
@@ -350,6 +351,11 @@ export default function TargetChangePlanTab(props: TargetChangePlanTabProps) {
           <input type="hidden" name="campaign_id" value={props.hiddenInputs.campaignId} />
           <input type="hidden" name="current_state" value={props.hiddenInputs.currentState ?? ''} />
           <input type="hidden" name="current_bid" value={props.hiddenInputs.currentBid ?? ''} />
+          <input
+            type="hidden"
+            name="current_campaign_bidding_strategy"
+            value={props.hiddenInputs.currentCampaignBiddingStrategy ?? ''}
+          />
 
           <div
             className={`mb-[10px] flex items-center justify-between rounded-[8px] px-[10px] py-2 transition-[background-color,border-color] duration-200 ${
@@ -576,7 +582,7 @@ export default function TargetChangePlanTab(props: TargetChangePlanTabProps) {
               {isPending ? 'Saving…' : 'Save override bundle'}
             </button>
             <div className="text-[10px] text-muted">
-              Supported override actions: bid, target state, and placement modifier only.
+              Supported override actions: bid, target state, campaign bidding strategy, and placement modifier only.
             </div>
           </div>
         </form>

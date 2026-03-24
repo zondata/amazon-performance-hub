@@ -19,6 +19,7 @@ import { markAdsOptimizerRecommendationOverridesApplied } from './repoOverrides'
 export const ADS_OPTIMIZER_WORKSPACE_HANDOFF_ACTION_TYPES = [
   'update_target_bid',
   'update_target_state',
+  'update_campaign_bidding_strategy',
   'update_placement_modifier',
 ] as const;
 
@@ -308,6 +309,51 @@ const buildTargetItemPayload = (args: {
   } satisfies ChangeSetItemPayload;
 };
 
+const buildCampaignItemPayload = (args: {
+  row: AdsOptimizerTargetReviewRow;
+  entityContext: JsonObject | null;
+  proposedChange: JsonObject | null;
+  objective: string;
+  hypothesis: string;
+  notes: string;
+  reviewAfterDays: number | null;
+}) => {
+  const newStrategy = readString(args.proposedChange, 'new_strategy');
+  if (!newStrategy) {
+    throw new Error(
+      `Target ${args.row.targetText} is missing new_strategy in the persisted campaign bidding strategy action.`
+    );
+  }
+
+  return {
+    channel: 'sp',
+    entity_level: 'campaign',
+    entity_key: args.row.campaignId,
+    campaign_id: args.row.campaignId,
+    ad_group_id: null,
+    target_id: null,
+    target_key: null,
+    placement_code: null,
+    action_type: 'update_campaign_bidding_strategy',
+    before_json: {
+      bidding_strategy:
+        readString(args.entityContext, 'current_bidding_strategy') ??
+        args.row.currentCampaignBiddingStrategy ??
+        null,
+    },
+    after_json: {
+      bidding_strategy: newStrategy,
+    },
+    objective: args.objective,
+    hypothesis: args.hypothesis,
+    forecast_json: null,
+    review_after_days: args.reviewAfterDays,
+    notes: args.notes,
+    objective_preset_id: null,
+    ui_context_json: null,
+  } satisfies ChangeSetItemPayload;
+};
+
 const buildPlacementItemPayload = (args: {
   row: AdsOptimizerTargetReviewRow;
   entityContext: JsonObject | null;
@@ -476,6 +522,12 @@ const buildDraftPayloadsForRow = (args: {
             entityContext: action.entityContext,
             proposedChange: action.proposedChange,
           })
+        : action.actionType === 'update_campaign_bidding_strategy'
+          ? buildCampaignItemPayload({
+              ...baseFields,
+              entityContext: action.entityContext,
+              proposedChange: action.proposedChange,
+            })
         : buildTargetItemPayload({
             ...baseFields,
             actionType: action.actionType,

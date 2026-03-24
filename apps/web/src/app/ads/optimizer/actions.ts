@@ -418,6 +418,9 @@ const buildAdsOptimizerRecommendationOverridePayload = (formData: FormData) => {
   const campaignId = trimToNull(formData.get('campaign_id'));
   const currentState = trimToNull(formData.get('current_state'));
   const currentBid = formNumber(formData.get('current_bid'));
+  const currentCampaignBiddingStrategy = trimToNull(
+    formData.get('current_campaign_bidding_strategy')
+  );
 
   const replacementActions: Array<Record<string, unknown>> = [];
 
@@ -445,6 +448,21 @@ const buildAdsOptimizerRecommendationOverridePayload = (formData: FormData) => {
       },
       proposed_change_json: {
         next_state: trimToNull(formData.get('override_state_next_state')),
+      },
+    });
+  }
+
+  if (formData.get('override_campaign_bidding_strategy_enabled') === '1') {
+    replacementActions.push({
+      action_type: 'update_campaign_bidding_strategy',
+      entity_context_json: {
+        campaign_id: campaignId,
+        current_bidding_strategy: currentCampaignBiddingStrategy,
+      },
+      proposed_change_json: {
+        new_strategy: trimToNull(
+          formData.get('override_campaign_bidding_strategy_new_strategy')
+        ),
       },
     });
   }
