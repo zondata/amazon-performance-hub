@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { env } from '@/lib/env';
+import { fetchAllRows } from '@/lib/supabaseFetchAll';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export type AdsOptimizerLastDetectedChangeKind =
@@ -493,67 +494,85 @@ export const loadAdsOptimizerLastDetectedChangesForTargets = async (
   const targetIds = [...new Set(filteredRows.map((row) => row.targetId))];
   const campaignIds = [...new Set(filteredRows.map((row) => row.campaignId))];
 
-  const [bulkTargetResult, bulkCampaignResult, placementChangeLogResult, bulkPlacementResult] =
-    await Promise.all([
-      supabaseAdmin
-        .from('bulk_targets')
-        .select('snapshot_date,target_id,bid,state')
-        .eq('account_id', env.accountId)
-        .in('target_id', targetIds)
-        .order('target_id', { ascending: true })
-        .order('snapshot_date', { ascending: false }),
-      supabaseAdmin
-        .from('bulk_campaigns')
-        .select('snapshot_date,campaign_id,bidding_strategy')
-        .eq('account_id', env.accountId)
-        .in('campaign_id', campaignIds)
-        .order('campaign_id', { ascending: true })
-        .order('snapshot_date', { ascending: false }),
-      supabaseAdmin
-        .from('sp_placement_modifier_change_log')
-        .select('snapshot_date,campaign_id,placement_code,old_pct,new_pct')
-        .eq('account_id', env.accountId)
-        .in('campaign_id', campaignIds)
-        .order('campaign_id', { ascending: true })
-        .order('placement_code', { ascending: true })
-        .order('snapshot_date', { ascending: false }),
-      supabaseAdmin
-        .from('bulk_placements')
-        .select('snapshot_date,campaign_id,placement_code,percentage')
-        .eq('account_id', env.accountId)
-        .in('campaign_id', campaignIds)
-        .order('campaign_id', { ascending: true })
-        .order('placement_code', { ascending: true })
-        .order('snapshot_date', { ascending: false }),
-    ]);
+  const bulkTargetQuery = supabaseAdmin
+    .from('bulk_targets')
+    .select('snapshot_date,target_id,bid,state')
+    .eq('account_id', env.accountId)
+    .in('target_id', targetIds)
+    .order('target_id', { ascending: true })
+    .order('snapshot_date', { ascending: false });
 
-  if (bulkTargetResult.error) {
-    throw new Error(
-      `Failed to load bulk target history for last detected changes: ${bulkTargetResult.error.message}`
-    );
-  }
-  if (bulkCampaignResult.error) {
-    throw new Error(
-      `Failed to load bulk campaign history for last detected changes: ${bulkCampaignResult.error.message}`
-    );
-  }
-  if (placementChangeLogResult.error) {
-    throw new Error(
-      `Failed to load placement modifier change log for last detected changes: ${placementChangeLogResult.error.message}`
-    );
-  }
-  if (bulkPlacementResult.error) {
-    throw new Error(
-      `Failed to load bulk placement history for last detected changes: ${bulkPlacementResult.error.message}`
-    );
-  }
+  const bulkCampaignQuery = supabaseAdmin
+    .from('bulk_campaigns')
+    .select('snapshot_date,campaign_id,bidding_strategy')
+    .eq('account_id', env.accountId)
+    .in('campaign_id', campaignIds)
+    .order('campaign_id', { ascending: true })
+    .order('snapshot_date', { ascending: false });
+
+  const placementChangeLogQuery = supabaseAdmin
+    .from('sp_placement_modifier_change_log')
+    .select('snapshot_date,campaign_id,placement_code,old_pct,new_pct')
+    .eq('account_id', env.accountId)
+    .in('campaign_id', campaignIds)
+    .order('campaign_id', { ascending: true })
+    .order('placement_code', { ascending: true })
+    .order('snapshot_date', { ascending: false });
+
+  const bulkPlacementQuery = supabaseAdmin
+    .from('bulk_placements')
+    .select('snapshot_date,campaign_id,placement_code,percentage')
+    .eq('account_id', env.accountId)
+    .in('campaign_id', campaignIds)
+    .order('campaign_id', { ascending: true })
+    .order('placement_code', { ascending: true })
+    .order('snapshot_date', { ascending: false });
+
+  const [bulkTargetRows, bulkCampaignRows, placementChangeLogRows, bulkPlacementRows] =
+    await Promise.all([
+      fetchAllRows<BulkTargetHistoryRow>((from, to) => bulkTargetQuery.range(from, to)).catch(
+        (error: unknown) => {
+          throw new Error(
+            `Failed to load bulk target history for last detected changes: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      ),
+      fetchAllRows<BulkCampaignHistoryRow>((from, to) => bulkCampaignQuery.range(from, to)).catch(
+        (error: unknown) => {
+          throw new Error(
+            `Failed to load bulk campaign history for last detected changes: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      ),
+      fetchAllRows<PlacementModifierChangeLogRow>((from, to) =>
+        placementChangeLogQuery.range(from, to)
+      ).catch((error: unknown) => {
+        throw new Error(
+          `Failed to load placement modifier change log for last detected changes: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }),
+      fetchAllRows<BulkPlacementHistoryRow>((from, to) => bulkPlacementQuery.range(from, to)).catch(
+        (error: unknown) => {
+          throw new Error(
+            `Failed to load bulk placement history for last detected changes: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      ),
+    ]);
 
   return buildAdsOptimizerLastDetectedChangesForTargets({
     rows: filteredRows,
-    bulkTargetRows: (bulkTargetResult.data ?? []) as BulkTargetHistoryRow[],
-    bulkCampaignRows: (bulkCampaignResult.data ?? []) as BulkCampaignHistoryRow[],
-    placementChangeLogRows:
-      (placementChangeLogResult.data ?? []) as PlacementModifierChangeLogRow[],
-    bulkPlacementRows: (bulkPlacementResult.data ?? []) as BulkPlacementHistoryRow[],
+    bulkTargetRows,
+    bulkCampaignRows,
+    placementChangeLogRows,
+    bulkPlacementRows,
   });
 };
