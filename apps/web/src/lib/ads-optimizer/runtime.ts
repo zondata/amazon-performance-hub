@@ -33,6 +33,10 @@ import {
   loadAdsOptimizerLastDetectedChangesForTargets,
   type AdsOptimizerLastDetectedChange,
 } from './lastDetectedChange';
+import {
+  loadAdsOptimizerManualOverrideCurrentContextForTargets,
+  type AdsOptimizerManualOverrideCurrentContext,
+} from './manualOverrideCurrent';
 import { buildAdsOptimizerRecommendationSnapshots } from './recommendation';
 import {
   createAdsOptimizerRun,
@@ -155,6 +159,25 @@ export type AdsOptimizerTargetRoleHistoryEntry = {
 };
 
 export type AdsOptimizerTargetReviewRow = AdsOptimizerTargetProfileSnapshotView & {
+  persistedTargetKey: string;
+  recommendation: AdsOptimizerRecommendationSnapshotView | null;
+  manualOverride?: AdsOptimizerRecommendationOverride | null;
+  lastDetectedChange?: AdsOptimizerLastDetectedChange;
+  previousComparable?: AdsOptimizerTargetProfileSnapshotView | null;
+  roleHistory: AdsOptimizerTargetRoleHistoryEntry[];
+  queue: {
+    priority: number | null;
+    recommendationCount: number;
+    primaryActionType: string | null;
+    spendDirection: string | null;
+    reasonCodeBadges: string[];
+    readOnlyBoundary: string | null;
+    hasCoverageGaps: boolean;
+  };
+  manualOverrideCurrent: AdsOptimizerManualOverrideCurrentContext;
+};
+
+type AdsOptimizerTargetReviewBaseRow = AdsOptimizerTargetProfileSnapshotView & {
   persistedTargetKey: string;
   recommendation: AdsOptimizerRecommendationSnapshotView | null;
   manualOverride?: AdsOptimizerRecommendationOverride | null;
@@ -398,7 +421,7 @@ const buildTargetReviewRows = (args: {
   recommendationSnapshots: Awaited<ReturnType<typeof listAdsOptimizerRecommendationSnapshotsByRun>>;
   roleHistoryByTargetId: Map<string, AdsOptimizerTargetRoleHistoryEntry[]>;
   activeOverrides?: AdsOptimizerRecommendationOverride[];
-}): AdsOptimizerTargetReviewRow[] => {
+}): AdsOptimizerTargetReviewBaseRow[] => {
   const recommendationsByTargetSnapshotId = new Map(
     args.recommendationSnapshots.map((snapshot) => [
       snapshot.target_snapshot_id,
@@ -451,7 +474,7 @@ const buildTargetReviewRows = (args: {
   });
 };
 
-const toComparisonRow = (row: AdsOptimizerTargetReviewRow): AdsOptimizerComparisonRow => ({
+const toComparisonRow = (row: AdsOptimizerTargetReviewBaseRow): AdsOptimizerComparisonRow => ({
   targetId: row.targetId,
   persistedTargetKey: row.persistedTargetKey,
   targetText: row.targetText,
@@ -1117,12 +1140,39 @@ export const getAdsOptimizerTargetsViewData = async (args: {
     bucket.push(historyEntry);
     roleHistoryByTargetId.set(log.target_id, bucket);
   });
-  const rows = buildTargetReviewRows({
+  const baseRows = buildTargetReviewRows({
     snapshots,
     recommendationSnapshots,
     roleHistoryByTargetId,
     activeOverrides,
   });
+  const manualOverrideCurrentByTargetSnapshotId =
+    baseRows.length > 0
+      ? await loadAdsOptimizerManualOverrideCurrentContextForTargets(baseRows)
+      : new Map();
+  const rows = baseRows.map((row) => ({
+    ...row,
+    manualOverrideCurrent:
+      manualOverrideCurrentByTargetSnapshotId.get(row.targetSnapshotId) ?? {
+        snapshotDate: null,
+        targetBid: row.currentTargetBid,
+        targetState: row.currentTargetState,
+        campaignBiddingStrategy: row.currentCampaignBiddingStrategy,
+        placementModifiers: {
+          PLACEMENT_TOP:
+            row.placementBreakdown.rows.find((entry) => entry.placementCode === 'PLACEMENT_TOP')
+              ?.modifierPct ?? null,
+          PLACEMENT_REST_OF_SEARCH:
+            row.placementBreakdown.rows.find(
+              (entry) => entry.placementCode === 'PLACEMENT_REST_OF_SEARCH'
+            )?.modifierPct ?? null,
+          PLACEMENT_PRODUCT_PAGE:
+            row.placementBreakdown.rows.find(
+              (entry) => entry.placementCode === 'PLACEMENT_PRODUCT_PAGE'
+            )?.modifierPct ?? null,
+        },
+      },
+  }));
   const lastDetectedChangeByTargetSnapshotId =
     rows.length > 0 ? await loadAdsOptimizerLastDetectedChangesForTargets(rows) : new Map();
   const rowsWithLastDetectedChange = rows.map((row) => ({

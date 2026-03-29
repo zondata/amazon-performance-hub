@@ -152,6 +152,14 @@ describe('ads optimizer phase 4 runtime wiring', () => {
   it('loads prior comparable runs and handoff audit into the targets trust layer', () => {
     const runtimeSource = fs.readFileSync(runtimePath, 'utf-8');
 
+    expect(runtimeSource).toContain("from './manualOverrideCurrent'");
+    expect(runtimeSource).toContain('loadAdsOptimizerManualOverrideCurrentContextForTargets');
+    expect(runtimeSource).toContain('const manualOverrideCurrentByTargetSnapshotId =');
+    expect(runtimeSource).toContain(
+      'baseRows.length > 0\n      ? await loadAdsOptimizerManualOverrideCurrentContextForTargets(baseRows)\n      : new Map()'
+    );
+    expect(runtimeSource).toContain('const rows = baseRows.map((row) => ({');
+    expect(runtimeSource).toContain('manualOverrideCurrent:');
     expect(runtimeSource).toContain("from './lastDetectedChange'");
     expect(runtimeSource).toContain('loadAdsOptimizerLastDetectedChangesForTargets');
     expect(runtimeSource).toContain('createEmptyAdsOptimizerLastDetectedChange');

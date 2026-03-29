@@ -23,6 +23,10 @@ const lastDetectedChangeState = vi.hoisted(() => ({
   load: vi.fn(),
 }));
 
+const manualOverrideCurrentState = vi.hoisted(() => ({
+  load: vi.fn(),
+}));
+
 vi.mock('../apps/web/src/lib/env', () => ({
   env: {
     supabaseUrl: 'https://example.supabase.co',
@@ -95,6 +99,10 @@ vi.mock('../apps/web/src/lib/ads-optimizer/lastDetectedChange', () => ({
     emptyMessage: 'No detected tracked change',
   })),
   loadAdsOptimizerLastDetectedChangesForTargets: lastDetectedChangeState.load,
+}));
+
+vi.mock('../apps/web/src/lib/ads-optimizer/manualOverrideCurrent', () => ({
+  loadAdsOptimizerManualOverrideCurrentContextForTargets: manualOverrideCurrentState.load,
 }));
 
 vi.mock('../apps/web/src/lib/ads-workspace/repoChangeSets', () => ({
@@ -345,6 +353,8 @@ describe('ads optimizer targets run context', () => {
     targetProfileState.mapTargetProfileRowToSnapshotView.mockReset();
     lastDetectedChangeState.load.mockReset();
     lastDetectedChangeState.load.mockResolvedValue(new Map());
+    manualOverrideCurrentState.load.mockReset();
+    manualOverrideCurrentState.load.mockResolvedValue(new Map());
   });
 
   it('prefers runId over incoming ASIN/date values and loads that persisted run', async () => {

@@ -337,6 +337,8 @@ export type AdsOptimizerTargetProfileSnapshotView = {
     spend: number | null;
     note: string | null;
   };
+  currentTargetBid: number | null;
+  currentTargetState: string | null;
   currentCampaignBiddingStrategy: string | null;
   placementBreakdown: PlacementBreakdownView;
   searchTermDiagnostics: {
@@ -2132,6 +2134,7 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
   const coverage = asJsonObject(payload.coverage);
   const statuses = asJsonObject(coverage?.statuses);
   const executionContext = asJsonObject(payload.execution_context);
+  const executionTarget = asJsonObject(executionContext?.target);
   const executionCampaign = asJsonObject(executionContext?.campaign);
   const topTermsRaw = Array.isArray(searchTermDiagnostics?.top_terms)
     ? searchTermDiagnostics?.top_terms
@@ -2433,6 +2436,8 @@ export const mapTargetSnapshotToProfileView = (snapshot: {
       spend: readNestedNumber(placementContext, 'spend'),
       note: readNestedString(placementContext, 'note'),
     },
+    currentTargetBid: readNestedNumber(executionTarget, 'current_bid'),
+    currentTargetState: readNestedString(executionTarget, 'current_state'),
     currentCampaignBiddingStrategy:
       readNestedString(payload, 'current_campaign_bidding_strategy') ??
       readNestedString(executionCampaign, 'current_bidding_strategy'),

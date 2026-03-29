@@ -64,6 +64,10 @@ const runtimePath = path.join(
   process.cwd(),
   'apps/web/src/lib/ads-optimizer/runtime.ts'
 );
+const targetProfilePath = path.join(
+  process.cwd(),
+  'apps/web/src/lib/ads-optimizer/targetProfile.ts'
+);
 const tableLayoutPrefsPath = path.join(
   process.cwd(),
   'apps/web/src/lib/ads-optimizer/targetTableLayoutPrefs.ts'
@@ -753,7 +757,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(shellSource).toContain('expandedContent={');
     expect(shellSource).not.toContain('colSpan={7}');
     expect(shellSource).toContain('data-aph-hscroll');
-    expect(shellSource).toContain('overflow-x-auto overflow-y-visible');
+    expect(shellSource).toContain('overflow-auto focus:outline-none');
     expect(shellSource).toContain('min-w-full table-fixed');
     expect(shellSource).toContain('<colgroup>');
     expect(shellSource).toContain('<thead>');
@@ -773,7 +777,7 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(shellSource).toContain('handleColumnResizePointerDown');
     expect(shellSource).toContain('data-column-resize-handle');
     expect(shellSource).toContain("tableLayoutPrefs.frozenColumns.includes('target')");
-    expect(shellSource).toContain('sticky left-0 z-30');
+    expect(shellSource).toContain('left-0 z-50');
     expect(shellSource).toContain("backgroundColor: 'var(--color-surface)'");
     expect(shellSource).toContain('Search targets');
     expect(shellSource).toContain('aria-label="Search target rows"');
@@ -1712,6 +1716,39 @@ describe('ads optimizer phase 6 inline target review wiring', () => {
     expect(source).toContain('productId');
     expect(source).toContain('requestedRunId');
     expect(source).toContain("resolvedContextSource = 'run_id'");
+  });
+
+  it('wires change-plan current values from manualOverrideCurrent instead of proposal payload fallbacks', () => {
+    const source = fs.readFileSync(shellPath, 'utf-8');
+
+    expect(source).not.toContain('activeRow.raw.cpc');
+    expect(source).toContain(
+      'const currentBidForOverride = activeRow.manualOverrideCurrent.targetBid;'
+    );
+    expect(source).toContain(
+      'const currentStateForOverride = activeRow.manualOverrideCurrent.targetState;'
+    );
+    expect(source).toContain('args.row.manualOverrideCurrent.campaignBiddingStrategy');
+    expect(source).toContain('args.row.manualOverrideCurrent.placementModifiers[placementCode]');
+    expect(source).toContain('currentState: currentStateForOverride,');
+    expect(source).toContain('currentBid: currentBidForOverride,');
+    expect(source).toContain('activeRow.manualOverrideCurrent.campaignBiddingStrategy');
+    expect(source).toContain('current_placement_percentage__${placementCode}');
+    expect(source).toContain(
+      "currentPlacementPercentage === null ? '' : String(currentPlacementPercentage)"
+    );
+  });
+
+  it('maps execution_context target bid and state into the snapshot view model', () => {
+    const source = fs.readFileSync(targetProfilePath, 'utf-8');
+
+    expect(source).toContain('currentTargetBid: number | null;');
+    expect(source).toContain('currentTargetState: string | null;');
+    expect(source).toContain("const executionTarget = asJsonObject(executionContext?.target);");
+    expect(source).toContain("currentTargetBid: readNestedNumber(executionTarget, 'current_bid'),");
+    expect(source).toContain(
+      "currentTargetState: readNestedString(executionTarget, 'current_state'),"
+    );
   });
 
   it('defines stable collapsed-row layout preferences with column keys and target freeze support', () => {

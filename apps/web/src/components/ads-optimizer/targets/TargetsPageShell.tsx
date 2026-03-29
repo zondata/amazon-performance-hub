@@ -453,13 +453,6 @@ const readPlacementCodeFromActionPayload = (
   return isTargetChangePlanPlacementCode(placementCode) ? placementCode : null;
 };
 
-const getCurrentPlacementPercentage = (
-  row: AdsOptimizerTargetReviewRow,
-  placementCode: TargetChangePlanPlacementCode
-) =>
-  row.placementBreakdown.rows.find((placement) => placement.placementCode === placementCode)
-    ?.modifierPct ?? null;
-
 const sentenceCase = (value: string | null) => {
   if (!value) return NOT_CAPTURED;
   return labelize(value).toLowerCase();
@@ -739,7 +732,7 @@ const buildTargetChangePlanOverrideRows = (args: {
   },
   (() => {
     const currentCampaignBiddingStrategy = trimStringToNull(
-      args.row.currentCampaignBiddingStrategy
+      args.row.manualOverrideCurrent.campaignBiddingStrategy
     );
     const existingOverrideNewStrategy =
       args.biddingStrategyActionEditor.source === 'override'
@@ -774,7 +767,8 @@ const buildTargetChangePlanOverrideRows = (args: {
       'update_placement_modifier',
       placementCode
     );
-    const currentPlacementPercentage = getCurrentPlacementPercentage(args.row, placementCode);
+    const currentPlacementPercentage =
+      args.row.manualOverrideCurrent.placementModifiers[placementCode];
     const nextPlacementPercentage = readJsonNumber(
       placementActionEditor.proposedChange,
       'next_percentage'
@@ -1397,13 +1391,9 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
           activeRow,
           'update_campaign_bidding_strategy'
         );
-        const currentBidForOverride =
-          readJsonNumber(bidActionEditor.entityContext, 'current_bid') ?? activeRow.raw.cpc;
+        const currentBidForOverride = activeRow.manualOverrideCurrent.targetBid;
         const nextBidForOverride = readJsonNumber(bidActionEditor.proposedChange, 'next_bid');
-        const currentStateForOverride = readJsonString(
-          stateActionEditor.entityContext,
-          'current_state'
-        );
+        const currentStateForOverride = activeRow.manualOverrideCurrent.targetState;
         const nextStateForOverride = readJsonString(stateActionEditor.proposedChange, 'next_state');
         const whyFlaggedNarrative = buildWhyFlaggedNarrative({
           row: activeRow,
@@ -1519,7 +1509,7 @@ export default function TargetsPageShell(props: OptimizerTargetsPanelProps) {
                     currentState: currentStateForOverride,
                     currentBid: currentBidForOverride,
                     currentCampaignBiddingStrategy:
-                      activeRow.currentCampaignBiddingStrategy,
+                      activeRow.manualOverrideCurrent.campaignBiddingStrategy,
                   }}
                   canSave={Boolean(props.productId && activeRow.recommendation)}
                   formUnavailableNote={changePlanFormUnavailableNote}
