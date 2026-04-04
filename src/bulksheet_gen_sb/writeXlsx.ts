@@ -53,6 +53,20 @@ function ensureNoHeaderCollisions(headers: string[], extra: string[], sheetName:
   }
 }
 
+function ensurePortfolioHeaderSafety(headers: string[], rows: UploadRow[], sheetName: string) {
+  if (headers.includes("Portfolio ID")) return;
+
+  const hasPortfolioBackedRow = rows.some(
+    (row) => String(row.cells["Portfolio ID"] ?? "").trim() !== ""
+  );
+
+  if (hasPortfolioBackedRow) {
+    throw new Error(
+      `Template sheet ${sheetName} missing required column: Portfolio ID. Cannot safely generate update rows for campaigns already assigned to portfolios.`
+    );
+  }
+}
+
 function buildRowArray(
   headers: string[],
   cells: Record<string, string | number | boolean | null>
@@ -96,6 +110,7 @@ export function writeSbBulkUpdateXlsx(params: {
     const requiredHeaders = requiredHeadersBySheet.get(sheetName) ?? [];
     ensureRequiredHeaders(templateSheet.headers, requiredHeaders, sheetName);
     ensureNoHeaderCollisions(templateSheet.headers, REVIEW_HELPER_COLUMNS, sheetName);
+    ensurePortfolioHeaderSafety(templateSheet.headers, sheetRows, sheetName);
 
     const uploadRows: (string | number | boolean)[][] = [
       templateSheet.headers as (string | number | boolean)[],

@@ -85,6 +85,7 @@ function buildCampaignBaseCells(campaign: CurrentSbCampaign): Record<string, str
     Operation: "Update",
     "Campaign ID": campaign.campaign_id,
     "Campaign Name": campaign.campaign_name_raw ?? "",
+    "Portfolio ID": campaign.portfolio_id ?? "",
   };
 }
 
@@ -112,6 +113,7 @@ function buildTargetBaseCells(params: {
     "Keyword Text": entity.isKeyword ? target.expression_raw : "",
     "Product Targeting Expression": entity.isKeyword ? "" : target.expression_raw,
     "Match Type": matchType,
+    "Portfolio ID": campaign?.portfolio_id ?? "",
   };
 }
 
@@ -126,6 +128,7 @@ function buildPlacementBaseCells(
     "Campaign ID": placement.campaign_id,
     "Campaign Name": campaignNameFromMap(campaign),
     Placement: placement.placement_raw || placement.placement_code,
+    "Portfolio ID": campaign?.portfolio_id ?? "",
   };
 }
 
@@ -142,7 +145,22 @@ function buildAdGroupBaseCells(params: {
     "Campaign Name": campaignNameFromMap(campaign),
     "Ad Group ID": adGroup.ad_group_id,
     "Ad Group Name": adGroup.ad_group_name_raw ?? "",
+    "Portfolio ID": campaign?.portfolio_id ?? "",
   };
+}
+
+function requireCampaignContext(
+  current: FetchCurrentSbResult,
+  campaignId: string,
+  entityLabel: "target row" | "ad group row" | "placement row"
+): CurrentSbCampaign {
+  const campaign = current.campaignsById.get(campaignId);
+  if (!campaign) {
+    throw new Error(
+      `Cannot safely preserve Portfolio ID for ${entityLabel}: missing campaign context for campaign_id=${campaignId}`
+    );
+  }
+  return campaign;
 }
 
 function normalizePlacementCode(raw: string): string {
@@ -337,7 +355,7 @@ export function buildUploadRows(params: {
         throw new Error(`Cannot update bid for negative target: ${action.target_id}`);
       }
       const newBid = parseNonNegativeNumber(action.new_bid, "new_bid");
-      const campaign = current.campaignsById.get(target.campaign_id);
+      const campaign = requireCampaignContext(current, target.campaign_id, "target row");
       const adGroup = current.adGroupsById.get(target.ad_group_id);
 
       const cells = {
@@ -362,7 +380,7 @@ export function buildUploadRows(params: {
       const target = current.targetsById.get(action.target_id);
       if (!target) throw new Error(`Target not found: ${action.target_id}`);
       const newState = normalizeState(action.new_state, target.state);
-      const campaign = current.campaignsById.get(target.campaign_id);
+      const campaign = requireCampaignContext(current, target.campaign_id, "target row");
       const adGroup = current.adGroupsById.get(target.ad_group_id);
 
       const cells = {
@@ -386,7 +404,7 @@ export function buildUploadRows(params: {
     if (action.type === "update_ad_group_state") {
       const adGroup = current.adGroupsById.get(action.ad_group_id);
       if (!adGroup) throw new Error(`Ad group not found: ${action.ad_group_id}`);
-      const campaign = current.campaignsById.get(adGroup.campaign_id);
+      const campaign = requireCampaignContext(current, adGroup.campaign_id, "ad group row");
       const newState = normalizeState(action.new_state, adGroup.state);
       const cells = {
         ...buildAdGroupBaseCells({ adGroup, campaign }),
@@ -409,7 +427,7 @@ export function buildUploadRows(params: {
     if (action.type === "update_ad_group_default_bid") {
       const adGroup = current.adGroupsById.get(action.ad_group_id);
       if (!adGroup) throw new Error(`Ad group not found: ${action.ad_group_id}`);
-      const campaign = current.campaignsById.get(adGroup.campaign_id);
+      const campaign = requireCampaignContext(current, adGroup.campaign_id, "ad group row");
       const newBid = parseNonNegativeNumber(action.new_default_bid, "new_default_bid");
       const cells = {
         ...buildAdGroupBaseCells({ adGroup, campaign }),
@@ -437,7 +455,7 @@ export function buildUploadRows(params: {
         placementCode: action.placement_code,
       });
       const newPct = parsePlacementPct(action.new_pct);
-      const campaign = current.campaignsById.get(action.campaign_id);
+      const campaign = requireCampaignContext(current, action.campaign_id, "placement row");
       const cells = {
         ...buildPlacementBaseCells(placement, campaign),
         Percentage: newPct,

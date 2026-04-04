@@ -88,7 +88,7 @@ describe("bulkgen sp update", () => {
             state: "enabled",
             daily_budget: 20,
             bidding_strategy: "Dynamic bids - down only",
-            portfolio_id: null,
+            portfolio_id: "P1",
           },
         ],
       ]),
@@ -200,6 +200,7 @@ describe("bulkgen sp update", () => {
     expect(Number(campaignRow?.["Daily Budget"])).toBe(50);
     expect(String(campaignRow?.State)).toBe("paused");
     expect(String(campaignRow?.["Bidding Strategy"])).toBe("Dynamic bids - down only");
+    expect(campaignRow?.["Portfolio ID"]).toBe("P1");
     expect(campaignRow?.action_type).toBe(
       "update_campaign_budget+update_campaign_state+update_campaign_bidding_strategy"
     );
@@ -210,11 +211,141 @@ describe("bulkgen sp update", () => {
     expect(adGroupRow?.["Campaign ID"]).toBe("C1");
     expect(adGroupRow?.["Ad Group ID"]).toBe("AG1");
     expect(String(adGroupRow?.State)).toBe("paused");
+    expect(adGroupRow?.["Portfolio ID"]).toBe("P1");
 
     const adGroupBidRow = reviewRowObjects.find((row) => row["Ad Group ID"] === "AG2");
     expect(Number(adGroupBidRow?.["Ad Group Default Bid"])).toBe(1.25);
     expect(Number(adGroupBidRow?.current_value)).toBe(0.5);
     expect(Number(adGroupBidRow?.new_value)).toBe(1.25);
     expect(Number(adGroupBidRow?.delta)).toBe(0.75);
+    expect(adGroupBidRow?.["Portfolio ID"]).toBe("P1");
+
+    const targetRow = reviewRowObjects.find((row) => row["Keyword ID"] === "T1");
+    expect(targetRow?.Entity).toBe("Keyword");
+    expect(Number(targetRow?.Bid)).toBe(1.5);
+    expect(targetRow?.["Portfolio ID"]).toBe("P1");
+
+    const placementRow = reviewRowObjects.find((row) => row.Entity === "Bidding Adjustment");
+    expect(placementRow?.Placement).toBe("Top of Search (first page)");
+    expect(Number(placementRow?.Percentage)).toBe(30);
+    expect(placementRow?.["Portfolio ID"]).toBe("P1");
+  });
+
+  it("fails when a portfolio-backed non-campaign row cannot be preserved by the template", () => {
+    const tmpDir = path.resolve(__dirname, "tmp");
+    const templatePath = path.join(tmpDir, `template-sp-missing-portfolio-${Date.now()}.xlsx`);
+    const outDir = path.join(tmpDir, `out-sp-missing-portfolio-${Date.now()}`);
+
+    makeTemplate(templatePath, [
+      "Entity",
+      "Operation",
+      "Campaign ID",
+      "Keyword ID",
+      "Bid",
+    ]);
+
+    const actions: SpUpdateAction[] = [
+      { type: "update_target_bid", target_id: "T1", new_bid: 1.5 },
+    ];
+
+    const current: FetchCurrentResult = {
+      snapshotDate: "2026-02-14",
+      campaignsById: new Map([
+        [
+          "C1",
+          {
+            campaign_id: "C1",
+            campaign_name_raw: "Camp 1",
+            state: "enabled",
+            daily_budget: 20,
+            bidding_strategy: "Dynamic bids - down only",
+            portfolio_id: "P1",
+          },
+        ],
+      ]),
+      adGroupsById: new Map([
+        [
+          "AG1",
+          {
+            ad_group_id: "AG1",
+            campaign_id: "C1",
+            ad_group_name_raw: "Ad Group 1",
+            state: "enabled",
+            default_bid: 0.8,
+          },
+        ],
+      ]),
+      targetsById: new Map([
+        [
+          "T1",
+          {
+            target_id: "T1",
+            ad_group_id: "AG1",
+            campaign_id: "C1",
+            expression_raw: "blue shoes",
+            match_type: "EXACT",
+            is_negative: false,
+            state: "enabled",
+            bid: 0.75,
+          },
+        ],
+      ]),
+      placementsByKey: new Map(),
+    };
+
+    const rows = buildUploadRows({ actions, current });
+    const expectedError = `Template sheet ${SP_SHEET_NAME} missing required column: Portfolio ID. Cannot safely generate update rows for campaigns already assigned to portfolios.`;
+
+    expect(() =>
+      writeSpBulkUpdateXlsx({
+        templatePath,
+        outDir,
+        rows,
+        requiredHeadersBySheet: new Map([[SP_SHEET_NAME, ["Entity", "Operation", "Campaign ID", "Keyword ID", "Bid"]]]),
+      })
+    ).toThrow(expectedError);
+  });
+
+  it("fails when campaign context is missing for a non-campaign row", () => {
+    const actions: SpUpdateAction[] = [
+      { type: "update_target_bid", target_id: "T1", new_bid: 1.5 },
+    ];
+
+    const current: FetchCurrentResult = {
+      snapshotDate: "2026-02-14",
+      campaignsById: new Map(),
+      adGroupsById: new Map([
+        [
+          "AG1",
+          {
+            ad_group_id: "AG1",
+            campaign_id: "C1",
+            ad_group_name_raw: "Ad Group 1",
+            state: "enabled",
+            default_bid: 0.8,
+          },
+        ],
+      ]),
+      targetsById: new Map([
+        [
+          "T1",
+          {
+            target_id: "T1",
+            ad_group_id: "AG1",
+            campaign_id: "C1",
+            expression_raw: "blue shoes",
+            match_type: "EXACT",
+            is_negative: false,
+            state: "enabled",
+            bid: 0.75,
+          },
+        ],
+      ]),
+      placementsByKey: new Map(),
+    };
+
+    expect(() => buildUploadRows({ actions, current })).toThrow(
+      "Cannot safely preserve Portfolio ID for target row: missing campaign context for campaign_id=C1"
+    );
   });
 });
