@@ -1153,25 +1153,29 @@ export const getAdsOptimizerTargetsViewData = async (args: {
   const rows = baseRows.map((row) => ({
     ...row,
     manualOverrideCurrent:
-      manualOverrideCurrentByTargetSnapshotId.get(row.targetSnapshotId) ?? {
-        snapshotDate: null,
-        targetBid: row.currentTargetBid,
-        targetState: row.currentTargetState,
-        campaignBiddingStrategy: row.currentCampaignBiddingStrategy,
-        placementModifiers: {
-          PLACEMENT_TOP:
-            row.placementBreakdown.rows.find((entry) => entry.placementCode === 'PLACEMENT_TOP')
-              ?.modifierPct ?? null,
-          PLACEMENT_REST_OF_SEARCH:
-            row.placementBreakdown.rows.find(
-              (entry) => entry.placementCode === 'PLACEMENT_REST_OF_SEARCH'
-            )?.modifierPct ?? null,
-          PLACEMENT_PRODUCT_PAGE:
-            row.placementBreakdown.rows.find(
-              (entry) => entry.placementCode === 'PLACEMENT_PRODUCT_PAGE'
-            )?.modifierPct ?? null,
-        },
-      },
+      manualOverrideCurrentByTargetSnapshotId.get(row.targetSnapshotId) ?? (() => {
+        const placementBreakdownRows = row.placementBreakdown?.rows ?? [];
+
+        return {
+          snapshotDate: null,
+          targetBid: row.currentTargetBid,
+          targetState: row.currentTargetState,
+          campaignBiddingStrategy: row.currentCampaignBiddingStrategy,
+          placementModifiers: {
+            PLACEMENT_TOP:
+              placementBreakdownRows.find((entry) => entry.placementCode === 'PLACEMENT_TOP')
+                ?.modifierPct ?? null,
+            PLACEMENT_REST_OF_SEARCH:
+              placementBreakdownRows.find(
+                (entry) => entry.placementCode === 'PLACEMENT_REST_OF_SEARCH'
+              )?.modifierPct ?? null,
+            PLACEMENT_PRODUCT_PAGE:
+              placementBreakdownRows.find(
+                (entry) => entry.placementCode === 'PLACEMENT_PRODUCT_PAGE'
+              )?.modifierPct ?? null,
+          },
+        };
+      })(),
   }));
   const lastDetectedChangeByTargetSnapshotId =
     rows.length > 0 ? await loadAdsOptimizerLastDetectedChangesForTargets(rows) : new Map();

@@ -16,7 +16,6 @@ import {
   summarizeOutcomeTrendPoints,
 } from '@/lib/ads-optimizer/outcomeReviewScoring';
 import {
-  ADS_OPTIMIZER_PHASE10_HANDOFF_SOURCE as HANDOFF_SOURCE,
   readAdsWorkspaceHandoffMeta,
 } from '@/lib/ads-workspace/generatedArtifact';
 import { buildAdsOptimizerHref } from '@/lib/ads-optimizer/shell';
@@ -95,6 +94,7 @@ type BuildPhaseSummariesArgs = {
   validations: OutcomeReviewValidationRow[];
 };
 
+const HANDOFF_SOURCE = 'ads_optimizer_phase10_handoff';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TODAY = '2026-03-12';
 
