@@ -63,7 +63,7 @@ const readSnapshotPlacementModifier = (
   row.placementBreakdown.rows.find((entry) => entry.placementCode === placementCode)?.modifierPct ??
   null;
 
-const buildEmptyPlacementModifiers = () => ({
+const buildEmptyPlacementModifiers = (): AdsOptimizerManualOverrideCurrentContext['placementModifiers'] => ({
   PLACEMENT_TOP: null,
   PLACEMENT_REST_OF_SEARCH: null,
   PLACEMENT_PRODUCT_PAGE: null,
