@@ -3,8 +3,8 @@
 Last updated: 2026-04-11
 Current owner: Codex + Albert
 Current branch: `v2/01-repo-boundary`
-Current task: `V2-01 - Create the V2 repo boundary only`
-Current stage: `Stage 1 - repo boundary for V2`
+Current task: `V2-02 - Create the SP-API auth skeleton only`
+Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 
 ## Locked decisions
 - [x] V2 release 1 is human-first and agent-readable.
@@ -32,45 +32,46 @@ Current stage: `Stage 1 - repo boundary for V2`
 
 ## Current task card
 ### Task ID
-`V2-01`
+`V2-02`
 
 ### Objective
-Create the folder and route boundaries for V2 without implementing Amazon APIs or product logic yet.
+Create the V2 Sponsored Products API authentication skeleton and environment contract without implementing report sync, warehouse writes, UI flows, or production data pulls.
 
 ### Allowed files
-- `apps/web/src/app/v2/**`
-- `src/connectors/**`
+- `src/connectors/sp-api/**`
+- `src/testing/fixtures/**` only if needed for auth/config unit tests
+- `docs/v2/BUILD_STATUS.md`
+
+### Forbidden changes
+- `apps/web/**`
 - `src/ingestion/**`
 - `src/warehouse/**`
 - `src/marts/**`
 - `src/diagnosis/**`
 - `src/memory/**`
 - `src/changes/**`
-- `src/testing/fixtures/**`
-- `docs/v2/BUILD_STATUS.md`
-
-### Forbidden changes
-- existing V1 pages except minimal navigation link wiring if explicitly needed
-- Amazon auth code
-- report ingestion code
-- migrations
-- marts logic
+- `supabase/**`
+- `.env*` files with real secrets
+- any Amazon write/execution code
+- any real report ingestion code
+- any real UI or admin page
+- any Ads API code
 
 ### Required checks
-- [x] `npm run web:lint`
-- [ ] `npm run web:build` (blocked by existing Windows-node/native-module mismatch for `lightningcss`)
+- [x] `npm run verify:wsl` (passed in WSL via operator handoff)
 
 ### Status
 - [ ] planned
 - [ ] in progress
-- [x] blocked
-- [ ] complete
+- [ ] blocked
+- [x] complete
 
 ### Notes
-- Added placeholder `/v2` routes only.
-- Added placeholder module boundaries only.
-- No Amazon auth, report sync, migrations, or real data-fetching logic was added.
-- Stage 1 is not marked complete because the required `npm run web:build` acceptance check did not pass in this environment.
+- Added only the SP-API auth/config skeleton under `src/connectors/sp-api/`.
+- Added typed env validation, region endpoint resolution, and an injected token refresh boundary with unit tests.
+- This task covers only the auth skeleton portion of Stage 2A.
+- `npm run verify:wsl` passed via operator handoff.
+- Stage 2A is not marked complete because this task does not include the first real SP-API call.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Manual follow-up |
@@ -78,6 +79,7 @@ Create the folder and route boundaries for V2 without implementing Amazon APIs o
 | 2026-04-10 | INIT | _n/a_ | Created V2 build plan and control process | planned | none | add control files to repo |
 | 2026-04-11 | V2-00B | `v2/00-control-plane` | Added Codex App-only V2 workflow policy, WSL usage limits, and local commit guard hook for `v2/*` branches | complete | `git diff --stat`; hook executable check | set `git config core.hooksPath .githooks` locally |
 | 2026-04-11 | V2-01 | `v2/01-repo-boundary` | Created placeholder `/v2` routes and placeholder module boundaries without auth, report sync, or marts logic | blocked | `npm run web:lint` pass; `npm run web:build` fail (`lightningcss.win32-x64-msvc.node` missing during Next build) | resolve the existing local Next/native-module build environment and rerun `npm run web:build` |
+| 2026-04-11 | V2-02 | `v2/01-repo-boundary` | Added typed SP-API auth/config skeleton, endpoint resolver, and injected token refresh boundary without report sync, warehouse writes, UI, or Ads API work | complete | `npm run verify:wsl` (passed via operator handoff) | later bounded task must handle the first real SP-API call |
 
 ## Decisions log
 | Date | Decision | Reason |
@@ -98,4 +100,4 @@ Create the folder and route boundaries for V2 without implementing Amazon APIs o
 - [x] local V2 commit guard documented
 
 ## Open blockers
-- `npm run web:build` currently fails in the local environment before full route compilation because Next/Tailwind resolves a missing native module: `lightningcss.win32-x64-msvc.node`.
+- none
