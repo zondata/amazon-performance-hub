@@ -1,0 +1,50 @@
+# Prompt before pushes or PR creation.
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Pushing changes should stay human-approved.",
+    match = [
+        "git push",
+        "git push origin v2/00-control-plane"
+    ]
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "create"],
+    decision = "prompt",
+    justification = "Creating pull requests should stay human-approved.",
+    match = [
+        "gh pr create --fill",
+        "gh pr create --title test --body test"
+    ]
+)
+
+# Prompt before production-like deploy commands.
+prefix_rule(
+    pattern = ["vercel", "--prod"],
+    decision = "prompt",
+    justification = "Production deploys require human approval.",
+    match = [
+        "vercel --prod"
+    ]
+)
+
+prefix_rule(
+    pattern = ["supabase", "db", "push"],
+    decision = "prompt",
+    justification = "Database schema pushes need human review.",
+    match = [
+        "supabase db push"
+    ]
+)
+
+# Forbid force-push by default.
+prefix_rule(
+    pattern = ["git", "push", "--force"],
+    decision = "forbidden",
+    justification = "Do not force-push. Open a new commit or ask for a human decision.",
+    match = [
+        "git push --force",
+        "git push --force origin branch"
+    ]
+)

@@ -1,0 +1,16 @@
+model = "gpt-5.4"
+review_model = "gpt-5.4-mini"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+service_tier = "fast"
+
+[sandbox_workspace_write]
+network_access = false
+
+[shell_environment_policy]
+inherit = "core"
+
+# Add this project to the trusted projects list after you review the repo locally.
+# Example:
+# [projects."C:/Users/<you>/code/amazon-performance-hub"]
+# trust_level = "trusted"

@@ -1254,3 +1254,26 @@ Verification:
   - `.env.local`
   - `out/`
   - `data/` (if used)
+
+## V2 control boundary (add this near the top of root AGENTS.md)
+
+### Amazon Performance Hub V2
+- The authoritative V2 instructions live at `docs/v2/AGENTS.md`.
+- Any task that touches V2 must read `docs/v2/AGENTS.md` and `docs/v2/BUILD_STATUS.md` first.
+- If a task changes V2 code, the same task must update `docs/v2/BUILD_STATUS.md` before it ends.
+- Do not start the next V2 stage automatically. Finish one bounded task, update status, stop.
+- Do not add new V2 work to existing V1 pages except for shared utilities that are clearly reusable.
+- Default V2 page boundary:
+  - `apps/web/src/app/v2/*`
+  - `src/connectors/*`
+  - `src/ingestion/*`
+  - `src/warehouse/*`
+  - `src/marts/*`
+  - `src/diagnosis/*`
+  - `src/memory/*`
+  - `src/changes/*`
+- V2 release 1 is read-only against Amazon for agent actions. No autonomous Amazon writes.
+- Primary V2 operator workflow is only:
+  - `Overview`
+  - `Queries`
+
