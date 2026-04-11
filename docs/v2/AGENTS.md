@@ -138,3 +138,18 @@ When instructions conflict, use this order:
 3. `docs/v2/BUILD_STATUS.md`
 4. root `AGENTS.md`
 5. older V1 docs
+
+## Codex App-only implementation policy
+- All V2 implementation tasks for this repo must run in Codex App.
+- If you are about to implement a V2 task manually in VS Code, stop and redirect the task back to Codex App.
+- Local WSL work on `v2/*` branches is limited to:
+  - `git fetch`
+  - `git checkout`
+  - `git pull`
+  - `git diff`
+  - `npm test`
+  - `npm run web:lint`
+  - `npm run web:build`
+  - debugging and manual verification
+- Manual code edits in VS Code are not the default V2 workflow.
+- Local commits to `v2/*` are blocked unless explicitly overridden with `ALLOW_LOCAL_V2_COMMIT=1`.

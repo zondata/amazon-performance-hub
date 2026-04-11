@@ -1277,3 +1277,9 @@ Verification:
   - `Overview`
   - `Queries`
 
+
+### V2 implementation workflow
+- V2 implementation for this repo must be done in Codex App.
+- VS Code / WSL are not the default implementation path for V2.
+- WSL local is allowed only for `git fetch`, `git checkout`, `git pull`, `git diff`, `npm test`, `npm run web:lint`, `npm run web:build`, debugging, and manual verification.
+- Manual local commits on `v2/*` branches are blocked unless explicitly overridden with `ALLOW_LOCAL_V2_COMMIT=1`.

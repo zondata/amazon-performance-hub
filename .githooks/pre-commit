@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+
+if [[ "$branch" == v2/* ]] && [[ "${ALLOW_LOCAL_V2_COMMIT:-0}" != "1" ]]; then
+  cat >&2 <<'MSG'
+Blocked local commit.
+
+This is a V2 Codex-App branch.
+Implement V2 changes in Codex App, not manually in VS Code.
+WSL local is test/debug only.
+
+For intentional emergency local fixes, rerun with:
+ALLOW_LOCAL_V2_COMMIT=1 git commit ...
+MSG
+  exit 1
+fi
+
+exit 0

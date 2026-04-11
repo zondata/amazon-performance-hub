@@ -86,3 +86,17 @@ Human work should be limited to:
 - final live-account smoke checks
 
 Everything else should be done by Codex when the task spec is bounded.
+
+## 9. Enable the local V2 branch commit guard
+Run:
+- `git config core.hooksPath .githooks`
+- `chmod +x .githooks/pre-commit`
+
+Why this exists:
+- `v2/*` branches in this repo are intended to be implemented in Codex App, not manually in VS Code / WSL.
+- WSL local remains available for fetch, checkout, diff, test, lint, build, debugging, and manual verification.
+
+Emergency override:
+- `ALLOW_LOCAL_V2_COMMIT=1 git commit -m "..."`
+
+Use the override only for an intentional emergency local fix on a `v2/*` branch.
