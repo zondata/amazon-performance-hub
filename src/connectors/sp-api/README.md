@@ -1,8 +1,16 @@
 # `src/connectors/sp-api`
 
-Stage 1 placeholder boundary for future Selling Partner API connector work.
+Stage 2A auth/config skeleton for future Selling Partner API work.
 
-Out of scope here:
-- auth
-- live API calls
-- sync logic
+Included in this task:
+- typed environment contract loader
+- region-to-endpoint resolver
+- injected Login with Amazon refresh-token boundary
+- unit tests that do not require real credentials or network access
+
+Still out of scope here:
+- live Amazon API calls
+- report creation, polling, download, parsing, or sync
+- warehouse writes
+- UI or admin flows
+- Amazon Ads API work
