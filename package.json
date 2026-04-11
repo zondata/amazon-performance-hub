@@ -94,6 +94,7 @@
     "product:cleanup-test-skus": "ts-node scripts/cleanup_test_skus.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "verify:wsl": "npm test && npm run web:lint && npm run web:build",
     "web:dev": "npm --prefix apps/web run dev",
     "web:build": "npm --prefix apps/web run build",
     "web:lint": "npm --prefix apps/web run lint"
