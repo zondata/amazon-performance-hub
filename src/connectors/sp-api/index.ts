@@ -40,6 +40,15 @@ export {
   summarizeFirstSalesAndTrafficReportDocument,
 } from './firstReportDocument';
 export {
+  FIRST_REPORT_PARSED_OUTPUT_DIR,
+  resolveFirstSalesAndTrafficRawArtifactPath,
+  readFirstSalesAndTrafficRawArtifact,
+  buildFirstSalesAndTrafficParsedArtifactPath,
+  writeFirstSalesAndTrafficParsedArtifact,
+  summarizeFirstSalesAndTrafficParsedArtifact,
+  parseFirstSalesAndTrafficReportContent,
+} from './firstReportParser';
+export {
   buildReportsGetReportPath,
   buildReportsGetReportDocumentPath,
   LWA_TOKEN_ENDPOINT,
@@ -52,10 +61,13 @@ export {
   SP_API_REGIONS,
   SpApiAuthError,
   SpApiConfigError,
+  SpApiParseError,
   SpApiRequestError,
   type SpApiCredentials,
   type SpApiEnvConfig,
   type SpApiFirstCallSummary,
+  type SpApiFirstReportParsedSectionSummary,
+  type SpApiFirstReportParseSummary,
   type SpApiFirstReportDocumentSummary,
   type SpApiFirstReportRequestSummary,
   type SpApiFirstReportStatusPollMode,

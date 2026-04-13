@@ -119,6 +119,24 @@ export type SpApiFirstReportDocumentSummary = {
   storedByteCount: number;
 };
 
+export type SpApiFirstReportParsedSectionSummary = {
+  sectionName: string;
+  headerCount: number;
+  rowCount: number;
+};
+
+export type SpApiFirstReportParseSummary = {
+  endpoint: 'parseFirstReportContent';
+  reportId: string;
+  inputFilePath: string;
+  detectedFormat: 'json';
+  decompressed: boolean;
+  sectionCount: number;
+  totalRowCount: number;
+  parsedArtifactPath: string;
+  sections: SpApiFirstReportParsedSectionSummary[];
+};
+
 export type SpApiTokenRefreshResult =
   | {
       ok: true;
@@ -188,5 +206,31 @@ export class SpApiAuthError extends Error {
     this.code = code;
     this.status = options?.status;
     this.details = options?.details;
+  }
+}
+
+export class SpApiParseError extends Error {
+  readonly code:
+    | 'artifact_not_found'
+    | 'invalid_input'
+    | 'unsupported_format'
+    | 'invalid_content'
+    | 'write_failed';
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'artifact_not_found'
+      | 'invalid_input'
+      | 'unsupported_format'
+      | 'invalid_content'
+      | 'write_failed',
+    message: string,
+    details?: unknown
+  ) {
+    super(message);
+    this.name = 'SpApiParseError';
+    this.code = code;
+    this.details = details;
   }
 }

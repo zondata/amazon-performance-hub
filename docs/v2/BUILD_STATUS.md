@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-13`
 Current branch: `v2/02-sp-api-auth`
-Current task: `V2-06 - Add report document retrieval only`
+Current task: `V2-07 - Add report content parsing only`
 Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 
 ## Stage checklist
@@ -10,14 +10,14 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 - [x] `Stage 2A` - SP-API auth + first Sales and Traffic pull
 
 ## Current task card
-- Task ID: `V2-06`
-- Title: `Add report document retrieval only`
-- Objective: Extend the existing first report-request and report-status boundaries so the system can retrieve the report document metadata and download the raw report document bytes for one completed Sales and Traffic report, with no decryption beyond what the API/document flow minimally requires for access, no parsing, no normalization, no ingestion, no warehouse writes, and no UI.
+- Task ID: `V2-07`
+- Title: `Add report content parsing only`
+- Objective: Extend the existing report-document retrieval boundary so the system can read one downloaded raw Sales and Traffic report document, decompress it if needed, parse its tabular content into a validated local structured artifact, and print a safe parsing summary, with no ingestion pipeline, no warehouse writes, no Supabase writes, and no UI.
 - Allowed files:
   - `src/connectors/sp-api/**`
   - `src/testing/fixtures/**` only if needed for unit tests
   - `docs/v2/BUILD_STATUS.md`
-  - `docs/v2/tasks/V2-06-report-document-retrieval-only.md`
+  - `docs/v2/tasks/V2-07-report-content-parsing-only.md`
   - `package.json`
 - Forbidden:
   - `apps/web/**`
@@ -29,22 +29,23 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - `src/changes/**`
   - `supabase/**`
   - `.env*` files with real secrets
-  - any report content parsing or normalization
   - any database write
   - any UI
   - any Ads API work
   - any generic multi-report orchestration
-  - any downstream business logic that interprets the report content
+  - any downstream business logic or KPI interpretation
+  - any warehouse schema or migration work
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run spapi:get-first-report-document -- --report-id <real-report-id>`
+  - [x] `npm run spapi:parse-first-report -- --report-id <real-report-id>`
   - [x] `npm run verify:wsl`
 - Status: `complete`
 - Notes:
   - Stage 2A remains recorded complete from the earlier successful `npm run verify:wsl` and `npm run spapi:first-call` confirmation on `2026-04-13`.
-  - V2-06 is limited to one Reports API report-document retrieval path for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 and V2-05.
-  - V2-06 downloads the raw document bytes and stores them under `out/sp-api-report-documents/` without parsing or ingestion.
-  - The follow-up after this task must stay bounded to report content parsing only, not ingestion or warehouse writes.
+  - V2-07 is limited to one bounded report-content parsing path for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 through V2-06.
+  - The real V2-06 raw artifact observed in WSL is a gzip-compressed JSON document, not TSV/CSV, so V2-07 must parse that actual format without widening into generic multi-format orchestration.
+  - V2-07 may write only a bounded local parsed artifact under `out/` for operator inspection; it must not write to Supabase or any warehouse layer.
+  - The follow-up after this task must stay bounded to local structured handoff or ingestion boundary definition only, not warehouse writes.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -58,6 +59,7 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 | 2026-04-13 | `V2-04` | `v2/02-sp-api-auth` | Add one bounded Reports API create-request path for `GET_SALES_AND_TRAFFIC_REPORT`, with no polling, download, parsing, ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:first-report-request succeeded after an unrestricted rerun and returned report id 485677020556; npm run verify:wsl passed after an unrestricted rerun because the sandboxed web build could not fetch Google Fonts` | Next bounded task after this one must stay on report polling/status only. |
 | 2026-04-13 | `V2-05` | `v2/02-sp-api-auth` | Add one bounded Reports API `getReport` status path for the first Sales and Traffic report, with bounded polling until terminal status or max attempts and no document retrieval, parsing, ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:poll-first-report -- --report-id 485677020556 succeeded after an unrestricted rerun and returned terminal status DONE on attempt 1; npm run verify:wsl passed in WSL` | Next bounded task after this one must stay on report document retrieval only, not parsing or ingestion. |
 | 2026-04-13 | `V2-06` | `v2/02-sp-api-auth` | Add one bounded Reports API report-document retrieval path for the first Sales and Traffic report, with raw document download to a controlled local output path and no parsing, ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:get-first-report-document -- --report-id 485677020556 succeeded after an unrestricted rerun and wrote out/sp-api-report-documents/report-485677020556.document.raw.gz; npm run verify:wsl passed` | Next bounded task after this one must stay on report content parsing only, not ingestion or warehouse writes. |
+| 2026-04-13 | `V2-07` | `v2/02-sp-api-auth` | Add one bounded local report-content parsing path for the first Sales and Traffic report, with gzip-aware raw artifact reading, JSON section tabularization into a controlled local artifact, and no ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:parse-first-report -- --report-id 485677020556 parsed the real bounded artifact into out/sp-api-parsed-reports/report-485677020556.parsed.json; npm run verify:wsl passed` | Next bounded task after this one must stay on local structured handoff or ingestion boundary definition only, not warehouse writes. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -82,7 +84,13 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - `npm run spapi:get-first-report-document -- --report-id 485677020556` was actually run. The sandboxed attempt failed at the auth transport boundary, so it was rerun unrestricted and retrieved the report document successfully.
   - The bounded raw artifact was written to `out/sp-api-report-documents/report-485677020556.document.raw.gz`.
   - `npm run verify:wsl` passed in WSL.
+- V2-07 validation completed:
+  - The real V2-06 raw artifact at `out/sp-api-report-documents/report-485677020556.document.raw.gz` was inspected in WSL and confirmed to be gzip-compressed JSON rather than delimited text.
+  - `npm test` passed locally.
+  - `npm run spapi:parse-first-report -- --report-id 485677020556` was actually run and parsed the bounded raw artifact into `out/sp-api-parsed-reports/report-485677020556.parsed.json`.
+  - The parser summary reported `Detected format: json`, `Decompressed: yes`, `Section count: 2`, and `Total row count: 1`.
+  - `npm run verify:wsl` passed in WSL.
 
 ## Open blockers
-- No blocker is open for V2-06 itself.
-- The next bounded task must remain focused on report content parsing only, without widening into ingestion or warehouse writes.
+- No blocker is open for V2-07 implementation itself.
+- The next bounded task after V2-07 must remain focused on local structured handoff or ingestion boundary definition only, without widening into warehouse writes.
