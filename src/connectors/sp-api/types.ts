@@ -52,6 +52,28 @@ export type SpApiFirstCallSummary = {
   participationCount: number;
 };
 
+export type SpApiReportType = 'GET_SALES_AND_TRAFFIC_REPORT';
+
+export type SpApiReportCreateRequestBody = {
+  reportType: SpApiReportType;
+  marketplaceIds: [string];
+  dataStartTime: string;
+  dataEndTime: string;
+  reportOptions: {
+    dateGranularity: 'DAY';
+    asinGranularity: 'PARENT';
+    skuGranularity: 'TOTAL';
+  };
+};
+
+export type SpApiFirstReportRequestSummary = {
+  endpoint: 'createReport';
+  region: SpApiRegion;
+  marketplaceId: string;
+  reportType: SpApiReportType;
+  reportId: string;
+};
+
 export type SpApiTokenRefreshResult =
   | {
       ok: true;

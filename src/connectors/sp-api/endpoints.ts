@@ -3,6 +3,7 @@ import { SpApiConfigError, type SpApiRegion } from './types';
 export const LWA_TOKEN_ENDPOINT = 'https://api.amazon.com/auth/o2/token';
 export const SELLERS_MARKETPLACE_PARTICIPATIONS_PATH =
   '/sellers/v1/marketplaceParticipations';
+export const REPORTS_CREATE_REPORT_PATH = '/reports/2021-06-30/reports';
 
 export const SP_API_ENDPOINTS: Record<SpApiRegion, string> = {
   na: 'https://sellingpartnerapi-na.amazon.com',

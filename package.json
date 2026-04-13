@@ -97,6 +97,7 @@
     "verify:wsl": "npm test && npm run web:lint && npm run web:build",
     "snapshot:debug": "bash scripts/debug-snapshot.sh",
     "spapi:first-call": "ts-node src/connectors/sp-api/firstCallCli.ts",
+    "spapi:first-report-request": "ts-node src/connectors/sp-api/firstReportRequestCli.ts",
     "web:dev": "npm --prefix apps/web run dev",
     "web:build": "npm --prefix apps/web run build",
     "web:lint": "npm --prefix apps/web run lint"
