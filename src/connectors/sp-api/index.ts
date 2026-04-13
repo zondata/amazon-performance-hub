@@ -30,7 +30,18 @@ export {
   isTerminalFirstSalesAndTrafficReportStatus,
 } from './firstReportStatus';
 export {
+  FIRST_REPORT_DOCUMENT_OUTPUT_DIR,
+  fetchFirstSalesAndTrafficReportDocument,
+  requireFirstSalesAndTrafficReportDocumentId,
+  buildFirstSalesAndTrafficReportDocumentMetadataRequest,
+  buildFirstSalesAndTrafficReportDocumentDownloadRequest,
+  buildFirstSalesAndTrafficReportArtifactPath,
+  writeFirstSalesAndTrafficReportArtifact,
+  summarizeFirstSalesAndTrafficReportDocument,
+} from './firstReportDocument';
+export {
   buildReportsGetReportPath,
+  buildReportsGetReportDocumentPath,
   LWA_TOKEN_ENDPOINT,
   REPORTS_CREATE_REPORT_PATH,
   SELLERS_MARKETPLACE_PARTICIPATIONS_PATH,
@@ -45,6 +56,7 @@ export {
   type SpApiCredentials,
   type SpApiEnvConfig,
   type SpApiFirstCallSummary,
+  type SpApiFirstReportDocumentSummary,
   type SpApiFirstReportRequestSummary,
   type SpApiFirstReportStatusPollMode,
   type SpApiFirstReportStatusSummary,

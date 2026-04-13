@@ -105,6 +105,20 @@ export type SpApiFirstReportStatusSummary = {
   reportDocumentId: string | null;
 };
 
+export type SpApiFirstReportDocumentSummary = {
+  endpoint: 'getReportDocument';
+  region: SpApiRegion;
+  marketplaceId: string;
+  reportId: string;
+  processingStatus: SpApiReportProcessingStatus;
+  reportDocumentId: string;
+  compressionAlgorithm: string | null;
+  contentType: string | null;
+  outputFilePath: string;
+  downloadedByteCount: number;
+  storedByteCount: number;
+};
+
 export type SpApiTokenRefreshResult =
   | {
       ok: true;

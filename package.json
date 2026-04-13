@@ -99,6 +99,7 @@
     "spapi:first-call": "ts-node src/connectors/sp-api/firstCallCli.ts",
     "spapi:first-report-request": "ts-node src/connectors/sp-api/firstReportRequestCli.ts",
     "spapi:poll-first-report": "ts-node src/connectors/sp-api/firstReportStatusCli.ts",
+    "spapi:get-first-report-document": "ts-node src/connectors/sp-api/firstReportDocumentCli.ts",
     "web:dev": "npm --prefix apps/web run dev",
     "web:build": "npm --prefix apps/web run build",
     "web:lint": "npm --prefix apps/web run lint"

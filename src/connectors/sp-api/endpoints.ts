@@ -6,6 +6,8 @@ export const SELLERS_MARKETPLACE_PARTICIPATIONS_PATH =
 export const REPORTS_CREATE_REPORT_PATH = '/reports/2021-06-30/reports';
 export const buildReportsGetReportPath = (reportId: string) =>
   `${REPORTS_CREATE_REPORT_PATH}/${encodeURIComponent(reportId)}`;
+export const buildReportsGetReportDocumentPath = (reportDocumentId: string) =>
+  `/reports/2021-06-30/documents/${encodeURIComponent(reportDocumentId)}`;
 
 export const SP_API_ENDPOINTS: Record<SpApiRegion, string> = {
   na: 'https://sellingpartnerapi-na.amazon.com',

@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-13`
 Current branch: `v2/02-sp-api-auth`
-Current task: `V2-05 - Add report polling and terminal status check only`
+Current task: `V2-06 - Add report document retrieval only`
 Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 
 ## Stage checklist
@@ -10,14 +10,14 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 - [x] `Stage 2A` - SP-API auth + first Sales and Traffic pull
 
 ## Current task card
-- Task ID: `V2-05`
-- Title: `Add report polling and terminal status check only`
-- Objective: Extend the existing first report-request boundary so the system can poll one existing Reports API report id until a terminal processing status is reached, then return a safe terminal status summary, with no document download, no decryption, no parsing, no ingestion, no warehouse writes, and no UI.
+- Task ID: `V2-06`
+- Title: `Add report document retrieval only`
+- Objective: Extend the existing first report-request and report-status boundaries so the system can retrieve the report document metadata and download the raw report document bytes for one completed Sales and Traffic report, with no decryption beyond what the API/document flow minimally requires for access, no parsing, no normalization, no ingestion, no warehouse writes, and no UI.
 - Allowed files:
   - `src/connectors/sp-api/**`
   - `src/testing/fixtures/**` only if needed for unit tests
   - `docs/v2/BUILD_STATUS.md`
-  - `docs/v2/tasks/V2-05-report-polling-status-only.md`
+  - `docs/v2/tasks/V2-06-report-document-retrieval-only.md`
   - `package.json`
 - Forbidden:
   - `apps/web/**`
@@ -29,22 +29,22 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - `src/changes/**`
   - `supabase/**`
   - `.env*` files with real secrets
-  - any report document download
-  - any report document decryption
   - any report content parsing or normalization
   - any database write
   - any UI
   - any Ads API work
   - any generic multi-report orchestration
+  - any downstream business logic that interprets the report content
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run spapi:poll-first-report -- --report-id <real-report-id>`
+  - [x] `npm run spapi:get-first-report-document -- --report-id <real-report-id>`
   - [x] `npm run verify:wsl`
 - Status: `complete`
 - Notes:
   - Stage 2A remains recorded complete from the earlier successful `npm run verify:wsl` and `npm run spapi:first-call` confirmation on `2026-04-13`.
-  - V2-05 is limited to one Reports API `getReport` status path for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04.
-  - The follow-up after this task must stay bounded to report document retrieval only, not parsing or ingestion.
+  - V2-06 is limited to one Reports API report-document retrieval path for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 and V2-05.
+  - V2-06 downloads the raw document bytes and stores them under `out/sp-api-report-documents/` without parsing or ingestion.
+  - The follow-up after this task must stay bounded to report content parsing only, not ingestion or warehouse writes.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -57,6 +57,7 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 | 2026-04-13 | `V2-03B` | `v2/02-sp-api-auth` | Remove the obsolete local `v2/*` commit block, align `.githooks/pre-commit` with the WSL-first policy, and validate that a normal local commit can proceed without `ALLOW_LOCAL_V2_COMMIT`. | `complete` | `git config --get core.hooksPath passed; pre-commit hook inspected; local commit succeeded; branch pushed after explicit operator reply` | `V2-03` WSL verification was later confirmed by operator and Stage 2A is now recorded complete. |
 | 2026-04-13 | `V2-04` | `v2/02-sp-api-auth` | Add one bounded Reports API create-request path for `GET_SALES_AND_TRAFFIC_REPORT`, with no polling, download, parsing, ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:first-report-request succeeded after an unrestricted rerun and returned report id 485677020556; npm run verify:wsl passed after an unrestricted rerun because the sandboxed web build could not fetch Google Fonts` | Next bounded task after this one must stay on report polling/status only. |
 | 2026-04-13 | `V2-05` | `v2/02-sp-api-auth` | Add one bounded Reports API `getReport` status path for the first Sales and Traffic report, with bounded polling until terminal status or max attempts and no document retrieval, parsing, ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:poll-first-report -- --report-id 485677020556 succeeded after an unrestricted rerun and returned terminal status DONE on attempt 1; npm run verify:wsl passed in WSL` | Next bounded task after this one must stay on report document retrieval only, not parsing or ingestion. |
+| 2026-04-13 | `V2-06` | `v2/02-sp-api-auth` | Add one bounded Reports API report-document retrieval path for the first Sales and Traffic report, with raw document download to a controlled local output path and no parsing, ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:get-first-report-document -- --report-id 485677020556 succeeded after an unrestricted rerun and wrote out/sp-api-report-documents/report-485677020556.document.raw.gz; npm run verify:wsl passed` | Next bounded task after this one must stay on report content parsing only, not ingestion or warehouse writes. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -76,7 +77,12 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - `npm test` passed locally.
   - `npm run spapi:poll-first-report -- --report-id 485677020556` was actually run. The sandboxed attempt failed at the auth transport boundary, so it was rerun unrestricted and returned terminal status `DONE` on attempt `1`.
   - `npm run verify:wsl` passed in WSL.
+- V2-06 validation completed:
+  - `npm test` passed locally.
+  - `npm run spapi:get-first-report-document -- --report-id 485677020556` was actually run. The sandboxed attempt failed at the auth transport boundary, so it was rerun unrestricted and retrieved the report document successfully.
+  - The bounded raw artifact was written to `out/sp-api-report-documents/report-485677020556.document.raw.gz`.
+  - `npm run verify:wsl` passed in WSL.
 
 ## Open blockers
-- No blocker is open for V2-05 itself.
-- The next bounded task must remain focused on report document retrieval only, without widening into parsing or ingestion.
+- No blocker is open for V2-06 itself.
+- The next bounded task must remain focused on report content parsing only, without widening into ingestion or warehouse writes.
