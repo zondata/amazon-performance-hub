@@ -20,14 +20,20 @@ Use Codex for:
 - browser checks against your app
 - updating `docs/v2/BUILD_STATUS.md`
 
+## Rule 4
+Run V2 implementation and verification in WSL.
+Preferred implementation tool is Codex CLI inside WSL.
+
 ## Exact loop
 1. Pick one stage item from `docs/v2/BUILD_STATUS.md`.
 2. Turn it into a strict task using `docs/v2/CODEX_TASK_TEMPLATE.md`.
-3. Run the task in Codex cloud/app/CLI.
+3. Run the task in Codex CLI inside WSL.
 4. Require Codex to update `docs/v2/BUILD_STATUS.md` in the same branch.
-5. Review the diff.
-6. If accepted, merge or continue.
-7. Only then start the next task.
+5. Run the exact WSL verification commands for that task.
+6. If verification passes, commit and push the task branch.
+7. If verification fails, run `npm run snapshot:debug` in WSL and upload the generated zip to ChatGPT web as the source of truth for the broken local state.
+8. Review the diff.
+9. Only then start the next task.
 
 ## Recommended first three tasks
 ### Task 1

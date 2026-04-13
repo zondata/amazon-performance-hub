@@ -3,18 +3,63 @@ set -euo pipefail
 
 branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
 
-if [[ "$branch" == v2/* ]] && [[ "${ALLOW_LOCAL_V2_COMMIT:-0}" != "1" ]]; then
-  cat >&2 <<'MSG'
-Blocked local commit.
+declare -a staged_paths=()
+while IFS= read -r -d '' rel_path; do
+  staged_paths+=("$rel_path")
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
 
-This is a V2 Codex-App branch.
-Implement V2 changes in Codex App, not manually in VS Code.
-WSL local is test/debug only.
+if [[ ${#staged_paths[@]} -eq 0 ]]; then
+  exit 0
+fi
 
-For intentional emergency local fixes, rerun with:
-ALLOW_LOCAL_V2_COMMIT=1 git commit ...
-MSG
+declare -a errors=()
+declare -a warnings=()
+
+for rel_path in "${staged_paths[@]}"; do
+  case "$rel_path" in
+    .env|.env.*|*/.env|*/.env.*)
+      errors+=("Blocked staged secret-like env file: $rel_path")
+      ;;
+    out/debug-snapshots/*|out/*.zip)
+      errors+=("Blocked staged debug snapshot artifact: $rel_path")
+      ;;
+    node_modules/*|*/node_modules/*)
+      errors+=("Blocked staged dependency artifact: $rel_path")
+      ;;
+  esac
+done
+
+if [[ "$branch" == v2/* ]]; then
+  build_status_staged=0
+  for rel_path in "${staged_paths[@]}"; do
+    if [[ "$rel_path" == "docs/v2/BUILD_STATUS.md" ]]; then
+      build_status_staged=1
+      break
+    fi
+  done
+
+  if [[ $build_status_staged -eq 0 ]]; then
+    warnings+=("V2 branch reminder: update docs/v2/BUILD_STATUS.md before finishing the bounded task.")
+  fi
+
+  warnings+=("WSL-first V2 policy: local commits on $branch are allowed after WSL verification.")
+  warnings+=("If WSL verification fails, do not push broken work to $branch just for inspection; run npm run snapshot:debug and hand off the zip instead.")
+fi
+
+if [[ ${#errors[@]} -gt 0 ]]; then
+  {
+    echo "Pre-commit blocked."
+    echo
+    printf '%s\n' "${errors[@]}"
+  } >&2
   exit 1
+fi
+
+if [[ ${#warnings[@]} -gt 0 ]]; then
+  {
+    echo "Pre-commit warnings:"
+    printf '%s\n' "${warnings[@]}"
+  } >&2
 fi
 
 exit 0

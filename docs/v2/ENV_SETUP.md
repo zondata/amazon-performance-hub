@@ -14,20 +14,22 @@ Recommended branch pattern:
 ## 2. GitHub + Codex setup
 ### Required
 - Connect the GitHub repository to Codex cloud.
-- Use Codex cloud for long-running background tasks and PR creation.
-- Use Codex app or Codex CLI locally when you want direct access to your machine and local browser.
+- Use WSL as the canonical repo execution environment.
+- Use Codex CLI inside WSL as the preferred implementation tool.
+- Use the pushed GitHub task branch as the clean source of truth after verification passes.
 
 ### Why
-This removes most manual copy-paste between chat and the coding agent.
-The repo files become the shared memory surface.
+The repo files become the durable shared memory surface.
+WSL is the stable local authority for implementation and verification.
 
 ## 3. Local machine tools to install
 ### Required
-- Node LTS and npm
+- WSL2 Ubuntu with the repo checked out inside WSL
+- Node LTS and npm in WSL
 - GitHub CLI (`gh`)
-- Playwright test dependency for deterministic browser tests
-- one local browser installed for Playwright use
-- Codex app or Codex CLI
+- `zip` and `unzip` in WSL for debug handoff bundles
+- one local browser installed for app verification when needed
+- Codex CLI in WSL
 
 ### Recommended
 - keep one Node version pinned for local, CI, and Codex setup scripts
@@ -41,6 +43,7 @@ Add these files:
 - `docs/v2/BUILD_STATUS.md`
 - `docs/v2/CODEX_TASK_TEMPLATE.md`
 - `docs/v2/CODEX_WORKFLOW.md`
+- `docs/v2/DEBUG_HANDOFF.md`
 
 ## 5. Browser testing setup
 ### Recommended approach
@@ -87,16 +90,20 @@ Human work should be limited to:
 
 Everything else should be done by Codex when the task spec is bounded.
 
-## 9. Enable the local V2 branch commit guard
-Run:
-- `git config core.hooksPath .githooks`
-- `chmod +x .githooks/pre-commit`
+## 9. Verification and debug handoff
+- Run the task’s exact verification commands in WSL. When relevant, that includes `npm run verify:wsl`.
+- If WSL verification passes, commit and push the task branch normally.
+- If WSL verification fails, do not push broken work to the main task branch just so another chat can inspect it.
+- Instead run `npm run snapshot:debug` in WSL and upload the generated zip bundle to ChatGPT web.
+- In the new chat, state that the uploaded snapshot bundle is the source of truth for the broken local state and GitHub may not contain those latest unpushed changes.
+- Main task branches should use the `v2/*` naming convention.
+- Optional broken remote backup branches should use the `debug/*` naming convention.
 
-Why this exists:
-- `v2/*` branches in this repo are intended to be implemented in Codex App, not manually in VS Code / WSL.
-- WSL local remains available for fetch, checkout, diff, test, lint, build, debugging, and manual verification.
-
-Emergency override:
-- `ALLOW_LOCAL_V2_COMMIT=1 git commit -m "..."`
-
-Use the override only for an intentional emergency local fix on a `v2/*` branch.
+## 10. Repo hook guardrails
+- Recommended once per clone: `git config core.hooksPath .githooks`
+- The repo pre-commit hook no longer blocks local commits on `v2/*` just because they are local.
+- Current hook guardrails are narrow:
+  - block staged `.env*` files and dependency artifacts
+  - block staged `out/debug-snapshots/*` bundles
+  - warn on `v2/*` when `docs/v2/BUILD_STATUS.md` is not staged
+  - remind operators that broken WSL state should hand off through `npm run snapshot:debug`

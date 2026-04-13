@@ -1279,7 +1279,11 @@ Verification:
 
 
 ### V2 implementation workflow
-- V2 implementation for this repo must be done in Codex App.
-- VS Code / WSL are not the default implementation path for V2.
-- WSL local is allowed only for `git fetch`, `git checkout`, `git pull`, `git diff`, `npm test`, `npm run web:lint`, `npm run web:build`, debugging, and manual verification.
-- Manual local commits on `v2/*` branches are blocked unless explicitly overridden with `ALLOW_LOCAL_V2_COMMIT=1`.
+- Canonical V2 implementation environment is WSL.
+- Preferred V2 implementation tool is Codex CLI running inside WSL.
+- WSL is the verification authority for V2 tasks and scripts.
+- Clean accepted state lives on the pushed GitHub task branch, normally `v2/*`.
+- If WSL verification passes, commit and push the task branch normally.
+- If WSL verification fails, do not push broken code to the main task branch just so another chat can inspect it.
+- Instead, generate a debug handoff bundle from WSL with `npm run snapshot:debug` and upload the zip to ChatGPT web.
+- If a remote backup of broken local work is still needed, use a clearly named `debug/*` branch, not the main `v2/*` task branch.

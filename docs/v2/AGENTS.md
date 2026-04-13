@@ -31,7 +31,9 @@ V2 release 1 must be:
 ### Before coding
 Read these files first:
 - `docs/v2/BUILD_STATUS.md`
+- the current task file under `docs/v2/tasks/` if it exists
 - `docs/v2/CODEX_TASK_TEMPLATE.md`
+- `docs/v2/DEBUG_HANDOFF.md`
 - the current stage section in `docs/v2/BUILD_PLAN.md` if present
 
 ### Allowed V2 shape
@@ -84,6 +86,10 @@ Minimum required updates:
 Do not end a V2 task with silent status drift.
 
 ## Testing rules
+### Verification authority
+- WSL is the canonical verification environment for all V2 work.
+- Final pass/fail for a V2 task is based on the exact WSL commands listed in the task spec or status file.
+
 ### Always run when relevant
 - `npm test`
 - `npm run web:lint`
@@ -111,6 +117,11 @@ MANUAL TEST REQUIRED:
 - Do not bundle unrelated work.
 - Do not “clean up nearby code” unless the task explicitly allows it.
 - Prefer small reviewable PRs.
+- The pushed GitHub task branch is the clean source of truth for accepted V2 state.
+- If WSL verification passes, commit and push normally.
+- If WSL verification fails, do not push broken work to the main task branch just for inspection.
+- Generate a WSL debug handoff bundle with `npm run snapshot:debug` and upload that zip to ChatGPT web as the source of truth for the broken local state.
+- If a remote backup of broken local work is still required, use a clearly named `debug/*` branch instead of the main `v2/*` task branch.
 
 ## Recommended branch naming
 - `v2/00-control-plane`
@@ -139,17 +150,10 @@ When instructions conflict, use this order:
 4. root `AGENTS.md`
 5. older V1 docs
 
-## Codex App-only implementation policy
-- All V2 implementation tasks for this repo must run in Codex App.
-- If you are about to implement a V2 task manually in VS Code, stop and redirect the task back to Codex App.
-- Local WSL work on `v2/*` branches is limited to:
-  - `git fetch`
-  - `git checkout`
-  - `git pull`
-  - `git diff`
-  - `npm test`
-  - `npm run web:lint`
-  - `npm run web:build`
-  - debugging and manual verification
-- Manual code edits in VS Code are not the default V2 workflow.
-- Local commits to `v2/*` are blocked unless explicitly overridden with `ALLOW_LOCAL_V2_COMMIT=1`.
+## WSL-first implementation policy
+- All V2 implementation tasks for this repo must run in WSL.
+- Preferred implementation tool is Codex CLI running inside WSL.
+- WSL is the canonical verification environment for `npm test`, `npm run web:lint`, `npm run web:build`, and any task-specific acceptance command.
+- GitHub task branches, normally `v2/*`, are the clean source of truth after verification passes and the branch is pushed.
+- Unpushed broken local state is not assumed to exist on GitHub; when that state must be handed off, `npm run snapshot:debug` is the source of truth.
+- Manual editor work is secondary to the Codex CLI path; do not treat ad hoc local edits as the canonical V2 workflow when Codex CLI can do the task.
