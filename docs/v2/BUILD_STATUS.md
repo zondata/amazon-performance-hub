@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-13`
 Current branch: `v2/02-sp-api-auth`
-Current task: `V2-04 - Make the first real SP-API report request only`
+Current task: `V2-05 - Add report polling and terminal status check only`
 Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 
 ## Stage checklist
@@ -10,14 +10,14 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 - [x] `Stage 2A` - SP-API auth + first Sales and Traffic pull
 
 ## Current task card
-- Task ID: `V2-04`
-- Title: `Make the first real SP-API report request only`
-- Objective: Use the existing SP-API auth and first-call boundary to submit exactly one real SP-API report request for the first retail Sales and Traffic report, with no polling, no document download, no parsing, no ingestion, no warehouse writes, and no UI.
+- Task ID: `V2-05`
+- Title: `Add report polling and terminal status check only`
+- Objective: Extend the existing first report-request boundary so the system can poll one existing Reports API report id until a terminal processing status is reached, then return a safe terminal status summary, with no document download, no decryption, no parsing, no ingestion, no warehouse writes, and no UI.
 - Allowed files:
   - `src/connectors/sp-api/**`
   - `src/testing/fixtures/**` only if needed for unit tests
   - `docs/v2/BUILD_STATUS.md`
-  - `docs/v2/tasks/V2-04-first-report-request.md`
+  - `docs/v2/tasks/V2-05-report-polling-status-only.md`
   - `package.json`
 - Forbidden:
   - `apps/web/**`
@@ -29,22 +29,22 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - `src/changes/**`
   - `supabase/**`
   - `.env*` files with real secrets
-  - any polling loop
-  - any report download
-  - any parsing or normalization
+  - any report document download
+  - any report document decryption
+  - any report content parsing or normalization
   - any database write
   - any UI
   - any Ads API work
-  - unrelated refactors
+  - any generic multi-report orchestration
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run spapi:first-report-request`
+  - [x] `npm run spapi:poll-first-report -- --report-id <real-report-id>`
   - [x] `npm run verify:wsl`
 - Status: `complete`
 - Notes:
-  - Stage 2A is now recorded complete because the operator later replied `all passed` after running `npm run verify:wsl` and `npm run spapi:first-call` in trusted WSL on `2026-04-13`.
-  - V2-04 is limited to one Reports API create-request path for `GET_SALES_AND_TRAFFIC_REPORT`.
-  - The follow-up after this task must stay bounded to report polling/status only.
+  - Stage 2A remains recorded complete from the earlier successful `npm run verify:wsl` and `npm run spapi:first-call` confirmation on `2026-04-13`.
+  - V2-05 is limited to one Reports API `getReport` status path for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04.
+  - The follow-up after this task must stay bounded to report document retrieval only, not parsing or ingestion.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -56,6 +56,7 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 | 2026-04-13 | `V2-03A` | `v2/02-sp-api-auth` | Add repo-level WSL-first workflow rules, a debug snapshot handoff command, and ChatGPT web handoff docs without changing app/business logic/UI/database scope. | `complete` | `npm run snapshot:debug passed; snapshot zip contents inspected with ls/unzip` | `V2-03` feature verification is still pending in WSL; after that, the next bounded product task remains the first report call path only. |
 | 2026-04-13 | `V2-03B` | `v2/02-sp-api-auth` | Remove the obsolete local `v2/*` commit block, align `.githooks/pre-commit` with the WSL-first policy, and validate that a normal local commit can proceed without `ALLOW_LOCAL_V2_COMMIT`. | `complete` | `git config --get core.hooksPath passed; pre-commit hook inspected; local commit succeeded; branch pushed after explicit operator reply` | `V2-03` WSL verification was later confirmed by operator and Stage 2A is now recorded complete. |
 | 2026-04-13 | `V2-04` | `v2/02-sp-api-auth` | Add one bounded Reports API create-request path for `GET_SALES_AND_TRAFFIC_REPORT`, with no polling, download, parsing, ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:first-report-request succeeded after an unrestricted rerun and returned report id 485677020556; npm run verify:wsl passed after an unrestricted rerun because the sandboxed web build could not fetch Google Fonts` | Next bounded task after this one must stay on report polling/status only. |
+| 2026-04-13 | `V2-05` | `v2/02-sp-api-auth` | Add one bounded Reports API `getReport` status path for the first Sales and Traffic report, with bounded polling until terminal status or max attempts and no document retrieval, parsing, ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:poll-first-report -- --report-id 485677020556 succeeded after an unrestricted rerun and returned terminal status DONE on attempt 1; npm run verify:wsl passed in WSL` | Next bounded task after this one must stay on report document retrieval only, not parsing or ingestion. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -71,7 +72,11 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - `npm test` passed locally.
   - `npm run spapi:first-report-request` was actually run. The sandboxed attempt failed at the auth transport boundary, so it was rerun unrestricted and succeeded with report id `485677020556`.
   - `npm run verify:wsl` was first attempted in the sandbox and failed because the Next.js build could not fetch Google Fonts. It was rerun unrestricted and passed.
+- V2-05 validation completed:
+  - `npm test` passed locally.
+  - `npm run spapi:poll-first-report -- --report-id 485677020556` was actually run. The sandboxed attempt failed at the auth transport boundary, so it was rerun unrestricted and returned terminal status `DONE` on attempt `1`.
+  - `npm run verify:wsl` passed in WSL.
 
 ## Open blockers
-- No blocker is open for V2-04 itself.
-- The next bounded task must remain focused on report polling/status only, without widening into download, parsing, or ingestion.
+- No blocker is open for V2-05 itself.
+- The next bounded task must remain focused on report document retrieval only, without widening into parsing or ingestion.

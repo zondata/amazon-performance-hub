@@ -21,6 +21,16 @@ export {
   summarizeFirstSalesAndTrafficReportRequest,
 } from './firstReportRequest';
 export {
+  DEFAULT_FIRST_REPORT_STATUS_MAX_ATTEMPTS,
+  DEFAULT_FIRST_REPORT_STATUS_POLL_INTERVAL_MS,
+  getFirstSalesAndTrafficReportStatusEndpointSummary,
+  pollFirstSalesAndTrafficReportStatus,
+  buildFirstSalesAndTrafficReportStatusRequest,
+  summarizeFirstSalesAndTrafficReportStatus,
+  isTerminalFirstSalesAndTrafficReportStatus,
+} from './firstReportStatus';
+export {
+  buildReportsGetReportPath,
   LWA_TOKEN_ENDPOINT,
   REPORTS_CREATE_REPORT_PATH,
   SELLERS_MARKETPLACE_PARTICIPATIONS_PATH,
@@ -36,8 +46,11 @@ export {
   type SpApiEnvConfig,
   type SpApiFirstCallSummary,
   type SpApiFirstReportRequestSummary,
+  type SpApiFirstReportStatusPollMode,
+  type SpApiFirstReportStatusSummary,
   type SpApiMarketplaceParticipation,
   type SpApiReportCreateRequestBody,
+  type SpApiReportProcessingStatus,
   type SpApiReportType,
   type SpApiRegion,
   type SpApiTokenRefreshResult,
@@ -45,4 +58,5 @@ export {
   type SpApiTransportRequest,
   type SpApiTransportResponse,
   type LwaTokenSuccessResponse,
+  SP_API_REPORT_PROCESSING_STATUSES,
 } from './types';

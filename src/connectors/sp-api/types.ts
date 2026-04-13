@@ -54,6 +54,18 @@ export type SpApiFirstCallSummary = {
 
 export type SpApiReportType = 'GET_SALES_AND_TRAFFIC_REPORT';
 
+export const SP_API_REPORT_PROCESSING_STATUSES = [
+  'IN_QUEUE',
+  'IN_PROGRESS',
+  'DONE',
+  'CANCELLED',
+  'FATAL',
+  'DONE_NO_DATA',
+] as const;
+
+export type SpApiReportProcessingStatus =
+  (typeof SP_API_REPORT_PROCESSING_STATUSES)[number];
+
 export type SpApiReportCreateRequestBody = {
   reportType: SpApiReportType;
   marketplaceIds: [string];
@@ -72,6 +84,25 @@ export type SpApiFirstReportRequestSummary = {
   marketplaceId: string;
   reportType: SpApiReportType;
   reportId: string;
+};
+
+export type SpApiFirstReportStatusPollMode =
+  | 'single-check'
+  | 'poll-until-terminal';
+
+export type SpApiFirstReportStatusSummary = {
+  endpoint: 'getReport';
+  region: SpApiRegion;
+  marketplaceId: string;
+  reportId: string;
+  reportType: SpApiReportType | null;
+  processingStatus: SpApiReportProcessingStatus;
+  terminalReached: boolean;
+  maxAttemptsReached: boolean;
+  attemptCount: number;
+  processingStartTime: string | null;
+  processingEndTime: string | null;
+  reportDocumentId: string | null;
 };
 
 export type SpApiTokenRefreshResult =
