@@ -23,9 +23,9 @@ export type LwaTokenSuccessResponse = {
 
 export type SpApiTransportRequest = {
   url: string;
-  method: 'POST';
+  method: 'GET' | 'POST';
   headers: Record<string, string>;
-  body: string;
+  body?: string;
 };
 
 export type SpApiTransportResponse = {
@@ -36,6 +36,21 @@ export type SpApiTransportResponse = {
 export type SpApiTransport = (
   request: SpApiTransportRequest
 ) => Promise<SpApiTransportResponse>;
+
+export type SpApiMarketplaceParticipation = {
+  marketplaceId: string | null;
+  countryCode: string | null;
+  name: string | null;
+  isParticipating: boolean | null;
+  hasSuspendedListings: boolean | null;
+};
+
+export type SpApiFirstCallSummary = {
+  endpoint: 'getMarketplaceParticipations';
+  region: SpApiRegion;
+  marketplaceIds: string[];
+  participationCount: number;
+};
 
 export type SpApiTokenRefreshResult =
   | {
@@ -50,6 +65,27 @@ export type SpApiTokenRefreshResult =
       ok: false;
       error: SpApiAuthError;
     };
+
+export class SpApiRequestError extends Error {
+  readonly code: 'request_build_error' | 'api_response_error' | 'invalid_response';
+  readonly status?: number;
+  readonly details?: unknown;
+
+  constructor(
+    code: 'request_build_error' | 'api_response_error' | 'invalid_response',
+    message: string,
+    options?: {
+      status?: number;
+      details?: unknown;
+    }
+  ) {
+    super(message);
+    this.name = 'SpApiRequestError';
+    this.code = code;
+    this.status = options?.status;
+    this.details = options?.details;
+  }
+}
 
 export class SpApiConfigError extends Error {
   readonly code: 'missing_env' | 'invalid_region';

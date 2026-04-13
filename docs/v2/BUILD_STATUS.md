@@ -1,103 +1,68 @@
-# Amazon Performance Hub V2 - Build Status
+# V2 Build Status
 
-Last updated: 2026-04-11
-Current owner: Codex + Albert
-Current branch: `v2/01-repo-boundary`
-Current task: `V2-02 - Create the SP-API auth skeleton only`
+Last updated: `2026-04-13`
+Current branch: `v2/02-sp-api-auth`
+Current task: `V2-03 - Make the first real SP-API call only`
 Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 
-## Locked decisions
-- [x] V2 release 1 is human-first and agent-readable.
-- [x] Primary pages are only `Overview` and `Queries`.
-- [x] Release 1 keeps agent actions read-only against Amazon.
-- [x] Sponsored Products is the first decision workflow.
-- [x] `search_query`, `ad_target`, and `asin_query_goal` stay separate.
-- [x] Memory must be structured and evidence-linked.
-- [x] V2 must not recreate V1 surface sprawl.
-- [x] V2 implementation is Codex App-first, with local WSL reserved for test/debug/review work.
-
 ## Stage checklist
-- [ ] Stage 0 - scope freeze and control files
-- [ ] Stage 1 - repo boundary for V2
-- [ ] Stage 2A - SP-API auth + first Sales and Traffic pull
-- [ ] Stage 2B - Ads API auth + first Sponsored Products pull
-- [ ] Stage 3 - ingestion backbone
-- [ ] Stage 4 - canonical marts
-- [ ] Stage 5 - memory system
-- [ ] Stage 6 - human UI
-- [ ] Stage 7 - diagnosis + agent review loop
-- [ ] Stage 8 - change logging + execution handoff
-- [ ] Stage 9 - intraday pulse
-- [ ] Stage 10 - ranking automation evaluation
+- [x] `Stage 1` - Repo boundary and V2 route/module skeleton
+- [ ] `Stage 2A` - SP-API auth + first Sales and Traffic pull
 
 ## Current task card
-### Task ID
-`V2-02`
-
-### Objective
-Create the V2 Sponsored Products API authentication skeleton and environment contract without implementing report sync, warehouse writes, UI flows, or production data pulls.
-
-### Allowed files
-- `src/connectors/sp-api/**`
-- `src/testing/fixtures/**` only if needed for auth/config unit tests
-- `docs/v2/BUILD_STATUS.md`
-
-### Forbidden changes
-- `apps/web/**`
-- `src/ingestion/**`
-- `src/warehouse/**`
-- `src/marts/**`
-- `src/diagnosis/**`
-- `src/memory/**`
-- `src/changes/**`
-- `supabase/**`
-- `.env*` files with real secrets
-- any Amazon write/execution code
-- any real report ingestion code
-- any real UI or admin page
-- any Ads API code
-
-### Required checks
-- [x] `npm run verify:wsl` (passed in WSL via operator handoff)
-
-### Status
-- [ ] planned
-- [ ] in progress
-- [ ] blocked
-- [x] complete
-
-### Notes
-- Added only the SP-API auth/config skeleton under `src/connectors/sp-api/`.
-- Added typed env validation, region endpoint resolution, and an injected token refresh boundary with unit tests.
-- This task covers only the auth skeleton portion of Stage 2A.
-- `npm run verify:wsl` passed via operator handoff.
-- Stage 2A is not marked complete because this task does not include the first real SP-API call.
+- Task ID: `V2-03`
+- Title: `Make the first real SP-API call only`
+- Objective: Use the existing SP-API auth skeleton and local production credentials to perform one minimal real SP-API read call successfully, with no ingestion, no warehouse writes, no UI, and no Amazon write actions.
+- Allowed files:
+  - `src/connectors/sp-api/**`
+  - `src/testing/fixtures/**` only if needed for unit tests
+  - `docs/v2/BUILD_STATUS.md`
+- Forbidden:
+  - `apps/web/**`
+  - `src/ingestion/**`
+  - `src/warehouse/**`
+  - `src/marts/**`
+  - `src/diagnosis/**`
+  - `src/memory/**`
+  - `src/changes/**`
+  - `supabase/**`
+  - `.env*` files with real secrets
+  - any UI or admin page
+  - any Ads API code
+  - any report create/poll/download/parse/ingest code
+- Required checks:
+  - [ ] `npm run verify:wsl` (operator handoff required)
+  - [ ] `npm run spapi:first-call` (operator handoff required)
+- Status: `in progress`
+- Notes:
+  - This task is the first real SP-API call proof for V2.
+  - The connector now targets Sellers `getMarketplaceParticipations` as the single minimal production read call path.
+  - Amazon documents Sellers `getMarketplaceParticipations` behind Selling Partner Insights or Product Listing in NA/EU; the app has now been corrected to Selling Partner Insights and re-authorized.
+  - Because that role correction is now in place, `V2-03` should stay on the existing Sellers first-call path and should not switch to Reports API.
+  - Corrected `V2-03` contract for this use case: the first-call path is LWA-only and does not require AWS env vars or SigV4 signing.
+  - Required env for the first-call boundary is now limited to LWA client id, LWA client secret, refresh token, region, and marketplace id.
+  - The first-call request now uses `x-amz-access-token` with a safe redacted success summary and no AWS authorization header path.
+  - The first-call CLI loads repo-local `.env.local` before env validation so the operator can run the bounded proof command from repo root.
+  - Stage `2A` must remain incomplete until the operator confirms both `npm run verify:wsl` and `npm run spapi:first-call` succeed.
 
 ## Task log
-| Date | Task ID | Branch | Scope | Result | Tests run | Manual follow-up |
-|---|---|---|---|---|---|---|
-| 2026-04-10 | INIT | _n/a_ | Created V2 build plan and control process | planned | none | add control files to repo |
-| 2026-04-11 | V2-00B | `v2/00-control-plane` | Added Codex App-only V2 workflow policy, WSL usage limits, and local commit guard hook for `v2/*` branches | complete | `git diff --stat`; hook executable check | set `git config core.hooksPath .githooks` locally |
-| 2026-04-11 | V2-01 | `v2/01-repo-boundary` | Created placeholder `/v2` routes and placeholder module boundaries without auth, report sync, or marts logic | blocked | `npm run web:lint` pass; `npm run web:build` fail (`lightningcss.win32-x64-msvc.node` missing during Next build) | resolve the existing local Next/native-module build environment and rerun `npm run web:build` |
-| 2026-04-11 | V2-02 | `v2/01-repo-boundary` | Added typed SP-API auth/config skeleton, endpoint resolver, and injected token refresh boundary without report sync, warehouse writes, UI, or Ads API work | complete | `npm run verify:wsl` (passed via operator handoff) | later bounded task must handle the first real SP-API call |
+| Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-04-12 | `V2-01` | `v2/01-repo-boundary` | Create V2 route boundary and placeholder module boundaries only. | `complete` | `operator later confirmed npm run verify:wsl passed` | Stage 2A depends on SP-API auth and first real call proof. |
+| 2026-04-12 | `V2-02` | `v2/01-repo-boundary` | Create the SP-API auth skeleton only: typed env/config validation, endpoint resolution, and refresh-token exchange boundary. | `complete` | `operator confirmed npm run verify:wsl passed` | First real SP-API call proof is still required before Stage 2A can be completed. |
+| 2026-04-12 | `V2-03` | `v2/01-repo-boundary` | Add one real SP-API Sellers read-call path with minimal SigV4 signing, safe summary output, and no report sync/warehouse/UI/Ads API scope expansion. | `in progress` | `operator confirmed npm run verify:wsl passed; npm run spapi:first-call initially failed because the CLI was not loading repo-local .env.local; rerun required after env-loader fix` | Next bounded task should be the first report call path after manual confirmation of the real-call proof. |
+| 2026-04-13 | `V2-03` | `v2/02-sp-api-auth` | Correct the first-call boundary to LWA-only env + `x-amz-access-token`, keep Sellers `getMarketplaceParticipations` as the bounded first real call after the Selling Partner Insights role correction, and avoid any Reports API/SigV4 expansion in this task. | `in progress` | `npm test passed; npm run web:lint passed; npm run web:build passed after an unrestricted rerun because the sandboxed build could not fetch Google Fonts` | Operator still needs to run `npm run verify:wsl` and `npm run spapi:first-call`, then paste both results; next bounded task remains the first report call path only. |
 
-## Decisions log
-| Date | Decision | Reason |
-|---|---|---|
-| 2026-04-10 | Use one repo with a hard V2 boundary instead of extending V1 pages directly | preserve shared foundation while preventing V1 sprawl |
-| 2026-04-10 | Use bounded Codex task slices instead of one giant "build V2" prompt | reduce drift and improve reviewability |
-| 2026-04-11 | Enforce Codex App as the default V2 implementation environment and block default local commits on `v2/*` | keep the stable implementation path consistent and reduce accidental VS Code drift |
-
-## Environment checklist
-- [ ] GitHub repo connected to Codex cloud
-- [ ] Codex app or Codex CLI installed locally
-- [ ] project-local `.codex/config.toml` added
-- [ ] browser testing tool installed
-- [ ] Supabase project chosen for V2 work
-- [x] V2 environment variables documented
-- [ ] Amazon SP-API app setup started
-- [ ] Amazon Ads API app setup started
-- [x] local V2 commit guard documented
+## Tests and verification
+- Codex in-task validation:
+  - `npm test` passed.
+  - `npm run web:lint` passed.
+  - `npm run web:build` passed after an unrestricted rerun; the initial sandboxed run failed because Next.js could not fetch Google Fonts.
+  - SP-API connector tests now cover env validation without AWS keys, token exchange error surfacing, endpoint resolution, local env loading, and LWA-only safe first-call request behavior.
+- Operator verification required:
+  - `npm run verify:wsl`
+  - `npm run spapi:first-call`
 
 ## Open blockers
-- none
+- `V2-03` still needs operator confirmation that both `npm run verify:wsl` and `npm run spapi:first-call` succeed in the trusted WSL environment with real credentials.
+- The next bounded task should remain focused on the first report call path only after this proof-of-read step is confirmed.
