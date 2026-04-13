@@ -1287,3 +1287,55 @@ Verification:
 - If WSL verification fails, do not push broken code to the main task branch just so another chat can inspect it.
 - Instead, generate a debug handoff bundle from WSL with `npm run snapshot:debug` and upload the zip to ChatGPT web.
 - If a remote backup of broken local work is still needed, use a clearly named `debug/*` branch, not the main `v2/*` task branch.
+
+## Push handoff workflow
+
+### Canonical push workflow
+- All V2 implementation and verification must run in WSL.
+- Preferred implementation tool is Codex CLI running inside WSL.
+- The current checked-out `v2/*` branch is the canonical working branch for the active task unless the task explicitly states otherwise.
+- After implementation and automated checks pass, do not push immediately.
+- Stop and ask the operator to perform the required manual verification steps.
+- Wait for an explicit operator reply before pushing.
+
+### Required operator reply before push
+- The operator must explicitly reply with: `all passed`
+- Do not treat vague approval as push authorization.
+
+### Required behavior after operator replies `all passed`
+- Re-check the current branch with `git branch --show-current`
+- Re-check repo state with `git status`
+- If the intended changes are not yet committed, stage only the intended task files and create the commit
+- Push the currently checked-out branch with:
+  - `git push origin HEAD`
+- After push, print:
+  - pushed branch name
+  - latest commit SHA
+  - final `git status`
+
+### Failure path
+- If automated checks fail, do not commit or push.
+- If manual verification fails, do not push.
+- If manual verification fails or the operator reports problems, generate a debug handoff bundle with:
+  - `npm run snapshot:debug`
+- Use the generated snapshot zip as the source of truth for the broken local state.
+- Do not push broken work to the main `v2/*` task branch just for inspection.
+- If a remote backup of broken work is absolutely needed, use a clearly named `debug/*` branch.
+
+### Safety checks before push
+- Push by current branch reference, not by manually typed branch name.
+- Use:
+  - `git push origin HEAD`
+- Never assume `main` is the correct push target.
+- Never assume GitHub contains the latest local broken state.
+
+### Commit scope rule
+- Stage and commit only the files intended for the current bounded task.
+- Do not include unrelated local changes in the push-handoff commit.
+
+### Minimum push report
+- After a successful push, report:
+  - branch name
+  - commit SHA
+  - commit message
+  - whether the working tree is clean
