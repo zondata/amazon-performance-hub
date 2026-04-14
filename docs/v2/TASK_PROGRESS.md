@@ -5,12 +5,12 @@ Last generated: 2026-04-14
 ## Overall
 
 - Total tasks: 72
-- Done: 11
+- Done: 15
 - Verify: 1
-- In progress: 3
+- In progress: 1
 - Blocked: 0
-- Remaining open: 61
-- Remaining fast-track tasks: 33
+- Remaining open: 57
+- Remaining fast-track tasks: 29
 
 ## Stage summary
 
@@ -18,7 +18,7 @@ Last generated: 2026-04-14
 |---|---:|---:|---:|---:|---:|---:|---:|---|
 | Stage 0 — scope freeze and control files | 2 | 0 | 0 | 0 | 0 | 2 | 2 | Yes |
 | Stage 1 — repo boundary for V2 | 3 | 0 | 0 | 0 | 0 | 3 | 3 | Yes |
-| Stage 2A — SP-API auth + first retail pulls | 6 | 1 | 3 | 0 | 3 | 3 | 4 | No |
+| Stage 2A — SP-API auth + first retail pulls | 10 | 1 | 1 | 0 | 1 | 4 | 4 | Yes |
 | Stage 2B — Ads API auth + first Sponsored Products pulls | 0 | 0 | 0 | 0 | 11 | 0 | 4 | No |
 | Stage 3 — ingestion backbone | 0 | 0 | 0 | 0 | 8 | 0 | 2 | No |
 | Stage 4 — canonical marts | 0 | 0 | 0 | 0 | 6 | 0 | 1 | No |
@@ -28,10 +28,6 @@ Last generated: 2026-04-14
 | Stage 8 — change logging + execution handoff | 0 | 0 | 0 | 0 | 5 | 0 | 1 | No |
 | Stage 9 — intraday pulse | 0 | 0 | 0 | 0 | 4 | 0 | 1 | No |
 | Stage 10 — ranking automation evaluation | 0 | 0 | 0 | 0 | 4 | 0 | 1 | No |
-
-### Stage 2A — SP-API auth + first retail pulls — gate tasks still required
-
-- S2A-G3 — Gate: first Search Terms pull ingests successfully for one marketplace window
 
 ### Stage 2B — Ads API auth + first Sponsored Products pulls — gate tasks still required
 
@@ -77,17 +73,14 @@ Last generated: 2026-04-14
 
 ### Ready to move from Stage 2A to Stage 2B
 
-- Progress: 3/4
-- Complete: No
-- Remaining:
-  - S2A-G3 — Gate: first Search Terms pull ingests successfully for one marketplace window
+- Progress: 4/4
+- Complete: Yes
 
 ### First usable app (fast track)
 
-- Progress: 3/20
+- Progress: 4/20
 - Complete: No
 - Remaining:
-  - S2A-G3 — Gate: first Search Terms pull ingests successfully for one marketplace window
   - S2B-G1 — Gate: first Ads profile sync succeeds
   - S2B-G2 — Gate: first Sponsored Products campaign daily ingest succeeds
   - S2B-G3 — Gate: first Sponsored Products target daily ingest succeeds
@@ -121,12 +114,8 @@ Last generated: 2026-04-14
 | ID | Status | Priority | Gate | Fast-track | Title |
 |---|---|---|---|---|---|
 | S2A-02 | todo | must | no | yes | Create SP-API connection/auth persistence model |
-| S2A-04 | in_progress | must | no | yes | Implement regional endpoint routing, signing, retries, and rate-limit logging |
-| S2A-05 | in_progress | must | no | yes | Implement report create → poll → retrieve flow with job persistence |
 | S2A-06 | in_progress | must | no | yes | Implement Sales and Traffic Business Report parse + ingest |
-| S2A-08 | todo | must | no | yes | Implement Search Terms report parse + ingest |
 | S2A-09 | verify | should | no | no | Add SP-API admin connection health check and smoke route/command |
-| S2A-G3 | todo | must | yes | yes | Gate: first Search Terms pull ingests successfully for one marketplace window |
 
 ### Stage 2B — Ads API auth + first Sponsored Products pulls
 

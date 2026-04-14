@@ -54,7 +54,8 @@ export type SpApiFirstCallSummary = {
 
 export type SpApiReportType =
   | 'GET_SALES_AND_TRAFFIC_REPORT'
-  | 'GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT';
+  | 'GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT'
+  | 'GET_BRAND_ANALYTICS_SEARCH_TERMS_REPORT';
 
 export const SP_API_REPORT_PROCESSING_STATUSES = [
   'IN_QUEUE',
@@ -88,6 +89,15 @@ export type SpApiReportCreateRequestBody =
       reportOptions: {
         reportPeriod: 'WEEK';
         asin: string;
+      };
+    }
+  | {
+      reportType: 'GET_BRAND_ANALYTICS_SEARCH_TERMS_REPORT';
+      marketplaceIds: [string];
+      dataStartTime: string;
+      dataEndTime: string;
+      reportOptions: {
+        reportPeriod: 'WEEK';
       };
     };
 
@@ -208,6 +218,33 @@ export type SpApiSqpRealPullSummary = {
   rawArtifactPath: string;
   scopeType: 'asin';
   scopeValue: string;
+  coverageStart: string;
+  coverageEnd: string;
+  rowCount: number;
+  uploadId: string | null;
+  warningsCount: number;
+};
+
+export type SpApiSearchTermsParseIngestSummary = {
+  endpoint: 'spApiSearchTermsParseAndIngest';
+  reportId: string | null;
+  inputFilePath: string;
+  marketplace: string;
+  marketplaceId: string;
+  coverageStart: string;
+  coverageEnd: string;
+  rowCount: number;
+  uploadId: string | null;
+  warningsCount: number;
+};
+
+export type SpApiSearchTermsRealPullSummary = {
+  endpoint: 'spApiSearchTermsFirstRealPullAndIngest';
+  reportId: string;
+  reportDocumentId: string;
+  rawArtifactPath: string;
+  marketplace: string;
+  marketplaceId: string;
   coverageStart: string;
   coverageEnd: string;
   rowCount: number;
@@ -412,6 +449,58 @@ export class SpApiSqpPullError extends Error {
   ) {
     super(message);
     this.name = 'SpApiSqpPullError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export class SpApiSearchTermsIngestError extends Error {
+  readonly code:
+    | 'artifact_not_found'
+    | 'invalid_input'
+    | 'invalid_content'
+    | 'validation_failed'
+    | 'write_failed'
+    | 'ingest_failed';
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'artifact_not_found'
+      | 'invalid_input'
+      | 'invalid_content'
+      | 'validation_failed'
+      | 'write_failed'
+      | 'ingest_failed',
+    message: string,
+    details?: unknown
+  ) {
+    super(message);
+    this.name = 'SpApiSearchTermsIngestError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export class SpApiSearchTermsPullError extends Error {
+  readonly code:
+    | 'invalid_input'
+    | 'validation_failed'
+    | 'artifact_not_found'
+    | 'write_failed';
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'invalid_input'
+      | 'validation_failed'
+      | 'artifact_not_found'
+      | 'write_failed',
+    message: string,
+    details?: unknown
+  ) {
+    super(message);
+    this.name = 'SpApiSearchTermsPullError';
     this.code = code;
     this.details = details;
   }

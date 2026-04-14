@@ -83,6 +83,15 @@ export {
   runFirstSpApiSqpParseIngest,
 } from './firstSqpParseIngest';
 export {
+  SP_API_SEARCH_TERMS_RAW_OUTPUT_DIR,
+  resolveSpApiSearchTermsRawArtifactPath,
+  readSpApiSearchTermsRawArtifact,
+  streamParseSpApiSearchTermsRawArtifact,
+  parseValidatedSpApiSearchTermsRawArtifact,
+  summarizeSpApiSearchTermsParseIngest,
+  runFirstSpApiSearchTermsParseIngest,
+} from './firstSearchTermsParseIngest';
+export {
   FIRST_SQP_REPORT_TYPE,
   FIRST_SQP_REPORT_PERIOD,
   DEFAULT_FIRST_SQP_STATUS_MAX_ATTEMPTS,
@@ -94,6 +103,18 @@ export {
   summarizeFirstSqpRealPull,
   runFirstSpApiSqpRealPullAndIngest,
 } from './firstSqpRealPull';
+export {
+  FIRST_SEARCH_TERMS_REPORT_TYPE,
+  FIRST_SEARCH_TERMS_REPORT_PERIOD,
+  DEFAULT_FIRST_SEARCH_TERMS_STATUS_MAX_ATTEMPTS,
+  DEFAULT_FIRST_SEARCH_TERMS_STATUS_POLL_INTERVAL_MS,
+  buildFirstSearchTermsReportRequestBody,
+  buildFirstSearchTermsReportRequest,
+  buildFirstSearchTermsReportStatusRequest,
+  pollFirstSearchTermsReportStatus,
+  summarizeFirstSearchTermsRealPull,
+  runFirstSpApiSearchTermsRealPullAndIngest,
+} from './firstSearchTermsRealPull';
 export {
   buildReportsGetReportPath,
   buildReportsGetReportDocumentPath,
@@ -112,6 +133,8 @@ export {
   SpApiParseError,
   SpApiSqpPullError,
   SpApiSqpIngestError,
+  SpApiSearchTermsPullError,
+  SpApiSearchTermsIngestError,
   SpApiRequestError,
   type SpApiCredentials,
   type SpApiEnvConfig,
@@ -124,6 +147,8 @@ export {
   type SpApiFirstReportParseSummary,
   type SpApiSqpParseIngestSummary,
   type SpApiSqpRealPullSummary,
+  type SpApiSearchTermsParseIngestSummary,
+  type SpApiSearchTermsRealPullSummary,
   type SpApiFirstReportDocumentSummary,
   type SpApiFirstReportRequestSummary,
   type SpApiFirstReportStatusPollMode,

@@ -2,59 +2,51 @@
 
 Last updated: `2026-04-14`
 Current branch: `v2/02-sp-api-auth`
-Current task: `S2A-G2 - Gate: first SQP pull ingests successfully for one ASIN window`
+Current task: `S2A-G3 - Gate: first Search Terms pull ingests successfully for one marketplace window`
 Current stage: `Stage 2A - SP-API auth + first retail pulls`
 
 ## Stage checklist
 - [x] `Stage 1` - Repo boundary and V2 route/module skeleton
-- [ ] `Stage 2A` - SP-API auth + first retail pulls
+- [x] `Stage 2A` - SP-API auth + first retail pulls
 
 ## Current task card
-- Task ID: `S2A-G2`
-- Title: `Gate: first SQP pull ingests successfully for one ASIN window`
-- Objective: Add one bounded real SP-API SQP pull path that requests one SQP ASIN-week report, polls until terminal status, downloads the raw artifact to a deterministic local path, and hands that artifact into the existing `spapi:sqp-parse-ingest` boundary without widening into Search Terms, Stage 2B, warehouse, or UI work.
+- Task ID: `S2A-G3`
+- Title: `Gate: first Search Terms pull ingests successfully for one marketplace window`
+- Objective: Add one bounded real SP-API Search Terms pull path that requests one Search Terms marketplace-week report, polls until terminal status, downloads the raw artifact to a deterministic local path, parses the official Search Terms artifact family explicitly, and ingests it through one bounded Search Terms ingest path without widening into Stage 2B, warehouse, or UI work.
 - Allowed files:
   - `src/connectors/sp-api/**`
   - `src/ingest/**`
-  - `src/sqp/**`
   - `src/testing/fixtures/**`
   - `package.json`
   - `docs/v2/BUILD_STATUS.md`
   - `docs/v2/TASK_REGISTRY.json`
   - `docs/v2/TASK_PROGRESS.md`
-  - `docs/v2/tasks/S2A-G2-first-real-sqp-pull-ingests.md`
+  - `docs/v2/tasks/S2A-G3-first-search-terms-pull-ingests.md`
 - Forbidden:
-  - Search Terms implementation
+  - Stage 2B work
+  - Search Query Performance scope changes beyond strict helper reuse
   - Sales and Traffic behavior changes beyond shared SP-API request/status/document design reuse
   - warehouse writes
-  - schema migrations
   - UI changes
-  - Stage 2B work
   - generic multi-report orchestration
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run spapi:sqp-first-real-pull-ingest -- --asin B0FYPRWPN1 --start-date 2026-04-05 --end-date 2026-04-11`
+  - [x] `npm run spapi:search-terms-first-real-pull-ingest -- --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD>`
   - [x] `npm run verify:wsl`
   - [x] `node scripts/v2-progress.mjs --write`
 - Status: `complete`
 - Notes:
-  - The new bounded CLI is `npm run spapi:sqp-first-real-pull-ingest`.
-  - The bounded request path is restricted to one SQP ASIN week window only and validates `--start-date` as Sunday plus `--end-date` as Saturday.
-  - Downloaded raw artifacts are written under `out/sp-api-sqp-artifacts/` and handed into the existing `spapi:sqp-parse-ingest` boundary.
-  - The SQP parser now accepts the official SP-API SQP JSON artifact shape in addition to the previously validated CSV fixture path.
-  - `S2A-G2` is complete because the real SP-API gate command succeeded end to end and ingested the real SQP artifact.
-  - Real gate proof summary:
-    - `reportId = 485937020557`
-    - `scopeType = asin`
-    - `scopeValue = B0FYPRWPN1`
-    - `coverage = 2026-04-05 -> 2026-04-11`
-    - `rowCount = 53`
-    - `warningsCount = 0`
-    - `uploadId = f0f533b2-b856-4b2c-9e5f-1aae58f7bcfe`
-  - `Stage 2B can start now: no`.
+  - The new bounded CLI is `npm run spapi:search-terms-first-real-pull-ingest`.
+  - The bounded request path is restricted to one Search Terms marketplace WEEK window only and validates `--start-date` as Sunday plus `--end-date` as Saturday.
+  - Downloaded raw artifacts are written under `out/sp-api-search-terms-artifacts/` and handed into the bounded Search Terms parse+ingest boundary.
+  - The Search Terms parser validates the official `GET_BRAND_ANALYTICS_SEARCH_TERMS_REPORT` family explicitly and normalizes one marketplace-window row contract.
+  - The repo did not have any Search Terms destination table before this task, so the bounded implementation adds the smallest raw-ingest table needed to persist a real upload id and normalized Search Terms rows.
+  - `S2A-G2` is already complete and is no longer an open blocker.
+  - The real SP-API gate command succeeded end to end for marketplace `ATVPDKIKX0DER`, coverage `2026-04-05 -> 2026-04-11`, with upload id `517bcaba-d7bd-4d3d-b56a-372c0de77bda`.
+  - `Stage 2B can start now: yes`.
   - Exact remaining gate tasks before Stage 2B can begin:
-    - `S2A-G3` — Gate: first Search Terms pull ingests successfully for one marketplace window
-  - Single next bounded build task: `S2A-G3 - Gate: first Search Terms pull ingests successfully for one marketplace window`
+    - none
+  - Single next bounded build task: `S2B-01 - Document Ads API environment contract and secret handling`
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -83,6 +75,8 @@ Current stage: `Stage 2A - SP-API auth + first retail pulls`
 | 2026-04-14 | `V2-AUDIT-STATUS` | `v2/02-sp-api-auth` | Audit the current branch against the master V2 task registry, regenerate progress output, and restate the actual stage and remaining Stage 2A gate tasks without building features. | `complete` | `node scripts/v2-progress.mjs --write passed` | Next bounded task is `S2A-07` — implement the first SP-API SQP pull/ingest gate proof. |
 | 2026-04-14 | `S2A-07` | `v2/02-sp-api-auth` | Add one bounded SP-API SQP parse+ingest path that reads one local SQP raw artifact, validates the ASIN-window SQP family, and ingests it through the existing SQP weekly raw ingest boundary without widening into Search Terms, warehouse, or UI work. | `complete` | `npm test passed; npm run spapi:sqp-parse-ingest -- --raw-path src/testing/fixtures/sp-api/report-fixture-sqp-asin-window.sqp.raw.csv succeeded with upload id 55f35127-63de-4481-b7b2-0d8a99eb1618; npm run verify:wsl passed` | Next bounded task is `S2A-G2` — prove one first real SQP pull ingests successfully for one ASIN window. |
 | 2026-04-14 | `S2A-G2` | `v2/02-sp-api-auth` | Add one bounded real SP-API SQP pull path for one ASIN week window that requests the report, polls to terminal state, downloads the raw artifact, and hands it into the existing `spapi:sqp-parse-ingest` path without widening into Search Terms, Stage 2B, warehouse, or UI work. | `complete` | `focused SQP boundary tests passed; npm run spapi:sqp-first-real-pull-ingest -- --asin B0FYPRWPN1 --start-date 2026-04-05 --end-date 2026-04-11 succeeded with upload id f0f533b2-b856-4b2c-9e5f-1aae58f7bcfe; npm test passed; npm run verify:wsl passed` | Next bounded task is `S2A-G3` — prove one first real Search Terms pull ingests successfully for one marketplace window. |
+| 2026-04-14 | `S2A-08` | `v2/02-sp-api-auth` | Add one bounded Search Terms parse+ingest path that reads one local Search Terms raw artifact, validates the official `GET_BRAND_ANALYTICS_SEARCH_TERMS_REPORT` family, and ingests it through one bounded Search Terms raw ingest boundary without widening into Stage 2B, warehouse, or UI work. | `complete` | `focused Search Terms parse+ingest tests passed; npm test passed; npm run verify:wsl passed` | Next bounded task is `S2A-G3` — prove one first real Search Terms pull ingests successfully for one marketplace window. |
+| 2026-04-14 | `S2A-G3` | `v2/02-sp-api-auth` | Add one bounded real SP-API Search Terms pull path for one marketplace week window that requests the report, polls to terminal state, downloads the raw artifact, and hands it into the bounded Search Terms parse+ingest path without widening into Stage 2B, warehouse, or UI work. | `complete` | `focused Search Terms real-pull tests passed; npm run spapi:search-terms-first-real-pull-ingest -- --marketplace-id ATVPDKIKX0DER --start-date 2026-04-05 --end-date 2026-04-11 succeeded with report id 485977020557 and upload id 517bcaba-d7bd-4d3d-b56a-372c0de77bda; npm test passed; npm run verify:wsl passed` | Next bounded task is `S2B-01` — document Ads API environment contract and secret handling. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -180,10 +174,18 @@ Current stage: `Stage 2A - SP-API auth + first retail pulls`
   - `npm run spapi:sqp-first-real-pull-ingest -- --asin B0FYPRWPN1 --start-date 2026-04-05 --end-date 2026-04-11` was actually run successfully and created report id `485937020557`.
   - The real gate summary reported `Scope type: asin`, `Scope value: B0FYPRWPN1`, `Coverage window: 2026-04-05 -> 2026-04-11`, `Row count: 53`, `Warnings: 0`, and `Upload ID: f0f533b2-b856-4b2c-9e5f-1aae58f7bcfe`.
   - `npm run verify:wsl` passed in WSL.
+- S2A-08 validation completed:
+  - Focused Search Terms parse+ingest tests passed locally for deterministic path resolution, family/type validation failure, gzip raw-artifact reading, and safe summary generation.
+  - `npm test` passed locally.
+  - `npm run verify:wsl` passed in WSL.
+- S2A-G3 validation completed:
+  - Focused Search Terms real-pull boundary tests passed locally for CLI argument validation, bounded polling failure, missing-document failure, and successful parse+ingest handoff summary.
+  - `npm test` passed locally.
+  - `npm run verify:wsl` passed in WSL.
+  - `npm run spapi:search-terms-first-real-pull-ingest -- --marketplace-id ATVPDKIKX0DER --start-date 2026-04-05 --end-date 2026-04-11` was actually run successfully and created report id `485977020557`.
+  - The real gate summary reported `Marketplace ID: ATVPDKIKX0DER`, `Coverage window: 2026-04-05 -> 2026-04-11`, `Row count: 0`, `Warnings: 0`, and `Upload ID: 517bcaba-d7bd-4d3d-b56a-372c0de77bda`.
 
 ## Open blockers
-- Stage 2B cannot start yet because `S2A-G2` and `S2A-G3` remain open.
-- The exact remaining Stage 2A gate tasks are:
-  - `S2A-G2` — Gate: first SQP pull ingests successfully for one ASIN window
-  - `S2A-G3` — Gate: first Search Terms pull ingests successfully for one marketplace window
-- The single next bounded build task is `S2A-G2` — prove the first real SP-API SQP pull ingests successfully for one ASIN window.
+- Stage 2A gates are complete.
+- Stage 2B can begin when the next bounded task is selected.
+- The single next bounded build task is `S2B-01` — document Ads API environment contract and secret handling.

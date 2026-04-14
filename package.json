@@ -108,6 +108,7 @@
     "spapi:prepare-first-report-warehouse-mapping": "ts-node src/warehouse/firstSalesTrafficWarehouseMappingCli.ts",
     "spapi:sqp-parse-ingest": "ts-node src/connectors/sp-api/firstSqpParseIngestCli.ts",
     "spapi:sqp-first-real-pull-ingest": "ts-node src/connectors/sp-api/firstSqpRealPullCli.ts",
+    "spapi:search-terms-first-real-pull-ingest": "ts-node src/connectors/sp-api/firstSearchTermsRealPullCli.ts",
     "spapi:dry-run-first-report-warehouse-adapter": "ts-node src/warehouse/firstSalesTrafficWarehouseDryRunCli.ts",
     "spapi:define-first-report-warehouse-interface": "ts-node src/warehouse/firstSalesTrafficWarehouseInterfaceCli.ts",
     "spapi:build-first-report-warehouse-noop": "ts-node src/warehouse/firstSalesTrafficWarehouseNoopCli.ts",
