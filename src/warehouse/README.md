@@ -36,3 +36,16 @@ Current V2 scope:
 - Explicitly records `mode = interface_only`, `writesAttempted = false`,
   `implementationPresent = false`, and `executionAllowed = false`; it does not
   perform any warehouse write or provide a real adapter client
+- `firstSalesTrafficWarehouseNoop.ts`
+- Reads one V2-14 warehouse interface artifact for the first
+  `GET_SALES_AND_TRAFFIC_REPORT`
+- Writes one deterministic no-op adapter artifact to
+  `out/sp-api-warehouse-noop/`
+- Uses local-only `noopPayload.targetHandlers[]` with explicit `operationName`,
+  `keyColumns`, `mappedColumnCount`, `requestStub`, `responseStub`, and
+  `executionState` to prove the adapter implementation boundary shape without
+  introducing any transport or warehouse client
+- Explicitly records `mode = noop`, `writesAttempted = false`,
+  `implementationPresent = true`, `executionAllowed = false`,
+  `executionResult = skipped_noop`, and `skipReason = no_real_write_allowed`;
+  it does not perform any warehouse write or real adapter invocation

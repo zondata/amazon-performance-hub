@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-14`
 Current branch: `v2/02-sp-api-auth`
-Current task: `V2-14 - Add one explicit warehouse adapter interface only`
+Current task: `V2-15 - Add one no-op warehouse adapter implementation only`
 Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 
 ## Stage checklist
@@ -10,15 +10,15 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 - [x] `Stage 2A` - SP-API auth + first Sales and Traffic pull
 
 ## Current task card
-- Task ID: `V2-14`
-- Title: `Add one explicit warehouse adapter interface only`
-- Objective: Extend the existing local warehouse dry-run boundary so the system can execute exactly one bounded interface-definition step in `src/warehouse/**` that reads one local warehouse dry-run artifact and produces one deterministic local warehouse adapter interface artifact for future write execution, with no Supabase writes, no warehouse writes, no UI, and no multi-report orchestration.
+- Task ID: `V2-15`
+- Title: `Add one no-op warehouse adapter implementation only`
+- Objective: Extend the existing local warehouse adapter interface boundary so the system can execute exactly one bounded no-op adapter implementation step in `src/warehouse/**` that reads one local warehouse adapter interface artifact and produces one deterministic local no-op adapter artifact proving the adapter implementation boundary shape, with no Supabase writes, no warehouse writes, no UI, and no multi-report orchestration.
 - Allowed files:
   - `src/warehouse/**`
-  - `src/ingestion/**` only where needed to wire the bounded entrypoint to the new interface-definition boundary
+  - `src/ingestion/**` only where needed to wire the bounded entrypoint to the new no-op adapter boundary
   - `src/testing/fixtures/**` only if needed for unit tests
   - `docs/v2/BUILD_STATUS.md`
-  - `docs/v2/tasks/V2-14-warehouse-adapter-interface-only.md`
+  - `docs/v2/tasks/V2-15-noop-warehouse-adapter-implementation-only.md`
   - `package.json`
 - Forbidden:
   - `apps/web/**`
@@ -37,16 +37,16 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - any real warehouse execution
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run spapi:define-first-report-warehouse-interface -- --report-id <real-report-id>`
+  - [x] `npm run spapi:build-first-report-warehouse-noop -- --report-id <real-report-id>`
   - [x] `npm run verify:wsl`
 - Status: `complete`
 - Notes:
   - Stage 2A remains recorded complete from the earlier successful `npm run verify:wsl` and `npm run spapi:first-call` confirmation on `2026-04-13`.
-  - V2-14 is limited to one warehouse adapter interface-definition step for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 through V2-13, still with no real warehouse writes.
-  - The interface target is intentionally local-only at `out/sp-api-warehouse-interface/`; it is a deterministic JSON interface-definition artifact and not a warehouse write or adapter invocation against any real target.
-  - The interface boundary reads the V2-13 warehouse dry-run artifact, validates the dry-run contract, preserves lineage back through the warehouse mapping, warehouse-ready, canonical, staging, handoff, parsed, and raw artifact paths, and prints only a redacted summary to the console.
-  - The bounded payload shape is `interfacePayload.targetInterfaces[]`, with explicit `operationName`, `keyColumns`, `mappedColumnCount`, `requestContract`, `responseContract`, and `executionFlags`, while `mode = interface_only`, `writesAttempted = false`, `implementationPresent = false`, and `executionAllowed = false`.
-  - The next follow-up after this task must stay bounded to one no-op adapter implementation or one explicit adapter invocation boundary that still forbids any real warehouse write execution.
+  - V2-15 is limited to one no-op warehouse adapter implementation step for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 through V2-14, still with no real warehouse writes.
+  - The no-op target is intentionally local-only at `out/sp-api-warehouse-noop/`; it is a deterministic JSON no-op adapter artifact and not a warehouse write or adapter invocation against any real target.
+  - The no-op boundary reads the V2-14 warehouse interface artifact, validates the interface contract, preserves lineage back through the warehouse dry-run, warehouse mapping, warehouse-ready, canonical, staging, handoff, parsed, and raw artifact paths, and prints only a redacted summary to the console.
+  - The bounded payload shape is `noopPayload.targetHandlers[]`, with explicit `operationName`, `keyColumns`, `mappedColumnCount`, `requestStub`, `responseStub`, and `executionState`, while `mode = noop`, `writesAttempted = false`, `implementationPresent = true`, `executionAllowed = false`, `executionResult = skipped_noop`, and `skipReason = no_real_write_allowed`.
+  - The next follow-up after this task must stay bounded to one explicit adapter invocation boundary that still forbids any real warehouse write execution.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -68,6 +68,7 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 | 2026-04-14 | `V2-12` | `v2/02-sp-api-auth` | Add one bounded warehouse adapter mapping definition path in `src/warehouse/**` for the first Sales and Traffic report, with warehouse-ready validation, deterministic local mapping writing, and no Supabase, warehouse execution, or UI scope. | `complete` | `npm test passed; npm run spapi:prepare-first-report-warehouse-mapping -- --report-id 485677020556 succeeded and wrote out/sp-api-warehouse-mapping/report-485677020556.warehouse-mapping.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one dry-run warehouse adapter execution step or one explicit adapter interface for future write execution, still without any actual write execution. |
 | 2026-04-14 | `V2-13` | `v2/02-sp-api-auth` | Add one bounded dry-run warehouse adapter execution path in `src/warehouse/**` for the first Sales and Traffic report, with cross-validation of the local warehouse-ready and warehouse-mapping artifacts, deterministic local dry-run artifact writing, and no Supabase, warehouse execution, or UI scope. | `complete` | `npm test passed; npm run spapi:dry-run-first-report-warehouse-adapter -- --report-id 485677020556 succeeded and wrote out/sp-api-warehouse-dry-run/report-485677020556.warehouse-dry-run.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one explicit adapter interface for future write execution, still without any actual write execution. |
 | 2026-04-14 | `V2-14` | `v2/02-sp-api-auth` | Add one bounded warehouse adapter interface-definition path in `src/warehouse/**` for the first Sales and Traffic report, with dry-run validation, deterministic local interface artifact writing, and no Supabase, warehouse execution, or UI scope. | `complete` | `npm test passed; npm run spapi:define-first-report-warehouse-interface -- --report-id 485677020556 succeeded and wrote out/sp-api-warehouse-interface/report-485677020556.warehouse-interface.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one no-op adapter implementation or one explicit adapter invocation boundary that still forbids any real warehouse write execution. |
+| 2026-04-14 | `V2-15` | `v2/02-sp-api-auth` | Add one bounded no-op warehouse adapter implementation path in `src/warehouse/**` for the first Sales and Traffic report, with interface validation, deterministic local no-op artifact writing, and no Supabase, warehouse execution, or UI scope. | `complete` | `npm test passed; npm run spapi:build-first-report-warehouse-noop -- --report-id 485677020556 succeeded and wrote out/sp-api-warehouse-noop/report-485677020556.warehouse-noop.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one explicit adapter invocation boundary that still forbids any real warehouse write execution. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -133,7 +134,12 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - `npm run spapi:define-first-report-warehouse-interface -- --report-id 485677020556` was actually run and built the bounded warehouse interface artifact at `out/sp-api-warehouse-interface/report-485677020556.warehouse-interface.json`.
   - The interface summary reported `Warehouse adapter interface version: sp-api-first-report-warehouse-adapter-interface/v1`, `Section count: 2`, `Total row count: 1`, target tables `spapi_sales_and_traffic_by_date_report_rows`, `spapi_sales_and_traffic_by_asin_report_rows`, and deterministic operation names for both targets.
   - `npm run verify:wsl` passed in WSL.
+- V2-15 validation completed:
+  - `npm test` passed locally.
+  - `npm run spapi:build-first-report-warehouse-noop -- --report-id 485677020556` was actually run and built the bounded warehouse no-op artifact at `out/sp-api-warehouse-noop/report-485677020556.warehouse-noop.json`.
+  - The no-op summary reported `Warehouse adapter noop version: sp-api-first-report-warehouse-adapter-noop/v1`, `Section count: 2`, `Total row count: 1`, target tables `spapi_sales_and_traffic_by_date_report_rows`, `spapi_sales_and_traffic_by_asin_report_rows`, deterministic operation names for both targets, and `executionResult = skipped_noop` with `writesAttempted = false`.
+  - `npm run verify:wsl` passed in WSL.
 
 ## Open blockers
-- No blocker is open for V2-14 implementation itself.
-- The next bounded task after V2-14 must remain focused on one no-op adapter implementation or one explicit adapter invocation boundary that still forbids any real warehouse write execution.
+- No blocker is open for V2-15 implementation itself.
+- The next bounded task after V2-15 must remain focused on one explicit adapter invocation boundary that still forbids any real warehouse write execution.

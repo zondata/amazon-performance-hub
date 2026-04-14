@@ -47,3 +47,19 @@ export {
   validateFirstSalesTrafficWarehouseAdapterInterface,
   writeFirstSalesTrafficWarehouseAdapterInterface,
 } from './firstSalesTrafficWarehouseInterface';
+
+export {
+  FIRST_REPORT_WAREHOUSE_ADAPTER_NOOP_VERSION,
+  FIRST_REPORT_WAREHOUSE_NOOP_OUTPUT_DIR,
+  FirstReportWarehouseNoopError,
+  type FirstReportWarehouseAdapterNoopArtifact,
+  type FirstReportWarehouseAdapterNoopSummary,
+  buildFirstSalesTrafficWarehouseAdapterNoop,
+  buildFirstSalesTrafficWarehouseAdapterNoopPath,
+  readFirstSalesTrafficWarehouseAdapterInterfaceArtifact,
+  resolveFirstSalesTrafficWarehouseInterfaceArtifactPath,
+  runFirstSalesTrafficWarehouseAdapterNoopImplementation,
+  summarizeFirstSalesTrafficWarehouseAdapterNoop,
+  validateFirstSalesTrafficWarehouseAdapterNoop,
+  writeFirstSalesTrafficWarehouseAdapterNoop,
+} from './firstSalesTrafficWarehouseNoop';
