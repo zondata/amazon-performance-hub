@@ -14,3 +14,20 @@ export {
   validateFirstSalesTrafficWarehouseAdapterMapping,
   writeFirstSalesTrafficWarehouseAdapterMapping,
 } from './firstSalesTrafficWarehouseMapping';
+
+export {
+  FIRST_REPORT_WAREHOUSE_ADAPTER_DRY_RUN_VERSION,
+  FIRST_REPORT_WAREHOUSE_DRY_RUN_OUTPUT_DIR,
+  FirstReportWarehouseDryRunError,
+  type FirstReportWarehouseAdapterDryRunArtifact,
+  type FirstReportWarehouseAdapterDryRunSummary,
+  buildFirstSalesTrafficWarehouseAdapterDryRun,
+  buildFirstSalesTrafficWarehouseAdapterDryRunPath,
+  readFirstSalesTrafficWarehouseAdapterMappingArtifact,
+  resolveFirstSalesTrafficWarehouseMappingArtifactPath,
+  runFirstSalesTrafficWarehouseAdapterDryRun,
+  summarizeFirstSalesTrafficWarehouseAdapterDryRun,
+  validateFirstSalesTrafficWarehouseAdapterDryRun,
+  validateFirstSalesTrafficWarehouseAdapterDryRunInputs,
+  writeFirstSalesTrafficWarehouseAdapterDryRun,
+} from './firstSalesTrafficWarehouseDryRun';
