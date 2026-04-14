@@ -1,8 +1,8 @@
 # V2 Build Status
 
-Last updated: `2026-04-13`
+Last updated: `2026-04-14`
 Current branch: `v2/02-sp-api-auth`
-Current task: `V2-07 - Add report content parsing only`
+Current task: `V2-08 - Add local structured handoff only`
 Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 
 ## Stage checklist
@@ -10,14 +10,14 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 - [x] `Stage 2A` - SP-API auth + first Sales and Traffic pull
 
 ## Current task card
-- Task ID: `V2-07`
-- Title: `Add report content parsing only`
-- Objective: Extend the existing report-document retrieval boundary so the system can read one downloaded raw Sales and Traffic report document, decompress it if needed, parse its tabular content into a validated local structured artifact, and print a safe parsing summary, with no ingestion pipeline, no warehouse writes, no Supabase writes, and no UI.
+- Task ID: `V2-08`
+- Title: `Add local structured handoff only`
+- Objective: Extend the existing bounded report-content parsing path so the system can produce one stable local structured handoff artifact and one explicit handoff contract for the first Sales and Traffic report, without any ingestion pipeline execution, without any Supabase or warehouse writes, and without any UI.
 - Allowed files:
   - `src/connectors/sp-api/**`
   - `src/testing/fixtures/**` only if needed for unit tests
   - `docs/v2/BUILD_STATUS.md`
-  - `docs/v2/tasks/V2-07-report-content-parsing-only.md`
+  - `docs/v2/tasks/V2-08-local-structured-handoff-only.md`
   - `package.json`
 - Forbidden:
   - `apps/web/**`
@@ -37,15 +37,15 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - any warehouse schema or migration work
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run spapi:parse-first-report -- --report-id <real-report-id>`
+  - [x] `npm run spapi:build-first-report-handoff -- --report-id <real-report-id>`
   - [x] `npm run verify:wsl`
 - Status: `complete`
 - Notes:
   - Stage 2A remains recorded complete from the earlier successful `npm run verify:wsl` and `npm run spapi:first-call` confirmation on `2026-04-13`.
-  - V2-07 is limited to one bounded report-content parsing path for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 through V2-06.
-  - The real V2-06 raw artifact observed in WSL is a gzip-compressed JSON document, not TSV/CSV, so V2-07 must parse that actual format without widening into generic multi-format orchestration.
-  - V2-07 may write only a bounded local parsed artifact under `out/` for operator inspection; it must not write to Supabase or any warehouse layer.
-  - The follow-up after this task must stay bounded to local structured handoff or ingestion boundary definition only, not warehouse writes.
+  - V2-08 is limited to one bounded local structured handoff path for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 through V2-07.
+  - The handoff contract is intentionally local-only and writes only to `out/sp-api-report-handoffs/`; it does not execute ingestion, write to Supabase, or write to any warehouse layer.
+  - The handoff artifact preserves parsed business rows only inside the local JSON artifact and prints only a redacted summary to the console.
+  - The follow-up after this task must stay bounded to one ingestion execution path to a local non-warehouse staging target or another explicit ingestion boundary implementation only, still without warehouse writes.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -60,6 +60,7 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 | 2026-04-13 | `V2-05` | `v2/02-sp-api-auth` | Add one bounded Reports API `getReport` status path for the first Sales and Traffic report, with bounded polling until terminal status or max attempts and no document retrieval, parsing, ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:poll-first-report -- --report-id 485677020556 succeeded after an unrestricted rerun and returned terminal status DONE on attempt 1; npm run verify:wsl passed in WSL` | Next bounded task after this one must stay on report document retrieval only, not parsing or ingestion. |
 | 2026-04-13 | `V2-06` | `v2/02-sp-api-auth` | Add one bounded Reports API report-document retrieval path for the first Sales and Traffic report, with raw document download to a controlled local output path and no parsing, ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:get-first-report-document -- --report-id 485677020556 succeeded after an unrestricted rerun and wrote out/sp-api-report-documents/report-485677020556.document.raw.gz; npm run verify:wsl passed` | Next bounded task after this one must stay on report content parsing only, not ingestion or warehouse writes. |
 | 2026-04-13 | `V2-07` | `v2/02-sp-api-auth` | Add one bounded local report-content parsing path for the first Sales and Traffic report, with gzip-aware raw artifact reading, JSON section tabularization into a controlled local artifact, and no ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:parse-first-report -- --report-id 485677020556 parsed the real bounded artifact into out/sp-api-parsed-reports/report-485677020556.parsed.json; npm run verify:wsl passed` | Next bounded task after this one must stay on local structured handoff or ingestion boundary definition only, not warehouse writes. |
+| 2026-04-14 | `V2-08` | `v2/02-sp-api-auth` | Add one bounded local structured handoff path for the first Sales and Traffic report, with parsed-artifact validation, deterministic handoff artifact writing, and no ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:build-first-report-handoff -- --report-id 485677020556 succeeded and wrote out/sp-api-report-handoffs/report-485677020556.handoff.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one ingestion execution path to a local non-warehouse staging target or another explicit ingestion boundary implementation only, still without warehouse writes. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -90,7 +91,12 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - `npm run spapi:parse-first-report -- --report-id 485677020556` was actually run and parsed the bounded raw artifact into `out/sp-api-parsed-reports/report-485677020556.parsed.json`.
   - The parser summary reported `Detected format: json`, `Decompressed: yes`, `Section count: 2`, and `Total row count: 1`.
   - `npm run verify:wsl` passed in WSL.
+- V2-08 validation completed:
+  - `npm test` passed locally.
+  - `npm run spapi:build-first-report-handoff -- --report-id 485677020556` was actually run and built the bounded handoff artifact at `out/sp-api-report-handoffs/report-485677020556.handoff.json`.
+  - The handoff summary reported `Schema version: sp-api-first-report-handoff/v1`, `Section count: 2`, and `Total row count: 1`.
+  - `npm run verify:wsl` passed in WSL.
 
 ## Open blockers
-- No blocker is open for V2-07 implementation itself.
-- The next bounded task after V2-07 must remain focused on local structured handoff or ingestion boundary definition only, without widening into warehouse writes.
+- No blocker is open for V2-08 implementation itself.
+- The next bounded task after V2-08 must remain focused on one ingestion execution path to a local non-warehouse staging target or another explicit ingestion boundary implementation only, without widening into warehouse writes.

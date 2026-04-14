@@ -49,6 +49,18 @@ export {
   parseFirstSalesAndTrafficReportContent,
 } from './firstReportParser';
 export {
+  FIRST_REPORT_HANDOFF_OUTPUT_DIR,
+  FIRST_REPORT_HANDOFF_SCHEMA_VERSION,
+  resolveFirstSalesAndTrafficParsedArtifactPath,
+  readFirstSalesAndTrafficParsedArtifact,
+  validateFirstSalesAndTrafficReportHandoff,
+  buildFirstSalesAndTrafficReportHandoff,
+  buildFirstSalesAndTrafficReportHandoffPath,
+  writeFirstSalesAndTrafficReportHandoff,
+  summarizeFirstSalesAndTrafficReportHandoff,
+  runFirstSpApiReportHandoff,
+} from './firstReportHandoff';
+export {
   buildReportsGetReportPath,
   buildReportsGetReportDocumentPath,
   LWA_TOKEN_ENDPOINT,
@@ -61,11 +73,14 @@ export {
   SP_API_REGIONS,
   SpApiAuthError,
   SpApiConfigError,
+  SpApiHandoffError,
   SpApiParseError,
   SpApiRequestError,
   type SpApiCredentials,
   type SpApiEnvConfig,
   type SpApiFirstCallSummary,
+  type SpApiFirstReportHandoffSectionSummary,
+  type SpApiFirstReportHandoffSummary,
   type SpApiFirstReportParsedSectionSummary,
   type SpApiFirstReportParseSummary,
   type SpApiFirstReportDocumentSummary,

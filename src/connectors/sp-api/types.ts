@@ -137,6 +137,25 @@ export type SpApiFirstReportParseSummary = {
   sections: SpApiFirstReportParsedSectionSummary[];
 };
 
+export type SpApiFirstReportHandoffSectionSummary = {
+  sectionName: string;
+  headerCount: number;
+  rowCount: number;
+};
+
+export type SpApiFirstReportHandoffSummary = {
+  endpoint: 'buildFirstReportHandoff';
+  reportId: string;
+  reportFamily: 'sales_and_traffic';
+  reportType: SpApiReportType;
+  parsedArtifactPath: string;
+  handoffArtifactPath: string;
+  schemaVersion: string;
+  sectionCount: number;
+  totalRowCount: number;
+  sections: SpApiFirstReportHandoffSectionSummary[];
+};
+
 export type SpApiTokenRefreshResult =
   | {
       ok: true;
@@ -230,6 +249,32 @@ export class SpApiParseError extends Error {
   ) {
     super(message);
     this.name = 'SpApiParseError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export class SpApiHandoffError extends Error {
+  readonly code:
+    | 'artifact_not_found'
+    | 'invalid_input'
+    | 'invalid_content'
+    | 'validation_failed'
+    | 'write_failed';
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'artifact_not_found'
+      | 'invalid_input'
+      | 'invalid_content'
+      | 'validation_failed'
+      | 'write_failed',
+    message: string,
+    details?: unknown
+  ) {
+    super(message);
+    this.name = 'SpApiHandoffError';
     this.code = code;
     this.details = details;
   }
