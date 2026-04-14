@@ -79,3 +79,19 @@ export {
   validateFirstSalesTrafficWarehouseAdapterInvocation,
   writeFirstSalesTrafficWarehouseAdapterInvocation,
 } from './firstSalesTrafficWarehouseInvocation';
+
+export {
+  FIRST_REPORT_WAREHOUSE_ADAPTER_RESULT_CONTRACT_VERSION,
+  FIRST_REPORT_WAREHOUSE_RESULT_CONTRACT_OUTPUT_DIR,
+  FirstReportWarehouseResultContractError,
+  type FirstReportWarehouseAdapterResultContractArtifact,
+  type FirstReportWarehouseAdapterResultContractSummary,
+  buildFirstSalesTrafficWarehouseAdapterResultContract,
+  buildFirstSalesTrafficWarehouseAdapterResultContractPath,
+  readFirstSalesTrafficWarehouseAdapterInvocationArtifact,
+  resolveFirstSalesTrafficWarehouseInvocationArtifactPath,
+  runFirstSalesTrafficWarehouseAdapterResultContract,
+  summarizeFirstSalesTrafficWarehouseAdapterResultContract,
+  validateFirstSalesTrafficWarehouseAdapterResultContract,
+  writeFirstSalesTrafficWarehouseAdapterResultContract,
+} from './firstSalesTrafficWarehouseResultContract';

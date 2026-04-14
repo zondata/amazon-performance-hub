@@ -64,3 +64,18 @@ Current V2 scope:
   `executionAllowed = false`, `invocationResult = blocked_no_write`, and
   `blockReason = no_real_write_allowed`; it does not perform any warehouse
   write or real adapter transport call
+- `firstSalesTrafficWarehouseResultContract.ts`
+- Reads one V2-16 warehouse invocation artifact for the first
+  `GET_SALES_AND_TRAFFIC_REPORT`
+- Writes one deterministic result-contract artifact to
+  `out/sp-api-warehouse-result-contract/`
+- Uses local-only `resultContractPayload.targetResults[]` with explicit
+  `operationName`, `keyColumns`, `mappedColumnCount`, `expectedSuccessResult`,
+  `expectedBlockedResult`, and `resultState` to prove what a future adapter
+  invocation result must contain without introducing any real transport or
+  warehouse client call
+- Explicitly records `mode = result_contract_only`,
+  `writesAttempted = false`, `transportCalled = false`,
+  `executionAllowed = false`, `resultStatus = blocked_no_write`, and
+  `statusReason = no_real_write_allowed`; it does not perform any warehouse
+  write or real adapter transport call
