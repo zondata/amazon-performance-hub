@@ -1,4 +1,16 @@
-export const ingestionBoundary = {
-  status: 'placeholder',
-  scope: 'Stage 1 repo boundary only',
-} as const;
+export {
+  FIRST_REPORT_CANONICAL_INGEST_OUTPUT_DIR,
+  FIRST_REPORT_CANONICAL_INGEST_VERSION,
+  FirstReportCanonicalIngestError,
+  type FirstReportCanonicalIngestArtifact,
+  type FirstReportCanonicalIngestSectionSummary,
+  type FirstReportCanonicalIngestSummary,
+  buildFirstSalesTrafficCanonicalIngestArtifact,
+  buildFirstSalesTrafficCanonicalIngestArtifactPath,
+  readFirstSalesTrafficStageArtifact,
+  resolveFirstSalesTrafficStageArtifactPath,
+  runFirstSalesTrafficCanonicalIngestBoundary,
+  summarizeFirstSalesTrafficCanonicalIngestArtifact,
+  validateFirstSalesTrafficCanonicalIngestArtifact,
+  writeFirstSalesTrafficCanonicalIngestArtifact,
+} from './firstSalesTrafficCanonical';

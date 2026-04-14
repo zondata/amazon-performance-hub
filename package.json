@@ -103,6 +103,7 @@
     "spapi:parse-first-report": "ts-node src/connectors/sp-api/firstReportParserCli.ts",
     "spapi:build-first-report-handoff": "ts-node src/connectors/sp-api/firstReportHandoffCli.ts",
     "spapi:ingest-first-report-local-stage": "ts-node src/connectors/sp-api/firstReportLocalStageCli.ts",
+    "spapi:ingest-first-report-canonical": "ts-node src/ingestion/firstSalesTrafficCanonicalCli.ts",
     "web:dev": "npm --prefix apps/web run dev",
     "web:build": "npm --prefix apps/web run build",
     "web:lint": "npm --prefix apps/web run lint"

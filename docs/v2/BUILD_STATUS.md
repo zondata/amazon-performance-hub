@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-14`
 Current branch: `v2/02-sp-api-auth`
-Current task: `V2-09 - Add one local non-warehouse staging write path only`
+Current task: `V2-10 - Add one explicit non-warehouse ingestion boundary only`
 Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 
 ## Stage checklist
@@ -10,14 +10,15 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 - [x] `Stage 2A` - SP-API auth + first Sales and Traffic pull
 
 ## Current task card
-- Task ID: `V2-09`
-- Title: `Add one local non-warehouse staging write path only`
-- Objective: Extend the existing local structured handoff boundary so the system can execute exactly one bounded ingestion path that reads one local Sales and Traffic handoff artifact and writes it to one local non-warehouse staging target, with no Supabase writes, no warehouse writes, no UI, and no multi-report orchestration.
+- Task ID: `V2-10`
+- Title: `Add one explicit non-warehouse ingestion boundary only`
+- Objective: Extend the existing local non-warehouse staging boundary so the system can execute exactly one explicit ingestion boundary implementation in `src/ingestion/**` that reads one local Sales and Traffic staging artifact and promotes it into one local canonical ingest artifact, with no Supabase writes, no warehouse writes, no UI, and no multi-report orchestration.
 - Allowed files:
-  - `src/connectors/sp-api/**`
+  - `src/ingestion/**`
+  - `src/connectors/sp-api/**` only where needed to wire the bounded entrypoint
   - `src/testing/fixtures/**` only if needed for unit tests
   - `docs/v2/BUILD_STATUS.md`
-  - `docs/v2/tasks/V2-09-local-staging-ingestion-only.md`
+  - `docs/v2/tasks/V2-10-explicit-ingestion-boundary-only.md`
   - `package.json`
 - Forbidden:
   - `apps/web/**`
@@ -36,16 +37,15 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - any warehouse schema or migration work
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run spapi:ingest-first-report-local-stage -- --report-id <real-report-id>`
+  - [x] `npm run spapi:ingest-first-report-canonical -- --report-id <real-report-id>`
   - [x] `npm run verify:wsl`
 - Status: `complete`
 - Notes:
   - Stage 2A remains recorded complete from the earlier successful `npm run verify:wsl` and `npm run spapi:first-call` confirmation on `2026-04-13`.
-  - V2-09 is limited to one bounded local non-warehouse staging ingestion path for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 through V2-08.
-  - The staging target is intentionally local-only at `out/sp-api-staging/`; it is a deterministic JSON staging artifact for ingestion proof and not a warehouse target.
-  - The staging artifact preserves lineage back to the handoff, parsed, and raw artifact paths and prints only a redacted summary to the console.
-  - The missing `docs/v2/tasks/V2-08-local-structured-handoff-only.md` file from the previous task is included in this task's committed scope without rewriting its contents.
-  - The follow-up after this task must stay bounded to either one explicit ingestion boundary implementation into `src/ingestion/**` without warehouse writes, or one bounded promotion step from local staging to a defined non-warehouse canonical ingest shape.
+  - V2-10 is limited to one explicit ingestion boundary implementation in `src/ingestion/**` for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 through V2-09.
+  - The canonical ingest target is intentionally local-only at `out/sp-api-canonical-ingest/`; it is a deterministic JSON canonical ingest artifact for ingestion-boundary proof and not a warehouse target.
+  - The ingestion boundary preserves lineage back to the staging, handoff, parsed, and raw artifact paths and prints only a redacted summary to the console.
+  - The follow-up after this task must stay bounded to one promotion step from the local canonical ingest shape toward a defined warehouse-ready contract, still without actual warehouse writes.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -62,6 +62,7 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 | 2026-04-13 | `V2-07` | `v2/02-sp-api-auth` | Add one bounded local report-content parsing path for the first Sales and Traffic report, with gzip-aware raw artifact reading, JSON section tabularization into a controlled local artifact, and no ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:parse-first-report -- --report-id 485677020556 parsed the real bounded artifact into out/sp-api-parsed-reports/report-485677020556.parsed.json; npm run verify:wsl passed` | Next bounded task after this one must stay on local structured handoff or ingestion boundary definition only, not warehouse writes. |
 | 2026-04-14 | `V2-08` | `v2/02-sp-api-auth` | Add one bounded local structured handoff path for the first Sales and Traffic report, with parsed-artifact validation, deterministic handoff artifact writing, and no ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:build-first-report-handoff -- --report-id 485677020556 succeeded and wrote out/sp-api-report-handoffs/report-485677020556.handoff.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one ingestion execution path to a local non-warehouse staging target or another explicit ingestion boundary implementation only, still without warehouse writes. |
 | 2026-04-14 | `V2-09` | `v2/02-sp-api-auth` | Add one bounded local non-warehouse staging ingestion path for the first Sales and Traffic report, with handoff validation, deterministic local stage writing, and no Supabase, warehouse, or UI scope. | `complete` | `npm test passed; npm run spapi:ingest-first-report-local-stage -- --report-id 485677020556 succeeded and wrote out/sp-api-staging/report-485677020556.local-stage.json; npm run verify:wsl passed` | Next bounded task after this one must stay on either one explicit ingestion boundary implementation into src/ingestion/** without warehouse writes, or one bounded promotion step from local staging to a defined non-warehouse canonical ingest shape. |
+| 2026-04-14 | `V2-10` | `v2/02-sp-api-auth` | Add one bounded explicit ingestion boundary in `src/ingestion/**` for the first Sales and Traffic report, with staging validation, deterministic local canonical ingest writing, and no Supabase, warehouse, or UI scope. | `complete` | `npm test passed; npm run spapi:ingest-first-report-canonical -- --report-id 485677020556 succeeded and wrote out/sp-api-canonical-ingest/report-485677020556.canonical-ingest.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one promotion step from local canonical ingest shape toward a defined warehouse-ready contract, still without actual warehouse writes. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -102,7 +103,12 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - `npm run spapi:ingest-first-report-local-stage -- --report-id 485677020556` was actually run and built the bounded local staging artifact at `out/sp-api-staging/report-485677020556.local-stage.json`.
   - The staging summary reported `Staging version: sp-api-first-report-local-stage/v1`, `Section count: 2`, and `Total row count: 1`.
   - `npm run verify:wsl` passed in WSL.
+- V2-10 validation completed:
+  - `npm test` passed locally.
+  - `npm run spapi:ingest-first-report-canonical -- --report-id 485677020556` was actually run and built the bounded canonical ingest artifact at `out/sp-api-canonical-ingest/report-485677020556.canonical-ingest.json`.
+  - The canonical summary reported `Canonical ingest version: sp-api-first-report-canonical-ingest/v1`, `Section count: 2`, and `Total row count: 1`.
+  - `npm run verify:wsl` passed in WSL.
 
 ## Open blockers
-- No blocker is open for V2-09 implementation itself.
-- The next bounded task after V2-09 must remain focused on either one explicit ingestion boundary implementation into `src/ingestion/**` without warehouse writes, or one bounded promotion step from local staging to a defined non-warehouse canonical ingest shape.
+- No blocker is open for V2-10 implementation itself.
+- The next bounded task after V2-10 must remain focused on one bounded promotion step from the local canonical ingest shape toward a defined warehouse-ready contract, still without actual warehouse writes.
