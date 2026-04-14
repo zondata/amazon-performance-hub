@@ -1,0 +1,1378 @@
+{
+  "version": 1,
+  "last_updated": "2026-04-14",
+  "status_values": [
+    "todo",
+    "in_progress",
+    "done",
+    "blocked",
+    "verify",
+    "skipped"
+  ],
+  "stages": [
+    {
+      "id": "S0",
+      "name": "Stage 0 \u2014 scope freeze and control files",
+      "next_stage": "S1"
+    },
+    {
+      "id": "S1",
+      "name": "Stage 1 \u2014 repo boundary for V2",
+      "next_stage": "S2A"
+    },
+    {
+      "id": "S2A",
+      "name": "Stage 2A \u2014 SP-API auth + first retail pulls",
+      "next_stage": "S2B"
+    },
+    {
+      "id": "S2B",
+      "name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
+      "next_stage": "S3"
+    },
+    {
+      "id": "S3",
+      "name": "Stage 3 \u2014 ingestion backbone",
+      "next_stage": "S4"
+    },
+    {
+      "id": "S4",
+      "name": "Stage 4 \u2014 canonical marts",
+      "next_stage": "S5"
+    },
+    {
+      "id": "S5",
+      "name": "Stage 5 \u2014 memory system",
+      "next_stage": "S6"
+    },
+    {
+      "id": "S6",
+      "name": "Stage 6 \u2014 human UI",
+      "next_stage": "S7"
+    },
+    {
+      "id": "S7",
+      "name": "Stage 7 \u2014 diagnosis + agent review loop",
+      "next_stage": "S8"
+    },
+    {
+      "id": "S8",
+      "name": "Stage 8 \u2014 change logging + execution handoff",
+      "next_stage": "S9"
+    },
+    {
+      "id": "S9",
+      "name": "Stage 9 \u2014 intraday pulse",
+      "next_stage": "S10"
+    },
+    {
+      "id": "S10",
+      "name": "Stage 10 \u2014 ranking automation evaluation",
+      "next_stage": null
+    }
+  ],
+  "milestones": [
+    {
+      "id": "M1",
+      "name": "Ready to move from Stage 2A to Stage 2B",
+      "tasks": [
+        "S2A-G1",
+        "S2A-G2",
+        "S2A-G3",
+        "S2A-G4"
+      ]
+    },
+    {
+      "id": "M2",
+      "name": "First usable app (fast track)",
+      "tasks": [
+        "S2A-G1",
+        "S2A-G2",
+        "S2A-G3",
+        "S2A-G4",
+        "S2B-G1",
+        "S2B-G2",
+        "S2B-G3",
+        "S2B-G4",
+        "S3-G1",
+        "S3-G2",
+        "S4-01",
+        "S4-03",
+        "S4-04",
+        "S4-G1",
+        "S6-01",
+        "S6-03",
+        "S6-04",
+        "S6-05",
+        "S6-G1",
+        "S8-01"
+      ]
+    },
+    {
+      "id": "M3",
+      "name": "Agent-aware review system",
+      "tasks": [
+        "S5-G1",
+        "S7-G1",
+        "S8-G1"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "S0-01",
+      "stage": "S0",
+      "stage_name": "Stage 0 \u2014 scope freeze and control files",
+      "title": "Install V2 control layer files (AGENTS, BUILD_STATUS, task templates, Codex config)",
+      "status": "done",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [],
+      "acceptance": [
+        "docs/v2/AGENTS.md exists",
+        "docs/v2/BUILD_STATUS.md exists",
+        ".codex/config.toml exists",
+        ".codex/rules/default.rules exists",
+        "root AGENTS points to V2 guidance"
+      ]
+    },
+    {
+      "id": "S0-02",
+      "stage": "S0",
+      "stage_name": "Stage 0 \u2014 scope freeze and control files",
+      "title": "Lock scope ADR, non-goals, kill list, and source-of-truth policy",
+      "status": "done",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S0-01"
+      ],
+      "acceptance": [
+        "scope doc or ADR exists",
+        "non-goals are explicit",
+        "source-of-truth rules are documented",
+        "Release 1 exclusions are documented"
+      ]
+    },
+    {
+      "id": "S1-01",
+      "stage": "S1",
+      "stage_name": "Stage 1 \u2014 repo boundary for V2",
+      "title": "Create /v2 route group skeleton for Overview, Queries, and admin pages",
+      "status": "done",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S0-02"
+      ],
+      "acceptance": [
+        "/v2/overview/[asin] exists",
+        "/v2/queries/[asin] exists",
+        "/v2/admin/connections exists",
+        "/v2/admin/imports exists",
+        "/v2/admin/history exists"
+      ]
+    },
+    {
+      "id": "S1-02",
+      "stage": "S1",
+      "stage_name": "Stage 1 \u2014 repo boundary for V2",
+      "title": "Create module boundaries for connectors, ingestion, warehouse, marts, diagnosis, memory, changes, fixtures",
+      "status": "done",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S1-01"
+      ],
+      "acceptance": [
+        "src/connectors/sp-api exists",
+        "src/connectors/ads-api exists",
+        "src/connectors/helium10 exists",
+        "src/ingestion exists",
+        "src/warehouse exists",
+        "src/marts exists",
+        "src/diagnosis exists",
+        "src/memory exists",
+        "src/changes exists",
+        "src/testing/fixtures exists"
+      ]
+    },
+    {
+      "id": "S1-03",
+      "stage": "S1",
+      "stage_name": "Stage 1 \u2014 repo boundary for V2",
+      "title": "Build and lint pass with V2 placeholders and without new V1 sprawl",
+      "status": "done",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S1-01",
+        "S1-02"
+      ],
+      "acceptance": [
+        "web build passes",
+        "lint passes",
+        "no new V2 logic added to monolithic V1 pages"
+      ]
+    },
+    {
+      "id": "S2A-01",
+      "stage": "S2A",
+      "stage_name": "Stage 2A \u2014 SP-API auth + first retail pulls",
+      "title": "Document SP-API environment contract and secret handling",
+      "status": "done",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S1-03"
+      ],
+      "acceptance": [
+        "required env vars documented",
+        "no mixed shared credential blob",
+        "explicit account_id + marketplace model documented"
+      ]
+    },
+    {
+      "id": "S2A-02",
+      "stage": "S2A",
+      "stage_name": "Stage 2A \u2014 SP-API auth + first retail pulls",
+      "title": "Create SP-API connection/auth persistence model",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S2A-01"
+      ],
+      "acceptance": [
+        "sp_api_connections model exists",
+        "token refs persisted safely",
+        "account/marketplace scoping is explicit"
+      ]
+    },
+    {
+      "id": "S2A-03",
+      "stage": "S2A",
+      "stage_name": "Stage 2A \u2014 SP-API auth + first retail pulls",
+      "title": "Implement LWA token exchange and refresh service",
+      "status": "done",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S2A-02"
+      ],
+      "acceptance": [
+        "refresh flow works",
+        "tokens can be renewed",
+        "unit tests cover refresh logic"
+      ]
+    },
+    {
+      "id": "S2A-04",
+      "stage": "S2A",
+      "stage_name": "Stage 2A \u2014 SP-API auth + first retail pulls",
+      "title": "Implement regional endpoint routing, signing, retries, and rate-limit logging",
+      "status": "in_progress",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S2A-03"
+      ],
+      "acceptance": [
+        "regional routing works",
+        "signed requests work",
+        "retries/backoff exist",
+        "rate-limit info logged"
+      ]
+    },
+    {
+      "id": "S2A-05",
+      "stage": "S2A",
+      "stage_name": "Stage 2A \u2014 SP-API auth + first retail pulls",
+      "title": "Implement report create \u2192 poll \u2192 retrieve flow with job persistence",
+      "status": "in_progress",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S2A-04"
+      ],
+      "acceptance": [
+        "report request works",
+        "polling works",
+        "document retrieval works",
+        "job record persists status"
+      ]
+    },
+    {
+      "id": "S2A-06",
+      "stage": "S2A",
+      "stage_name": "Stage 2A \u2014 SP-API auth + first retail pulls",
+      "title": "Implement Sales and Traffic Business Report parse + ingest",
+      "status": "in_progress",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S2A-05"
+      ],
+      "acceptance": [
+        "raw payload stored",
+        "normalized retail facts stored",
+        "account_id and marketplace written on every row"
+      ]
+    },
+    {
+      "id": "S2A-07",
+      "stage": "S2A",
+      "stage_name": "Stage 2A \u2014 SP-API auth + first retail pulls",
+      "title": "Implement Search Query Performance report parse + ingest",
+      "status": "done",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S2A-05"
+      ],
+      "acceptance": [
+        "raw payload stored",
+        "normalized SQP facts stored",
+        "ASIN/query/window scoping preserved"
+      ]
+    },
+    {
+      "id": "S2A-08",
+      "stage": "S2A",
+      "stage_name": "Stage 2A \u2014 SP-API auth + first retail pulls",
+      "title": "Implement Search Terms report parse + ingest",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S2A-05"
+      ],
+      "acceptance": [
+        "raw payload stored",
+        "normalized market query facts stored",
+        "marketplace/window scoping preserved"
+      ]
+    },
+    {
+      "id": "S2A-09",
+      "stage": "S2A",
+      "stage_name": "Stage 2A \u2014 SP-API auth + first retail pulls",
+      "title": "Add SP-API admin connection health check and smoke route/command",
+      "status": "verify",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S2A-03",
+        "S2A-04"
+      ],
+      "acceptance": [
+        "connection health visible",
+        "smoke command exists",
+        "useful errors surface for bad auth"
+      ]
+    },
+    {
+      "id": "S2A-G1",
+      "stage": "S2A",
+      "stage_name": "Stage 2A \u2014 SP-API auth + first retail pulls",
+      "title": "Gate: first Sales and Traffic pull ingests successfully for one account + marketplace",
+      "status": "done",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S2A-06"
+      ],
+      "acceptance": [
+        "one command/job ingests Sales and Traffic for one account/marketplace"
+      ]
+    },
+    {
+      "id": "S2A-G2",
+      "stage": "S2A",
+      "stage_name": "Stage 2A \u2014 SP-API auth + first retail pulls",
+      "title": "Gate: first SQP pull ingests successfully for one ASIN window",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S2A-07"
+      ],
+      "acceptance": [
+        "one command/job ingests SQP for one ASIN/window"
+      ]
+    },
+    {
+      "id": "S2A-G3",
+      "stage": "S2A",
+      "stage_name": "Stage 2A \u2014 SP-API auth + first retail pulls",
+      "title": "Gate: first Search Terms pull ingests successfully for one marketplace window",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S2A-08"
+      ],
+      "acceptance": [
+        "one command/job ingests Search Terms for one marketplace/window"
+      ]
+    },
+    {
+      "id": "S2A-G4",
+      "stage": "S2A",
+      "stage_name": "Stage 2A \u2014 SP-API auth + first retail pulls",
+      "title": "Gate: Stage 2A tests green",
+      "status": "done",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S2A-03",
+        "S2A-04",
+        "S2A-05",
+        "S2A-06",
+        "S2A-07",
+        "S2A-08"
+      ],
+      "acceptance": [
+        "relevant unit/integration tests pass",
+        "build passes",
+        "no secrets committed"
+      ]
+    },
+    {
+      "id": "S2B-01",
+      "stage": "S2B",
+      "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
+      "title": "Document Ads API environment contract and secret handling",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S2A-G4"
+      ],
+      "acceptance": [
+        "required Ads env vars documented",
+        "account/profile mapping rules documented"
+      ]
+    },
+    {
+      "id": "S2B-02",
+      "stage": "S2B",
+      "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
+      "title": "Implement Ads authorization grant, token exchange, and refresh",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S2B-01"
+      ],
+      "acceptance": [
+        "auth grant flow works",
+        "access + refresh tokens persist",
+        "refresh flow is tested"
+      ]
+    },
+    {
+      "id": "S2B-03",
+      "stage": "S2B",
+      "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
+      "title": "Implement Ads profile sync and internal profile mapping",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S2B-02"
+      ],
+      "acceptance": [
+        "profiles can be listed",
+        "internal account/profile/marketplace mapping exists"
+      ]
+    },
+    {
+      "id": "S2B-04",
+      "stage": "S2B",
+      "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
+      "title": "Implement Sponsored Products campaign daily connector",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S2B-03"
+      ],
+      "acceptance": [
+        "campaign daily facts ingest",
+        "dimension mapping stored",
+        "account/profile tags written"
+      ]
+    },
+    {
+      "id": "S2B-05",
+      "stage": "S2B",
+      "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
+      "title": "Implement Sponsored Products target daily connector",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S2B-03"
+      ],
+      "acceptance": [
+        "target daily facts ingest",
+        "target dimensions stored",
+        "account/profile tags written"
+      ]
+    },
+    {
+      "id": "S2B-06",
+      "stage": "S2B",
+      "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
+      "title": "Add Ads raw landing + normalization persistence",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S2B-04",
+        "S2B-05"
+      ],
+      "acceptance": [
+        "raw payloads stored",
+        "normalized facts stored",
+        "idempotent upserts implemented"
+      ]
+    },
+    {
+      "id": "S2B-07",
+      "stage": "S2B",
+      "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
+      "title": "Add Ads admin connection health check and smoke route/command",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S2B-02",
+        "S2B-03"
+      ],
+      "acceptance": [
+        "health visible",
+        "smoke command exists",
+        "useful auth/profile errors surface"
+      ]
+    },
+    {
+      "id": "S2B-G1",
+      "stage": "S2B",
+      "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
+      "title": "Gate: first Ads profile sync succeeds",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S2B-03"
+      ],
+      "acceptance": [
+        "one command/job syncs profiles successfully"
+      ]
+    },
+    {
+      "id": "S2B-G2",
+      "stage": "S2B",
+      "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
+      "title": "Gate: first Sponsored Products campaign daily ingest succeeds",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S2B-04",
+        "S2B-06"
+      ],
+      "acceptance": [
+        "one command/job ingests SP campaign daily facts"
+      ]
+    },
+    {
+      "id": "S2B-G3",
+      "stage": "S2B",
+      "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
+      "title": "Gate: first Sponsored Products target daily ingest succeeds",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S2B-05",
+        "S2B-06"
+      ],
+      "acceptance": [
+        "one command/job ingests SP target daily facts"
+      ]
+    },
+    {
+      "id": "S2B-G4",
+      "stage": "S2B",
+      "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
+      "title": "Gate: Stage 2B tests green",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S2B-02",
+        "S2B-03",
+        "S2B-04",
+        "S2B-05",
+        "S2B-06"
+      ],
+      "acceptance": [
+        "relevant unit/integration tests pass",
+        "build passes",
+        "no secrets committed"
+      ]
+    },
+    {
+      "id": "S3-01",
+      "stage": "S3",
+      "stage_name": "Stage 3 \u2014 ingestion backbone",
+      "title": "Create ingestion_jobs and source_watermarks schema",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S2B-G4"
+      ],
+      "acceptance": [
+        "ingestion_jobs exists",
+        "source_watermarks exists",
+        "job lifecycle tracked"
+      ]
+    },
+    {
+      "id": "S3-02",
+      "stage": "S3",
+      "stage_name": "Stage 3 \u2014 ingestion backbone",
+      "title": "Implement idempotent job runner with retries and replay",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S3-01"
+      ],
+      "acceptance": [
+        "idempotency keys exist",
+        "retry/backoff exists",
+        "failed jobs can replay"
+      ]
+    },
+    {
+      "id": "S3-03",
+      "stage": "S3",
+      "stage_name": "Stage 3 \u2014 ingestion backbone",
+      "title": "Implement backfill by date range and safe reruns",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S3-02"
+      ],
+      "acceptance": [
+        "date-range backfill exists",
+        "reruns do not duplicate rows"
+      ]
+    },
+    {
+      "id": "S3-04",
+      "stage": "S3",
+      "stage_name": "Stage 3 \u2014 ingestion backbone",
+      "title": "Model freshness_state, collection_state, finalization_state, source_confidence",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S3-01"
+      ],
+      "acceptance": [
+        "freshness states exist",
+        "finalization states exist",
+        "every ingest writes status metadata"
+      ]
+    },
+    {
+      "id": "S3-05",
+      "stage": "S3",
+      "stage_name": "Stage 3 \u2014 ingestion backbone",
+      "title": "Build ingestion dashboard/status view",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S3-01",
+        "S3-04"
+      ],
+      "acceptance": [
+        "dashboard shows status by source",
+        "delayed/failed/current is visible"
+      ]
+    },
+    {
+      "id": "S3-06",
+      "stage": "S3",
+      "stage_name": "Stage 3 \u2014 ingestion backbone",
+      "title": "Build manual Helium 10 rank CSV import with validation and dedupe",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S3-02"
+      ],
+      "acceptance": [
+        "validated import exists",
+        "dedupe exists",
+        "coverage gaps visible"
+      ]
+    },
+    {
+      "id": "S3-G1",
+      "stage": "S3",
+      "stage_name": "Stage 3 \u2014 ingestion backbone",
+      "title": "Gate: daily batch jobs runnable end-to-end",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S3-02",
+        "S3-03",
+        "S3-04"
+      ],
+      "acceptance": [
+        "retail, ads, and rank import jobs can run end-to-end"
+      ]
+    },
+    {
+      "id": "S3-G2",
+      "stage": "S3",
+      "stage_name": "Stage 3 \u2014 ingestion backbone",
+      "title": "Gate: app can show current vs delayed vs final data state",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S3-04",
+        "S3-05"
+      ],
+      "acceptance": [
+        "UI or admin surface shows freshness/finalization clearly"
+      ]
+    },
+    {
+      "id": "S4-01",
+      "stage": "S4",
+      "stage_name": "Stage 4 \u2014 canonical marts",
+      "title": "Build product overview mart",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S3-G2"
+      ],
+      "acceptance": [
+        "sales/orders/sessions/CVR/ad spend/TACOS/contribution available by ASIN/date window"
+      ]
+    },
+    {
+      "id": "S4-02",
+      "stage": "S4",
+      "stage_name": "Stage 4 \u2014 canonical marts",
+      "title": "Build root-cause mart",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S4-01"
+      ],
+      "acceptance": [
+        "traffic/conversion/economics/rank/execution features computed"
+      ]
+    },
+    {
+      "id": "S4-03",
+      "stage": "S4",
+      "stage_name": "Stage 4 \u2014 canonical marts",
+      "title": "Build query decision mart",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S3-G2",
+        "S3-06"
+      ],
+      "acceptance": [
+        "ASIN \u00d7 query facts include organic/sponsored rank, tier, SQP stats, ad coverage, objective mode, guardrails"
+      ]
+    },
+    {
+      "id": "S4-04",
+      "stage": "S4",
+      "stage_name": "Stage 4 \u2014 canonical marts",
+      "title": "Build rank tier mart",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S3-06"
+      ],
+      "acceptance": [
+        "tier ladder data available per ASIN \u00d7 query \u00d7 day"
+      ]
+    },
+    {
+      "id": "S4-05",
+      "stage": "S4",
+      "stage_name": "Stage 4 \u2014 canonical marts",
+      "title": "Build change impact mart",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S8-01",
+        "S8-03"
+      ],
+      "acceptance": [
+        "change date/reason/entities/outcome windows/verdict/confidence available"
+      ]
+    },
+    {
+      "id": "S4-G1",
+      "stage": "S4",
+      "stage_name": "Stage 4 \u2014 canonical marts",
+      "title": "Gate: V2 UI can read only from marts, not raw tables",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S4-01",
+        "S4-03",
+        "S4-04"
+      ],
+      "acceptance": [
+        "Overview and Queries bind to marts only"
+      ]
+    },
+    {
+      "id": "S5-01",
+      "stage": "S5",
+      "stage_name": "Stage 5 \u2014 memory system",
+      "title": "Create product context notes and product memory tables",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S4-G1"
+      ],
+      "acceptance": [
+        "product objectives/lifecycle/constraints can be stored with evidence links"
+      ]
+    },
+    {
+      "id": "S5-02",
+      "stage": "S5",
+      "stage_name": "Stage 5 \u2014 memory system",
+      "title": "Create query context notes and asin_query_goals memory tables",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S4-G1"
+      ],
+      "acceptance": [
+        "query goals/guardrails/target tier can be stored with evidence links"
+      ]
+    },
+    {
+      "id": "S5-03",
+      "stage": "S5",
+      "stage_name": "Stage 5 \u2014 memory system",
+      "title": "Create change/outcome/memory evidence link tables",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S8-01",
+        "S8-03"
+      ],
+      "acceptance": [
+        "memory item can trace back to structured evidence"
+      ]
+    },
+    {
+      "id": "S5-04",
+      "stage": "S5",
+      "stage_name": "Stage 5 \u2014 memory system",
+      "title": "Build derived memory cards and agent brief read models",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S5-01",
+        "S5-02",
+        "S5-03"
+      ],
+      "acceptance": [
+        "agent_product_brief, agent_query_brief, agent_change_brief available"
+      ]
+    },
+    {
+      "id": "S5-G1",
+      "stage": "S5",
+      "stage_name": "Stage 5 \u2014 memory system",
+      "title": "Gate: agent can answer what changed, why, and what happened last time from structured tables",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": false,
+      "depends_on": [
+        "S5-04"
+      ],
+      "acceptance": [
+        "agent brief views are queryable and evidence-linked"
+      ]
+    },
+    {
+      "id": "S6-01",
+      "stage": "S6",
+      "stage_name": "Stage 6 \u2014 human UI",
+      "title": "Build Overview page KPI shell",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S4-G1"
+      ],
+      "acceptance": [
+        "Overview shows KPI cards and date/window controls"
+      ]
+    },
+    {
+      "id": "S6-02",
+      "stage": "S6",
+      "stage_name": "Stage 6 \u2014 human UI",
+      "title": "Build Overview root-cause panel with evidence for/against",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S4-02"
+      ],
+      "acceptance": [
+        "root-cause panel shows ranked causes with evidence for/against"
+      ]
+    },
+    {
+      "id": "S6-03",
+      "stage": "S6",
+      "stage_name": "Stage 6 \u2014 human UI",
+      "title": "Build Queries ladder summary and query table",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S4-03",
+        "S4-04"
+      ],
+      "acceptance": [
+        "Queries page shows ladder counts and filterable query list"
+      ]
+    },
+    {
+      "id": "S6-04",
+      "stage": "S6",
+      "stage_name": "Stage 6 \u2014 human UI",
+      "title": "Build per-query drilldown panel",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S6-03"
+      ],
+      "acceptance": [
+        "query drilldown shows rank history, SQP, ad coverage, recent changes"
+      ]
+    },
+    {
+      "id": "S6-05",
+      "stage": "S6",
+      "stage_name": "Stage 6 \u2014 human UI",
+      "title": "Add freshness/finalization banners to Overview and Queries",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S3-G2",
+        "S6-01",
+        "S6-03"
+      ],
+      "acceptance": [
+        "pages show current/delayed/final states clearly"
+      ]
+    },
+    {
+      "id": "S6-G1",
+      "stage": "S6",
+      "stage_name": "Stage 6 \u2014 human UI",
+      "title": "Gate: first usable Overview + Queries operating flow",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": true,
+      "depends_on": [
+        "S6-01",
+        "S6-03",
+        "S6-04",
+        "S6-05"
+      ],
+      "acceptance": [
+        "operator can inspect ASIN performance and query tiers without leaving V2"
+      ]
+    },
+    {
+      "id": "S7-01",
+      "stage": "S7",
+      "stage_name": "Stage 7 \u2014 diagnosis + agent review loop",
+      "title": "Build deterministic feature extraction engine",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S4-02"
+      ],
+      "acceptance": [
+        "features for traffic/conversion/economics/rank/execution extracted reproducibly"
+      ]
+    },
+    {
+      "id": "S7-02",
+      "stage": "S7",
+      "stage_name": "Stage 7 \u2014 diagnosis + agent review loop",
+      "title": "Build candidate-cause ranking logic",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S7-01"
+      ],
+      "acceptance": [
+        "candidate causes and scores are computed before narrative generation"
+      ]
+    },
+    {
+      "id": "S7-03",
+      "stage": "S7",
+      "stage_name": "Stage 7 \u2014 diagnosis + agent review loop",
+      "title": "Build agent review contract and read surface",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S5-G1",
+        "S7-02"
+      ],
+      "acceptance": [
+        "agent input/output contract exists and uses structured facts + memory"
+      ]
+    },
+    {
+      "id": "S7-04",
+      "stage": "S7",
+      "stage_name": "Stage 7 \u2014 diagnosis + agent review loop",
+      "title": "Build inspectable evidence panel and disagreement support",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S7-03"
+      ],
+      "acceptance": [
+        "agent outputs evidence for and against, confidence, missing data, and no-action when warranted"
+      ]
+    },
+    {
+      "id": "S7-G1",
+      "stage": "S7",
+      "stage_name": "Stage 7 \u2014 diagnosis + agent review loop",
+      "title": "Gate: inspectable agent review loop working",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": false,
+      "depends_on": [
+        "S7-03",
+        "S7-04"
+      ],
+      "acceptance": [
+        "agent can challenge a diagnosis using linked evidence"
+      ]
+    },
+    {
+      "id": "S8-01",
+      "stage": "S8",
+      "stage_name": "Stage 8 \u2014 change logging + execution handoff",
+      "title": "Build change request form and intent log model",
+      "status": "todo",
+      "priority": "must",
+      "gate": false,
+      "fast_track": true,
+      "depends_on": [
+        "S6-G1"
+      ],
+      "acceptance": [
+        "operator can log ASIN/query/objective/hypothesis/action plan"
+      ]
+    },
+    {
+      "id": "S8-02",
+      "stage": "S8",
+      "stage_name": "Stage 8 \u2014 change logging + execution handoff",
+      "title": "Record guardrail checks and warnings with each planned change",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S8-01"
+      ],
+      "acceptance": [
+        "guardrails checked are saved with the change"
+      ]
+    },
+    {
+      "id": "S8-03",
+      "stage": "S8",
+      "stage_name": "Stage 8 \u2014 change logging + execution handoff",
+      "title": "Create execution confirmation and outcome review queue",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S8-01"
+      ],
+      "acceptance": [
+        "review windows auto-schedule after execution confirmation"
+      ]
+    },
+    {
+      "id": "S8-04",
+      "stage": "S8",
+      "stage_name": "Stage 8 \u2014 change logging + execution handoff",
+      "title": "Show recent change history on Queries page",
+      "status": "todo",
+      "priority": "should",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S8-01",
+        "S6-03"
+      ],
+      "acceptance": [
+        "recent changes visible in query context"
+      ]
+    },
+    {
+      "id": "S8-G1",
+      "stage": "S8",
+      "stage_name": "Stage 8 \u2014 change logging + execution handoff",
+      "title": "Gate: no optimization action exists without intent log",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": false,
+      "depends_on": [
+        "S8-01"
+      ],
+      "acceptance": [
+        "all adjustment flows require intent logging"
+      ]
+    },
+    {
+      "id": "S9-01",
+      "stage": "S9",
+      "stage_name": "Stage 9 \u2014 intraday pulse",
+      "title": "Create intraday ads/pulse schema",
+      "status": "todo",
+      "priority": "later",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S3-G2"
+      ],
+      "acceptance": [
+        "intraday schema can store provisional pulse data"
+      ]
+    },
+    {
+      "id": "S9-02",
+      "stage": "S9",
+      "stage_name": "Stage 9 \u2014 intraday pulse",
+      "title": "Integrate Marketing Stream or chosen intraday source",
+      "status": "todo",
+      "priority": "later",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S9-01"
+      ],
+      "acceptance": [
+        "intraday connector ingests hourly-ish metrics"
+      ]
+    },
+    {
+      "id": "S9-03",
+      "stage": "S9",
+      "stage_name": "Stage 9 \u2014 intraday pulse",
+      "title": "Build pulse UI with revision risk labels",
+      "status": "todo",
+      "priority": "later",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S9-02",
+        "S6-01"
+      ],
+      "acceptance": [
+        "today cards show source, refresh time, revision risk, baseline"
+      ]
+    },
+    {
+      "id": "S9-G1",
+      "stage": "S9",
+      "stage_name": "Stage 9 \u2014 intraday pulse",
+      "title": "Gate: provisional pulse is clearly separated from final daily data",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": false,
+      "depends_on": [
+        "S9-03"
+      ],
+      "acceptance": [
+        "no UI surface confuses provisional data with final data"
+      ]
+    },
+    {
+      "id": "S10-01",
+      "stage": "S10",
+      "stage_name": "Stage 10 \u2014 ranking automation evaluation",
+      "title": "Harden manual Helium 10 parser and exception handling",
+      "status": "todo",
+      "priority": "later",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S3-06"
+      ],
+      "acceptance": [
+        "manual import is validated and cannot silently corrupt data"
+      ]
+    },
+    {
+      "id": "S10-02",
+      "stage": "S10",
+      "stage_name": "Stage 10 \u2014 ranking automation evaluation",
+      "title": "Add coverage/dedupe/exception reporting for rank imports",
+      "status": "todo",
+      "priority": "later",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S10-01"
+      ],
+      "acceptance": [
+        "coverage and exceptions are visible after import"
+      ]
+    },
+    {
+      "id": "S10-03",
+      "stage": "S10",
+      "stage_name": "Stage 10 \u2014 ranking automation evaluation",
+      "title": "Evaluate ranking automation options and document decision",
+      "status": "todo",
+      "priority": "later",
+      "gate": false,
+      "fast_track": false,
+      "depends_on": [
+        "S10-01",
+        "S10-02"
+      ],
+      "acceptance": [
+        "decision doc states keep-manual vs automate path and risks"
+      ]
+    },
+    {
+      "id": "S10-G1",
+      "stage": "S10",
+      "stage_name": "Stage 10 \u2014 ranking automation evaluation",
+      "title": "Gate: ranking automation decision is explicit and non-blocking",
+      "status": "todo",
+      "priority": "must",
+      "gate": true,
+      "fast_track": false,
+      "depends_on": [
+        "S10-03"
+      ],
+      "acceptance": [
+        "manual import remains reliable even if automation is deferred"
+      ]
+    }
+  ]
+}

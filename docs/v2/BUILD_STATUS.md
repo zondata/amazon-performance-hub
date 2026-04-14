@@ -2,52 +2,51 @@
 
 Last updated: `2026-04-14`
 Current branch: `v2/02-sp-api-auth`
-Current task: `V2-18 - Post-Stage-2A warehouse boundary buildout — Add one explicit write-authority gate only`
-Current stage: `Post-Stage-2A warehouse boundary buildout`
+Current task: `S2A-07 - Implement Search Query Performance report parse + ingest`
+Current stage: `Stage 2A - SP-API auth + first retail pulls`
 
 ## Stage checklist
 - [x] `Stage 1` - Repo boundary and V2 route/module skeleton
-- [x] `Stage 2A` - SP-API auth + first Sales and Traffic pull
+- [ ] `Stage 2A` - SP-API auth + first retail pulls
 
 ## Current task card
-- Task ID: `V2-18`
-- Title: `Post-Stage-2A warehouse boundary buildout — Add one explicit write-authority gate only`
-- Objective: Extend the existing local warehouse adapter result-contract boundary so the system can execute exactly one bounded write-authority-gate step in `src/warehouse/**` that reads one local warehouse result-contract artifact and produces one deterministic local warehouse write-authority artifact proving the gate boundary shape, with no Supabase writes, no warehouse writes, no UI, and no multi-report orchestration.
+- Task ID: `S2A-07`
+- Title: `Implement Search Query Performance report parse + ingest`
+- Objective: Add one bounded SP-API SQP parse-and-ingest CLI path that reads one local SQP raw artifact, validates the SQP ASIN-window family, and ingests it through the existing SQP weekly raw ingest boundary without widening into Search Terms, warehouse, UI, or Stage 2B work.
 - Allowed files:
-  - `src/warehouse/**`
-  - `src/ingestion/**` only where needed to wire the bounded entrypoint to the new write-authority-gate boundary
-  - `src/testing/fixtures/**` only if needed for unit tests
-  - `docs/v2/BUILD_STATUS.md`
-  - `docs/v2/tasks/V2-18-write-authority-gate-only.md`
+  - `src/connectors/sp-api/**`
+  - `src/ingest/**`
+  - `src/sqp/**`
+  - `src/testing/fixtures/**`
   - `package.json`
+  - `docs/v2/BUILD_STATUS.md`
+  - `docs/v2/TASK_REGISTRY.json`
+  - `docs/v2/TASK_PROGRESS.md`
+  - `docs/v2/tasks/S2A-07-sp-api-sqp-parse-ingest.md`
 - Forbidden:
-  - `apps/web/**`
-  - `src/marts/**`
-  - `src/diagnosis/**`
-  - `src/memory/**`
-  - `src/changes/**`
-  - `supabase/**`
-  - `.env*` files with real secrets
-  - any database write
-  - any UI
-  - any Ads API work
-  - any generic multi-report orchestration
-  - any downstream business logic or KPI interpretation
-  - any warehouse schema or migration work
-  - any real warehouse execution
+  - Search Terms implementation
+  - Sales and Traffic behavior changes
+  - warehouse writes
+  - schema migrations
+  - UI changes
+  - Stage 2B work
+  - generic multi-report orchestration
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run spapi:gate-first-report-warehouse-write-authority -- --report-id <real-report-id>`
+  - [x] `npm run spapi:sqp-parse-ingest -- --raw-path src/testing/fixtures/sp-api/report-fixture-sqp-asin-window.sqp.raw.csv`
   - [x] `npm run verify:wsl`
+  - [x] `node scripts/v2-progress.mjs --write`
 - Status: `complete`
 - Notes:
-  - Stage 2A remains recorded complete from the earlier successful `npm run verify:wsl` and `npm run spapi:first-call` confirmation on `2026-04-13`.
-  - The active warehouse workstream label is now `Post-Stage-2A warehouse boundary buildout` so the current boundary-buildout sequence no longer implies that Stage 2A itself is unfinished.
-  - V2-18 is limited to one warehouse write-authority-gate step for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 through V2-17, still with no real warehouse writes.
-  - The write-authority target is intentionally local-only at `out/sp-api-warehouse-write-authority/`; it is a deterministic JSON gate artifact and not a warehouse write or adapter transport call against any real target.
-  - The write-authority boundary reads the V2-17 warehouse result-contract artifact, validates the result-contract shape, preserves lineage back through the warehouse invocation, warehouse no-op, warehouse interface, warehouse dry-run, warehouse mapping, warehouse-ready, canonical, staging, handoff, parsed, and raw artifact paths, and prints only a redacted summary to the console.
-  - The bounded payload shape is `writeAuthorityPayload.targetGateDecisions[]`, with explicit `operationName`, `keyColumns`, `mappedColumnCount`, `decision`, `decisionReason`, `requiredAuthority`, and `gateState`, while `mode = write_authority_gate_only`, `writesAttempted = false`, `transportCalled = false`, `executionAllowed = false`, `writeAuthorityDecision = denied`, `decisionReason = no_real_write_allowed`, and `authoritySource = local_gate_only`.
-  - The next follow-up after this task must stay bounded to one explicit Stage 2B entry handoff note or another clearly named next-stage gate that still forbids any real warehouse write execution.
+  - The new bounded CLI is `npm run spapi:sqp-parse-ingest`.
+  - The task-specific command was validated with the committed fixture artifact at `src/testing/fixtures/sp-api/report-fixture-sqp-asin-window.sqp.raw.csv`.
+  - `S2A-07` is complete.
+  - `Stage 2B can start now: no`.
+  - Exact remaining gate tasks before Stage 2B can begin:
+    - `S2A-G2` — Gate: first SQP pull ingests successfully for one ASIN window
+    - `S2A-G3` — Gate: first Search Terms pull ingests successfully for one marketplace window
+  - The fixture-backed ingest proves the bounded implementation path, but it does not close `S2A-G2` because that gate still requires a first real SQP pull for one ASIN window.
+  - Single next bounded build task: `S2A-G2 - Gate: first SQP pull ingests successfully for one ASIN window`
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -73,6 +72,8 @@ Current stage: `Post-Stage-2A warehouse boundary buildout`
 | 2026-04-14 | `V2-16` | `v2/02-sp-api-auth` | Add one bounded warehouse adapter invocation boundary path in `src/warehouse/**` for the first Sales and Traffic report, with no-op validation, deterministic local invocation artifact writing, and no Supabase, warehouse execution, or UI scope. | `complete` | `npm test passed; npm run spapi:invoke-first-report-warehouse-adapter -- --report-id 485677020556 succeeded and wrote out/sp-api-warehouse-invocation/report-485677020556.warehouse-invocation.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one adapter result contract step or one explicit write-authority gate that still forbids any real warehouse write execution. |
 | 2026-04-14 | `V2-17` | `v2/02-sp-api-auth` | Add one bounded warehouse adapter result-contract path in `src/warehouse/**` for the first Sales and Traffic report, with invocation validation, deterministic local result-contract artifact writing, and no Supabase, warehouse execution, or UI scope. | `complete` | `npm test passed; npm run spapi:build-first-report-warehouse-result-contract -- --report-id 485677020556 succeeded and wrote out/sp-api-warehouse-result-contract/report-485677020556.warehouse-result-contract.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one write-authority gate that still forbids any real warehouse write execution. |
 | 2026-04-14 | `V2-18` | `v2/02-sp-api-auth` | Post-Stage-2A warehouse boundary buildout — add one bounded warehouse write-authority-gate path in `src/warehouse/**` for the first Sales and Traffic report, with result-contract validation, deterministic local write-authority artifact writing, and no Supabase, warehouse execution, or UI scope. | `complete` | `npm test passed; npm run spapi:gate-first-report-warehouse-write-authority -- --report-id 485677020556 succeeded and wrote out/sp-api-warehouse-write-authority/report-485677020556.warehouse-write-authority.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one explicit Stage 2B entry handoff note or another clearly named next-stage gate that still forbids any real warehouse write execution. |
+| 2026-04-14 | `V2-AUDIT-STATUS` | `v2/02-sp-api-auth` | Audit the current branch against the master V2 task registry, regenerate progress output, and restate the actual stage and remaining Stage 2A gate tasks without building features. | `complete` | `node scripts/v2-progress.mjs --write passed` | Next bounded task is `S2A-07` — implement the first SP-API SQP pull/ingest gate proof. |
+| 2026-04-14 | `S2A-07` | `v2/02-sp-api-auth` | Add one bounded SP-API SQP parse+ingest path that reads one local SQP raw artifact, validates the ASIN-window SQP family, and ingests it through the existing SQP weekly raw ingest boundary without widening into Search Terms, warehouse, or UI work. | `complete` | `npm test passed; npm run spapi:sqp-parse-ingest -- --raw-path src/testing/fixtures/sp-api/report-fixture-sqp-asin-window.sqp.raw.csv succeeded with upload id 55f35127-63de-4481-b7b2-0d8a99eb1618; npm run verify:wsl passed` | Next bounded task is `S2A-G2` — prove one first real SQP pull ingests successfully for one ASIN window. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -81,6 +82,7 @@ Current stage: `Post-Stage-2A warehouse boundary buildout`
   - `unzip -l out/debug-snapshots/*.zip | sed -n '1,120p' || true` inspected the generated bundle contents.
   - `git config --get core.hooksPath` returned `.githooks`.
   - `sed -n '1,220p' .githooks/pre-commit || true` inspected the active hook implementation before replacement.
+  - `node scripts/v2-progress.mjs --write` regenerated `docs/v2/TASK_PROGRESS.md` from the audited task registry statuses.
 - V2-03 operator confirmation already received:
   - `npm run verify:wsl`
   - `npm run spapi:first-call`
@@ -158,7 +160,15 @@ Current stage: `Post-Stage-2A warehouse boundary buildout`
   - `npm run spapi:gate-first-report-warehouse-write-authority -- --report-id 485677020556` was actually run and built the bounded warehouse write-authority artifact at `out/sp-api-warehouse-write-authority/report-485677020556.warehouse-write-authority.json`.
   - The write-authority summary reported `Warehouse write-authority version: sp-api-first-report-warehouse-write-authority/v1`, `Section count: 2`, `Total row count: 1`, target tables `spapi_sales_and_traffic_by_date_report_rows`, `spapi_sales_and_traffic_by_asin_report_rows`, deterministic operation names for both targets, and `writeAuthorityDecision = denied` with `transportCalled = false`.
   - `npm run verify:wsl` passed in WSL.
+- S2A-07 validation completed:
+  - `npm test` passed locally.
+  - `npm run spapi:sqp-parse-ingest -- --raw-path src/testing/fixtures/sp-api/report-fixture-sqp-asin-window.sqp.raw.csv` was actually run. The sandboxed attempt failed at the Supabase network boundary, so it was rerun unrestricted and succeeded through the existing SQP ingest sink.
+  - The bounded CLI summary reported `Report ID: fixture-sqp-asin-window`, `Scope type: asin`, `Scope value: B0B2K57W5R`, `Coverage window: 2026-02-01 -> 2026-02-07`, `Row count: 1`, `Upload ID: 55f35127-63de-4481-b7b2-0d8a99eb1618`, and `Warnings: 0`.
+  - `npm run verify:wsl` passed in WSL.
 
 ## Open blockers
-- No blocker is open for V2-18 implementation itself.
-- The next bounded task after V2-18 must remain focused on one explicit Stage 2B entry handoff note or another clearly named next-stage gate that still forbids any real warehouse write execution.
+- Stage 2B cannot start yet because `S2A-G2` and `S2A-G3` remain open.
+- The exact remaining Stage 2A gate tasks are:
+  - `S2A-G2` — Gate: first SQP pull ingests successfully for one ASIN window
+  - `S2A-G3` — Gate: first Search Terms pull ingests successfully for one marketplace window
+- The single next bounded build task is `S2A-G2` — prove the first real SP-API SQP pull ingests successfully for one ASIN window.

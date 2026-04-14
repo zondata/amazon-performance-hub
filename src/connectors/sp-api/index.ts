@@ -73,6 +73,16 @@ export {
   runFirstSpApiLocalStageIngestion,
 } from './firstReportLocalStage';
 export {
+  SP_API_SQP_RAW_OUTPUT_DIR,
+  buildSpApiSqpMaterializedCsvPath,
+  resolveSpApiSqpRawArtifactPath,
+  readSpApiSqpRawArtifact,
+  parseValidatedSpApiSqpRawArtifact,
+  ensureSpApiSqpIngestCsvPath,
+  summarizeSpApiSqpParseIngest,
+  runFirstSpApiSqpParseIngest,
+} from './firstSqpParseIngest';
+export {
   buildReportsGetReportPath,
   buildReportsGetReportDocumentPath,
   LWA_TOKEN_ENDPOINT,
@@ -88,6 +98,7 @@ export {
   SpApiHandoffError,
   SpApiLocalStageError,
   SpApiParseError,
+  SpApiSqpIngestError,
   SpApiRequestError,
   type SpApiCredentials,
   type SpApiEnvConfig,
@@ -98,6 +109,7 @@ export {
   type SpApiFirstReportLocalStageSummary,
   type SpApiFirstReportParsedSectionSummary,
   type SpApiFirstReportParseSummary,
+  type SpApiSqpParseIngestSummary,
   type SpApiFirstReportDocumentSummary,
   type SpApiFirstReportRequestSummary,
   type SpApiFirstReportStatusPollMode,

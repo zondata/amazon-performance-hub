@@ -175,6 +175,19 @@ export type SpApiFirstReportLocalStageSummary = {
   sections: SpApiFirstReportLocalStageSectionSummary[];
 };
 
+export type SpApiSqpParseIngestSummary = {
+  endpoint: 'spApiSqpParseAndIngest';
+  reportId: string | null;
+  inputFilePath: string;
+  scopeType: 'asin';
+  scopeValue: string;
+  coverageStart: string;
+  coverageEnd: string;
+  rowCount: number;
+  uploadId: string | null;
+  warningsCount: number;
+};
+
 export type SpApiTokenRefreshResult =
   | {
       ok: true;
@@ -320,6 +333,34 @@ export class SpApiLocalStageError extends Error {
   ) {
     super(message);
     this.name = 'SpApiLocalStageError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export class SpApiSqpIngestError extends Error {
+  readonly code:
+    | 'artifact_not_found'
+    | 'invalid_input'
+    | 'invalid_content'
+    | 'validation_failed'
+    | 'write_failed'
+    | 'ingest_failed';
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'artifact_not_found'
+      | 'invalid_input'
+      | 'invalid_content'
+      | 'validation_failed'
+      | 'write_failed'
+      | 'ingest_failed',
+    message: string,
+    details?: unknown
+  ) {
+    super(message);
+    this.name = 'SpApiSqpIngestError';
     this.code = code;
     this.details = details;
   }
