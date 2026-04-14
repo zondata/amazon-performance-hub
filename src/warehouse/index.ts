@@ -95,3 +95,19 @@ export {
   validateFirstSalesTrafficWarehouseAdapterResultContract,
   writeFirstSalesTrafficWarehouseAdapterResultContract,
 } from './firstSalesTrafficWarehouseResultContract';
+
+export {
+  FIRST_REPORT_WAREHOUSE_WRITE_AUTHORITY_OUTPUT_DIR,
+  FIRST_REPORT_WAREHOUSE_WRITE_AUTHORITY_VERSION,
+  FirstReportWarehouseWriteAuthorityError,
+  type FirstReportWarehouseWriteAuthorityArtifact,
+  type FirstReportWarehouseWriteAuthoritySummary,
+  buildFirstSalesTrafficWarehouseWriteAuthority,
+  buildFirstSalesTrafficWarehouseWriteAuthorityPath,
+  readFirstSalesTrafficWarehouseAdapterResultContractArtifact,
+  resolveFirstSalesTrafficWarehouseResultContractArtifactPath,
+  runFirstSalesTrafficWarehouseWriteAuthorityGate,
+  summarizeFirstSalesTrafficWarehouseWriteAuthority,
+  validateFirstSalesTrafficWarehouseWriteAuthority,
+  writeFirstSalesTrafficWarehouseWriteAuthority,
+} from './firstSalesTrafficWarehouseWriteAuthority';

@@ -79,3 +79,19 @@ Current V2 scope:
   `executionAllowed = false`, `resultStatus = blocked_no_write`, and
   `statusReason = no_real_write_allowed`; it does not perform any warehouse
   write or real adapter transport call
+- `firstSalesTrafficWarehouseWriteAuthority.ts`
+- Reads one V2-17 warehouse result-contract artifact for the first
+  `GET_SALES_AND_TRAFFIC_REPORT`
+- Writes one deterministic write-authority gate artifact to
+  `out/sp-api-warehouse-write-authority/`
+- Uses local-only `writeAuthorityPayload.targetGateDecisions[]` with explicit
+  `operationName`, `keyColumns`, `mappedColumnCount`, `decision`,
+  `decisionReason`, `requiredAuthority`, and `gateState` to prove what a future
+  write-authority gate must evaluate before any warehouse adapter write could
+  proceed
+- Explicitly records `mode = write_authority_gate_only`,
+  `writesAttempted = false`, `transportCalled = false`,
+  `executionAllowed = false`, `writeAuthorityDecision = denied`,
+  `decisionReason = no_real_write_allowed`, and
+  `authoritySource = local_gate_only`; it does not perform any warehouse write
+  or real adapter transport call

@@ -2,23 +2,23 @@
 
 Last updated: `2026-04-14`
 Current branch: `v2/02-sp-api-auth`
-Current task: `V2-17 - Add one warehouse adapter result contract only`
-Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
+Current task: `V2-18 - Post-Stage-2A warehouse boundary buildout — Add one explicit write-authority gate only`
+Current stage: `Post-Stage-2A warehouse boundary buildout`
 
 ## Stage checklist
 - [x] `Stage 1` - Repo boundary and V2 route/module skeleton
 - [x] `Stage 2A` - SP-API auth + first Sales and Traffic pull
 
 ## Current task card
-- Task ID: `V2-17`
-- Title: `Add one warehouse adapter result contract only`
-- Objective: Extend the existing local warehouse adapter invocation boundary so the system can execute exactly one bounded result-contract step in `src/warehouse/**` that reads one local warehouse invocation artifact and produces one deterministic local warehouse adapter result-contract artifact proving the result boundary shape, with no Supabase writes, no warehouse writes, no UI, and no multi-report orchestration.
+- Task ID: `V2-18`
+- Title: `Post-Stage-2A warehouse boundary buildout — Add one explicit write-authority gate only`
+- Objective: Extend the existing local warehouse adapter result-contract boundary so the system can execute exactly one bounded write-authority-gate step in `src/warehouse/**` that reads one local warehouse result-contract artifact and produces one deterministic local warehouse write-authority artifact proving the gate boundary shape, with no Supabase writes, no warehouse writes, no UI, and no multi-report orchestration.
 - Allowed files:
   - `src/warehouse/**`
-  - `src/ingestion/**` only where needed to wire the bounded entrypoint to the new result-contract boundary
+  - `src/ingestion/**` only where needed to wire the bounded entrypoint to the new write-authority-gate boundary
   - `src/testing/fixtures/**` only if needed for unit tests
   - `docs/v2/BUILD_STATUS.md`
-  - `docs/v2/tasks/V2-17-warehouse-adapter-result-contract-only.md`
+  - `docs/v2/tasks/V2-18-write-authority-gate-only.md`
   - `package.json`
 - Forbidden:
   - `apps/web/**`
@@ -37,16 +37,17 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - any real warehouse execution
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run spapi:build-first-report-warehouse-result-contract -- --report-id <real-report-id>`
+  - [x] `npm run spapi:gate-first-report-warehouse-write-authority -- --report-id <real-report-id>`
   - [x] `npm run verify:wsl`
 - Status: `complete`
 - Notes:
   - Stage 2A remains recorded complete from the earlier successful `npm run verify:wsl` and `npm run spapi:first-call` confirmation on `2026-04-13`.
-  - V2-17 is limited to one warehouse adapter result-contract step for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 through V2-16, still with no real warehouse writes.
-  - The result-contract target is intentionally local-only at `out/sp-api-warehouse-result-contract/`; it is a deterministic JSON result-contract artifact and not a warehouse write or adapter transport call against any real target.
-  - The result-contract boundary reads the V2-16 warehouse invocation artifact, validates the invocation contract, preserves lineage back through the warehouse no-op, warehouse interface, warehouse dry-run, warehouse mapping, warehouse-ready, canonical, staging, handoff, parsed, and raw artifact paths, and prints only a redacted summary to the console.
-  - The bounded payload shape is `resultContractPayload.targetResults[]`, with explicit `operationName`, `keyColumns`, `mappedColumnCount`, `expectedSuccessResult`, `expectedBlockedResult`, and `resultState`, while `mode = result_contract_only`, `writesAttempted = false`, `transportCalled = false`, `executionAllowed = false`, `resultStatus = blocked_no_write`, and `statusReason = no_real_write_allowed`.
-  - The next follow-up after this task must stay bounded to one write-authority gate that still forbids any real warehouse write execution.
+  - The active warehouse workstream label is now `Post-Stage-2A warehouse boundary buildout` so the current boundary-buildout sequence no longer implies that Stage 2A itself is unfinished.
+  - V2-18 is limited to one warehouse write-authority-gate step for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 through V2-17, still with no real warehouse writes.
+  - The write-authority target is intentionally local-only at `out/sp-api-warehouse-write-authority/`; it is a deterministic JSON gate artifact and not a warehouse write or adapter transport call against any real target.
+  - The write-authority boundary reads the V2-17 warehouse result-contract artifact, validates the result-contract shape, preserves lineage back through the warehouse invocation, warehouse no-op, warehouse interface, warehouse dry-run, warehouse mapping, warehouse-ready, canonical, staging, handoff, parsed, and raw artifact paths, and prints only a redacted summary to the console.
+  - The bounded payload shape is `writeAuthorityPayload.targetGateDecisions[]`, with explicit `operationName`, `keyColumns`, `mappedColumnCount`, `decision`, `decisionReason`, `requiredAuthority`, and `gateState`, while `mode = write_authority_gate_only`, `writesAttempted = false`, `transportCalled = false`, `executionAllowed = false`, `writeAuthorityDecision = denied`, `decisionReason = no_real_write_allowed`, and `authoritySource = local_gate_only`.
+  - The next follow-up after this task must stay bounded to one explicit Stage 2B entry handoff note or another clearly named next-stage gate that still forbids any real warehouse write execution.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -71,6 +72,7 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 | 2026-04-14 | `V2-15` | `v2/02-sp-api-auth` | Add one bounded no-op warehouse adapter implementation path in `src/warehouse/**` for the first Sales and Traffic report, with interface validation, deterministic local no-op artifact writing, and no Supabase, warehouse execution, or UI scope. | `complete` | `npm test passed; npm run spapi:build-first-report-warehouse-noop -- --report-id 485677020556 succeeded and wrote out/sp-api-warehouse-noop/report-485677020556.warehouse-noop.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one explicit adapter invocation boundary that still forbids any real warehouse write execution. |
 | 2026-04-14 | `V2-16` | `v2/02-sp-api-auth` | Add one bounded warehouse adapter invocation boundary path in `src/warehouse/**` for the first Sales and Traffic report, with no-op validation, deterministic local invocation artifact writing, and no Supabase, warehouse execution, or UI scope. | `complete` | `npm test passed; npm run spapi:invoke-first-report-warehouse-adapter -- --report-id 485677020556 succeeded and wrote out/sp-api-warehouse-invocation/report-485677020556.warehouse-invocation.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one adapter result contract step or one explicit write-authority gate that still forbids any real warehouse write execution. |
 | 2026-04-14 | `V2-17` | `v2/02-sp-api-auth` | Add one bounded warehouse adapter result-contract path in `src/warehouse/**` for the first Sales and Traffic report, with invocation validation, deterministic local result-contract artifact writing, and no Supabase, warehouse execution, or UI scope. | `complete` | `npm test passed; npm run spapi:build-first-report-warehouse-result-contract -- --report-id 485677020556 succeeded and wrote out/sp-api-warehouse-result-contract/report-485677020556.warehouse-result-contract.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one write-authority gate that still forbids any real warehouse write execution. |
+| 2026-04-14 | `V2-18` | `v2/02-sp-api-auth` | Post-Stage-2A warehouse boundary buildout — add one bounded warehouse write-authority-gate path in `src/warehouse/**` for the first Sales and Traffic report, with result-contract validation, deterministic local write-authority artifact writing, and no Supabase, warehouse execution, or UI scope. | `complete` | `npm test passed; npm run spapi:gate-first-report-warehouse-write-authority -- --report-id 485677020556 succeeded and wrote out/sp-api-warehouse-write-authority/report-485677020556.warehouse-write-authority.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one explicit Stage 2B entry handoff note or another clearly named next-stage gate that still forbids any real warehouse write execution. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -151,7 +153,12 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - `npm run spapi:build-first-report-warehouse-result-contract -- --report-id 485677020556` was actually run and built the bounded warehouse result-contract artifact at `out/sp-api-warehouse-result-contract/report-485677020556.warehouse-result-contract.json`.
   - The result-contract summary reported `Warehouse adapter result contract version: sp-api-first-report-warehouse-adapter-result-contract/v1`, `Section count: 2`, `Total row count: 1`, target tables `spapi_sales_and_traffic_by_date_report_rows`, `spapi_sales_and_traffic_by_asin_report_rows`, deterministic operation names for both targets, and `resultStatus = blocked_no_write` with `transportCalled = false`.
   - `npm run verify:wsl` passed in WSL.
+- V2-18 validation completed:
+  - `npm test` passed locally.
+  - `npm run spapi:gate-first-report-warehouse-write-authority -- --report-id 485677020556` was actually run and built the bounded warehouse write-authority artifact at `out/sp-api-warehouse-write-authority/report-485677020556.warehouse-write-authority.json`.
+  - The write-authority summary reported `Warehouse write-authority version: sp-api-first-report-warehouse-write-authority/v1`, `Section count: 2`, `Total row count: 1`, target tables `spapi_sales_and_traffic_by_date_report_rows`, `spapi_sales_and_traffic_by_asin_report_rows`, deterministic operation names for both targets, and `writeAuthorityDecision = denied` with `transportCalled = false`.
+  - `npm run verify:wsl` passed in WSL.
 
 ## Open blockers
-- No blocker is open for V2-17 implementation itself.
-- The next bounded task after V2-17 must remain focused on one write-authority gate that still forbids any real warehouse write execution.
+- No blocker is open for V2-18 implementation itself.
+- The next bounded task after V2-18 must remain focused on one explicit Stage 2B entry handoff note or another clearly named next-stage gate that still forbids any real warehouse write execution.

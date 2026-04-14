@@ -111,6 +111,7 @@
     "spapi:build-first-report-warehouse-noop": "ts-node src/warehouse/firstSalesTrafficWarehouseNoopCli.ts",
     "spapi:invoke-first-report-warehouse-adapter": "ts-node src/warehouse/firstSalesTrafficWarehouseInvocationCli.ts",
     "spapi:build-first-report-warehouse-result-contract": "ts-node src/warehouse/firstSalesTrafficWarehouseResultContractCli.ts",
+    "spapi:gate-first-report-warehouse-write-authority": "ts-node src/warehouse/firstSalesTrafficWarehouseWriteAuthorityCli.ts",
     "web:dev": "npm --prefix apps/web run dev",
     "web:build": "npm --prefix apps/web run build",
     "web:lint": "npm --prefix apps/web run lint"
