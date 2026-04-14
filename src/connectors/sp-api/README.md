@@ -13,6 +13,7 @@ Included in this stage:
 - one first-report-document entrypoint for Reports `getReportDocument` plus raw document download
 - one first-report parser entrypoint that reads the bounded raw artifact, decompresses it if needed, and tabularizes the observed Sales and Traffic JSON sections into a local parsed artifact
 - one first-report handoff entrypoint that reads the bounded parsed artifact and writes a local structured handoff artifact for future ingestion boundary proof
+- one first-report local-stage ingestion entrypoint that reads the bounded handoff artifact and writes a deterministic local non-warehouse staging artifact under `out/`
 - unit tests that do not require real credentials or network access
 
 Still out of scope here:

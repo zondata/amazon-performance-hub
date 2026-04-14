@@ -156,6 +156,25 @@ export type SpApiFirstReportHandoffSummary = {
   sections: SpApiFirstReportHandoffSectionSummary[];
 };
 
+export type SpApiFirstReportLocalStageSectionSummary = {
+  sectionName: string;
+  headerCount: number;
+  rowCount: number;
+};
+
+export type SpApiFirstReportLocalStageSummary = {
+  endpoint: 'ingestFirstReportLocalStage';
+  reportId: string;
+  reportFamily: 'sales_and_traffic';
+  reportType: SpApiReportType;
+  handoffArtifactPath: string;
+  stagingArtifactPath: string;
+  stagingVersion: string;
+  sectionCount: number;
+  totalRowCount: number;
+  sections: SpApiFirstReportLocalStageSectionSummary[];
+};
+
 export type SpApiTokenRefreshResult =
   | {
       ok: true;
@@ -275,6 +294,32 @@ export class SpApiHandoffError extends Error {
   ) {
     super(message);
     this.name = 'SpApiHandoffError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export class SpApiLocalStageError extends Error {
+  readonly code:
+    | 'artifact_not_found'
+    | 'invalid_input'
+    | 'invalid_content'
+    | 'validation_failed'
+    | 'write_failed';
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'artifact_not_found'
+      | 'invalid_input'
+      | 'invalid_content'
+      | 'validation_failed'
+      | 'write_failed',
+    message: string,
+    details?: unknown
+  ) {
+    super(message);
+    this.name = 'SpApiLocalStageError';
     this.code = code;
     this.details = details;
   }

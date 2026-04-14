@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-14`
 Current branch: `v2/02-sp-api-auth`
-Current task: `V2-08 - Add local structured handoff only`
+Current task: `V2-09 - Add one local non-warehouse staging write path only`
 Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 
 ## Stage checklist
@@ -10,18 +10,17 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 - [x] `Stage 2A` - SP-API auth + first Sales and Traffic pull
 
 ## Current task card
-- Task ID: `V2-08`
-- Title: `Add local structured handoff only`
-- Objective: Extend the existing bounded report-content parsing path so the system can produce one stable local structured handoff artifact and one explicit handoff contract for the first Sales and Traffic report, without any ingestion pipeline execution, without any Supabase or warehouse writes, and without any UI.
+- Task ID: `V2-09`
+- Title: `Add one local non-warehouse staging write path only`
+- Objective: Extend the existing local structured handoff boundary so the system can execute exactly one bounded ingestion path that reads one local Sales and Traffic handoff artifact and writes it to one local non-warehouse staging target, with no Supabase writes, no warehouse writes, no UI, and no multi-report orchestration.
 - Allowed files:
   - `src/connectors/sp-api/**`
   - `src/testing/fixtures/**` only if needed for unit tests
   - `docs/v2/BUILD_STATUS.md`
-  - `docs/v2/tasks/V2-08-local-structured-handoff-only.md`
+  - `docs/v2/tasks/V2-09-local-staging-ingestion-only.md`
   - `package.json`
 - Forbidden:
   - `apps/web/**`
-  - `src/ingestion/**`
   - `src/warehouse/**`
   - `src/marts/**`
   - `src/diagnosis/**`
@@ -37,15 +36,16 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - any warehouse schema or migration work
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run spapi:build-first-report-handoff -- --report-id <real-report-id>`
+  - [x] `npm run spapi:ingest-first-report-local-stage -- --report-id <real-report-id>`
   - [x] `npm run verify:wsl`
 - Status: `complete`
 - Notes:
   - Stage 2A remains recorded complete from the earlier successful `npm run verify:wsl` and `npm run spapi:first-call` confirmation on `2026-04-13`.
-  - V2-08 is limited to one bounded local structured handoff path for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 through V2-07.
-  - The handoff contract is intentionally local-only and writes only to `out/sp-api-report-handoffs/`; it does not execute ingestion, write to Supabase, or write to any warehouse layer.
-  - The handoff artifact preserves parsed business rows only inside the local JSON artifact and prints only a redacted summary to the console.
-  - The follow-up after this task must stay bounded to one ingestion execution path to a local non-warehouse staging target or another explicit ingestion boundary implementation only, still without warehouse writes.
+  - V2-09 is limited to one bounded local non-warehouse staging ingestion path for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 through V2-08.
+  - The staging target is intentionally local-only at `out/sp-api-staging/`; it is a deterministic JSON staging artifact for ingestion proof and not a warehouse target.
+  - The staging artifact preserves lineage back to the handoff, parsed, and raw artifact paths and prints only a redacted summary to the console.
+  - The missing `docs/v2/tasks/V2-08-local-structured-handoff-only.md` file from the previous task is included in this task's committed scope without rewriting its contents.
+  - The follow-up after this task must stay bounded to either one explicit ingestion boundary implementation into `src/ingestion/**` without warehouse writes, or one bounded promotion step from local staging to a defined non-warehouse canonical ingest shape.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -61,6 +61,7 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 | 2026-04-13 | `V2-06` | `v2/02-sp-api-auth` | Add one bounded Reports API report-document retrieval path for the first Sales and Traffic report, with raw document download to a controlled local output path and no parsing, ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:get-first-report-document -- --report-id 485677020556 succeeded after an unrestricted rerun and wrote out/sp-api-report-documents/report-485677020556.document.raw.gz; npm run verify:wsl passed` | Next bounded task after this one must stay on report content parsing only, not ingestion or warehouse writes. |
 | 2026-04-13 | `V2-07` | `v2/02-sp-api-auth` | Add one bounded local report-content parsing path for the first Sales and Traffic report, with gzip-aware raw artifact reading, JSON section tabularization into a controlled local artifact, and no ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:parse-first-report -- --report-id 485677020556 parsed the real bounded artifact into out/sp-api-parsed-reports/report-485677020556.parsed.json; npm run verify:wsl passed` | Next bounded task after this one must stay on local structured handoff or ingestion boundary definition only, not warehouse writes. |
 | 2026-04-14 | `V2-08` | `v2/02-sp-api-auth` | Add one bounded local structured handoff path for the first Sales and Traffic report, with parsed-artifact validation, deterministic handoff artifact writing, and no ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:build-first-report-handoff -- --report-id 485677020556 succeeded and wrote out/sp-api-report-handoffs/report-485677020556.handoff.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one ingestion execution path to a local non-warehouse staging target or another explicit ingestion boundary implementation only, still without warehouse writes. |
+| 2026-04-14 | `V2-09` | `v2/02-sp-api-auth` | Add one bounded local non-warehouse staging ingestion path for the first Sales and Traffic report, with handoff validation, deterministic local stage writing, and no Supabase, warehouse, or UI scope. | `complete` | `npm test passed; npm run spapi:ingest-first-report-local-stage -- --report-id 485677020556 succeeded and wrote out/sp-api-staging/report-485677020556.local-stage.json; npm run verify:wsl passed` | Next bounded task after this one must stay on either one explicit ingestion boundary implementation into src/ingestion/** without warehouse writes, or one bounded promotion step from local staging to a defined non-warehouse canonical ingest shape. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -96,7 +97,12 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - `npm run spapi:build-first-report-handoff -- --report-id 485677020556` was actually run and built the bounded handoff artifact at `out/sp-api-report-handoffs/report-485677020556.handoff.json`.
   - The handoff summary reported `Schema version: sp-api-first-report-handoff/v1`, `Section count: 2`, and `Total row count: 1`.
   - `npm run verify:wsl` passed in WSL.
+- V2-09 validation completed:
+  - `npm test` passed locally.
+  - `npm run spapi:ingest-first-report-local-stage -- --report-id 485677020556` was actually run and built the bounded local staging artifact at `out/sp-api-staging/report-485677020556.local-stage.json`.
+  - The staging summary reported `Staging version: sp-api-first-report-local-stage/v1`, `Section count: 2`, and `Total row count: 1`.
+  - `npm run verify:wsl` passed in WSL.
 
 ## Open blockers
-- No blocker is open for V2-08 implementation itself.
-- The next bounded task after V2-08 must remain focused on one ingestion execution path to a local non-warehouse staging target or another explicit ingestion boundary implementation only, without widening into warehouse writes.
+- No blocker is open for V2-09 implementation itself.
+- The next bounded task after V2-09 must remain focused on either one explicit ingestion boundary implementation into `src/ingestion/**` without warehouse writes, or one bounded promotion step from local staging to a defined non-warehouse canonical ingest shape.

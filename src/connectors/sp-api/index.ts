@@ -61,6 +61,18 @@ export {
   runFirstSpApiReportHandoff,
 } from './firstReportHandoff';
 export {
+  FIRST_REPORT_LOCAL_STAGE_OUTPUT_DIR,
+  FIRST_REPORT_LOCAL_STAGE_VERSION,
+  resolveFirstSalesAndTrafficHandoffArtifactPath,
+  readFirstSalesAndTrafficHandoffArtifact,
+  buildFirstSalesAndTrafficLocalStageArtifact,
+  validateFirstSalesAndTrafficLocalStageArtifact,
+  buildFirstSalesAndTrafficLocalStageArtifactPath,
+  writeFirstSalesAndTrafficLocalStageArtifact,
+  summarizeFirstSalesAndTrafficLocalStageArtifact,
+  runFirstSpApiLocalStageIngestion,
+} from './firstReportLocalStage';
+export {
   buildReportsGetReportPath,
   buildReportsGetReportDocumentPath,
   LWA_TOKEN_ENDPOINT,
@@ -74,6 +86,7 @@ export {
   SpApiAuthError,
   SpApiConfigError,
   SpApiHandoffError,
+  SpApiLocalStageError,
   SpApiParseError,
   SpApiRequestError,
   type SpApiCredentials,
@@ -81,6 +94,8 @@ export {
   type SpApiFirstCallSummary,
   type SpApiFirstReportHandoffSectionSummary,
   type SpApiFirstReportHandoffSummary,
+  type SpApiFirstReportLocalStageSectionSummary,
+  type SpApiFirstReportLocalStageSummary,
   type SpApiFirstReportParsedSectionSummary,
   type SpApiFirstReportParseSummary,
   type SpApiFirstReportDocumentSummary,
