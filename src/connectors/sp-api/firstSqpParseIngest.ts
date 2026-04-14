@@ -14,7 +14,7 @@ export const SP_API_SQP_RAW_OUTPUT_DIR = path.resolve(
 );
 
 const RAW_ARTIFACT_NAME_RE =
-  /^report-(?<reportId>.+)\.sqp\.raw(?:\.csv(?:\.gz)?|\.gz)?$/;
+  /^report-(?<reportId>.+)\.sqp\.raw(?:\.(?:csv|json)(?:\.gz)?|\.gz)?$/;
 
 const isGzipBuffer = (value: Buffer) =>
   value.length >= 2 && value[0] === 0x1f && value[1] === 0x8b;
@@ -98,8 +98,10 @@ export const resolveSpApiSqpRawArtifactPath = async (args: {
 
   const rawOutputRoot = args.rawOutputRoot ?? SP_API_SQP_RAW_OUTPUT_DIR;
   const candidates = [
+    path.resolve(rawOutputRoot, `report-${explicitReportId}.sqp.raw.json.gz`),
     path.resolve(rawOutputRoot, `report-${explicitReportId}.sqp.raw.csv.gz`),
     path.resolve(rawOutputRoot, `report-${explicitReportId}.sqp.raw.gz`),
+    path.resolve(rawOutputRoot, `report-${explicitReportId}.sqp.raw.json`),
     path.resolve(rawOutputRoot, `report-${explicitReportId}.sqp.raw.csv`),
     path.resolve(rawOutputRoot, `report-${explicitReportId}.sqp.raw`),
   ];

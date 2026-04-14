@@ -61,6 +61,8 @@ export type SqpWeeklyParseResult = {
 
 type SqpHeaderField = Exclude<keyof SqpWeeklyRow, "search_query_norm">;
 
+type JsonObject = Record<string, unknown>;
+
 const HEADER_ALIASES: Record<SqpHeaderField, string[]> = {
   reporting_date: ["reporting date"],
   search_query_raw: ["search query"],
@@ -195,6 +197,27 @@ function parseCsv(content: string): string[][] {
   return rows;
 }
 
+function asObject(value: unknown): JsonObject | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as JsonObject;
+}
+
+function asStringValue(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function asNumberValue(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return value;
+}
+
+function asMoneyAmount(value: unknown): number | null {
+  const candidate = asObject(value);
+  return asNumberValue(candidate?.amount);
+}
+
 function parseDate(value: string): string | null {
   const raw = value.trim();
   if (!raw) return null;
@@ -303,9 +326,158 @@ function asPercent(row: string[], idx: number | undefined): number | null {
   return parsePercent(row[idx]);
 }
 
+function parseSqpJsonReport(content: string): SqpWeeklyParseResult {
+  let parsedJson: unknown;
+
+  try {
+    parsedJson = JSON.parse(content);
+  } catch (error) {
+    throw new Error(
+      `SQP JSON artifact could not be parsed: ${
+        error instanceof Error ? error.message : "unknown JSON parse failure"
+      }`
+    );
+  }
+
+  const root = asObject(parsedJson);
+  const reportSpecification = asObject(root?.reportSpecification);
+  const reportOptions = asObject(reportSpecification?.reportOptions);
+  const reportType = asStringValue(reportSpecification?.reportType);
+  const reportPeriod = asStringValue(reportOptions?.reportPeriod);
+  const asinList = asStringValue(reportOptions?.asin);
+  const coverageStart = parseDate(asStringValue(reportSpecification?.dataStartTime) ?? "");
+  const coverageEnd = parseDate(asStringValue(reportSpecification?.dataEndTime) ?? "");
+  const dataByAsin = Array.isArray(root?.dataByAsin) ? root.dataByAsin : null;
+
+  if (reportType !== "GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT") {
+    throw new Error("SQP JSON artifact reportType is not Search Query Performance.");
+  }
+
+  if (reportPeriod !== "WEEK") {
+    throw new Error("SQP JSON artifact must use WEEK reportPeriod.");
+  }
+
+  if (!asinList) {
+    throw new Error("SQP JSON artifact is missing reportOptions.asin.");
+  }
+
+  const requestedAsins = Array.from(
+    new Set(
+      asinList
+        .split(/\s+/)
+        .map((value) => value.trim().toUpperCase())
+        .filter(Boolean)
+    )
+  );
+
+  if (requestedAsins.length !== 1) {
+    throw new Error("SQP JSON artifact must contain exactly one requested ASIN for the bounded path.");
+  }
+
+  if (!coverageStart || !coverageEnd) {
+    throw new Error("SQP JSON artifact is missing a valid report date range.");
+  }
+
+  if (!dataByAsin || dataByAsin.length === 0) {
+    throw new Error("SQP JSON artifact is missing dataByAsin rows.");
+  }
+
+  const warnings: string[] = [];
+  const rows: SqpWeeklyRow[] = [];
+
+  for (let index = 0; index < dataByAsin.length; index += 1) {
+    const item = asObject(dataByAsin[index]);
+    const asin = asStringValue(item?.asin)?.toUpperCase() ?? "";
+    const startDate = parseDate(asStringValue(item?.startDate) ?? "");
+    const endDate = parseDate(asStringValue(item?.endDate) ?? "");
+    const searchQueryData = asObject(item?.searchQueryData);
+    const impressionData = asObject(item?.impressionData);
+    const clickData = asObject(item?.clickData);
+    const cartAddData = asObject(item?.cartAddData);
+    const purchaseData = asObject(item?.purchaseData);
+    const searchQuery = asStringValue(searchQueryData?.searchQuery);
+
+    if (!asin || asin !== requestedAsins[0]) {
+      throw new Error(`SQP JSON artifact row ${index + 1} has an ASIN outside the bounded request scope.`);
+    }
+
+    if (!startDate || !endDate) {
+      throw new Error(`SQP JSON artifact row ${index + 1} is missing a valid date range.`);
+    }
+
+    if (startDate !== coverageStart || endDate !== coverageEnd) {
+      warnings.push(
+        `Coverage mismatch at row ${index + 1}: row=${startDate}->${endDate}, report=${coverageStart}->${coverageEnd}`
+      );
+    }
+
+    if (!searchQuery) {
+      continue;
+    }
+
+    rows.push({
+      reporting_date: endDate,
+      search_query_raw: searchQuery,
+      search_query_norm: normText(searchQuery),
+      search_query_score: asNumberValue(searchQueryData?.searchQueryScore),
+      search_query_volume: asNumberValue(searchQueryData?.searchQueryVolume),
+
+      impressions_total: asNumberValue(impressionData?.totalQueryImpressionCount),
+      impressions_self: asNumberValue(impressionData?.asinImpressionCount),
+      impressions_self_share: asNumberValue(impressionData?.asinImpressionShare),
+
+      clicks_total: asNumberValue(clickData?.totalClickCount),
+      clicks_rate_per_query: asNumberValue(clickData?.totalClickRate),
+      clicks_self: asNumberValue(clickData?.asinClickCount),
+      clicks_self_share: asNumberValue(clickData?.asinClickShare),
+      clicks_price_median_total: asMoneyAmount(clickData?.totalMedianClickPrice),
+      clicks_price_median_self: asMoneyAmount(clickData?.asinMedianClickPrice),
+      clicks_same_day_ship: asNumberValue(clickData?.totalSameDayShippingClickCount),
+      clicks_1d_ship: asNumberValue(clickData?.totalOneDayShippingClickCount),
+      clicks_2d_ship: asNumberValue(clickData?.totalTwoDayShippingClickCount),
+
+      cart_adds_total: asNumberValue(cartAddData?.totalCartAddCount),
+      cart_add_rate_per_query: asNumberValue(cartAddData?.totalCartAddRate),
+      cart_adds_self: asNumberValue(cartAddData?.asinCartAddCount),
+      cart_adds_self_share: asNumberValue(cartAddData?.asinCartAddShare),
+      cart_adds_price_median_total: asMoneyAmount(cartAddData?.totalMedianCartAddPrice),
+      cart_adds_price_median_self: asMoneyAmount(cartAddData?.asinMedianCartAddPrice),
+      cart_adds_same_day_ship: asNumberValue(cartAddData?.totalSameDayShippingCartAddCount),
+      cart_adds_1d_ship: asNumberValue(cartAddData?.totalOneDayShippingCartAddCount),
+      cart_adds_2d_ship: asNumberValue(cartAddData?.totalTwoDayShippingCartAddCount),
+
+      purchases_total: asNumberValue(purchaseData?.totalPurchaseCount),
+      purchases_rate_per_query: asNumberValue(purchaseData?.totalPurchaseRate),
+      purchases_self: asNumberValue(purchaseData?.asinPurchaseCount),
+      purchases_self_share: asNumberValue(purchaseData?.asinPurchaseShare),
+      purchases_price_median_total: asMoneyAmount(purchaseData?.totalMedianPurchasePrice),
+      purchases_price_median_self: asMoneyAmount(purchaseData?.asinMedianPurchasePrice),
+      purchases_same_day_ship: asNumberValue(purchaseData?.totalSameDayShippingPurchaseCount),
+      purchases_1d_ship: asNumberValue(purchaseData?.totalOneDayShippingPurchaseCount),
+      purchases_2d_ship: asNumberValue(purchaseData?.totalTwoDayShippingPurchaseCount),
+    });
+  }
+
+  return {
+    scopeType: "asin",
+    scopeValue: requestedAsins[0],
+    weekStart: coverageStart,
+    weekEnd: coverageEnd,
+    coverageStart,
+    coverageEnd,
+    rows,
+    warnings,
+  };
+}
+
 export function parseSqpReport(input: string, filenameHint?: string): SqpWeeklyParseResult {
   const isFilePath = fs.existsSync(input);
   const content = isFilePath ? fs.readFileSync(input, "utf8") : input;
+  const trimmedContent = content.trim();
+  if (trimmedContent.startsWith("{")) {
+    return parseSqpJsonReport(trimmedContent);
+  }
+
   const filename = filenameHint ?? (isFilePath ? path.basename(input) : "");
 
   const csvRows = parseCsv(content);

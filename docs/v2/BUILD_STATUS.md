@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-14`
 Current branch: `v2/02-sp-api-auth`
-Current task: `S2A-07 - Implement Search Query Performance report parse + ingest`
+Current task: `S2A-G2 - Gate: first SQP pull ingests successfully for one ASIN window`
 Current stage: `Stage 2A - SP-API auth + first retail pulls`
 
 ## Stage checklist
@@ -10,9 +10,9 @@ Current stage: `Stage 2A - SP-API auth + first retail pulls`
 - [ ] `Stage 2A` - SP-API auth + first retail pulls
 
 ## Current task card
-- Task ID: `S2A-07`
-- Title: `Implement Search Query Performance report parse + ingest`
-- Objective: Add one bounded SP-API SQP parse-and-ingest CLI path that reads one local SQP raw artifact, validates the SQP ASIN-window family, and ingests it through the existing SQP weekly raw ingest boundary without widening into Search Terms, warehouse, UI, or Stage 2B work.
+- Task ID: `S2A-G2`
+- Title: `Gate: first SQP pull ingests successfully for one ASIN window`
+- Objective: Add one bounded real SP-API SQP pull path that requests one SQP ASIN-week report, polls until terminal status, downloads the raw artifact to a deterministic local path, and hands that artifact into the existing `spapi:sqp-parse-ingest` boundary without widening into Search Terms, Stage 2B, warehouse, or UI work.
 - Allowed files:
   - `src/connectors/sp-api/**`
   - `src/ingest/**`
@@ -22,10 +22,10 @@ Current stage: `Stage 2A - SP-API auth + first retail pulls`
   - `docs/v2/BUILD_STATUS.md`
   - `docs/v2/TASK_REGISTRY.json`
   - `docs/v2/TASK_PROGRESS.md`
-  - `docs/v2/tasks/S2A-07-sp-api-sqp-parse-ingest.md`
+  - `docs/v2/tasks/S2A-G2-first-real-sqp-pull-ingests.md`
 - Forbidden:
   - Search Terms implementation
-  - Sales and Traffic behavior changes
+  - Sales and Traffic behavior changes beyond shared SP-API request/status/document design reuse
   - warehouse writes
   - schema migrations
   - UI changes
@@ -33,20 +33,28 @@ Current stage: `Stage 2A - SP-API auth + first retail pulls`
   - generic multi-report orchestration
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run spapi:sqp-parse-ingest -- --raw-path src/testing/fixtures/sp-api/report-fixture-sqp-asin-window.sqp.raw.csv`
+  - [x] `npm run spapi:sqp-first-real-pull-ingest -- --asin B0FYPRWPN1 --start-date 2026-04-05 --end-date 2026-04-11`
   - [x] `npm run verify:wsl`
   - [x] `node scripts/v2-progress.mjs --write`
 - Status: `complete`
 - Notes:
-  - The new bounded CLI is `npm run spapi:sqp-parse-ingest`.
-  - The task-specific command was validated with the committed fixture artifact at `src/testing/fixtures/sp-api/report-fixture-sqp-asin-window.sqp.raw.csv`.
-  - `S2A-07` is complete.
+  - The new bounded CLI is `npm run spapi:sqp-first-real-pull-ingest`.
+  - The bounded request path is restricted to one SQP ASIN week window only and validates `--start-date` as Sunday plus `--end-date` as Saturday.
+  - Downloaded raw artifacts are written under `out/sp-api-sqp-artifacts/` and handed into the existing `spapi:sqp-parse-ingest` boundary.
+  - The SQP parser now accepts the official SP-API SQP JSON artifact shape in addition to the previously validated CSV fixture path.
+  - `S2A-G2` is complete because the real SP-API gate command succeeded end to end and ingested the real SQP artifact.
+  - Real gate proof summary:
+    - `reportId = 485937020557`
+    - `scopeType = asin`
+    - `scopeValue = B0FYPRWPN1`
+    - `coverage = 2026-04-05 -> 2026-04-11`
+    - `rowCount = 53`
+    - `warningsCount = 0`
+    - `uploadId = f0f533b2-b856-4b2c-9e5f-1aae58f7bcfe`
   - `Stage 2B can start now: no`.
   - Exact remaining gate tasks before Stage 2B can begin:
-    - `S2A-G2` — Gate: first SQP pull ingests successfully for one ASIN window
     - `S2A-G3` — Gate: first Search Terms pull ingests successfully for one marketplace window
-  - The fixture-backed ingest proves the bounded implementation path, but it does not close `S2A-G2` because that gate still requires a first real SQP pull for one ASIN window.
-  - Single next bounded build task: `S2A-G2 - Gate: first SQP pull ingests successfully for one ASIN window`
+  - Single next bounded build task: `S2A-G3 - Gate: first Search Terms pull ingests successfully for one marketplace window`
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -74,6 +82,7 @@ Current stage: `Stage 2A - SP-API auth + first retail pulls`
 | 2026-04-14 | `V2-18` | `v2/02-sp-api-auth` | Post-Stage-2A warehouse boundary buildout — add one bounded warehouse write-authority-gate path in `src/warehouse/**` for the first Sales and Traffic report, with result-contract validation, deterministic local write-authority artifact writing, and no Supabase, warehouse execution, or UI scope. | `complete` | `npm test passed; npm run spapi:gate-first-report-warehouse-write-authority -- --report-id 485677020556 succeeded and wrote out/sp-api-warehouse-write-authority/report-485677020556.warehouse-write-authority.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one explicit Stage 2B entry handoff note or another clearly named next-stage gate that still forbids any real warehouse write execution. |
 | 2026-04-14 | `V2-AUDIT-STATUS` | `v2/02-sp-api-auth` | Audit the current branch against the master V2 task registry, regenerate progress output, and restate the actual stage and remaining Stage 2A gate tasks without building features. | `complete` | `node scripts/v2-progress.mjs --write passed` | Next bounded task is `S2A-07` — implement the first SP-API SQP pull/ingest gate proof. |
 | 2026-04-14 | `S2A-07` | `v2/02-sp-api-auth` | Add one bounded SP-API SQP parse+ingest path that reads one local SQP raw artifact, validates the ASIN-window SQP family, and ingests it through the existing SQP weekly raw ingest boundary without widening into Search Terms, warehouse, or UI work. | `complete` | `npm test passed; npm run spapi:sqp-parse-ingest -- --raw-path src/testing/fixtures/sp-api/report-fixture-sqp-asin-window.sqp.raw.csv succeeded with upload id 55f35127-63de-4481-b7b2-0d8a99eb1618; npm run verify:wsl passed` | Next bounded task is `S2A-G2` — prove one first real SQP pull ingests successfully for one ASIN window. |
+| 2026-04-14 | `S2A-G2` | `v2/02-sp-api-auth` | Add one bounded real SP-API SQP pull path for one ASIN week window that requests the report, polls to terminal state, downloads the raw artifact, and hands it into the existing `spapi:sqp-parse-ingest` path without widening into Search Terms, Stage 2B, warehouse, or UI work. | `complete` | `focused SQP boundary tests passed; npm run spapi:sqp-first-real-pull-ingest -- --asin B0FYPRWPN1 --start-date 2026-04-05 --end-date 2026-04-11 succeeded with upload id f0f533b2-b856-4b2c-9e5f-1aae58f7bcfe; npm test passed; npm run verify:wsl passed` | Next bounded task is `S2A-G3` — prove one first real Search Terms pull ingests successfully for one marketplace window. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -164,6 +173,12 @@ Current stage: `Stage 2A - SP-API auth + first retail pulls`
   - `npm test` passed locally.
   - `npm run spapi:sqp-parse-ingest -- --raw-path src/testing/fixtures/sp-api/report-fixture-sqp-asin-window.sqp.raw.csv` was actually run. The sandboxed attempt failed at the Supabase network boundary, so it was rerun unrestricted and succeeded through the existing SQP ingest sink.
   - The bounded CLI summary reported `Report ID: fixture-sqp-asin-window`, `Scope type: asin`, `Scope value: B0B2K57W5R`, `Coverage window: 2026-02-01 -> 2026-02-07`, `Row count: 1`, `Upload ID: 55f35127-63de-4481-b7b2-0d8a99eb1618`, and `Warnings: 0`.
+  - `npm run verify:wsl` passed in WSL.
+- S2A-G2 implementation validation completed:
+  - Focused SQP boundary tests passed locally for the new real-pull CLI, bounded polling failure, missing-document failure, JSON raw-artifact parsing, and handoff into the existing `spapi:sqp-parse-ingest` path.
+  - `npm test` passed locally.
+  - `npm run spapi:sqp-first-real-pull-ingest -- --asin B0FYPRWPN1 --start-date 2026-04-05 --end-date 2026-04-11` was actually run successfully and created report id `485937020557`.
+  - The real gate summary reported `Scope type: asin`, `Scope value: B0FYPRWPN1`, `Coverage window: 2026-04-05 -> 2026-04-11`, `Row count: 53`, `Warnings: 0`, and `Upload ID: f0f533b2-b856-4b2c-9e5f-1aae58f7bcfe`.
   - `npm run verify:wsl` passed in WSL.
 
 ## Open blockers

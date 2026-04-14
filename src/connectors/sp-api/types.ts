@@ -52,7 +52,9 @@ export type SpApiFirstCallSummary = {
   participationCount: number;
 };
 
-export type SpApiReportType = 'GET_SALES_AND_TRAFFIC_REPORT';
+export type SpApiReportType =
+  | 'GET_SALES_AND_TRAFFIC_REPORT'
+  | 'GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT';
 
 export const SP_API_REPORT_PROCESSING_STATUSES = [
   'IN_QUEUE',
@@ -66,17 +68,28 @@ export const SP_API_REPORT_PROCESSING_STATUSES = [
 export type SpApiReportProcessingStatus =
   (typeof SP_API_REPORT_PROCESSING_STATUSES)[number];
 
-export type SpApiReportCreateRequestBody = {
-  reportType: SpApiReportType;
-  marketplaceIds: [string];
-  dataStartTime: string;
-  dataEndTime: string;
-  reportOptions: {
-    dateGranularity: 'DAY';
-    asinGranularity: 'PARENT';
-    skuGranularity: 'TOTAL';
-  };
-};
+export type SpApiReportCreateRequestBody =
+  | {
+      reportType: 'GET_SALES_AND_TRAFFIC_REPORT';
+      marketplaceIds: [string];
+      dataStartTime: string;
+      dataEndTime: string;
+      reportOptions: {
+        dateGranularity: 'DAY';
+        asinGranularity: 'PARENT';
+        skuGranularity: 'TOTAL';
+      };
+    }
+  | {
+      reportType: 'GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT';
+      marketplaceIds: [string];
+      dataStartTime: string;
+      dataEndTime: string;
+      reportOptions: {
+        reportPeriod: 'WEEK';
+        asin: string;
+      };
+    };
 
 export type SpApiFirstReportRequestSummary = {
   endpoint: 'createReport';
@@ -179,6 +192,20 @@ export type SpApiSqpParseIngestSummary = {
   endpoint: 'spApiSqpParseAndIngest';
   reportId: string | null;
   inputFilePath: string;
+  scopeType: 'asin';
+  scopeValue: string;
+  coverageStart: string;
+  coverageEnd: string;
+  rowCount: number;
+  uploadId: string | null;
+  warningsCount: number;
+};
+
+export type SpApiSqpRealPullSummary = {
+  endpoint: 'spApiSqpFirstRealPullAndIngest';
+  reportId: string;
+  reportDocumentId: string;
+  rawArtifactPath: string;
   scopeType: 'asin';
   scopeValue: string;
   coverageStart: string;
@@ -361,6 +388,30 @@ export class SpApiSqpIngestError extends Error {
   ) {
     super(message);
     this.name = 'SpApiSqpIngestError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export class SpApiSqpPullError extends Error {
+  readonly code:
+    | 'invalid_input'
+    | 'validation_failed'
+    | 'artifact_not_found'
+    | 'write_failed';
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'invalid_input'
+      | 'validation_failed'
+      | 'artifact_not_found'
+      | 'write_failed',
+    message: string,
+    details?: unknown
+  ) {
+    super(message);
+    this.name = 'SpApiSqpPullError';
     this.code = code;
     this.details = details;
   }

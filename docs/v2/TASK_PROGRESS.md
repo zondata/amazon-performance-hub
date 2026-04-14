@@ -5,12 +5,12 @@ Last generated: 2026-04-14
 ## Overall
 
 - Total tasks: 72
-- Done: 10
+- Done: 11
 - Verify: 1
 - In progress: 3
 - Blocked: 0
-- Remaining open: 62
-- Remaining fast-track tasks: 34
+- Remaining open: 61
+- Remaining fast-track tasks: 33
 
 ## Stage summary
 
@@ -18,7 +18,7 @@ Last generated: 2026-04-14
 |---|---:|---:|---:|---:|---:|---:|---:|---|
 | Stage 0 — scope freeze and control files | 2 | 0 | 0 | 0 | 0 | 2 | 2 | Yes |
 | Stage 1 — repo boundary for V2 | 3 | 0 | 0 | 0 | 0 | 3 | 3 | Yes |
-| Stage 2A — SP-API auth + first retail pulls | 5 | 1 | 3 | 0 | 4 | 2 | 4 | No |
+| Stage 2A — SP-API auth + first retail pulls | 6 | 1 | 3 | 0 | 3 | 3 | 4 | No |
 | Stage 2B — Ads API auth + first Sponsored Products pulls | 0 | 0 | 0 | 0 | 11 | 0 | 4 | No |
 | Stage 3 — ingestion backbone | 0 | 0 | 0 | 0 | 8 | 0 | 2 | No |
 | Stage 4 — canonical marts | 0 | 0 | 0 | 0 | 6 | 0 | 1 | No |
@@ -31,7 +31,6 @@ Last generated: 2026-04-14
 
 ### Stage 2A — SP-API auth + first retail pulls — gate tasks still required
 
-- S2A-G2 — Gate: first SQP pull ingests successfully for one ASIN window
 - S2A-G3 — Gate: first Search Terms pull ingests successfully for one marketplace window
 
 ### Stage 2B — Ads API auth + first Sponsored Products pulls — gate tasks still required
@@ -78,18 +77,16 @@ Last generated: 2026-04-14
 
 ### Ready to move from Stage 2A to Stage 2B
 
-- Progress: 2/4
+- Progress: 3/4
 - Complete: No
 - Remaining:
-  - S2A-G2 — Gate: first SQP pull ingests successfully for one ASIN window
   - S2A-G3 — Gate: first Search Terms pull ingests successfully for one marketplace window
 
 ### First usable app (fast track)
 
-- Progress: 2/20
+- Progress: 3/20
 - Complete: No
 - Remaining:
-  - S2A-G2 — Gate: first SQP pull ingests successfully for one ASIN window
   - S2A-G3 — Gate: first Search Terms pull ingests successfully for one marketplace window
   - S2B-G1 — Gate: first Ads profile sync succeeds
   - S2B-G2 — Gate: first Sponsored Products campaign daily ingest succeeds
@@ -129,7 +126,6 @@ Last generated: 2026-04-14
 | S2A-06 | in_progress | must | no | yes | Implement Sales and Traffic Business Report parse + ingest |
 | S2A-08 | todo | must | no | yes | Implement Search Terms report parse + ingest |
 | S2A-09 | verify | should | no | no | Add SP-API admin connection health check and smoke route/command |
-| S2A-G2 | todo | must | yes | yes | Gate: first SQP pull ingests successfully for one ASIN window |
 | S2A-G3 | todo | must | yes | yes | Gate: first Search Terms pull ingests successfully for one marketplace window |
 
 ### Stage 2B — Ads API auth + first Sponsored Products pulls

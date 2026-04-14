@@ -406,7 +406,7 @@
       "stage": "S2A",
       "stage_name": "Stage 2A \u2014 SP-API auth + first retail pulls",
       "title": "Gate: first SQP pull ingests successfully for one ASIN window",
-      "status": "todo",
+      "status": "done",
       "priority": "must",
       "gate": true,
       "fast_track": true,
