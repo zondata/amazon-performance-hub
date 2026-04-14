@@ -104,6 +104,8 @@
     "spapi:build-first-report-handoff": "ts-node src/connectors/sp-api/firstReportHandoffCli.ts",
     "spapi:ingest-first-report-local-stage": "ts-node src/connectors/sp-api/firstReportLocalStageCli.ts",
     "spapi:ingest-first-report-canonical": "ts-node src/ingestion/firstSalesTrafficCanonicalCli.ts",
+    "spapi:promote-first-report-warehouse-ready": "ts-node src/ingestion/firstSalesTrafficWarehouseReadyCli.ts",
+    "spapi:prepare-first-report-warehouse-mapping": "ts-node src/warehouse/firstSalesTrafficWarehouseMappingCli.ts",
     "web:dev": "npm --prefix apps/web run dev",
     "web:build": "npm --prefix apps/web run build",
     "web:lint": "npm --prefix apps/web run lint"

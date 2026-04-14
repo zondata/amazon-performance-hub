@@ -1,4 +1,16 @@
-export const warehouseBoundary = {
-  status: 'placeholder',
-  scope: 'Stage 1 repo boundary only',
-} as const;
+export {
+  FIRST_REPORT_WAREHOUSE_ADAPTER_MAPPING_VERSION,
+  FIRST_REPORT_WAREHOUSE_MAPPING_OUTPUT_DIR,
+  FirstReportWarehouseMappingError,
+  type FirstReportWarehouseAdapterMappingArtifact,
+  type FirstReportWarehouseAdapterMappingSummary,
+  type FirstReportWarehouseMappingSectionSummary,
+  buildFirstSalesTrafficWarehouseAdapterMapping,
+  buildFirstSalesTrafficWarehouseAdapterMappingPath,
+  readFirstSalesTrafficWarehouseReadyArtifact,
+  resolveFirstSalesTrafficWarehouseReadyArtifactPath,
+  runFirstSalesTrafficWarehouseAdapterPreparation,
+  summarizeFirstSalesTrafficWarehouseAdapterMapping,
+  validateFirstSalesTrafficWarehouseAdapterMapping,
+  writeFirstSalesTrafficWarehouseAdapterMapping,
+} from './firstSalesTrafficWarehouseMapping';

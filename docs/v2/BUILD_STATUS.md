@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-14`
 Current branch: `v2/02-sp-api-auth`
-Current task: `V2-10 - Add one explicit non-warehouse ingestion boundary only`
+Current task: `V2-12 - Add one warehouse adapter mapping definition only`
 Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 
 ## Stage checklist
@@ -10,19 +10,18 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 - [x] `Stage 2A` - SP-API auth + first Sales and Traffic pull
 
 ## Current task card
-- Task ID: `V2-10`
-- Title: `Add one explicit non-warehouse ingestion boundary only`
-- Objective: Extend the existing local non-warehouse staging boundary so the system can execute exactly one explicit ingestion boundary implementation in `src/ingestion/**` that reads one local Sales and Traffic staging artifact and promotes it into one local canonical ingest artifact, with no Supabase writes, no warehouse writes, no UI, and no multi-report orchestration.
+- Task ID: `V2-12`
+- Title: `Add one warehouse adapter mapping definition only`
+- Objective: Extend the existing local warehouse-ready contract boundary so the system can execute exactly one bounded preparation step in `src/warehouse/**` that reads one local warehouse-ready contract artifact and produces one local warehouse adapter mapping definition artifact, with no Supabase writes, no warehouse writes, no UI, and no multi-report orchestration.
 - Allowed files:
-  - `src/ingestion/**`
-  - `src/connectors/sp-api/**` only where needed to wire the bounded entrypoint
+  - `src/warehouse/**`
+  - `src/ingestion/**` only where needed to wire the bounded entrypoint to the new warehouse-preparation boundary
   - `src/testing/fixtures/**` only if needed for unit tests
   - `docs/v2/BUILD_STATUS.md`
-  - `docs/v2/tasks/V2-10-explicit-ingestion-boundary-only.md`
+  - `docs/v2/tasks/V2-12-warehouse-adapter-mapping-definition-only.md`
   - `package.json`
 - Forbidden:
   - `apps/web/**`
-  - `src/warehouse/**`
   - `src/marts/**`
   - `src/diagnosis/**`
   - `src/memory/**`
@@ -37,15 +36,16 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - any warehouse schema or migration work
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run spapi:ingest-first-report-canonical -- --report-id <real-report-id>`
+  - [x] `npm run spapi:prepare-first-report-warehouse-mapping -- --report-id <real-report-id>`
   - [x] `npm run verify:wsl`
 - Status: `complete`
 - Notes:
   - Stage 2A remains recorded complete from the earlier successful `npm run verify:wsl` and `npm run spapi:first-call` confirmation on `2026-04-13`.
-  - V2-10 is limited to one explicit ingestion boundary implementation in `src/ingestion/**` for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 through V2-09.
-  - The canonical ingest target is intentionally local-only at `out/sp-api-canonical-ingest/`; it is a deterministic JSON canonical ingest artifact for ingestion-boundary proof and not a warehouse target.
-  - The ingestion boundary preserves lineage back to the staging, handoff, parsed, and raw artifact paths and prints only a redacted summary to the console.
-  - The follow-up after this task must stay bounded to one promotion step from the local canonical ingest shape toward a defined warehouse-ready contract, still without actual warehouse writes.
+  - V2-12 is limited to one warehouse adapter mapping definition step for the same `GET_SALES_AND_TRAFFIC_REPORT` family proven in V2-04 through V2-11, still without warehouse writes.
+  - The warehouse adapter mapping target is intentionally local-only at `out/sp-api-warehouse-mapping/`; it is a deterministic JSON mapping-definition artifact and not a warehouse write.
+  - The warehouse-preparation boundary preserves lineage back to the warehouse-ready, canonical ingest, staging, handoff, parsed, and raw artifact paths and prints only a redacted summary to the console.
+  - The bounded payload shape is `mappingPayload.targetMappings[]`, with explicit `targetTableName`, `keyColumns`, and one-to-one `sourceField -> targetColumn` definitions for future write adapters, but no actual adapter execution.
+  - The follow-up after this task must stay bounded to one dry-run warehouse adapter execution step or one explicit adapter interface for future write execution, still without any actual write execution.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -63,6 +63,8 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
 | 2026-04-14 | `V2-08` | `v2/02-sp-api-auth` | Add one bounded local structured handoff path for the first Sales and Traffic report, with parsed-artifact validation, deterministic handoff artifact writing, and no ingestion, warehouse writes, or UI. | `complete` | `npm test passed; npm run spapi:build-first-report-handoff -- --report-id 485677020556 succeeded and wrote out/sp-api-report-handoffs/report-485677020556.handoff.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one ingestion execution path to a local non-warehouse staging target or another explicit ingestion boundary implementation only, still without warehouse writes. |
 | 2026-04-14 | `V2-09` | `v2/02-sp-api-auth` | Add one bounded local non-warehouse staging ingestion path for the first Sales and Traffic report, with handoff validation, deterministic local stage writing, and no Supabase, warehouse, or UI scope. | `complete` | `npm test passed; npm run spapi:ingest-first-report-local-stage -- --report-id 485677020556 succeeded and wrote out/sp-api-staging/report-485677020556.local-stage.json; npm run verify:wsl passed` | Next bounded task after this one must stay on either one explicit ingestion boundary implementation into src/ingestion/** without warehouse writes, or one bounded promotion step from local staging to a defined non-warehouse canonical ingest shape. |
 | 2026-04-14 | `V2-10` | `v2/02-sp-api-auth` | Add one bounded explicit ingestion boundary in `src/ingestion/**` for the first Sales and Traffic report, with staging validation, deterministic local canonical ingest writing, and no Supabase, warehouse, or UI scope. | `complete` | `npm test passed; npm run spapi:ingest-first-report-canonical -- --report-id 485677020556 succeeded and wrote out/sp-api-canonical-ingest/report-485677020556.canonical-ingest.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one promotion step from local canonical ingest shape toward a defined warehouse-ready contract, still without actual warehouse writes. |
+| 2026-04-14 | `V2-11` | `v2/02-sp-api-auth` | Add one bounded warehouse-ready contract promotion path in `src/ingestion/**` for the first Sales and Traffic report, with canonical-ingest validation, deterministic local contract writing, and no Supabase, warehouse, or UI scope. | `complete` | `npm test passed; npm run spapi:promote-first-report-warehouse-ready -- --report-id 485677020556 succeeded and wrote out/sp-api-warehouse-ready/report-485677020556.warehouse-ready.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one warehouse-adapter preparation step or one explicit mapping definition into src/warehouse/**, still without any actual write execution. |
+| 2026-04-14 | `V2-12` | `v2/02-sp-api-auth` | Add one bounded warehouse adapter mapping definition path in `src/warehouse/**` for the first Sales and Traffic report, with warehouse-ready validation, deterministic local mapping writing, and no Supabase, warehouse execution, or UI scope. | `complete` | `npm test passed; npm run spapi:prepare-first-report-warehouse-mapping -- --report-id 485677020556 succeeded and wrote out/sp-api-warehouse-mapping/report-485677020556.warehouse-mapping.json; npm run verify:wsl passed` | Next bounded task after this one must stay on one dry-run warehouse adapter execution step or one explicit adapter interface for future write execution, still without any actual write execution. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -108,7 +110,17 @@ Current stage: `Stage 2A - SP-API auth + first Sales and Traffic pull`
   - `npm run spapi:ingest-first-report-canonical -- --report-id 485677020556` was actually run and built the bounded canonical ingest artifact at `out/sp-api-canonical-ingest/report-485677020556.canonical-ingest.json`.
   - The canonical summary reported `Canonical ingest version: sp-api-first-report-canonical-ingest/v1`, `Section count: 2`, and `Total row count: 1`.
   - `npm run verify:wsl` passed in WSL.
+- V2-11 validation completed:
+  - `npm test` passed locally.
+  - `npm run spapi:promote-first-report-warehouse-ready -- --report-id 485677020556` was actually run and built the bounded warehouse-ready contract artifact at `out/sp-api-warehouse-ready/report-485677020556.warehouse-ready.json`.
+  - The promotion summary reported `Warehouse-ready contract version: sp-api-first-report-warehouse-ready/v1`, `Section count: 2`, and `Total row count: 1`.
+  - `npm run verify:wsl` passed in WSL.
+- V2-12 validation completed:
+  - `npm test` passed locally.
+  - `npm run spapi:prepare-first-report-warehouse-mapping -- --report-id 485677020556` was actually run and built the bounded warehouse adapter mapping artifact at `out/sp-api-warehouse-mapping/report-485677020556.warehouse-mapping.json`.
+  - The preparation summary reported `Warehouse adapter mapping version: sp-api-first-report-warehouse-adapter-mapping/v1`, `Section count: 2`, and `Total row count: 1`.
+  - `npm run verify:wsl` passed in WSL.
 
 ## Open blockers
-- No blocker is open for V2-10 implementation itself.
-- The next bounded task after V2-10 must remain focused on one bounded promotion step from the local canonical ingest shape toward a defined warehouse-ready contract, still without actual warehouse writes.
+- No blocker is open for V2-12 implementation itself.
+- The next bounded task after V2-12 must remain focused on one dry-run warehouse adapter execution step or one explicit adapter interface for future write execution, still without any actual write execution.
