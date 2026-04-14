@@ -2,51 +2,51 @@
 
 Last updated: `2026-04-14`
 Current branch: `v2/02-sp-api-auth`
-Current task: `S2A-G3 - Gate: first Search Terms pull ingests successfully for one marketplace window`
-Current stage: `Stage 2A - SP-API auth + first retail pulls`
+Current task: `S2B-01 - Document Ads API environment contract and secret handling`
+Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 
 ## Stage checklist
 - [x] `Stage 1` - Repo boundary and V2 route/module skeleton
 - [x] `Stage 2A` - SP-API auth + first retail pulls
+- [ ] `Stage 2B` - Ads API auth + first Sponsored Products pulls
 
 ## Current task card
-- Task ID: `S2A-G3`
-- Title: `Gate: first Search Terms pull ingests successfully for one marketplace window`
-- Objective: Add one bounded real SP-API Search Terms pull path that requests one Search Terms marketplace-week report, polls until terminal status, downloads the raw artifact to a deterministic local path, parses the official Search Terms artifact family explicitly, and ingests it through one bounded Search Terms ingest path without widening into Stage 2B, warehouse, or UI work.
+- Task ID: `S2B-01`
+- Title: `Document Ads API environment contract and secret handling`
+- Objective: Create one authoritative Stage 2B contract doc that defines the Amazon Ads API environment contract, secret handling rules, runtime boundaries, and verification requirements that must be satisfied before any live Ads API auth or pull task can claim success.
 - Allowed files:
-  - `src/connectors/sp-api/**`
-  - `src/ingest/**`
-  - `src/testing/fixtures/**`
-  - `package.json`
   - `docs/v2/BUILD_STATUS.md`
   - `docs/v2/TASK_REGISTRY.json`
   - `docs/v2/TASK_PROGRESS.md`
-  - `docs/v2/tasks/S2A-G3-first-search-terms-pull-ingests.md`
+  - `docs/v2/tasks/S2B-01-ads-api-env-contract-and-secret-handling.md`
+  - `package.json` only if a bounded non-secret verification helper is strictly required
+  - `src/connectors/ads-api/**` only if a tiny non-secret contract stub or README is strictly required
 - Forbidden:
-  - Stage 2B work
-  - Search Query Performance scope changes beyond strict helper reuse
-  - Sales and Traffic behavior changes beyond shared SP-API request/status/document design reuse
-  - warehouse writes
-  - UI changes
-  - generic multi-report orchestration
+  - live Amazon Ads API auth code
+  - live Amazon Ads API requests
+  - warehouse work
+  - UI work
+  - Supabase schema work
+  - Stage 2A behavior changes
+  - Stage 2B pull implementation
+  - real secrets in committed files
+  - broad refactors
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run spapi:search-terms-first-real-pull-ingest -- --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD>`
   - [x] `npm run verify:wsl`
   - [x] `node scripts/v2-progress.mjs --write`
+  - [x] `docs/v2/tasks/S2B-01-ads-api-env-contract-and-secret-handling.md`
 - Status: `complete`
 - Notes:
-  - The new bounded CLI is `npm run spapi:search-terms-first-real-pull-ingest`.
-  - The bounded request path is restricted to one Search Terms marketplace WEEK window only and validates `--start-date` as Sunday plus `--end-date` as Saturday.
-  - Downloaded raw artifacts are written under `out/sp-api-search-terms-artifacts/` and handed into the bounded Search Terms parse+ingest boundary.
-  - The Search Terms parser validates the official `GET_BRAND_ANALYTICS_SEARCH_TERMS_REPORT` family explicitly and normalizes one marketplace-window row contract.
-  - The repo did not have any Search Terms destination table before this task, so the bounded implementation adds the smallest raw-ingest table needed to persist a real upload id and normalized Search Terms rows.
-  - `S2A-G2` is already complete and is no longer an open blocker.
-  - The real SP-API gate command succeeded end to end for marketplace `ATVPDKIKX0DER`, coverage `2026-04-05 -> 2026-04-11`, with upload id `517bcaba-d7bd-4d3d-b56a-372c0de77bda`.
+  - This task is documentation-only and adds no live Ads API auth or request code.
+  - The contract doc explicitly defines required Ads credentials, secret storage rules, allowed runtime environments, forbidden environment mixes, verification rules, operator handoff rules, Codex execution rules, and non-goals.
+  - The contract explicitly forbids committing real Ads API secrets.
+  - The contract explicitly distinguishes sandbox-only proof from production proof.
   - `Stage 2B can start now: yes`.
-  - Exact remaining gate tasks before Stage 2B can begin:
-    - none
-  - Single next bounded build task: `S2B-01 - Document Ads API environment contract and secret handling`
+  - Exact remaining tasks before the first Stage 2B real proof can begin:
+    - `S2B-02` — Implement Ads authorization grant, token exchange, and refresh
+    - `S2B-03` — Implement Ads profile sync and internal profile mapping
+  - Single next bounded build task: `S2B-02 - Implement Ads authorization grant, token exchange, and refresh`
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -77,6 +77,7 @@ Current stage: `Stage 2A - SP-API auth + first retail pulls`
 | 2026-04-14 | `S2A-G2` | `v2/02-sp-api-auth` | Add one bounded real SP-API SQP pull path for one ASIN week window that requests the report, polls to terminal state, downloads the raw artifact, and hands it into the existing `spapi:sqp-parse-ingest` path without widening into Search Terms, Stage 2B, warehouse, or UI work. | `complete` | `focused SQP boundary tests passed; npm run spapi:sqp-first-real-pull-ingest -- --asin B0FYPRWPN1 --start-date 2026-04-05 --end-date 2026-04-11 succeeded with upload id f0f533b2-b856-4b2c-9e5f-1aae58f7bcfe; npm test passed; npm run verify:wsl passed` | Next bounded task is `S2A-G3` — prove one first real Search Terms pull ingests successfully for one marketplace window. |
 | 2026-04-14 | `S2A-08` | `v2/02-sp-api-auth` | Add one bounded Search Terms parse+ingest path that reads one local Search Terms raw artifact, validates the official `GET_BRAND_ANALYTICS_SEARCH_TERMS_REPORT` family, and ingests it through one bounded Search Terms raw ingest boundary without widening into Stage 2B, warehouse, or UI work. | `complete` | `focused Search Terms parse+ingest tests passed; npm test passed; npm run verify:wsl passed` | Next bounded task is `S2A-G3` — prove one first real Search Terms pull ingests successfully for one marketplace window. |
 | 2026-04-14 | `S2A-G3` | `v2/02-sp-api-auth` | Add one bounded real SP-API Search Terms pull path for one marketplace week window that requests the report, polls to terminal state, downloads the raw artifact, and hands it into the bounded Search Terms parse+ingest path without widening into Stage 2B, warehouse, or UI work. | `complete` | `focused Search Terms real-pull tests passed; npm run spapi:search-terms-first-real-pull-ingest -- --marketplace-id ATVPDKIKX0DER --start-date 2026-04-05 --end-date 2026-04-11 succeeded with report id 485977020557 and upload id 517bcaba-d7bd-4d3d-b56a-372c0de77bda; npm test passed; npm run verify:wsl passed` | Next bounded task is `S2B-01` — document Ads API environment contract and secret handling. |
+| 2026-04-14 | `S2B-01` | `v2/02-sp-api-auth` | Document the Amazon Ads API environment contract, secret handling rules, runtime boundaries, and verification requirements required before any live Stage 2B implementation begins. | `complete` | `node scripts/v2-progress.mjs --write passed; npm test passed; npm run verify:wsl passed` | Next bounded task is `S2B-02` — implement Ads authorization grant, token exchange, and refresh. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -187,5 +188,5 @@ Current stage: `Stage 2A - SP-API auth + first retail pulls`
 
 ## Open blockers
 - Stage 2A gates are complete.
-- Stage 2B can begin when the next bounded task is selected.
-- The single next bounded build task is `S2B-01` — document Ads API environment contract and secret handling.
+- Stage 2B is active.
+- The single next bounded build task is `S2B-02` — implement Ads authorization grant, token exchange, and refresh.

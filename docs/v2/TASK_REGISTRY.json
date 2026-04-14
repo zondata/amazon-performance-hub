@@ -461,7 +461,7 @@
       "stage": "S2B",
       "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
       "title": "Document Ads API environment contract and secret handling",
-      "status": "todo",
+      "status": "done",
       "priority": "must",
       "gate": false,
       "fast_track": true,
