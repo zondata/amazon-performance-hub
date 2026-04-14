@@ -49,3 +49,18 @@ Current V2 scope:
   `implementationPresent = true`, `executionAllowed = false`,
   `executionResult = skipped_noop`, and `skipReason = no_real_write_allowed`;
   it does not perform any warehouse write or real adapter invocation
+- `firstSalesTrafficWarehouseInvocation.ts`
+- Reads one V2-15 warehouse no-op artifact for the first
+  `GET_SALES_AND_TRAFFIC_REPORT`
+- Writes one deterministic invocation-boundary artifact to
+  `out/sp-api-warehouse-invocation/`
+- Uses local-only `invocationPayload.targetInvocations[]` with explicit
+  `operationName`, `keyColumns`, `mappedColumnCount`, `requestEnvelope`,
+  `responseEnvelope`, and `invocationState` to prove what a future adapter
+  invocation boundary would receive and return without introducing any real
+  transport or warehouse client call
+- Explicitly records `mode = invocation_boundary_only`,
+  `writesAttempted = false`, `transportCalled = false`,
+  `executionAllowed = false`, `invocationResult = blocked_no_write`, and
+  `blockReason = no_real_write_allowed`; it does not perform any warehouse
+  write or real adapter transport call

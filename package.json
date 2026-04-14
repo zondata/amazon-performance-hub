@@ -109,6 +109,7 @@
     "spapi:dry-run-first-report-warehouse-adapter": "ts-node src/warehouse/firstSalesTrafficWarehouseDryRunCli.ts",
     "spapi:define-first-report-warehouse-interface": "ts-node src/warehouse/firstSalesTrafficWarehouseInterfaceCli.ts",
     "spapi:build-first-report-warehouse-noop": "ts-node src/warehouse/firstSalesTrafficWarehouseNoopCli.ts",
+    "spapi:invoke-first-report-warehouse-adapter": "ts-node src/warehouse/firstSalesTrafficWarehouseInvocationCli.ts",
     "web:dev": "npm --prefix apps/web run dev",
     "web:build": "npm --prefix apps/web run build",
     "web:lint": "npm --prefix apps/web run lint"
