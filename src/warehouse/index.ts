@@ -31,3 +31,19 @@ export {
   validateFirstSalesTrafficWarehouseAdapterDryRunInputs,
   writeFirstSalesTrafficWarehouseAdapterDryRun,
 } from './firstSalesTrafficWarehouseDryRun';
+
+export {
+  FIRST_REPORT_WAREHOUSE_ADAPTER_INTERFACE_VERSION,
+  FIRST_REPORT_WAREHOUSE_INTERFACE_OUTPUT_DIR,
+  FirstReportWarehouseInterfaceError,
+  type FirstReportWarehouseAdapterInterfaceArtifact,
+  type FirstReportWarehouseAdapterInterfaceSummary,
+  buildFirstSalesTrafficWarehouseAdapterInterface,
+  buildFirstSalesTrafficWarehouseAdapterInterfacePath,
+  readFirstSalesTrafficWarehouseAdapterDryRunArtifact,
+  resolveFirstSalesTrafficWarehouseDryRunArtifactPath,
+  runFirstSalesTrafficWarehouseAdapterInterfaceDefinition,
+  summarizeFirstSalesTrafficWarehouseAdapterInterface,
+  validateFirstSalesTrafficWarehouseAdapterInterface,
+  writeFirstSalesTrafficWarehouseAdapterInterface,
+} from './firstSalesTrafficWarehouseInterface';

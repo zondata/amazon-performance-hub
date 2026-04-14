@@ -24,3 +24,15 @@ Current V2 scope:
   show what would be prepared for adapter execution
 - Explicitly records `mode = dry_run`, `writesAttempted = false`, and
   `writesAttemptedCount = 0`; it does not perform any warehouse write
+- `firstSalesTrafficWarehouseInterface.ts`
+- Reads one V2-13 warehouse dry-run artifact for the first
+  `GET_SALES_AND_TRAFFIC_REPORT`
+- Writes one deterministic adapter interface artifact to
+  `out/sp-api-warehouse-interface/`
+- Uses local-only `interfacePayload.targetInterfaces[]` with explicit
+  `operationName`, `keyColumns`, `mappedColumnCount`, `requestContract`,
+  `responseContract`, and `executionFlags` so future adapter execution can be
+  bounded without providing any actual implementation
+- Explicitly records `mode = interface_only`, `writesAttempted = false`,
+  `implementationPresent = false`, and `executionAllowed = false`; it does not
+  perform any warehouse write or provide a real adapter client
