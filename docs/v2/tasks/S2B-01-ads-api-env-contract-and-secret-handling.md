@@ -15,18 +15,20 @@ The following variables are the required Ads API contract for future implementat
 
 | Variable | Required for sandbox | Required for production | Secret | Purpose |
 | --- | --- | --- | --- | --- |
-| `ADS_API_CLIENT_ID` | yes | yes | yes | Amazon Ads application client id |
-| `ADS_API_CLIENT_SECRET` | yes | yes | yes | Amazon Ads application client secret |
-| `ADS_API_REFRESH_TOKEN` | yes | yes | yes | Environment-specific refresh token |
-| `ADS_API_REGION` | yes | yes | no | Runtime region selector: `NA`, `EU`, or `FE` |
-| `ADS_API_PROFILE_ID` | optional for auth-only checks | yes for live pull proof | no | Ads profile scope used in `Amazon-Advertising-API-Scope` |
+| `AMAZON_ADS_CLIENT_ID` | yes | yes | yes | Amazon Ads application client id |
+| `AMAZON_ADS_CLIENT_SECRET` | yes | yes | yes | Amazon Ads application client secret |
+| `AMAZON_ADS_API_BASE_URL` | yes | yes | no | Configured Amazon Ads API base URL |
+| `AMAZON_ADS_REFRESH_TOKEN` | yes | yes | yes | Environment-specific refresh token |
+| `AMAZON_ADS_PROFILE_ID` | optional for auth-only checks | yes for live pull proof | no | Ads profile scope used in `Amazon-Advertising-API-Scope` |
 | `APP_ACCOUNT_ID` | yes | yes | no | Internal account partition key already used by the repo |
 | `APP_MARKETPLACE` | yes | yes | no | Internal marketplace code already used by the repo |
 
 Rules:
-- `ADS_API_CLIENT_ID`, `ADS_API_CLIENT_SECRET`, and `ADS_API_REFRESH_TOKEN` are secrets.
-- `ADS_API_PROFILE_ID` is runtime scope, not a secret.
-- `ADS_API_REGION` must match the region that owns the refresh token and profile.
+- `AMAZON_ADS_CLIENT_ID`, `AMAZON_ADS_CLIENT_SECRET`, and `AMAZON_ADS_REFRESH_TOKEN` are secrets.
+- `AMAZON_ADS_PROFILE_ID` is runtime scope, not a secret.
+- `AMAZON_ADS_API_BASE_URL` must stay separate from the LWA token endpoint.
+- `AMAZON_ADS_REFRESH_TOKEN` may be wrapped in one matching pair of surrounding single or double quotes in local `.env.local`; loaders must trim whitespace and remove that one outer pair before use without altering interior characters.
+- Region handling is out of scope for `S2B-02` and is not a required variable in this contract.
 - One `.env.local` set must describe one environment only.
 
 ## Secret storage rules
@@ -67,15 +69,14 @@ Rules:
 Forbidden combinations:
 - production refresh token with sandbox base URL or sandbox assumptions
 - sandbox refresh token with production success claims
-- `ADS_API_PROFILE_ID` from one account with credentials for another account
-- `ADS_API_REGION` that does not match the token and profile region
+- `AMAZON_ADS_PROFILE_ID` from one account with credentials for another account
 - shared mixed `.env.local` containing both sandbox and production Ads credentials
 - committed placeholder values presented as real proof
 
 ## Verification rules
 Before any future Stage 2B implementation task may be marked complete:
 - required env vars for that task must be present in local `.env.local`
-- runtime region must be explicit
+- configured Ads API base URL must be explicit
 - profile scope must be explicit for any task that needs profile-scoped calls
 - the exact WSL command used for proof must be recorded
 - success must be based on a real end-to-end run against the intended environment
@@ -86,7 +87,7 @@ Before any future Stage 2B implementation task may be marked complete:
 The minimum evidence set for the first real Ads API implementation task is:
 - exact command run
 - environment class: `sandbox` or `production`
-- region used
+- configured Ads API base URL
 - profile id used if applicable
 - account id / marketplace used by the repo
 - redacted success summary
@@ -100,7 +101,7 @@ Proof rules:
 ## Operator handoff rules
 The operator must provide or confirm:
 - which environment is intended: `sandbox` or `production`
-- the region
+- the configured Ads API base URL
 - the profile id if the task is profile-scoped
 - that credentials are placed in local `.env.local` and not committed
 - whether the goal is sandbox wiring proof or production proof
@@ -108,7 +109,7 @@ The operator must provide or confirm:
 If production proof is required, the operator must confirm:
 - the intended Ads account
 - the intended profile
-- that the credentials and profile belong to the same environment and region
+- that the credentials and profile belong to the same environment
 
 ## Codex execution rules
 Codex must:

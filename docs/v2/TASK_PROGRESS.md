@@ -1,16 +1,16 @@
 # Amazon Performance Hub V2 — Task Progress
 
-Last generated: 2026-04-14
+Last generated: 2026-04-16
 
 ## Overall
 
 - Total tasks: 72
-- Done: 16
+- Done: 17
 - Verify: 1
 - In progress: 1
 - Blocked: 0
-- Remaining open: 56
-- Remaining fast-track tasks: 28
+- Remaining open: 55
+- Remaining fast-track tasks: 27
 
 ## Stage summary
 
@@ -19,7 +19,7 @@ Last generated: 2026-04-14
 | Stage 0 — scope freeze and control files | 2 | 0 | 0 | 0 | 0 | 2 | 2 | Yes |
 | Stage 1 — repo boundary for V2 | 3 | 0 | 0 | 0 | 0 | 3 | 3 | Yes |
 | Stage 2A — SP-API auth + first retail pulls | 10 | 1 | 1 | 0 | 1 | 4 | 4 | Yes |
-| Stage 2B — Ads API auth + first Sponsored Products pulls | 1 | 0 | 0 | 0 | 10 | 0 | 4 | No |
+| Stage 2B — Ads API auth + first Sponsored Products pulls | 2 | 0 | 0 | 0 | 9 | 0 | 4 | No |
 | Stage 3 — ingestion backbone | 0 | 0 | 0 | 0 | 8 | 0 | 2 | No |
 | Stage 4 — canonical marts | 0 | 0 | 0 | 0 | 6 | 0 | 1 | No |
 | Stage 5 — memory system | 0 | 0 | 0 | 0 | 5 | 0 | 1 | No |
@@ -121,7 +121,6 @@ Last generated: 2026-04-14
 
 | ID | Status | Priority | Gate | Fast-track | Title |
 |---|---|---|---|---|---|
-| S2B-02 | todo | must | no | yes | Implement Ads authorization grant, token exchange, and refresh |
 | S2B-03 | todo | must | no | yes | Implement Ads profile sync and internal profile mapping |
 | S2B-04 | todo | must | no | yes | Implement Sponsored Products campaign daily connector |
 | S2B-05 | todo | must | no | yes | Implement Sponsored Products target daily connector |

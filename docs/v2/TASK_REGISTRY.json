@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-04-14",
+  "last_updated": "2026-04-16",
   "status_values": [
     "todo",
     "in_progress",
@@ -478,7 +478,7 @@
       "stage": "S2B",
       "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
       "title": "Implement Ads authorization grant, token exchange, and refresh",
-      "status": "todo",
+      "status": "done",
       "priority": "must",
       "gate": false,
       "fast_track": true,

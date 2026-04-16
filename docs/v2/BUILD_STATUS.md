@@ -1,8 +1,8 @@
 # V2 Build Status
 
-Last updated: `2026-04-14`
+Last updated: `2026-04-16`
 Current branch: `v2/02-sp-api-auth`
-Current task: `S2B-01 - Document Ads API environment contract and secret handling`
+Current task: `S2B-02 - Implement Ads authorization grant, token exchange, and refresh`
 Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 
 ## Stage checklist
@@ -11,42 +11,40 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 - [ ] `Stage 2B` - Ads API auth + first Sponsored Products pulls
 
 ## Current task card
-- Task ID: `S2B-01`
-- Title: `Document Ads API environment contract and secret handling`
-- Objective: Create one authoritative Stage 2B contract doc that defines the Amazon Ads API environment contract, secret handling rules, runtime boundaries, and verification requirements that must be satisfied before any live Ads API auth or pull task can claim success.
+- Task ID: `S2B-02`
+- Title: `Implement Ads authorization grant, token exchange, and refresh`
+- Objective: Implement a bounded Amazon Ads auth module and CLI surface that can build an operator-facing authorization URL, exchange an authorization code, and refresh an access token without widening into profile sync, report pulls, UI, schema, or warehouse work.
 - Allowed files:
   - `docs/v2/BUILD_STATUS.md`
   - `docs/v2/TASK_REGISTRY.json`
   - `docs/v2/TASK_PROGRESS.md`
   - `docs/v2/tasks/S2B-01-ads-api-env-contract-and-secret-handling.md`
-  - `package.json` only if a bounded non-secret verification helper is strictly required
-  - `src/connectors/ads-api/**` only if a tiny non-secret contract stub or README is strictly required
+  - `docs/v2/tasks/S2B-02-ads-auth-token-refresh.md`
+  - `package.json`
+  - `src/connectors/ads-api/**`
 - Forbidden:
-  - live Amazon Ads API auth code
-  - live Amazon Ads API requests
+  - Ads profile sync
+  - Sponsored Products pulls
   - warehouse work
   - UI work
   - Supabase schema work
   - Stage 2A behavior changes
-  - Stage 2B pull implementation
   - real secrets in committed files
   - broad refactors
 - Required checks:
   - [x] `npm test`
   - [x] `npm run verify:wsl`
+  - [x] `npm run adsapi:print-auth-url -- --redirect-uri https://example.com/callback --scope cpc_advertising:campaign_management`
+  - [x] `npm run adsapi:refresh-access-token`
   - [x] `node scripts/v2-progress.mjs --write`
-  - [x] `docs/v2/tasks/S2B-01-ads-api-env-contract-and-secret-handling.md`
 - Status: `complete`
 - Notes:
-  - This task is documentation-only and adds no live Ads API auth or request code.
-  - The contract doc explicitly defines required Ads credentials, secret storage rules, allowed runtime environments, forbidden environment mixes, verification rules, operator handoff rules, Codex execution rules, and non-goals.
-  - The contract explicitly forbids committing real Ads API secrets.
-  - The contract explicitly distinguishes sandbox-only proof from production proof.
-  - `Stage 2B can start now: yes`.
-  - Exact remaining tasks before the first Stage 2B real proof can begin:
-    - `S2B-02` — Implement Ads authorization grant, token exchange, and refresh
-    - `S2B-03` — Implement Ads profile sync and internal profile mapping
-  - Single next bounded build task: `S2B-02 - Implement Ads authorization grant, token exchange, and refresh`
+  - Replaced the Stage 1 placeholder Ads boundary with typed env/auth/endpoints helpers, repo-local env loading, and three bounded CLIs.
+  - Standardized the implementation on `AMAZON_ADS_*` env keys and kept `AMAZON_ADS_API_BASE_URL` separate from the LWA token endpoint.
+  - Added quoted-refresh-token normalization for `.env.local` values with one matching outer quote pair.
+  - Real Stage 2B proof for this task was `npm run adsapi:refresh-access-token`.
+  - The first sandboxed refresh attempt failed at the outbound auth transport boundary and then passed after an unrestricted rerun from WSL.
+  - Single next bounded build task: `S2B-03 - Implement Ads profile sync and internal profile mapping`
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -78,6 +76,7 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 | 2026-04-14 | `S2A-08` | `v2/02-sp-api-auth` | Add one bounded Search Terms parse+ingest path that reads one local Search Terms raw artifact, validates the official `GET_BRAND_ANALYTICS_SEARCH_TERMS_REPORT` family, and ingests it through one bounded Search Terms raw ingest boundary without widening into Stage 2B, warehouse, or UI work. | `complete` | `focused Search Terms parse+ingest tests passed; npm test passed; npm run verify:wsl passed` | Next bounded task is `S2A-G3` — prove one first real Search Terms pull ingests successfully for one marketplace window. |
 | 2026-04-14 | `S2A-G3` | `v2/02-sp-api-auth` | Add one bounded real SP-API Search Terms pull path for one marketplace week window that requests the report, polls to terminal state, downloads the raw artifact, and hands it into the bounded Search Terms parse+ingest path without widening into Stage 2B, warehouse, or UI work. | `complete` | `focused Search Terms real-pull tests passed; npm run spapi:search-terms-first-real-pull-ingest -- --marketplace-id ATVPDKIKX0DER --start-date 2026-04-05 --end-date 2026-04-11 succeeded with report id 485977020557 and upload id 517bcaba-d7bd-4d3d-b56a-372c0de77bda; npm test passed; npm run verify:wsl passed` | Next bounded task is `S2B-01` — document Ads API environment contract and secret handling. |
 | 2026-04-14 | `S2B-01` | `v2/02-sp-api-auth` | Document the Amazon Ads API environment contract, secret handling rules, runtime boundaries, and verification requirements required before any live Stage 2B implementation begins. | `complete` | `node scripts/v2-progress.mjs --write passed; npm test passed; npm run verify:wsl passed` | Next bounded task is `S2B-02` — implement Ads authorization grant, token exchange, and refresh. |
+| 2026-04-16 | `S2B-02` | `v2/02-sp-api-auth` | Replace the Stage 1 Ads placeholder with a bounded auth module and CLI surface for authorization URL generation, authorization-code exchange, and refresh-token exchange without widening into profile sync, pulls, UI, schema, or warehouse work. | `complete` | `npm test passed; npm run adsapi:print-auth-url -- --redirect-uri https://example.com/callback --scope cpc_advertising:campaign_management passed; npm run adsapi:refresh-access-token passed after an unrestricted rerun because the sandbox blocked outbound auth; npm run verify:wsl passed; node scripts/v2-progress.mjs --write passed` | Next bounded task is `S2B-03` — implement Ads profile sync and internal profile mapping. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -185,8 +184,16 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
   - `npm run verify:wsl` passed in WSL.
   - `npm run spapi:search-terms-first-real-pull-ingest -- --marketplace-id ATVPDKIKX0DER --start-date 2026-04-05 --end-date 2026-04-11` was actually run successfully and created report id `485977020557`.
   - The real gate summary reported `Marketplace ID: ATVPDKIKX0DER`, `Coverage window: 2026-04-05 -> 2026-04-11`, `Row count: 0`, `Warnings: 0`, and `Upload ID: 517bcaba-d7bd-4d3d-b56a-372c0de77bda`.
+- S2B-02 validation completed:
+  - Focused Amazon Ads auth boundary tests passed locally for missing-env handling, quoted refresh-token normalization, authorization URL construction, authorization-code request construction, refresh-token request construction, success payload parsing, invalid payload handling, non-2xx failure normalization, transport failure normalization, local env loading, and CLI redaction.
+  - `npm test` passed locally.
+  - `npm run adsapi:print-auth-url -- --redirect-uri https://example.com/callback --scope cpc_advertising:campaign_management` passed and printed one authorization URL.
+  - `npm run adsapi:refresh-access-token` failed in the sandbox at the outbound auth transport boundary, then passed after an unrestricted rerun in WSL.
+  - The refresh proof summary reported `Token type: bearer`, `Expires in: 3600`, `Refresh token returned in payload: yes (redacted)`, and the configured Ads API base URL.
+  - `npm run verify:wsl` passed in WSL.
+  - `node scripts/v2-progress.mjs --write` regenerated `docs/v2/TASK_PROGRESS.md`.
 
 ## Open blockers
 - Stage 2A gates are complete.
 - Stage 2B is active.
-- The single next bounded build task is `S2B-02` — implement Ads authorization grant, token exchange, and refresh.
+- The single next bounded build task is `S2B-03` — implement Ads profile sync and internal profile mapping.
