@@ -99,6 +99,7 @@
     "adsapi:print-auth-url": "ts-node src/connectors/ads-api/authUrlCli.ts",
     "adsapi:exchange-code": "ts-node src/connectors/ads-api/exchangeCodeCli.ts",
     "adsapi:refresh-access-token": "ts-node src/connectors/ads-api/refreshAccessTokenCli.ts",
+    "adsapi:sync-profiles": "ts-node src/connectors/ads-api/profileSyncCli.ts",
     "spapi:first-call": "ts-node src/connectors/sp-api/firstCallCli.ts",
     "spapi:first-report-request": "ts-node src/connectors/sp-api/firstReportRequestCli.ts",
     "spapi:poll-first-report": "ts-node src/connectors/sp-api/firstReportStatusCli.ts",

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-04-16",
+  "last_updated": "2026-04-17",
   "status_values": [
     "todo",
     "in_progress",
@@ -496,7 +496,7 @@
       "stage": "S2B",
       "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
       "title": "Implement Ads profile sync and internal profile mapping",
-      "status": "todo",
+      "status": "done",
       "priority": "must",
       "gate": false,
       "fast_track": true,
@@ -587,7 +587,7 @@
       "stage": "S2B",
       "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
       "title": "Gate: first Ads profile sync succeeds",
-      "status": "todo",
+      "status": "done",
       "priority": "must",
       "gate": true,
       "fast_track": true,

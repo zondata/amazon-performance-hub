@@ -1,4 +1,8 @@
-import { AdsApiConfigError, type AdsApiEnvConfig } from './types';
+import {
+  AdsApiConfigError,
+  type AdsApiEnvConfig,
+  type AdsApiProfileSyncEnvConfig,
+} from './types';
 
 export const REQUIRED_AMAZON_ADS_ENV_KEYS = [
   'AMAZON_ADS_CLIENT_ID',
@@ -9,6 +13,13 @@ export const REQUIRED_AMAZON_ADS_ENV_KEYS = [
 export const AMAZON_ADS_ENV_OPTIONAL_KEYS = [
   'AMAZON_ADS_REFRESH_TOKEN',
   'AMAZON_ADS_PROFILE_ID',
+] as const;
+
+export const REQUIRED_ADS_PROFILE_SYNC_ENV_KEYS = [
+  'AMAZON_ADS_REFRESH_TOKEN',
+  'AMAZON_ADS_PROFILE_ID',
+  'APP_ACCOUNT_ID',
+  'APP_MARKETPLACE',
 ] as const;
 
 export type AdsApiEnvSource = Record<string, string | undefined>;
@@ -119,4 +130,40 @@ export const loadAdsApiEnvForRefresh = (
   }
 
   return config;
+};
+
+export const loadAdsApiEnvForProfileSync = (
+  source: AdsApiEnvSource = process.env
+): AdsApiProfileSyncEnvConfig => {
+  const missingKeys = [
+    ...REQUIRED_AMAZON_ADS_ENV_KEYS.filter(
+      (key) => readTrimmed(source, key) === null
+    ),
+    ...REQUIRED_ADS_PROFILE_SYNC_ENV_KEYS.filter(
+      (key) => readTrimmed(source, key) === null
+    ),
+  ];
+
+  if (missingKeys.length > 0) {
+    throw new AdsApiConfigError(
+      'missing_env',
+      `Missing required environment variables: ${missingKeys.join(', ')}`,
+      { details: { missingKeys } }
+    );
+  }
+
+  const config = loadAdsApiEnv(source);
+
+  return {
+    ...config,
+    profileId: readTrimmed(source, 'AMAZON_ADS_PROFILE_ID')!,
+    credentials: {
+      ...config.credentials,
+      refreshToken: normalizeAmazonAdsRefreshToken(
+        readTrimmed(source, 'AMAZON_ADS_REFRESH_TOKEN')
+      ),
+    },
+    appAccountId: readTrimmed(source, 'APP_ACCOUNT_ID')!,
+    appMarketplace: readTrimmed(source, 'APP_MARKETPLACE')!,
+  };
 };

@@ -1,8 +1,8 @@
 # V2 Build Status
 
-Last updated: `2026-04-16`
+Last updated: `2026-04-17`
 Current branch: `v2/02-sp-api-auth`
-Current task: `S2B-02 - Implement Ads authorization grant, token exchange, and refresh`
+Current task: `S2B-03 - Implement Ads profile sync and internal profile mapping`
 Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 
 ## Stage checklist
@@ -11,40 +11,47 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 - [ ] `Stage 2B` - Ads API auth + first Sponsored Products pulls
 
 ## Current task card
-- Task ID: `S2B-02`
-- Title: `Implement Ads authorization grant, token exchange, and refresh`
-- Objective: Implement a bounded Amazon Ads auth module and CLI surface that can build an operator-facing authorization URL, exchange an authorization code, and refresh an access token without widening into profile sync, report pulls, UI, schema, or warehouse work.
+- Task ID: `S2B-03`
+- Title: `Implement Ads profile sync and internal profile mapping`
+- Objective: Implement one bounded Amazon Ads profile-sync path that refreshes an access token through the existing `S2B-02` boundary, fetches `/v2/profiles`, validates `AMAZON_ADS_PROFILE_ID`, and writes one deterministic local mapping artifact without widening into Sponsored Products pulls, UI, schema, or warehouse work.
 - Allowed files:
   - `docs/v2/BUILD_STATUS.md`
   - `docs/v2/TASK_REGISTRY.json`
   - `docs/v2/TASK_PROGRESS.md`
-  - `docs/v2/tasks/S2B-01-ads-api-env-contract-and-secret-handling.md`
-  - `docs/v2/tasks/S2B-02-ads-auth-token-refresh.md`
+  - `docs/v2/tasks/S2B-03-ads-profile-sync-and-mapping.md`
   - `package.json`
-  - `src/connectors/ads-api/**`
+  - `src/connectors/ads-api/README.md`
+  - `src/connectors/ads-api/index.ts`
+  - `src/connectors/ads-api/types.ts`
+  - `src/connectors/ads-api/env.ts`
+  - `src/connectors/ads-api/profiles.ts`
+  - `src/connectors/ads-api/profileSyncCli.ts`
+  - `src/connectors/ads-api/profiles.test.ts`
+  - `src/connectors/ads-api/profileSyncCli.test.ts`
 - Forbidden:
-  - Ads profile sync
   - Sponsored Products pulls
   - warehouse work
   - UI work
   - Supabase schema work
-  - Stage 2A behavior changes
+  - Supabase writes
+  - report endpoints
+  - `Amazon-Advertising-API-Scope` on the profile-list request
   - real secrets in committed files
   - broad refactors
 - Required checks:
   - [x] `npm test`
+  - [x] `npm run adsapi:sync-profiles`
   - [x] `npm run verify:wsl`
-  - [x] `npm run adsapi:print-auth-url -- --redirect-uri https://example.com/callback --scope cpc_advertising:campaign_management`
-  - [x] `npm run adsapi:refresh-access-token`
   - [x] `node scripts/v2-progress.mjs --write`
 - Status: `complete`
 - Notes:
-  - Replaced the Stage 1 placeholder Ads boundary with typed env/auth/endpoints helpers, repo-local env loading, and three bounded CLIs.
-  - Standardized the implementation on `AMAZON_ADS_*` env keys and kept `AMAZON_ADS_API_BASE_URL` separate from the LWA token endpoint.
-  - Added quoted-refresh-token normalization for `.env.local` values with one matching outer quote pair.
-  - Real Stage 2B proof for this task was `npm run adsapi:refresh-access-token`.
-  - The first sandboxed refresh attempt failed at the outbound auth transport boundary and then passed after an unrestricted rerun from WSL.
-  - Single next bounded build task: `S2B-03 - Implement Ads profile sync and internal profile mapping`
+  - Added a bounded `adsapi:sync-profiles` CLI that reuses the `S2B-02` refresh-token exchange, fetches `GET {AMAZON_ADS_API_BASE_URL}/v2/profiles`, validates the configured profile id, and writes `out/ads-api-profile-sync/ads-profiles.sync.json`.
+  - The profile-list request intentionally sends `Authorization` and `Amazon-Advertising-API-ClientId` only; it does not send `Amazon-Advertising-API-Scope`.
+  - Added a stricter profile-sync env loader that requires `AMAZON_ADS_PROFILE_ID`, `APP_ACCOUNT_ID`, and `APP_MARKETPLACE` while keeping the existing `AMAZON_ADS_*` contract intact.
+  - Real Stage 2B proof for this task was `npm run adsapi:sync-profiles`.
+  - The first sandboxed profile-sync attempt failed at the outbound auth transport boundary and then passed after an unrestricted rerun from WSL.
+  - Manual verification is still required before push; wait for explicit operator reply `all passed`.
+  - Single next bounded build task: `S2B-04 - Implement Sponsored Products campaign daily connector`
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -77,6 +84,7 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 | 2026-04-14 | `S2A-G3` | `v2/02-sp-api-auth` | Add one bounded real SP-API Search Terms pull path for one marketplace week window that requests the report, polls to terminal state, downloads the raw artifact, and hands it into the bounded Search Terms parse+ingest path without widening into Stage 2B, warehouse, or UI work. | `complete` | `focused Search Terms real-pull tests passed; npm run spapi:search-terms-first-real-pull-ingest -- --marketplace-id ATVPDKIKX0DER --start-date 2026-04-05 --end-date 2026-04-11 succeeded with report id 485977020557 and upload id 517bcaba-d7bd-4d3d-b56a-372c0de77bda; npm test passed; npm run verify:wsl passed` | Next bounded task is `S2B-01` — document Ads API environment contract and secret handling. |
 | 2026-04-14 | `S2B-01` | `v2/02-sp-api-auth` | Document the Amazon Ads API environment contract, secret handling rules, runtime boundaries, and verification requirements required before any live Stage 2B implementation begins. | `complete` | `node scripts/v2-progress.mjs --write passed; npm test passed; npm run verify:wsl passed` | Next bounded task is `S2B-02` — implement Ads authorization grant, token exchange, and refresh. |
 | 2026-04-16 | `S2B-02` | `v2/02-sp-api-auth` | Replace the Stage 1 Ads placeholder with a bounded auth module and CLI surface for authorization URL generation, authorization-code exchange, and refresh-token exchange without widening into profile sync, pulls, UI, schema, or warehouse work. | `complete` | `npm test passed; npm run adsapi:print-auth-url -- --redirect-uri https://example.com/callback --scope cpc_advertising:campaign_management passed; npm run adsapi:refresh-access-token passed after an unrestricted rerun because the sandbox blocked outbound auth; npm run verify:wsl passed; node scripts/v2-progress.mjs --write passed` | Next bounded task is `S2B-03` — implement Ads profile sync and internal profile mapping. |
+| 2026-04-17 | `S2B-03` | `v2/02-sp-api-auth` | Add one bounded Ads profile-sync path that reuses the existing refresh-token boundary, fetches `/v2/profiles` without a scope header, validates the configured profile id, and writes one local mapping artifact without widening into Sponsored Products pulls, UI, schema, or warehouse work. | `complete` | `npm test passed; npm run adsapi:sync-profiles passed after an unrestricted rerun because the sandbox blocked outbound auth; npm run verify:wsl passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S2B-04` — implement Sponsored Products campaign daily connector. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -192,8 +200,17 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
   - The refresh proof summary reported `Token type: bearer`, `Expires in: 3600`, `Refresh token returned in payload: yes (redacted)`, and the configured Ads API base URL.
   - `npm run verify:wsl` passed in WSL.
   - `node scripts/v2-progress.mjs --write` regenerated `docs/v2/TASK_PROGRESS.md`.
+- S2B-03 validation completed:
+  - Focused Amazon Ads profile-sync boundary tests passed locally for request construction without a scope header, successful array parsing, non-array payload failure, non-2xx failure normalization, transport failure normalization, configured-profile matching, configured-profile missing failure, deterministic artifact building, and safe CLI summary formatting.
+  - `npm test` passed locally.
+  - `npm run adsapi:sync-profiles` failed in the sandbox at the outbound auth transport boundary, then passed after an unrestricted rerun in WSL.
+  - The profile-sync proof summary reported `Configured profile id: 3362351578582214`, `Selected profile id: 3362351578582214`, `Profile count: 3`, `Selected country code: US`, `Selected account name: NETRADE SOLUTION`, and artifact path `out/ads-api-profile-sync/ads-profiles.sync.json`.
+  - The generated artifact was inspected in WSL and confirmed to contain `appAccountId`, `appMarketplace`, `adsApiBaseUrl`, `configuredProfileId`, `selectedProfile`, `profileCount`, and `profilesSummary` with no token values.
+  - `npm run verify:wsl` passed in WSL.
+  - `node scripts/v2-progress.mjs --write` regenerated `docs/v2/TASK_PROGRESS.md`.
 
 ## Open blockers
 - Stage 2A gates are complete.
 - Stage 2B is active.
-- The single next bounded build task is `S2B-03` — implement Ads profile sync and internal profile mapping.
+- Manual verification is still required before push.
+- The single next bounded build task is `S2B-04` — implement Sponsored Products campaign daily connector.
