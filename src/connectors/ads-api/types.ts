@@ -53,6 +53,16 @@ export type AdsApiTransport = (
   request: AdsApiTransportRequest
 ) => Promise<AdsApiTransportResponse>;
 
+export type AdsApiDownloadTransportResponse = {
+  status: number;
+  body: Buffer;
+  headers: Record<string, string | null>;
+};
+
+export type AdsApiDownloadTransport = (
+  url: string
+) => Promise<AdsApiDownloadTransportResponse>;
+
 export type AdsApiTokenResult =
   | {
       ok: true;
@@ -173,6 +183,123 @@ export class AdsApiProfilesError extends Error {
   ) {
     super(message);
     this.name = 'AdsApiProfilesError';
+    this.code = code;
+    this.status = options.status;
+    this.details = options.details;
+  }
+}
+
+export type AdsApiDateRange = {
+  startDate: string;
+  endDate: string;
+};
+
+export type AdsApiValidatedProfileSyncArtifact = AdsApiProfilesSyncArtifact & {
+  selectedProfile: AdsApiProfile;
+};
+
+export type AdsApiSpCampaignDailyCreateRequest = {
+  name: string;
+  startDate: string;
+  endDate: string;
+  configuration: {
+    adProduct: 'SPONSORED_PRODUCTS';
+    groupBy: ['campaign'];
+    columns: string[];
+    reportTypeId: 'spCampaigns';
+    timeUnit: 'DAILY';
+    format: 'GZIP_JSON';
+  };
+};
+
+export type AdsApiSpCampaignDailyReportMetadata = {
+  reportId: string;
+  status: string | null;
+  statusDetails: string | null;
+  location: string | null;
+  fileSize: number | null;
+};
+
+export type AdsApiSpCampaignDailyRawPayload = {
+  format: 'json' | 'csv';
+  rows: Array<Record<string, unknown>>;
+};
+
+export type AdsApiSpCampaignDailyRawArtifact = {
+  schemaVersion: 'ads-api-sp-campaign-daily-raw/v1';
+  generatedAt: string;
+  appAccountId: string;
+  appMarketplace: string;
+  adsApiBaseUrl: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  reportMetadata: Omit<AdsApiSpCampaignDailyReportMetadata, 'location'> & {
+    downloadUrlPresent: boolean;
+  };
+  rawRowsPayload: AdsApiSpCampaignDailyRawPayload;
+};
+
+export type AdsApiSpCampaignDailyNormalizedRow = {
+  appAccountId: string;
+  appMarketplace: string;
+  profileId: string;
+  campaignId: string;
+  campaignName: string;
+  campaignStatus: string;
+  campaignBudgetType: string | null;
+  date: string;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  attributedSales14d: number;
+  attributedConversions14d: number;
+  currencyCode: string | null;
+};
+
+export type AdsApiSpCampaignDailyNormalizedArtifact = {
+  schemaVersion: 'ads-api-sp-campaign-daily-normalized/v1';
+  generatedAt: string;
+  appAccountId: string;
+  appMarketplace: string;
+  adsApiBaseUrl: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  rowCount: number;
+  normalizedCampaignRows: AdsApiSpCampaignDailyNormalizedRow[];
+};
+
+export class AdsApiSpCampaignDailyError extends Error {
+  readonly code:
+    | 'invalid_date'
+    | 'profile_sync_artifact_missing'
+    | 'profile_sync_artifact_invalid'
+    | 'profile_sync_artifact_mismatch'
+    | 'transport_error'
+    | 'report_request_failed'
+    | 'invalid_response'
+    | 'report_timeout'
+    | 'report_failed'
+    | 'download_failed';
+  readonly status?: number;
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'invalid_date'
+      | 'profile_sync_artifact_missing'
+      | 'profile_sync_artifact_invalid'
+      | 'profile_sync_artifact_mismatch'
+      | 'transport_error'
+      | 'report_request_failed'
+      | 'invalid_response'
+      | 'report_timeout'
+      | 'report_failed'
+      | 'download_failed',
+    message: string,
+    options: { status?: number; details?: unknown } = {}
+  ) {
+    super(message);
+    this.name = 'AdsApiSpCampaignDailyError';
     this.code = code;
     this.status = options.status;
     this.details = options.details;
