@@ -305,3 +305,115 @@ export class AdsApiSpCampaignDailyError extends Error {
     this.details = options.details;
   }
 }
+
+export type AdsApiSpTargetDailyCreateRequest = {
+  name: string;
+  startDate: string;
+  endDate: string;
+  configuration: {
+    adProduct: 'SPONSORED_PRODUCTS';
+    groupBy: ['targeting'];
+    columns: string[];
+    reportTypeId: 'spTargeting';
+    timeUnit: 'DAILY';
+    format: 'GZIP_JSON';
+  };
+};
+
+export type AdsApiSpTargetDailyReportMetadata = {
+  reportId: string;
+  status: string | null;
+  statusDetails: string | null;
+  location: string | null;
+  fileSize: number | null;
+};
+
+export type AdsApiSpTargetDailyRawPayload = {
+  format: 'json' | 'csv';
+  rows: Array<Record<string, unknown>>;
+};
+
+export type AdsApiSpTargetDailyRawArtifact = {
+  schemaVersion: 'ads-api-sp-target-daily-raw/v1';
+  generatedAt: string;
+  appAccountId: string;
+  appMarketplace: string;
+  adsApiBaseUrl: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  reportMetadata: Omit<AdsApiSpTargetDailyReportMetadata, 'location'> & {
+    downloadUrlPresent: boolean;
+  };
+  rawRowsPayload: AdsApiSpTargetDailyRawPayload;
+};
+
+export type AdsApiSpTargetDailyNormalizedRow = {
+  appAccountId: string;
+  appMarketplace: string;
+  profileId: string;
+  campaignId: string;
+  campaignName: string | null;
+  adGroupId: string;
+  adGroupName: string | null;
+  targetId: string;
+  targetingExpression: string | null;
+  matchType: string | null;
+  targetStatus: string;
+  date: string;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  attributedSales14d: number;
+  attributedConversions14d: number;
+  currencyCode: string | null;
+};
+
+export type AdsApiSpTargetDailyNormalizedArtifact = {
+  schemaVersion: 'ads-api-sp-target-daily-normalized/v1';
+  generatedAt: string;
+  appAccountId: string;
+  appMarketplace: string;
+  adsApiBaseUrl: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  rowCount: number;
+  normalizedTargetRows: AdsApiSpTargetDailyNormalizedRow[];
+};
+
+export class AdsApiSpTargetDailyError extends Error {
+  readonly code:
+    | 'invalid_date'
+    | 'profile_sync_artifact_missing'
+    | 'profile_sync_artifact_invalid'
+    | 'profile_sync_artifact_mismatch'
+    | 'transport_error'
+    | 'report_request_failed'
+    | 'invalid_response'
+    | 'report_timeout'
+    | 'report_failed'
+    | 'download_failed';
+  readonly status?: number;
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'invalid_date'
+      | 'profile_sync_artifact_missing'
+      | 'profile_sync_artifact_invalid'
+      | 'profile_sync_artifact_mismatch'
+      | 'transport_error'
+      | 'report_request_failed'
+      | 'invalid_response'
+      | 'report_timeout'
+      | 'report_failed'
+      | 'download_failed',
+    message: string,
+    options: { status?: number; details?: unknown } = {}
+  ) {
+    super(message);
+    this.name = 'AdsApiSpTargetDailyError';
+    this.code = code;
+    this.status = options.status;
+    this.details = options.details;
+  }
+}

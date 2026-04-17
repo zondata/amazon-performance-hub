@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-17`
 Current branch: `v2/02-sp-api-auth`
-Current task: `S2B-04 - Implement Sponsored Products campaign daily connector`
+Current task: `S2B-05 - Implement Sponsored Products target daily connector`
 Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 
 ## Stage checklist
@@ -11,49 +11,49 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 - [ ] `Stage 2B` - Ads API auth + first Sponsored Products pulls
 
 ## Current task card
-- Task ID: `S2B-04`
-- Title: `Implement Sponsored Products campaign daily connector`
-- Objective: Implement one bounded Sponsored Products campaign daily Ads API connector that validates the existing `S2B-03` profile-sync artifact before sending any report request, reuses the existing `S2B-02` refresh-token boundary, and writes deterministic local raw and normalized campaign-daily artifacts without widening into target daily, search-term, keyword, UI, schema, Supabase, or warehouse work.
+- Task ID: `S2B-05`
+- Title: `Implement Sponsored Products target daily connector`
+- Objective: Implement one bounded Sponsored Products target daily Ads API connector that validates the existing `S2B-03` profile-sync artifact before sending any report request, reuses the existing `S2B-02` refresh-token boundary, and writes deterministic local raw and normalized target-daily artifacts without widening into search-term, keyword, UI, schema, Supabase, or warehouse work.
 - Allowed files:
   - `docs/v2/BUILD_STATUS.md`
   - `docs/v2/TASK_REGISTRY.json`
   - `docs/v2/TASK_PROGRESS.md`
-  - `docs/v2/tasks/S2B-04-sp-campaign-daily-connector.md`
+  - `docs/v2/tasks/S2B-05-sp-target-daily-connector.md`
   - `package.json`
   - `src/connectors/ads-api/README.md`
   - `src/connectors/ads-api/index.ts`
   - `src/connectors/ads-api/types.ts`
-  - `src/connectors/ads-api/spCampaignDaily.ts`
-  - `src/connectors/ads-api/spCampaignDailyCli.ts`
-  - `src/connectors/ads-api/spCampaignDaily.test.ts`
-  - `src/connectors/ads-api/spCampaignDailyCli.test.ts`
+  - `src/connectors/ads-api/spTargetDaily.ts`
+  - `src/connectors/ads-api/spTargetDailyCli.ts`
+  - `src/connectors/ads-api/spTargetDaily.test.ts`
+  - `src/connectors/ads-api/spTargetDailyCli.test.ts`
 - Forbidden:
-  - target daily connector
   - search-term connector
   - keyword connector
   - warehouse work
   - UI work
   - Supabase schema work
   - Supabase writes
-  - target-level mapping
+  - campaign optimization logic
   - schema or warehouse persistence
   - `Amazon-Advertising-API-Scope` on the profile-list request
   - real secrets in committed files
   - broad refactors
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run adsapi:pull-sp-campaign-daily -- --start-date 2026-04-10 --end-date 2026-04-16`
+  - [x] `npm run adsapi:pull-sp-target-daily -- --start-date 2026-04-10 --end-date 2026-04-16`
   - [x] `npm run verify:wsl`
   - [x] `node scripts/v2-progress.mjs --write`
 - Status: `complete`
 - Notes:
-  - Added a bounded `adsapi:pull-sp-campaign-daily` CLI that validates the existing `out/ads-api-profile-sync/ads-profiles.sync.json` artifact before any report request, refreshes an Ads access token through the `S2B-02` boundary, requests one Sponsored Products campaign-daily report, polls to completion, downloads the bounded report payload, and writes both required local artifacts.
-  - The campaign-daily request path uses the validated profile id for the `Amazon-Advertising-API-Scope` request header and does not trust raw env alone for profile scoping.
-  - Added bounded campaign-daily normalization that stamps `appAccountId`, `appMarketplace`, and `profileId` onto every normalized row and preserves the downloaded raw payload losslessly.
-  - Real Stage 2B proof for this task was `npm run adsapi:pull-sp-campaign-daily -- --start-date 2026-04-10 --end-date 2026-04-16`, executed in WSL with `APP_ACCOUNT_ID=sourbear` set in the local shell so the internal metadata matched the validated `S2B-03` artifact.
-  - The first sandboxed campaign-daily attempt failed at the outbound auth transport boundary and then passed after an unrestricted rerun from WSL.
+  - Added a bounded `adsapi:pull-sp-target-daily` CLI that validates the existing `out/ads-api-profile-sync/ads-profiles.sync.json` artifact before any report request, refreshes an Ads access token through the `S2B-02` boundary, requests one Sponsored Products target-daily report, polls to completion, downloads the bounded report payload, and writes both required local artifacts.
+  - The target-daily request path uses the validated profile id for the `Amazon-Advertising-API-Scope` request header and does not trust raw env alone for profile scoping.
+  - Live Amazon response validation established the accepted target report shape for this bounded path: `reportTypeId=spTargeting`, `groupBy=[\"targeting\"]`, with `keywordId`, `targeting`, `keyword`, `matchType`, `keywordType`, and `adKeywordStatus` fields mapped into the normalized target rows.
+  - Added bounded target-daily normalization that stamps `appAccountId`, `appMarketplace`, and `profileId` onto every normalized row and preserves the downloaded raw payload losslessly.
+  - Real Stage 2B proof for this task was `npm run adsapi:pull-sp-target-daily -- --start-date 2026-04-10 --end-date 2026-04-16`, executed in WSL with `APP_ACCOUNT_ID=sourbear` set in the local shell so the internal metadata matched the validated `S2B-03` artifact.
+  - The first sandboxed target-daily attempt failed at the outbound auth transport boundary and then passed after unrestricted reruns from WSL.
   - Manual verification is still required before push; wait for explicit operator reply `all passed`.
-  - Single next bounded build task: `S2B-05 - Implement Sponsored Products target daily connector`
+  - Single next bounded build task: `S2B-06 - Add Ads raw landing + normalization persistence`
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -88,6 +88,7 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 | 2026-04-16 | `S2B-02` | `v2/02-sp-api-auth` | Replace the Stage 1 Ads placeholder with a bounded auth module and CLI surface for authorization URL generation, authorization-code exchange, and refresh-token exchange without widening into profile sync, pulls, UI, schema, or warehouse work. | `complete` | `npm test passed; npm run adsapi:print-auth-url -- --redirect-uri https://example.com/callback --scope cpc_advertising:campaign_management passed; npm run adsapi:refresh-access-token passed after an unrestricted rerun because the sandbox blocked outbound auth; npm run verify:wsl passed; node scripts/v2-progress.mjs --write passed` | Next bounded task is `S2B-03` — implement Ads profile sync and internal profile mapping. |
 | 2026-04-17 | `S2B-03` | `v2/02-sp-api-auth` | Add one bounded Ads profile-sync path that reuses the existing refresh-token boundary, fetches `/v2/profiles` without a scope header, validates the configured profile id, and writes one local mapping artifact without widening into Sponsored Products pulls, UI, schema, or warehouse work. | `complete` | `npm test passed; npm run adsapi:sync-profiles passed after an unrestricted rerun because the sandbox blocked outbound auth; npm run verify:wsl passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S2B-04` — implement Sponsored Products campaign daily connector. |
 | 2026-04-17 | `S2B-04` | `v2/02-sp-api-auth` | Add one bounded Sponsored Products campaign-daily connector that validates the existing profile-sync artifact before requesting the report, reuses the existing Ads refresh-token boundary, and writes deterministic local raw + normalized artifacts without widening into target daily, search-term, keyword, UI, schema, Supabase, or warehouse work. | `complete` | `npm test passed; npm run adsapi:pull-sp-campaign-daily -- --start-date 2026-04-10 --end-date 2026-04-16 passed after an unrestricted rerun because the sandbox blocked outbound auth; npm run verify:wsl passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S2B-05` — implement Sponsored Products target daily connector. |
+| 2026-04-17 | `S2B-05` | `v2/02-sp-api-auth` | Add one bounded Sponsored Products target-daily connector that validates the existing profile-sync artifact before requesting the report, reuses the existing Ads refresh-token boundary, and writes deterministic local raw + normalized artifacts without widening into search-term, keyword, UI, schema, Supabase, or warehouse work. | `complete` | `npm test passed; npm run adsapi:pull-sp-target-daily -- --start-date 2026-04-10 --end-date 2026-04-16 passed after unrestricted reruns because the sandbox blocked outbound auth; npm run verify:wsl passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S2B-06` — add Ads raw landing + normalization persistence. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -220,9 +221,19 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
   - The generated normalized artifact was inspected in WSL and confirmed to contain `rowCount: 733` plus `normalizedCampaignRows[]` with `appAccountId`, `appMarketplace`, `profileId`, `campaignId`, `campaignName`, `campaignStatus`, `campaignBudgetType`, `date`, `impressions`, `clicks`, `cost`, `attributedSales14d`, `attributedConversions14d`, and `currencyCode` on each row.
   - `npm run verify:wsl` passed in WSL.
   - `node scripts/v2-progress.mjs --write` regenerated `docs/v2/TASK_PROGRESS.md`.
+- S2B-05 validation completed:
+  - Focused Sponsored Products target-daily boundary tests passed locally for profile-sync artifact validation, bounded date-range validation, request construction, non-2xx failure normalization, transport failure normalization, normalization shape, deterministic artifact building, and safe CLI summary formatting.
+  - `npm test` passed locally.
+  - `npm run adsapi:pull-sp-target-daily -- --start-date 2026-04-10 --end-date 2026-04-16` failed in the sandbox at the outbound auth transport boundary, then passed after unrestricted reruns in WSL with `APP_ACCOUNT_ID=sourbear` set in the shell so the local internal metadata matched the validated profile-sync artifact.
+  - The live Amazon validation path first rejected `reportTypeId=spTargets`, then confirmed the bounded target report shape via API feedback: `reportTypeId=spTargeting`, `groupBy=targeting`, and accepted targeting columns including `keywordId`, `targeting`, `keyword`, `matchType`, `keywordType`, and `adKeywordStatus`.
+  - The target-daily proof summary reported `Validated profile id: 3362351578582214`, `Date range: 2026-04-10 -> 2026-04-16`, `Row count: 545`, raw artifact path `out/ads-api-sp-target-daily/raw/sp-target-daily.raw.json`, and normalized artifact path `out/ads-api-sp-target-daily/normalized/sp-target-daily.normalized.json`.
+  - The generated raw artifact was inspected in WSL and confirmed to contain `schemaVersion`, `generatedAt`, `appAccountId`, `appMarketplace`, `adsApiBaseUrl`, `profileId`, `requestedDateRange`, `reportMetadata`, and `rawRowsPayload`.
+  - The generated normalized artifact was inspected in WSL and confirmed to contain `rowCount: 545` plus `normalizedTargetRows[]` with `appAccountId`, `appMarketplace`, `profileId`, `campaignId`, `campaignName`, `adGroupId`, `adGroupName`, `targetId`, `targetingExpression`, `matchType`, `targetStatus`, `date`, `impressions`, `clicks`, `cost`, `attributedSales14d`, `attributedConversions14d`, and `currencyCode` on each row.
+  - `npm run verify:wsl` passed in WSL.
+  - `node scripts/v2-progress.mjs --write` regenerated `docs/v2/TASK_PROGRESS.md`.
 
 ## Open blockers
 - Stage 2A gates are complete.
 - Stage 2B is active.
 - Manual verification is still required before push.
-- The single next bounded build task is `S2B-05` — implement Sponsored Products target daily connector.
+- The single next bounded build task is `S2B-06` — add Ads raw landing + normalization persistence.

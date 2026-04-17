@@ -1,8 +1,8 @@
 # `src/connectors/ads-api`
 
-Bounded Stage 2B Amazon Ads auth, profile-sync, and Sponsored Products campaign daily surface.
+Bounded Stage 2B Amazon Ads auth, profile-sync, Sponsored Products campaign daily, and Sponsored Products target daily surface.
 
-In scope through `S2B-04`:
+In scope through `S2B-05`:
 - build an operator-facing authorization URL
 - exchange an authorization code for token payload data
 - refresh an access token from the configured refresh token
@@ -13,6 +13,9 @@ In scope through `S2B-04`:
 - request one bounded Sponsored Products campaign daily report for an explicit date range
 - poll the report to a terminal state and download it
 - build one raw and one normalized local campaign-daily artifact
+- request one bounded Sponsored Products target daily report for an explicit date range
+- poll the target report to a terminal state and download it
+- build one raw and one normalized local target-daily artifact
 
 Required environment:
 - `AMAZON_ADS_CLIENT_ID`
@@ -32,7 +35,11 @@ Notes:
 - The campaign-daily path writes:
   - `out/ads-api-sp-campaign-daily/raw/sp-campaign-daily.raw.json`
   - `out/ads-api-sp-campaign-daily/normalized/sp-campaign-daily.normalized.json`
-- Target daily, search-term, keyword, warehouse, and UI work remain out of scope here.
+- `adsapi:pull-sp-target-daily` validates the same local profile-sync artifact before sending any report request.
+- The target-daily path writes:
+  - `out/ads-api-sp-target-daily/raw/sp-target-daily.raw.json`
+  - `out/ads-api-sp-target-daily/normalized/sp-target-daily.normalized.json`
+- Search-term, keyword, warehouse, and UI work remain out of scope here.
 
 Bounded CLIs:
 - `npm run adsapi:print-auth-url -- --redirect-uri <uri> --scope <scope> [--state <state>]`
@@ -40,3 +47,4 @@ Bounded CLIs:
 - `npm run adsapi:refresh-access-token`
 - `npm run adsapi:sync-profiles`
 - `npm run adsapi:pull-sp-campaign-daily -- --start-date YYYY-MM-DD --end-date YYYY-MM-DD`
+- `npm run adsapi:pull-sp-target-daily -- --start-date YYYY-MM-DD --end-date YYYY-MM-DD`
