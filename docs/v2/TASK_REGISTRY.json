@@ -603,7 +603,7 @@
       "stage": "S2B",
       "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
       "title": "Gate: first Sponsored Products campaign daily ingest succeeds",
-      "status": "todo",
+      "status": "done",
       "priority": "must",
       "gate": true,
       "fast_track": true,

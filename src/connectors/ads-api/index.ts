@@ -89,8 +89,16 @@ export {
   runAdsPersistence,
   writeAdsPersistenceArtifacts,
 } from './adsPersistence';
+export {
+  ADS_API_SP_CAMPAIGN_INGEST_GATE_TEMP_CSV_PATH,
+  buildCampaignIngestGateCsv,
+  loadAdsCampaignIngestGateArtifact,
+  runAdsApiCampaignIngestGate,
+  writeCampaignIngestGateCsv,
+} from './campaignIngestGate';
 export { loadLocalEnvFiles } from './loadLocalEnv';
 export {
+  AdsApiCampaignIngestGateError,
   AdsApiAuthError,
   AdsApiConfigError,
   AdsApiPersistenceError,
@@ -99,6 +107,8 @@ export {
   AdsApiProfilesError,
   type AdsApiAuthorizationCodeExchangeInput,
   type AdsApiAuthorizationUrlInput,
+  type AdsApiCampaignIngestGateResult,
+  type AdsApiCampaignIngestGateSinkSummary,
   type AdsApiDateRange,
   type AdsApiDownloadTransport,
   type AdsApiDownloadTransportResponse,

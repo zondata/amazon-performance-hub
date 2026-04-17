@@ -5,12 +5,12 @@ Last generated: 2026-04-17
 ## Overall
 
 - Total tasks: 72
-- Done: 22
+- Done: 23
 - Verify: 1
 - In progress: 1
 - Blocked: 0
-- Remaining open: 50
-- Remaining fast-track tasks: 22
+- Remaining open: 49
+- Remaining fast-track tasks: 21
 
 ## Stage summary
 
@@ -19,7 +19,7 @@ Last generated: 2026-04-17
 | Stage 0 — scope freeze and control files | 2 | 0 | 0 | 0 | 0 | 2 | 2 | Yes |
 | Stage 1 — repo boundary for V2 | 3 | 0 | 0 | 0 | 0 | 3 | 3 | Yes |
 | Stage 2A — SP-API auth + first retail pulls | 10 | 1 | 1 | 0 | 1 | 4 | 4 | Yes |
-| Stage 2B — Ads API auth + first Sponsored Products pulls | 7 | 0 | 0 | 0 | 4 | 1 | 4 | No |
+| Stage 2B — Ads API auth + first Sponsored Products pulls | 8 | 0 | 0 | 0 | 3 | 2 | 4 | No |
 | Stage 3 — ingestion backbone | 0 | 0 | 0 | 0 | 8 | 0 | 2 | No |
 | Stage 4 — canonical marts | 0 | 0 | 0 | 0 | 6 | 0 | 1 | No |
 | Stage 5 — memory system | 0 | 0 | 0 | 0 | 5 | 0 | 1 | No |
@@ -31,7 +31,6 @@ Last generated: 2026-04-17
 
 ### Stage 2B — Ads API auth + first Sponsored Products pulls — gate tasks still required
 
-- S2B-G2 — Gate: first Sponsored Products campaign daily ingest succeeds
 - S2B-G3 — Gate: first Sponsored Products target daily ingest succeeds
 - S2B-G4 — Gate: Stage 2B tests green
 
@@ -77,10 +76,9 @@ Last generated: 2026-04-17
 
 ### First usable app (fast track)
 
-- Progress: 5/20
+- Progress: 6/20
 - Complete: No
 - Remaining:
-  - S2B-G2 — Gate: first Sponsored Products campaign daily ingest succeeds
   - S2B-G3 — Gate: first Sponsored Products target daily ingest succeeds
   - S2B-G4 — Gate: Stage 2B tests green
   - S3-G1 — Gate: daily batch jobs runnable end-to-end
@@ -120,7 +118,6 @@ Last generated: 2026-04-17
 | ID | Status | Priority | Gate | Fast-track | Title |
 |---|---|---|---|---|---|
 | S2B-07 | todo | should | no | no | Add Ads admin connection health check and smoke route/command |
-| S2B-G2 | todo | must | yes | yes | Gate: first Sponsored Products campaign daily ingest succeeds |
 | S2B-G3 | todo | must | yes | yes | Gate: first Sponsored Products target daily ingest succeeds |
 | S2B-G4 | todo | must | yes | yes | Gate: Stage 2B tests green |
 

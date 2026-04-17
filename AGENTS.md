@@ -283,6 +283,56 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 5) Never commit real Amazon reports/bulksheets to Git. Never commit Supabase keys.
 6) Canonical SOPs live in `docs/sop/`.
 
+## Task spec file rule
+There are two classes of task-spec files.
+
+### 1. Canonical tracked task specs
+These belong in git and may be committed:
+- `docs/v2/tasks/S*.md`
+- only when the file is the canonical source-of-truth spec for a real repo task or gate
+- one canonical tracked task spec per real task id
+
+Examples:
+- `docs/v2/tasks/S2B-04-sp-campaign-daily-connector.md`
+- `docs/v2/tasks/S2B-G2-first-sp-campaign-daily-ingest-gate.md`
+
+### 2. Scratch drafts and handoff specs
+These must stay outside commits and normally should stay outside the repo entirely:
+- ad hoc `*-spec.md`
+- downloaded handoff drafts
+- duplicate task drafts
+- one-off planning notes not intended as canonical repo history
+- generated task files stored at repo root such as `docs/v2/S2B-04-...md` instead of `docs/v2/tasks/...`
+
+Rules:
+- Do not commit scratch drafts.
+- Do not leave duplicate task specs in the repo root or `docs/v2/`.
+- If a task spec is only a temporary handoff draft, store it outside the repo or delete it after use.
+- Before commit, stage only the canonical tracked task spec for the active task, not scratch drafts.
+
+### Pre-commit selection rule
+Before every V2 task commit:
+1. stage tracked source-of-truth task file only if it lives under `docs/v2/tasks/`
+2. exclude:
+   - `docs/v2/*-spec.md`
+   - duplicate task files outside `docs/v2/tasks/`
+   - scratch planning notes
+   - downloaded prompt/spec handoff files
+3. if both a canonical task file and a duplicate scratch draft exist, commit only the canonical `docs/v2/tasks/...` file
+
+### Cleanup rule
+After a task is accepted and pushed:
+- keep the tracked canonical `docs/v2/tasks/...` file
+- delete or move any untracked duplicate scratch drafts outside the repo
+- maintain a clean worktree so later tasks do not risk accidental staging
+
+### Codex commit rule
+Codex must:
+- include the canonical active task spec if it is part of the repo history for that task
+- exclude untracked scratch drafts from staging and commit
+- mention any remaining untracked scratch task files in the final push report
+- never treat scratch drafts as source of truth over the tracked canonical task file
+
 ## Experiment Core Spec
 - Experiment-core scaffolding and phase checklist live in `docs/experiment-core/AGENTS.md`.
 - Use that document as the implementation contract for experiment-core phases.

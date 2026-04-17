@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-17`
 Current branch: `v2/02-sp-api-auth`
-Current task: `S2B-06 - Add Ads raw landing + normalization persistence`
+Current task: `S2B-G2 - Gate: first Sponsored Products campaign daily ingest succeeds`
 Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 
 ## Stage checklist
@@ -11,27 +11,27 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 - [ ] `Stage 2B` - Ads API auth + first Sponsored Products pulls
 
 ## Current task card
-- Task ID: `S2B-06`
-- Title: `Add Ads raw landing + normalization persistence`
-- Objective: Implement one bounded local persistence layer that reads the existing `S2B-04` and `S2B-05` raw and normalized artifacts, validates shared metadata consistency, and writes deterministic landed and persisted normalization artifacts without widening into ingestion, warehouse, Supabase, UI, or new Amazon pull work.
+- Task ID: `S2B-G2`
+- Title: `Gate: first Sponsored Products campaign daily ingest succeeds`
+- Objective: Implement one bounded gate path that reads the existing `S2B-06` persisted campaign rows, reuses the repo’s current Sponsored Products campaign ingest sink, and proves one real campaign-daily ingest succeeds for one account/profile/date-range scope without widening into target ingest, Stage 3 orchestration, UI, or schema redesign.
 - Allowed files:
   - `docs/v2/BUILD_STATUS.md`
   - `docs/v2/TASK_REGISTRY.json`
   - `docs/v2/TASK_PROGRESS.md`
-  - `docs/v2/tasks/S2B-06-ads-raw-landing-and-normalization-persistence.md`
+  - `docs/v2/tasks/S2B-G2-first-sp-campaign-daily-ingest-gate.md`
   - `package.json`
   - `src/connectors/ads-api/README.md`
   - `src/connectors/ads-api/index.ts`
   - `src/connectors/ads-api/types.ts`
-  - `src/connectors/ads-api/adsPersistence.ts`
-  - `src/connectors/ads-api/adsPersistenceCli.ts`
-  - `src/connectors/ads-api/adsPersistence.test.ts`
-  - `src/connectors/ads-api/adsPersistenceCli.test.ts`
+  - `src/connectors/ads-api/campaignIngestGate.ts`
+  - `src/connectors/ads-api/campaignIngestGateCli.ts`
+  - `src/connectors/ads-api/campaignIngestGate.test.ts`
+  - `src/connectors/ads-api/campaignIngestGateCli.test.ts`
 - Forbidden:
-  - ingestion work
-  - warehouse work
-  - Supabase work
+  - target ingest
+  - Stage 3 orchestration
   - UI work
+  - schema redesign
   - new Amazon pull work
   - search-term connector
   - keyword connector
@@ -39,18 +39,18 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
   - broad refactors
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run adsapi:persist-sp-daily`
+  - [x] `npm run adsapi:ingest-sp-campaign-daily`
   - [x] `npm run verify:wsl`
   - [x] `node scripts/v2-progress.mjs --write`
 - Status: `complete`
 - Notes:
-  - Added a bounded `adsapi:persist-sp-daily` CLI that is fully local, does not call Amazon, does not refresh tokens, and reuses the four existing `S2B-04` and `S2B-05` artifacts as its only inputs.
-  - Added local artifact validation that fails clearly on missing files, invalid JSON, metadata mismatches, or empty normalized row sets.
-  - Added a landed artifact at `out/ads-api-persisted/raw/ads-sp-daily.landed.json` that preserves the source campaign and target raw artifacts losslessly and records the four source artifact paths.
-  - Added a persisted normalization artifact at `out/ads-api-persisted/normalized/ads-sp-daily.persisted.json` that preserves the existing normalized campaign and target rows and builds a deterministic `dailySummary` sorted by date.
-  - Real Stage 2B proof for this task was the fully local command `npm run adsapi:persist-sp-daily`; no network access or Amazon calls were required.
+  - Added a bounded `adsapi:ingest-sp-campaign-daily` CLI that validates the persisted artifact, extracts campaign rows only, and reuses the existing SP campaign ingest plus mapping sink.
+  - The gate writes exactly one bounded temporary CSV to `out/ads-api-ingest-gate/sp-campaign-daily.ingest.csv` so the existing `ingest:sp:campaign` sink can be called without widening the sink contract.
+  - The gate proof succeeded in WSL and returned `upload_id = 37c763a7-e836-438e-86d7-6fe072164f4e`, `fact_rows = 611`, and `issue_rows = 20`.
+  - The sink wrapper intentionally keeps the exported-at date anchored to the persisted artifact end date while still generating a unique run payload so reruns do not collapse to an `already ingested` file-hash result.
+  - The canonical tracked task spec now lives at `docs/v2/tasks/S2B-G2-first-sp-campaign-daily-ingest-gate.md`; scratch duplicate task-spec drafts remain excluded from staging and commit.
   - Manual verification is still required before push; wait for explicit operator reply `all passed`.
-  - Single next bounded build task: `S2B-G2 - Gate: first Sponsored Products campaign daily ingest succeeds`
+  - Single next bounded build task: `S2B-G3 - Gate: first Sponsored Products target daily ingest succeeds`
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -87,6 +87,7 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 | 2026-04-17 | `S2B-04` | `v2/02-sp-api-auth` | Add one bounded Sponsored Products campaign-daily connector that validates the existing profile-sync artifact before requesting the report, reuses the existing Ads refresh-token boundary, and writes deterministic local raw + normalized artifacts without widening into target daily, search-term, keyword, UI, schema, Supabase, or warehouse work. | `complete` | `npm test passed; npm run adsapi:pull-sp-campaign-daily -- --start-date 2026-04-10 --end-date 2026-04-16 passed after an unrestricted rerun because the sandbox blocked outbound auth; npm run verify:wsl passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S2B-05` — implement Sponsored Products target daily connector. |
 | 2026-04-17 | `S2B-05` | `v2/02-sp-api-auth` | Add one bounded Sponsored Products target-daily connector that validates the existing profile-sync artifact before requesting the report, reuses the existing Ads refresh-token boundary, and writes deterministic local raw + normalized artifacts without widening into search-term, keyword, UI, schema, Supabase, or warehouse work. | `complete` | `npm test passed; npm run adsapi:pull-sp-target-daily -- --start-date 2026-04-10 --end-date 2026-04-16 passed after unrestricted reruns because the sandbox blocked outbound auth; npm run verify:wsl passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S2B-06` — add Ads raw landing + normalization persistence. |
 | 2026-04-17 | `S2B-06` | `v2/02-sp-api-auth` | Add one bounded local persistence layer that reads the existing campaign-daily and target-daily raw and normalized artifacts, validates shared metadata consistency, and writes deterministic landed and persisted normalization artifacts without widening into ingestion, warehouse, Supabase, UI, or new Amazon pull work. | `complete` | `npm test passed; npm run adsapi:persist-sp-daily passed; npm run verify:wsl passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S2B-G2` — gate: first Sponsored Products campaign daily ingest succeeds. |
+| 2026-04-17 | `S2B-G2` | `v2/02-sp-api-auth` | Add one bounded gate that reads the existing `S2B-06` persisted campaign rows, transforms them into the current SP campaign ingest sink’s accepted CSV shape, and proves one real campaign daily ingest succeeds without widening into target ingest, Stage 3 orchestration, UI, or schema redesign. | `complete` | `focused campaign-ingest-gate tests passed; npm run adsapi:ingest-sp-campaign-daily passed after an unrestricted rerun because the sandbox blocked the existing Supabase-backed sink; npm test passed; npm run verify:wsl passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S2B-G3` — gate: first Sponsored Products target daily ingest succeeds. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -238,9 +239,17 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
   - `npm test` passed in WSL.
   - `npm run verify:wsl` passed in WSL.
   - `node scripts/v2-progress.mjs --write` regenerated `docs/v2/TASK_PROGRESS.md`.
+- S2B-G2 validation completed:
+  - Focused campaign-ingest-gate tests passed locally for missing persisted-artifact failure, empty campaign-row failure, row-metadata mismatch failure, sink failure normalization, CSV shaping for the existing sink, and safe CLI summary formatting.
+  - `npm run adsapi:ingest-sp-campaign-daily` first failed in the sandbox at the existing Supabase-backed sink boundary, then passed after an unrestricted rerun in WSL with `APP_ACCOUNT_ID=sourbear`.
+  - The real gate summary reported `App account id: sourbear`, `App marketplace: US`, `Profile id: 3362351578582214`, `Date range: 2026-04-10 -> 2026-04-16`, `Campaign row count: 734`, `Upload id: 37c763a7-e836-438e-86d7-6fe072164f4e`, `raw_ingest=ok`, `mapping=ok`, `fact_rows=611`, and `issue_rows=20`.
+  - The gate wrote one bounded temporary CSV at `out/ads-api-ingest-gate/sp-campaign-daily.ingest.csv` and reused the current `ingestSpCampaignRaw` plus `mapUpload(uploadId, "sp_campaign")` sink path.
+  - `npm test` passed in WSL.
+  - `npm run verify:wsl` passed in WSL.
+  - `node scripts/v2-progress.mjs --write` regenerated `docs/v2/TASK_PROGRESS.md`.
 
 ## Open blockers
 - Stage 2A gates are complete.
 - Stage 2B is active.
 - Manual verification is still required before push.
-- The single next bounded build task is `S2B-G2` — gate: first Sponsored Products campaign daily ingest succeeds.
+- The single next bounded build task is `S2B-G3` — gate: first Sponsored Products target daily ingest succeeds.

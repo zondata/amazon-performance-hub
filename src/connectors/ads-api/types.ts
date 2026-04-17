@@ -492,3 +492,50 @@ export class AdsApiPersistenceError extends Error {
     this.details = options.details;
   }
 }
+
+export type AdsApiCampaignIngestGateSinkSummary = {
+  ingestStatus: 'ok' | 'already ingested';
+  mapStatus: 'ok' | 'missing_snapshot';
+  uploadId: string;
+  rawRowCount: number | null;
+  factRows: number;
+  issueRows: number;
+  coverageStart: string | null;
+  coverageEnd: string | null;
+  tempCsvPath: string;
+};
+
+export type AdsApiCampaignIngestGateResult = {
+  appAccountId: string;
+  appMarketplace: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  campaignRowCount: number;
+  sinkResult: AdsApiCampaignIngestGateSinkSummary;
+};
+
+export class AdsApiCampaignIngestGateError extends Error {
+  readonly code:
+    | 'artifact_missing'
+    | 'artifact_invalid'
+    | 'artifact_mismatch'
+    | 'invalid_rows'
+    | 'sink_failed';
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'artifact_missing'
+      | 'artifact_invalid'
+      | 'artifact_mismatch'
+      | 'invalid_rows'
+      | 'sink_failed',
+    message: string,
+    options: { details?: unknown } = {}
+  ) {
+    super(message);
+    this.name = 'AdsApiCampaignIngestGateError';
+    this.code = code;
+    this.details = options.details;
+  }
+}
