@@ -102,6 +102,7 @@
     "adsapi:sync-profiles": "ts-node src/connectors/ads-api/profileSyncCli.ts",
     "adsapi:pull-sp-campaign-daily": "ts-node src/connectors/ads-api/spCampaignDailyCli.ts",
     "adsapi:pull-sp-target-daily": "ts-node src/connectors/ads-api/spTargetDailyCli.ts",
+    "adsapi:persist-sp-daily": "ts-node src/connectors/ads-api/adsPersistenceCli.ts",
     "spapi:first-call": "ts-node src/connectors/sp-api/firstCallCli.ts",
     "spapi:first-report-request": "ts-node src/connectors/sp-api/firstReportRequestCli.ts",
     "spapi:poll-first-report": "ts-node src/connectors/sp-api/firstReportStatusCli.ts",

@@ -1,8 +1,8 @@
 # `src/connectors/ads-api`
 
-Bounded Stage 2B Amazon Ads auth, profile-sync, Sponsored Products campaign daily, and Sponsored Products target daily surface.
+Bounded Stage 2B Amazon Ads auth, profile-sync, Sponsored Products campaign daily, Sponsored Products target daily, and local persistence surface.
 
-In scope through `S2B-05`:
+In scope through `S2B-06`:
 - build an operator-facing authorization URL
 - exchange an authorization code for token payload data
 - refresh an access token from the configured refresh token
@@ -16,6 +16,8 @@ In scope through `S2B-05`:
 - request one bounded Sponsored Products target daily report for an explicit date range
 - poll the target report to a terminal state and download it
 - build one raw and one normalized local target-daily artifact
+- validate the four existing campaign-daily and target-daily local artifacts
+- build one deterministic local landed artifact and one deterministic local persisted normalization artifact
 
 Required environment:
 - `AMAZON_ADS_CLIENT_ID`
@@ -39,6 +41,10 @@ Notes:
 - The target-daily path writes:
   - `out/ads-api-sp-target-daily/raw/sp-target-daily.raw.json`
   - `out/ads-api-sp-target-daily/normalized/sp-target-daily.normalized.json`
+- `adsapi:persist-sp-daily` is fully local, does not call Amazon, and reuses the four existing `S2B-04` and `S2B-05` artifacts.
+- The local persistence path writes:
+  - `out/ads-api-persisted/raw/ads-sp-daily.landed.json`
+  - `out/ads-api-persisted/normalized/ads-sp-daily.persisted.json`
 - Search-term, keyword, warehouse, and UI work remain out of scope here.
 
 Bounded CLIs:
@@ -48,3 +54,4 @@ Bounded CLIs:
 - `npm run adsapi:sync-profiles`
 - `npm run adsapi:pull-sp-campaign-daily -- --start-date YYYY-MM-DD --end-date YYYY-MM-DD`
 - `npm run adsapi:pull-sp-target-daily -- --start-date YYYY-MM-DD --end-date YYYY-MM-DD`
+- `npm run adsapi:persist-sp-daily`

@@ -549,7 +549,7 @@
       "stage": "S2B",
       "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
       "title": "Add Ads raw landing + normalization persistence",
-      "status": "todo",
+      "status": "done",
       "priority": "must",
       "gate": false,
       "fast_track": true,

@@ -78,10 +78,22 @@ export {
   validateProfileSyncArtifactForSpTargetDaily,
   writeSpTargetDailyArtifacts,
 } from './spTargetDaily';
+export {
+  ADS_API_PERSISTED_LANDING_ARTIFACT_PATH,
+  ADS_API_PERSISTED_NORMALIZATION_ARTIFACT_PATH,
+  DEFAULT_ADS_PERSISTENCE_SOURCES,
+  buildAdsPersistenceDailySummary,
+  buildAdsPersistedLandingArtifact,
+  buildAdsPersistedNormalizationArtifact,
+  loadAdsPersistenceInputs,
+  runAdsPersistence,
+  writeAdsPersistenceArtifacts,
+} from './adsPersistence';
 export { loadLocalEnvFiles } from './loadLocalEnv';
 export {
   AdsApiAuthError,
   AdsApiConfigError,
+  AdsApiPersistenceError,
   AdsApiSpCampaignDailyError,
   AdsApiSpTargetDailyError,
   AdsApiProfilesError,
@@ -92,6 +104,9 @@ export {
   type AdsApiDownloadTransportResponse,
   type AdsApiCredentials,
   type AdsApiEnvConfig,
+  type AdsApiPersistedLandingArtifact,
+  type AdsApiPersistedNormalizationArtifact,
+  type AdsApiPersistenceSources,
   type AdsApiProfile,
   type AdsApiProfileAccountInfo,
   type AdsApiProfileSyncEnvConfig,
@@ -104,6 +119,7 @@ export {
   type AdsApiSpCampaignDailyRawArtifact,
   type AdsApiSpCampaignDailyRawPayload,
   type AdsApiSpCampaignDailyReportMetadata,
+  type AdsApiSpDailySummaryRow,
   type AdsApiSpTargetDailyCreateRequest,
   type AdsApiSpTargetDailyNormalizedArtifact,
   type AdsApiSpTargetDailyNormalizedRow,

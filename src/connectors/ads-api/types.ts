@@ -417,3 +417,78 @@ export class AdsApiSpTargetDailyError extends Error {
     this.details = options.details;
   }
 }
+
+export type AdsApiPersistenceSources = {
+  campaignRawArtifactPath: string;
+  campaignNormalizedArtifactPath: string;
+  targetRawArtifactPath: string;
+  targetNormalizedArtifactPath: string;
+};
+
+export type AdsApiSpDailySummaryRow = {
+  date: string;
+  campaignRowCount: number;
+  targetRowCount: number;
+  campaignImpressions: number;
+  campaignClicks: number;
+  campaignCost: number;
+  campaignAttributedSales14d: number;
+  campaignAttributedConversions14d: number;
+  targetImpressions: number;
+  targetClicks: number;
+  targetCost: number;
+  targetAttributedSales14d: number;
+  targetAttributedConversions14d: number;
+};
+
+export type AdsApiPersistedLandingArtifact = {
+  schemaVersion: 'ads-api-sp-daily-landed/v1';
+  generatedAt: string;
+  appAccountId: string;
+  appMarketplace: string;
+  adsApiBaseUrl: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  sources: AdsApiPersistenceSources;
+  campaignRaw: AdsApiSpCampaignDailyRawArtifact;
+  targetRaw: AdsApiSpTargetDailyRawArtifact;
+};
+
+export type AdsApiPersistedNormalizationArtifact = {
+  schemaVersion: 'ads-api-sp-daily-persisted/v1';
+  generatedAt: string;
+  appAccountId: string;
+  appMarketplace: string;
+  adsApiBaseUrl: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  campaignRowCount: number;
+  targetRowCount: number;
+  campaignRows: AdsApiSpCampaignDailyNormalizedRow[];
+  targetRows: AdsApiSpTargetDailyNormalizedRow[];
+  dailySummary: AdsApiSpDailySummaryRow[];
+};
+
+export class AdsApiPersistenceError extends Error {
+  readonly code:
+    | 'artifact_missing'
+    | 'artifact_invalid'
+    | 'artifact_mismatch'
+    | 'invalid_rows';
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'artifact_missing'
+      | 'artifact_invalid'
+      | 'artifact_mismatch'
+      | 'invalid_rows',
+    message: string,
+    options: { details?: unknown } = {}
+  ) {
+    super(message);
+    this.name = 'AdsApiPersistenceError';
+    this.code = code;
+    this.details = options.details;
+  }
+}
