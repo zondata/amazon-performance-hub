@@ -96,6 +96,13 @@ export {
   runAdsApiCampaignIngestGate,
   writeCampaignIngestGateCsv,
 } from './campaignIngestGate';
+export {
+  ADS_API_SP_TARGET_INGEST_GATE_TEMP_XLSX_PATH,
+  buildTargetIngestGateWorkbook,
+  loadAdsTargetIngestGateArtifact,
+  runAdsApiTargetIngestGate,
+  writeTargetIngestGateWorkbook,
+} from './targetIngestGate';
 export { loadLocalEnvFiles } from './loadLocalEnv';
 export {
   AdsApiCampaignIngestGateError,
@@ -104,6 +111,7 @@ export {
   AdsApiPersistenceError,
   AdsApiSpCampaignDailyError,
   AdsApiSpTargetDailyError,
+  AdsApiTargetIngestGateError,
   AdsApiProfilesError,
   type AdsApiAuthorizationCodeExchangeInput,
   type AdsApiAuthorizationUrlInput,
@@ -137,6 +145,8 @@ export {
   type AdsApiSpTargetDailyRawPayload,
   type AdsApiSpTargetDailyReportMetadata,
   type AdsApiTokenResponsePayload,
+  type AdsApiTargetIngestGateResult,
+  type AdsApiTargetIngestGateSinkSummary,
   type AdsApiTokenResult,
   type AdsApiTransport,
   type AdsApiTransportRequest,

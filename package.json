@@ -104,6 +104,7 @@
     "adsapi:pull-sp-target-daily": "ts-node src/connectors/ads-api/spTargetDailyCli.ts",
     "adsapi:persist-sp-daily": "ts-node src/connectors/ads-api/adsPersistenceCli.ts",
     "adsapi:ingest-sp-campaign-daily": "ts-node src/connectors/ads-api/campaignIngestGateCli.ts",
+    "adsapi:ingest-sp-target-daily": "ts-node src/connectors/ads-api/targetIngestGateCli.ts",
     "spapi:first-call": "ts-node src/connectors/sp-api/firstCallCli.ts",
     "spapi:first-report-request": "ts-node src/connectors/sp-api/firstReportRequestCli.ts",
     "spapi:poll-first-report": "ts-node src/connectors/sp-api/firstReportStatusCli.ts",

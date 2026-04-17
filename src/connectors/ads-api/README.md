@@ -1,8 +1,8 @@
 # `src/connectors/ads-api`
 
-Bounded Stage 2B Amazon Ads auth, profile-sync, Sponsored Products campaign daily, Sponsored Products target daily, local persistence, and first campaign-ingest gate surface.
+Bounded Stage 2B Amazon Ads auth, profile-sync, Sponsored Products campaign daily, Sponsored Products target daily, local persistence, and first campaign/target ingest gate surface.
 
-In scope through `S2B-G2`:
+In scope through `S2B-G3`:
 - build an operator-facing authorization URL
 - exchange an authorization code for token payload data
 - refresh an access token from the configured refresh token
@@ -19,6 +19,7 @@ In scope through `S2B-G2`:
 - validate the four existing campaign-daily and target-daily local artifacts
 - build one deterministic local landed artifact and one deterministic local persisted normalization artifact
 - validate the existing persisted campaign rows and hand them into the repo's current SP campaign ingest sink
+- validate the existing persisted target rows and hand them into the repo's current SP targeting ingest sink
 
 Required environment:
 - `AMAZON_ADS_CLIENT_ID`
@@ -48,6 +49,8 @@ Notes:
   - `out/ads-api-persisted/normalized/ads-sp-daily.persisted.json`
 - `adsapi:ingest-sp-campaign-daily` reuses the existing SP campaign ingest sink by writing one bounded temporary CSV under:
   - `out/ads-api-ingest-gate/sp-campaign-daily.ingest.csv`
+- `adsapi:ingest-sp-target-daily` reuses the existing SP targeting ingest sink by writing one bounded temporary XLSX under:
+  - `out/ads-api-ingest-gate/sp-target-daily.ingest.xlsx`
 - Search-term, keyword, warehouse, and UI work remain out of scope here.
 
 Bounded CLIs:
@@ -59,3 +62,4 @@ Bounded CLIs:
 - `npm run adsapi:pull-sp-target-daily -- --start-date YYYY-MM-DD --end-date YYYY-MM-DD`
 - `npm run adsapi:persist-sp-daily`
 - `npm run adsapi:ingest-sp-campaign-daily`
+- `npm run adsapi:ingest-sp-target-daily`
