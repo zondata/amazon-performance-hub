@@ -5,12 +5,12 @@ Last generated: 2026-04-17
 ## Overall
 
 - Total tasks: 72
-- Done: 24
+- Done: 25
 - Verify: 1
 - In progress: 1
 - Blocked: 0
-- Remaining open: 48
-- Remaining fast-track tasks: 20
+- Remaining open: 47
+- Remaining fast-track tasks: 19
 
 ## Stage summary
 
@@ -19,7 +19,7 @@ Last generated: 2026-04-17
 | Stage 0 — scope freeze and control files | 2 | 0 | 0 | 0 | 0 | 2 | 2 | Yes |
 | Stage 1 — repo boundary for V2 | 3 | 0 | 0 | 0 | 0 | 3 | 3 | Yes |
 | Stage 2A — SP-API auth + first retail pulls | 10 | 1 | 1 | 0 | 1 | 4 | 4 | Yes |
-| Stage 2B — Ads API auth + first Sponsored Products pulls | 9 | 0 | 0 | 0 | 2 | 3 | 4 | No |
+| Stage 2B — Ads API auth + first Sponsored Products pulls | 10 | 0 | 0 | 0 | 1 | 4 | 4 | Yes |
 | Stage 3 — ingestion backbone | 0 | 0 | 0 | 0 | 8 | 0 | 2 | No |
 | Stage 4 — canonical marts | 0 | 0 | 0 | 0 | 6 | 0 | 1 | No |
 | Stage 5 — memory system | 0 | 0 | 0 | 0 | 5 | 0 | 1 | No |
@@ -28,10 +28,6 @@ Last generated: 2026-04-17
 | Stage 8 — change logging + execution handoff | 0 | 0 | 0 | 0 | 5 | 0 | 1 | No |
 | Stage 9 — intraday pulse | 0 | 0 | 0 | 0 | 4 | 0 | 1 | No |
 | Stage 10 — ranking automation evaluation | 0 | 0 | 0 | 0 | 4 | 0 | 1 | No |
-
-### Stage 2B — Ads API auth + first Sponsored Products pulls — gate tasks still required
-
-- S2B-G4 — Gate: Stage 2B tests green
 
 ### Stage 3 — ingestion backbone — gate tasks still required
 
@@ -75,10 +71,9 @@ Last generated: 2026-04-17
 
 ### First usable app (fast track)
 
-- Progress: 7/20
+- Progress: 8/20
 - Complete: No
 - Remaining:
-  - S2B-G4 — Gate: Stage 2B tests green
   - S3-G1 — Gate: daily batch jobs runnable end-to-end
   - S3-G2 — Gate: app can show current vs delayed vs final data state
   - S4-01 — Build product overview mart
@@ -116,7 +111,6 @@ Last generated: 2026-04-17
 | ID | Status | Priority | Gate | Fast-track | Title |
 |---|---|---|---|---|---|
 | S2B-07 | todo | should | no | no | Add Ads admin connection health check and smoke route/command |
-| S2B-G4 | todo | must | yes | yes | Gate: Stage 2B tests green |
 
 ### Stage 3 — ingestion backbone
 

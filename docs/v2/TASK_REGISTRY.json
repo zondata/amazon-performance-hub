@@ -637,7 +637,7 @@
       "stage": "S2B",
       "stage_name": "Stage 2B \u2014 Ads API auth + first Sponsored Products pulls",
       "title": "Gate: Stage 2B tests green",
-      "status": "todo",
+      "status": "done",
       "priority": "must",
       "gate": true,
       "fast_track": true,

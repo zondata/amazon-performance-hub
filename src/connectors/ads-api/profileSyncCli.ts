@@ -19,6 +19,11 @@ export const ADS_API_PROFILE_SYNC_ARTIFACT_PATH = path.resolve(
   'out/ads-api-profile-sync/ads-profiles.sync.json'
 );
 
+const ADS_API_PERSISTED_NORMALIZATION_ARTIFACT_PATH = path.resolve(
+  process.cwd(),
+  'out/ads-api-persisted/normalized/ads-sp-daily.persisted.json'
+);
+
 export const buildProfileSyncSuccessLines = (args: {
   artifact: AdsApiProfilesSyncArtifact;
   artifactPath: string;
@@ -34,8 +39,66 @@ export const buildProfileSyncSuccessLines = (args: {
   `Artifact path: ${args.artifactPath}`,
 ];
 
+const readArtifactMetadata = (
+  artifactPath: string,
+  requiredKeys: string[] = []
+): { appAccountId: string; appMarketplace: string } | null => {
+  if (!fs.existsSync(artifactPath)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(artifactPath, 'utf8')) as Record<
+      string,
+      unknown
+    >;
+    const appAccountId =
+      typeof parsed.appAccountId === 'string' ? parsed.appAccountId.trim() : '';
+    const appMarketplace =
+      typeof parsed.appMarketplace === 'string'
+        ? parsed.appMarketplace.trim()
+        : '';
+    const configuredProfileId =
+      typeof parsed.configuredProfileId === 'string'
+        ? parsed.configuredProfileId.trim()
+        : '';
+
+    if (!appAccountId || !appMarketplace) {
+      return null;
+    }
+
+    for (const key of requiredKeys) {
+      const value = parsed[key];
+      if (typeof value !== 'string' || value.trim().length === 0) {
+        return null;
+      }
+    }
+
+    if (
+      requiredKeys.includes('configuredProfileId') &&
+      configuredProfileId.length === 0
+    ) {
+      return null;
+    }
+
+    return {
+      appAccountId,
+      appMarketplace,
+    };
+  } catch {
+    return null;
+  }
+};
+
 async function main(): Promise<void> {
   try {
+    const hadExplicitAppAccountId =
+      typeof process.env.APP_ACCOUNT_ID === 'string' &&
+      process.env.APP_ACCOUNT_ID.trim().length > 0;
+    const hadExplicitAppMarketplace =
+      typeof process.env.APP_MARKETPLACE === 'string' &&
+      process.env.APP_MARKETPLACE.trim().length > 0;
+
     loadLocalEnvFiles();
 
     const config = loadAdsApiEnvForProfileSync();
@@ -58,11 +121,27 @@ async function main(): Promise<void> {
       throw profilesResult.error;
     }
 
+    const existingMetadata =
+      !hadExplicitAppAccountId || !hadExplicitAppMarketplace
+        ? readArtifactMetadata(ADS_API_PERSISTED_NORMALIZATION_ARTIFACT_PATH, [
+            'profileId',
+          ]) ??
+          readArtifactMetadata(ADS_API_PROFILE_SYNC_ARTIFACT_PATH, [
+            'configuredProfileId',
+          ])
+        : null;
+
     const artifact = buildAdsProfilesSyncArtifact({
       profiles: profilesResult.profiles,
       configuredProfileId: config.profileId,
-      appAccountId: config.appAccountId,
-      appMarketplace: config.appMarketplace,
+      appAccountId:
+        hadExplicitAppAccountId || !existingMetadata
+          ? config.appAccountId
+          : existingMetadata.appAccountId,
+      appMarketplace:
+        hadExplicitAppMarketplace || !existingMetadata
+          ? config.appMarketplace
+          : existingMetadata.appMarketplace,
       adsApiBaseUrl: config.apiBaseUrl,
     });
 

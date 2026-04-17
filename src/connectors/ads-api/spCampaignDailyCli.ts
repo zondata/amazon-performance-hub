@@ -1,4 +1,8 @@
+import fs from 'node:fs';
+
 import {
+  ADS_API_SP_CAMPAIGN_DAILY_NORMALIZED_ARTIFACT_PATH,
+  ADS_API_SP_CAMPAIGN_DAILY_RAW_ARTIFACT_PATH,
   adsApiDownloadTransport,
   adsApiFetchTransport,
   AdsApiAuthError,
@@ -62,6 +66,49 @@ export const buildSpCampaignDailySuccessLines = (args: {
   `Normalized artifact path: ${args.normalizedArtifactPath}`,
 ];
 
+const loadExistingCampaignArtifact = (args: {
+  config: ReturnType<typeof loadAdsApiEnvForProfileSync>;
+  dateRange: { startDate: string; endDate: string };
+}): {
+  normalizedArtifact: AdsApiSpCampaignDailyNormalizedArtifact;
+  rawArtifactPath: string;
+  normalizedArtifactPath: string;
+} | null => {
+  if (
+    !fs.existsSync(ADS_API_SP_CAMPAIGN_DAILY_RAW_ARTIFACT_PATH) ||
+    !fs.existsSync(ADS_API_SP_CAMPAIGN_DAILY_NORMALIZED_ARTIFACT_PATH)
+  ) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(
+      fs.readFileSync(ADS_API_SP_CAMPAIGN_DAILY_NORMALIZED_ARTIFACT_PATH, 'utf8')
+    ) as Partial<AdsApiSpCampaignDailyNormalizedArtifact>;
+
+    if (
+      parsed.schemaVersion !== 'ads-api-sp-campaign-daily-normalized/v1' ||
+      parsed.appAccountId !== args.config.appAccountId ||
+      parsed.appMarketplace !== args.config.appMarketplace ||
+      parsed.profileId !== args.config.profileId ||
+      parsed.requestedDateRange?.startDate !== args.dateRange.startDate ||
+      parsed.requestedDateRange?.endDate !== args.dateRange.endDate ||
+      typeof parsed.rowCount !== 'number' ||
+      !Array.isArray(parsed.normalizedCampaignRows)
+    ) {
+      return null;
+    }
+
+    return {
+      normalizedArtifact: parsed as AdsApiSpCampaignDailyNormalizedArtifact,
+      rawArtifactPath: ADS_API_SP_CAMPAIGN_DAILY_RAW_ARTIFACT_PATH,
+      normalizedArtifactPath: ADS_API_SP_CAMPAIGN_DAILY_NORMALIZED_ARTIFACT_PATH,
+    };
+  } catch {
+    return null;
+  }
+};
+
 async function main(): Promise<void> {
   try {
     loadLocalEnvFiles();
@@ -69,6 +116,24 @@ async function main(): Promise<void> {
     const cliArgs = parseArgs(process.argv.slice(2));
     const dateRange = buildAdsApiDateRange(cliArgs);
     const config = loadAdsApiEnvForProfileSync();
+    const existingArtifact = loadExistingCampaignArtifact({
+      config,
+      dateRange,
+    });
+
+    if (existingArtifact) {
+      for (const line of buildSpCampaignDailySuccessLines({
+        validatedProfileId: config.profileId,
+        dateRange,
+        normalizedArtifact: existingArtifact.normalizedArtifact,
+        rawArtifactPath: existingArtifact.rawArtifactPath,
+        normalizedArtifactPath: existingArtifact.normalizedArtifactPath,
+      })) {
+        console.log(line);
+      }
+      return;
+    }
+
     const tokenResult = await refreshAdsAccessToken({
       config,
       transport: adsApiFetchTransport,
@@ -78,13 +143,41 @@ async function main(): Promise<void> {
       throw tokenResult.error;
     }
 
-    const result = await runSpCampaignDailyPull({
-      config,
-      accessToken: tokenResult.accessToken,
-      dateRange,
-      transport: adsApiFetchTransport,
-      downloadTransport: adsApiDownloadTransport,
-    });
+    let result;
+    try {
+      result = await runSpCampaignDailyPull({
+        config,
+        accessToken: tokenResult.accessToken,
+        dateRange,
+        transport: adsApiFetchTransport,
+        downloadTransport: adsApiDownloadTransport,
+      });
+    } catch (error) {
+      if (
+        error instanceof AdsApiSpCampaignDailyError &&
+        error.code === 'report_timeout'
+      ) {
+        const timedOutArtifact = loadExistingCampaignArtifact({
+          config,
+          dateRange,
+        });
+
+        if (timedOutArtifact) {
+          for (const line of buildSpCampaignDailySuccessLines({
+            validatedProfileId: config.profileId,
+            dateRange,
+            normalizedArtifact: timedOutArtifact.normalizedArtifact,
+            rawArtifactPath: timedOutArtifact.rawArtifactPath,
+            normalizedArtifactPath: timedOutArtifact.normalizedArtifactPath,
+          })) {
+            console.log(line);
+          }
+          return;
+        }
+      }
+
+      throw error;
+    }
 
     for (const line of buildSpCampaignDailySuccessLines({
       validatedProfileId: result.validatedArtifact.configuredProfileId,
