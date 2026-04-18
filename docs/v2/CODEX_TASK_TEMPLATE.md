@@ -38,9 +38,11 @@ List concrete things that must not change.
 
 ## Required tests
 List exact commands Codex must run.
+If the task is browser-facing, include the exact Playwright or browser-smoke command here.
 
 ## Acceptance checks
 List exact checks that prove the task is done.
+If browser behavior is in scope, include the machine-checkable browser assertions separately from any human-only visual checks.
 
 ## Required status update
 Codex must update `docs/v2/BUILD_STATUS.md` in the same branch:
@@ -50,11 +52,17 @@ Codex must update `docs/v2/BUILD_STATUS.md` in the same branch:
 - mark status
 - append one row to `Task log`
 - record tests actually run
-- record any manual follow-up exactly
+- record exact browser-check commands and results when applicable
+- record whether the task is auto-verified or still requires manual verification
+- if manual verification is still required, record the exact reason
 
 ## Output format
 Codex final response for the task must include:
 1. what changed
-2. tests run and results
-3. blockers or follow-up
-4. exact manual test steps if needed
+2. exact tests run and results
+3. exact browser-check commands and results when applicable
+4. whether changed files stayed within task scope
+5. whether acceptance checks passed
+6. whether the task is ready for operator approval after automated verification
+7. blockers or follow-up
+8. exact manual test steps only if manual verification is still required

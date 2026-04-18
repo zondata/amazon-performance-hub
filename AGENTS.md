@@ -204,6 +204,13 @@ Current approach: local CLI ingestion → Supabase as the source of truth → we
 - URL filters: `start=YYYY-MM-DD`, `end=YYYY-MM-DD`, `asin=<ASIN|all>` (shareable dashboard state).
 - `ui_page_settings` stores per-page default UI settings across devices (e.g., Sales Trend metric selections).
 
+### Browser smoke testing
+- Playwright may be used for browser-facing local app verification when the task touches local UI behavior or route rendering.
+- Playwright is for the local or repo-controlled app only, such as localhost or the repo's staging app when the task explicitly allows it.
+- Do not use Playwright against Amazon Seller Central, Amazon Ads console, or other live external sites that require real operator login.
+- For browser-facing V2 tasks, prefer automated local Playwright checks before asking for manual verification when the acceptance checks are machine-verifiable.
+- When browser checks are run, report the exact Playwright command and result in the task handoff.
+
 **Pages**
 - Dashboard: `/dashboard` (primary UI). Uses `si_sales_trend_daily_latest` for sales KPIs.
 - Products: `/products` list and `/products/[asin]` detail with tabs (overview, sales, logbook, costs, ads, keywords, SQP, ranking) using the same URL filters. Keywords is configuration; SQP is weekly Brand Analytics (Search Query Performance).

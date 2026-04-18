@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-18`
 Current branch: `v2/02-sp-api-auth`
-Current task: `S3-04 - Model freshness_state, collection_state, finalization_state, source_confidence`
+Current task: `T-PLAYWRIGHT-01 - Ignore Playwright artifacts and formalize browser checks`
 Current stage: `Stage 3 — ingestion backbone`
 
 ## Stage checklist
@@ -12,47 +12,46 @@ Current stage: `Stage 3 — ingestion backbone`
 - [ ] `Stage 3` - ingestion backbone
 
 ## Current task card
-- Task ID: `S3-04`
-- Title: `Model freshness_state, collection_state, finalization_state, source_confidence`
-- Objective: Build only the bounded Stage 3 state-model backbone: canonical state families, a stable typed state envelope, minimal metadata-based persistence for current runner/backfill outputs, bounded derivation helpers, a stub-only proof path, and directly related tests.
+- Task ID: `T-PLAYWRIGHT-01`
+- Title: `Ignore Playwright artifacts and formalize browser checks`
+- Objective: Add the minimum repo hygiene and workflow policy needed so local Playwright smoke testing is safe, ignored correctly, and consistently reported in future V2 browser-facing tasks.
 - Allowed files:
+  - `.gitignore`
+  - `AGENTS.md`
+  - `docs/v2/AGENTS.md`
+  - `docs/v2/CODEX_TASK_TEMPLATE.md`
   - `docs/v2/BUILD_STATUS.md`
   - `docs/v2/TASK_REGISTRY.json`
   - `docs/v2/TASK_PROGRESS.md`
-  - `docs/v2/tasks/S3-04-freshness-collection-finalization-confidence.md`
-  - `src/ingestion/*`
-  - `src/testing/fixtures/*`
-  - `package.json` only if a bounded task-local command alias were strictly required
-  - `supabase/migrations/*` only if a minimal migration were strictly required for the bounded state model
-  - directly related tests only
+  - `docs/v2/tasks/T-PLAYWRIGHT-01-ignore-artifacts-and-formalize-browser-checks.md`
 - Forbidden:
-  - live Amazon connector execution
-  - UI
-  - scheduler
-  - dashboard implementation
-  - warehouse execution
-  - marts
-  - memory tables
-  - diagnosis logic
-  - browser automation
-  - real secrets in committed files
+  - application code
+  - `apps/web/*`
+  - connector changes
+  - ingestion logic
+  - warehouse logic
+  - database migrations
+  - product behavior changes
+  - Playwright test logic changes unless strictly required for repo hygiene
+  - browser automation against Amazon Seller Central or Amazon Ads console
   - broad refactors
 - Required checks:
-  - [x] `npm test`
+  - [x] `git diff -- .gitignore AGENTS.md docs/v2/AGENTS.md docs/v2/CODEX_TASK_TEMPLATE.md docs/v2/BUILD_STATUS.md`
+  - [x] `npm run test:e2e:v2-admin-imports`
   - [x] `npm run web:lint`
-  - [x] `npm run web:build`
   - [x] `node scripts/v2-progress.mjs --write`
 - Status: `complete`
 - Notes:
-  - Added a bounded canonical state contract in `src/ingestion/stateEnvelope.ts` covering exactly `freshness_state`, `collection_state`, `finalization_state`, and `source_confidence`, plus validators, derivation helpers, persistence helpers, and stable envelope readers.
-  - Chose the minimum bounded persistence/storage shape by storing the state envelope explicitly in `metadata.state_envelope` for current `ingestion_jobs` and mirrored `source_watermarks`, so no migration was required for this task.
-  - Integrated the state envelope into the existing Stage 3 runner and backfill layers only: runner job metadata and success watermarks now persist the envelope, and backfill slice results expose it directly.
-  - Added a stub-only task-local CLI in `src/ingestion/stateEnvelopeCli.ts` with deterministic success and failed state-envelope summaries and no live connector imports.
-  - Added directly related tests in `src/ingestion/stateEnvelope.test.ts` and `src/ingestion/stateEnvelopeCli.test.ts`.
-  - The required WSL command set passed without widening into live connector execution, scheduler, dashboard implementation, UI, or warehouse execution.
-  - `docs/v2/BUILD_PLAN.md` is not present on this branch; implementation used the canonical task spec, `docs/v2/BUILD_STATUS.md`, and `docs/v2/amazon-performance-hub-v2-build-plan.md` for the current Stage 3 reference.
-  - MANUAL TEST REQUIRED before push.
-  - Single next bounded build task: `S3-05 - Build ingestion dashboard/status view`
+  - Add `.gitignore` coverage for Playwright-generated artifacts so local smoke runs do not leave stageable noise in the repo.
+  - Formalize Playwright policy in both AGENTS files: local or staging app only, allowed for browser-facing V2 verification, forbidden against Amazon-operated consoles and live external login flows.
+  - Formalize browser-check reporting in the V2 task template so future UI tasks record exact Playwright commands, results, and whether manual verification still remains.
+  - Re-run the existing bounded `/v2/admin/imports` Playwright smoke test to prove the local browser path still works after the policy-only changes.
+  - `git check-ignore -v test-results/` now resolves to `.gitignore:15:test-results/`.
+  - Required verification passed: `git diff -- .gitignore AGENTS.md docs/v2/AGENTS.md docs/v2/CODEX_TASK_TEMPLATE.md docs/v2/BUILD_STATUS.md`, `npm run test:e2e:v2-admin-imports`, `npm run web:lint`, and `node scripts/v2-progress.mjs --write`.
+  - `npm run test:e2e:v2-admin-imports` passed with `1 passed (1.9s)` against the local `/v2/admin/imports` route.
+  - Scope check passed for this task: the intended task edits are limited to `.gitignore`, `AGENTS.md`, `docs/v2/AGENTS.md`, `docs/v2/CODEX_TASK_TEMPLATE.md`, `docs/v2/BUILD_STATUS.md`, and generated `docs/v2/TASK_PROGRESS.md`.
+  - Auto-verified: no manual verification remains because the ignore behavior, policy text, and required browser/lint/progress checks are all machine-checkable.
+  - Single next bounded build task remains `S3-06 - Build manual Helium 10 rank CSV import with validation and dedupe`
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -96,6 +95,7 @@ Current stage: `Stage 3 — ingestion backbone`
 | 2026-04-18 | `S3-02` | `v2/02-sp-api-auth` | Add the bounded generic Stage 3 job runner only: idempotent submit/reuse, explicit `requested|processing|available|failed` transitions, explicit retry and replay paths, success-only `source_watermarks` updates, a stub executor, a task-local stub CLI, and directly related tests without live connector execution, scheduler, UI, backfill, or warehouse execution scope. | `complete` | `npm test passed; npm run web:lint passed; npm run web:build passed; ./node_modules/.bin/ts-node src/ingestion/jobRunnerCli.ts --scenario success passed; ./node_modules/.bin/ts-node src/ingestion/jobRunnerCli.ts --scenario retry passed; node scripts/v2-progress.mjs --write passed` | Operator manual verification completed. Next bounded task is `S3-03` — implement backfill by date range and safe reruns. |
 | 2026-04-18 | `S3-03` | `v2/02-sp-api-auth` | Add the bounded generic Stage 3 backfill path only: deterministic date-range slice planning, safe reruns on top of the existing job runner, explicit `created|reused_existing|rerun_failed|skipped_available` slice actions, a stub-only task-local CLI, and directly related tests without live connector execution, scheduler, UI, or warehouse execution scope. | `complete` | `npm test -- src/ingestion/backfillRunner.test.ts src/ingestion/backfillCli.test.ts passed; ./node_modules/.bin/ts-node src/ingestion/backfillCli.ts --scenario success passed; ./node_modules/.bin/ts-node src/ingestion/backfillCli.ts --scenario failed-only-rerun passed; npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S3-04` — model freshness_state, collection_state, finalization_state, source_confidence. |
 | 2026-04-18 | `S3-04` | `v2/02-sp-api-auth` | Add the bounded generic Stage 3 state-model layer only: canonical state families for freshness/collection/finalization/confidence, a stable typed state envelope, metadata-based persistence for current runner/backfill outputs, bounded derivation helpers, a stub-only task-local CLI, and directly related tests without live connector execution, UI, scheduler, dashboard implementation, or warehouse execution scope. | `complete` | `npm test -- src/ingestion/stateEnvelope.test.ts src/ingestion/stateEnvelopeCli.test.ts src/ingestion/jobRunner.test.ts src/ingestion/backfillRunner.test.ts passed; ./node_modules/.bin/ts-node src/ingestion/stateEnvelopeCli.ts --scenario success passed; ./node_modules/.bin/ts-node src/ingestion/stateEnvelopeCli.ts --scenario failed passed; npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S3-05` — build ingestion dashboard/status view. |
+| 2026-04-18 | `T-PLAYWRIGHT-01` | `v2/02-sp-api-auth` | Add only the bounded repo-hygiene and workflow policy follow-up for local Playwright usage: ignore generated artifacts, document allowed/forbidden browser-testing behavior in root/V2 AGENTS, and formalize browser-check reporting in the V2 task template without changing app behavior, connectors, ingestion, or warehouse code. | `complete` | `git diff -- .gitignore AGENTS.md docs/v2/AGENTS.md docs/v2/CODEX_TASK_TEMPLATE.md docs/v2/BUILD_STATUS.md passed; npm run test:e2e:v2-admin-imports passed; npm run web:lint passed; node scripts/v2-progress.mjs --write passed; git check-ignore -v test-results/ passed` | Auto-verified for task scope. No manual verification remains. Next bounded task is `S3-06` — build manual Helium 10 rank CSV import with validation and dedupe. |
 
 ## Tests and verification
 - Codex in-task validation:

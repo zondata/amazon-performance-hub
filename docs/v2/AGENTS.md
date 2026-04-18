@@ -148,8 +148,11 @@ Do not end a V2 task with silent status drift.
 If you cannot run one of them, say exactly why in `docs/v2/BUILD_STATUS.md` under the task entry.
 
 ### Browser testing
-Use browser testing against the local or staging V2 app.
-Do not use browser automation against Amazon Seller Central or Amazon Ads console.
+- Browser-facing V2 tasks may use Playwright against the local or staging V2 app.
+- Playwright is allowed for repo-controlled routes such as `/v2/*`.
+- Codex should include Playwright in automated verification for browser-facing V2 tasks when feasible.
+- Manual verification is still required when acceptance depends on human judgment, external auth flows, or ambiguous UI behavior.
+- Do not use browser automation against Amazon Seller Central, Amazon Ads console, or other Amazon-operated consoles.
 
 ### Manual testing handoff
 If manual testing is needed, write it in this exact shape:
