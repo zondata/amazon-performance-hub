@@ -30,3 +30,16 @@ export {
   validateFirstSalesTrafficWarehouseReadyArtifact,
   writeFirstSalesTrafficWarehouseReadyArtifact,
 } from './firstSalesTrafficWarehouseReady';
+export {
+  INGESTION_JOB_RECORD_FIELDS,
+  INGESTION_PROCESSING_STATUSES,
+  SOURCE_WATERMARK_RECORD_FIELDS,
+  SOURCE_WATERMARK_STATUSES,
+  isIngestionProcessingStatus,
+  isSourceWatermarkStatus,
+  type IngestionJobRecord,
+  type IngestionProcessingStatus,
+  type IngestionRunKind,
+  type SourceWatermarkRecord,
+  type SourceWatermarkStatus,
+} from './schemaContract';

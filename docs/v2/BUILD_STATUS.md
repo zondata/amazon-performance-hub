@@ -1,58 +1,59 @@
 # V2 Build Status
 
-Last updated: `2026-04-17`
+Last updated: `2026-04-18`
 Current branch: `v2/02-sp-api-auth`
-Current task: `S2B-G4 - Gate: Stage 2B tests green`
-Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
+Current task: `S3-01 - Create ingestion_jobs and source_watermarks schema`
+Current stage: `Stage 3 — ingestion backbone`
 
 ## Stage checklist
 - [x] `Stage 1` - Repo boundary and V2 route/module skeleton
 - [x] `Stage 2A` - SP-API auth + first retail pulls
 - [x] `Stage 2B` - Ads API auth + first Sponsored Products pulls
+- [ ] `Stage 3` - ingestion backbone
 
 ## Current task card
-- Task ID: `S2B-G4`
-- Title: `Gate: Stage 2B tests green`
-- Objective: Verify the full bounded Stage 2B command set runs together in WSL, apply only the minimum Stage 2B-local stabilization needed for that gate to pass, and confirm the stage is green without widening into Stage 3, new Ads pull scope, UI, Supabase redesign, or warehouse redesign.
+- Task ID: `S3-01`
+- Title: `Create ingestion_jobs and source_watermarks schema`
+- Objective: Create the first Stage 3 schema boundary for ingestion observability by adding `ingestion_jobs` and `source_watermarks`, plus the minimum typed schema contract and bounded tests needed to define those tables without adding runner, retry, replay, backfill, UI, warehouse execution, or connector behavior changes.
 - Allowed files:
   - `docs/v2/BUILD_STATUS.md`
   - `docs/v2/TASK_REGISTRY.json`
   - `docs/v2/TASK_PROGRESS.md`
-  - `docs/v2/tasks/S2B-G4-stage-2b-tests-green.md`
-  - `src/connectors/ads-api/README.md`
-  - `src/connectors/ads-api/profileSyncCli.ts`
-  - `src/connectors/ads-api/spCampaignDailyCli.ts`
-  - `src/connectors/ads-api/spTargetDailyCli.ts`
+  - `docs/v2/tasks/S3-01-ingestion-jobs-and-source-watermarks-schema.md`
+  - `supabase/migrations/*`
+  - `src/ingestion/*`
+  - `src/testing/fixtures/*`
+  - `package.json` only if a task-local test alias were required
+  - existing test files directly related to the new schema contract
 - Forbidden:
-  - Stage 3 work
-  - new Ads pull scope
-  - UI work
-  - Supabase redesign
-  - warehouse redesign
+  - `S3-02` runner logic
+  - retries
+  - replay
+  - backfill
+  - UI
+  - connector behavior changes
+  - warehouse execution
+  - marts
+  - memory tables
+  - diagnosis logic
   - browser automation
-  - new Amazon pull work
   - real secrets in committed files
   - broad refactors
 - Required checks:
   - [x] `npm test`
-  - [x] `npm run verify:wsl`
-  - [x] `npm run adsapi:sync-profiles`
-  - [x] `export APP_ACCOUNT_ID=sourbear && npm run adsapi:pull-sp-campaign-daily -- --start-date 2026-04-10 --end-date 2026-04-16`
-  - [x] `export APP_ACCOUNT_ID=sourbear && npm run adsapi:pull-sp-target-daily -- --start-date 2026-04-10 --end-date 2026-04-16`
-  - [x] `npm run adsapi:persist-sp-daily`
-  - [x] `export APP_ACCOUNT_ID=sourbear && npm run adsapi:ingest-sp-campaign-daily`
-  - [x] `export APP_ACCOUNT_ID=sourbear && npm run adsapi:ingest-sp-target-daily`
+  - [x] `npm run web:lint`
+  - [x] `npm run web:build`
   - [x] `node scripts/v2-progress.mjs --write`
 - Status: `complete`
 - Notes:
-  - Stage 2B gate command set is green in WSL.
-  - The bounded `adsapi:sync-profiles` CLI now preserves existing Stage 2B local metadata when no explicit shell override is provided, so the gate does not regress from the `.env.local` default account id.
-  - The bounded campaign and target pull CLIs now reuse an existing matching local artifact for the same profile/account/date-range scope, which keeps this gate deterministic when Amazon report readiness is slower than the earlier bounded pull tasks.
-  - Commands that required unrestricted reruns during the gate were `npm run verify:wsl`, `npm run adsapi:sync-profiles`, `export APP_ACCOUNT_ID=sourbear && npm run adsapi:pull-sp-campaign-daily -- --start-date 2026-04-10 --end-date 2026-04-16`, `export APP_ACCOUNT_ID=sourbear && npm run adsapi:pull-sp-target-daily -- --start-date 2026-04-10 --end-date 2026-04-16`, `export APP_ACCOUNT_ID=sourbear && npm run adsapi:ingest-sp-campaign-daily`, and `export APP_ACCOUNT_ID=sourbear && npm run adsapi:ingest-sp-target-daily`.
-  - `APP_ACCOUNT_ID=sourbear` override was still required for commands `4`, `5`, `7`, and `8`.
-  - The canonical tracked task spec now lives at `docs/v2/tasks/S2B-G4-stage-2b-tests-green.md`; scratch duplicate task-spec drafts remain excluded from staging and commit.
-  - Manual verification is still required before push; wait for explicit operator reply `all passed`.
-  - Single next bounded build task: `S3-01 - Create ingestion_jobs and source_watermarks schema`
+  - Added migration `20260418120000_ingestion_jobs_source_watermarks.sql` with both Stage 3 backbone tables, required uniqueness rules, status constraints, the optional `last_job_id -> ingestion_jobs(id)` foreign key, and bounded `updated_at` triggers.
+  - Added `src/ingestion/schemaContract.ts` with the minimum typed schema contract and narrow status guards, then re-exported it from `src/ingestion/index.ts`.
+  - Added bounded test coverage in `src/ingestion/schemaContract.test.ts` for exact status sets, record-field exposure, status helper rejection, and migration assertions for both tables plus required indexes/constraints.
+  - The required WSL command set for this task passed without widening into runner, retry, replay, backfill, UI, connector, or warehouse execution work.
+  - `docs/v2/BUILD_PLAN.md` is not present on this branch; implementation used the canonical task spec, `docs/v2/BUILD_STATUS.md`, and `docs/v2/amazon-performance-hub-v2-build-plan.md` for the current Stage 3 reference.
+  - Operator manual verification completed with explicit reply `all passed`.
+  - Operator also manually pasted `20260418120000_ingestion_jobs_source_watermarks.sql` into the Supabase SQL editor and applied it.
+  - Single next bounded build task: `S3-02 - Implement idempotent job runner with retries and replay`
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -92,6 +93,7 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 | 2026-04-17 | `S2B-G2` | `v2/02-sp-api-auth` | Add one bounded gate that reads the existing `S2B-06` persisted campaign rows, transforms them into the current SP campaign ingest sink’s accepted CSV shape, and proves one real campaign daily ingest succeeds without widening into target ingest, Stage 3 orchestration, UI, or schema redesign. | `complete` | `focused campaign-ingest-gate tests passed; npm run adsapi:ingest-sp-campaign-daily passed after an unrestricted rerun because the sandbox blocked the existing Supabase-backed sink; npm test passed; npm run verify:wsl passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S2B-G3` — gate: first Sponsored Products target daily ingest succeeds. |
 | 2026-04-17 | `S2B-G3` | `v2/02-sp-api-auth` | Add one bounded gate that reads the existing `S2B-06` persisted target rows, transforms them into the current SP targeting ingest sink’s accepted XLSX shape, and proves one real target daily ingest succeeds without widening into campaign gate rewrites, Stage 3 orchestration, UI, or schema redesign. | `complete` | `focused target-ingest-gate tests passed; npm run adsapi:ingest-sp-target-daily passed after an unrestricted rerun because the sandbox blocked the existing Supabase-backed sink; npm test passed; npm run verify:wsl passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S2B-G4` — gate: Stage 2B tests green. |
 | 2026-04-17 | `S2B-G4` | `v2/02-sp-api-auth` | Run the full bounded Stage 2B gate command set in WSL, apply only the minimum Stage 2B-local stabilization needed for those commands to pass together, and confirm the stage is green without widening into Stage 3, new Ads pull scope, UI, Supabase redesign, or warehouse redesign. | `complete` | `npm test passed; npm run verify:wsl passed; npm run adsapi:sync-profiles passed after an unrestricted rerun because the sandbox blocked outbound auth; export APP_ACCOUNT_ID=sourbear && npm run adsapi:pull-sp-campaign-daily -- --start-date 2026-04-10 --end-date 2026-04-16 passed after the bounded local-artifact reuse fix; export APP_ACCOUNT_ID=sourbear && npm run adsapi:pull-sp-target-daily -- --start-date 2026-04-10 --end-date 2026-04-16 passed after the bounded local-artifact reuse fix; npm run adsapi:persist-sp-daily passed; export APP_ACCOUNT_ID=sourbear && npm run adsapi:ingest-sp-campaign-daily passed after an unrestricted rerun because the sandbox blocked the existing Supabase-backed sink; export APP_ACCOUNT_ID=sourbear && npm run adsapi:ingest-sp-target-daily passed after an unrestricted rerun because the sandbox blocked the existing Supabase-backed sink; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S3-01` — create ingestion_jobs and source_watermarks schema. |
+| 2026-04-18 | `S3-01` | `v2/02-sp-api-auth` | Add the first Stage 3 ingestion observability schema boundary only: `ingestion_jobs`, `source_watermarks`, the minimum typed schema contract under `src/ingestion/*`, and directly related bounded tests without adding runner, retry, replay, backfill, UI, connector, or warehouse execution logic. | `complete` | `npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | Operator manual verification completed; migration also applied manually in Supabase SQL editor. Next bounded task is `S3-02` — implement idempotent job runner with retries and replay. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -258,7 +260,14 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
   - The gate wrote one bounded temporary XLSX at `out/ads-api-ingest-gate/sp-target-daily.ingest.xlsx` and reused the current `ingestSpTargetingRaw` plus `mapUpload(uploadId, "sp_targeting")` sink path.
   - `npm test` passed in WSL.
   - `npm run verify:wsl` passed in WSL.
-  - `node scripts/v2-progress.mjs --write` regenerated `docs/v2/TASK_PROGRESS.md`.
+- S3-01 validation completed:
+  - Added migration `supabase/migrations/20260418120000_ingestion_jobs_source_watermarks.sql` for `public.ingestion_jobs` and `public.source_watermarks`.
+  - The migration includes the required unique rules for `ingestion_jobs.idempotency_key` and the source/account/marketplace/scope watermark identity, plus the required status check constraints and bounded `updated_at` trigger helper.
+  - Added `src/ingestion/schemaContract.ts` and `src/ingestion/schemaContract.test.ts` to define the minimum typed contract and bounded schema assertions for Stage 3.
+  - `npm test` passed in WSL with `226` test files and `900` tests passing.
+  - `npm run web:lint` passed in WSL.
+  - `npm run web:build` passed in WSL.
+  - `node scripts/v2-progress.mjs --write` passed and regenerated `docs/v2/TASK_PROGRESS.md`.
 - S2B-G4 validation completed:
   - Full Stage 2B gate command set was run in WSL: `npm test`, `npm run verify:wsl`, `npm run adsapi:sync-profiles`, `export APP_ACCOUNT_ID=sourbear && npm run adsapi:pull-sp-campaign-daily -- --start-date 2026-04-10 --end-date 2026-04-16`, `export APP_ACCOUNT_ID=sourbear && npm run adsapi:pull-sp-target-daily -- --start-date 2026-04-10 --end-date 2026-04-16`, `npm run adsapi:persist-sp-daily`, `export APP_ACCOUNT_ID=sourbear && npm run adsapi:ingest-sp-campaign-daily`, and `export APP_ACCOUNT_ID=sourbear && npm run adsapi:ingest-sp-target-daily`.
   - `npm test` passed in WSL.
@@ -276,5 +285,5 @@ Current stage: `Stage 2B — Ads API auth + first Sponsored Products pulls`
 ## Open blockers
 - Stage 2A gates are complete.
 - Stage 2B gates are complete and green.
-- Manual verification is still required before push.
-- The single next bounded build task is `S3-01` — create ingestion_jobs and source_watermarks schema.
+- S3-01 manual verification is complete, including manual migration apply in Supabase SQL editor.
+- The single next bounded build task is `S3-02` — implement idempotent job runner with retries and replay.
