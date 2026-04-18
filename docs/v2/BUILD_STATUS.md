@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-18`
 Current branch: `v2/02-sp-api-auth`
-Current task: `S3-03 - Implement backfill by date range and safe reruns`
+Current task: `S3-04 - Model freshness_state, collection_state, finalization_state, source_confidence`
 Current stage: `Stage 3 — ingestion backbone`
 
 ## Stage checklist
@@ -12,24 +12,24 @@ Current stage: `Stage 3 — ingestion backbone`
 - [ ] `Stage 3` - ingestion backbone
 
 ## Current task card
-- Task ID: `S3-03`
-- Title: `Implement backfill by date range and safe reruns`
-- Objective: Build only the bounded Stage 3 backfill backbone on top of the existing generic job runner: deterministic date-range slice planning, safe rerun behavior, success-only watermark carry-through via the runner, a stub-only proof path, and directly related tests.
+- Task ID: `S3-04`
+- Title: `Model freshness_state, collection_state, finalization_state, source_confidence`
+- Objective: Build only the bounded Stage 3 state-model backbone: canonical state families, a stable typed state envelope, minimal metadata-based persistence for current runner/backfill outputs, bounded derivation helpers, a stub-only proof path, and directly related tests.
 - Allowed files:
   - `docs/v2/BUILD_STATUS.md`
   - `docs/v2/TASK_REGISTRY.json`
   - `docs/v2/TASK_PROGRESS.md`
-  - `docs/v2/tasks/S3-03-backfill-date-range-safe-reruns.md`
+  - `docs/v2/tasks/S3-04-freshness-collection-finalization-confidence.md`
   - `src/ingestion/*`
   - `src/testing/fixtures/*`
   - `package.json` only if a bounded task-local command alias were strictly required
-  - `supabase/migrations/*` only if a minimal follow-up migration were strictly required and could not be represented safely with existing job metadata
+  - `supabase/migrations/*` only if a minimal migration were strictly required for the bounded state model
   - directly related tests only
 - Forbidden:
   - live Amazon connector execution
   - UI
   - scheduler
-  - queue workers
+  - dashboard implementation
   - warehouse execution
   - marts
   - memory tables
@@ -44,14 +44,15 @@ Current stage: `Stage 3 — ingestion backbone`
   - [x] `node scripts/v2-progress.mjs --write`
 - Status: `complete`
 - Notes:
-  - Added a bounded generic backfill boundary in `src/ingestion/backfillRunner.ts` with a source-agnostic request contract, deterministic day/week slicing, ascending non-overlapping inclusive date windows, stable per-slice idempotency keys, and explicit rerun modes `none | failed_only`.
-  - The backfill execution path reuses the existing Stage 3 job runner for all mutable operations, keeps successful slices non-duplicated, reuses in-flight slices, and reruns failed slices only through the explicit failed-only path.
-  - Added a stub-only task-local CLI in `src/ingestion/backfillCli.ts` with safe deterministic summaries for one success backfill path and one failed-only rerun path.
-  - Added directly related tests in `src/ingestion/backfillRunner.test.ts` and `src/ingestion/backfillCli.test.ts`.
-  - The required WSL command set passed without widening into live connector execution, scheduler, queue workers, UI, or warehouse execution.
+  - Added a bounded canonical state contract in `src/ingestion/stateEnvelope.ts` covering exactly `freshness_state`, `collection_state`, `finalization_state`, and `source_confidence`, plus validators, derivation helpers, persistence helpers, and stable envelope readers.
+  - Chose the minimum bounded persistence/storage shape by storing the state envelope explicitly in `metadata.state_envelope` for current `ingestion_jobs` and mirrored `source_watermarks`, so no migration was required for this task.
+  - Integrated the state envelope into the existing Stage 3 runner and backfill layers only: runner job metadata and success watermarks now persist the envelope, and backfill slice results expose it directly.
+  - Added a stub-only task-local CLI in `src/ingestion/stateEnvelopeCli.ts` with deterministic success and failed state-envelope summaries and no live connector imports.
+  - Added directly related tests in `src/ingestion/stateEnvelope.test.ts` and `src/ingestion/stateEnvelopeCli.test.ts`.
+  - The required WSL command set passed without widening into live connector execution, scheduler, dashboard implementation, UI, or warehouse execution.
   - `docs/v2/BUILD_PLAN.md` is not present on this branch; implementation used the canonical task spec, `docs/v2/BUILD_STATUS.md`, and `docs/v2/amazon-performance-hub-v2-build-plan.md` for the current Stage 3 reference.
   - MANUAL TEST REQUIRED before push.
-  - Single next bounded build task: `S3-04 - Model freshness_state, collection_state, finalization_state, source_confidence`
+  - Single next bounded build task: `S3-05 - Build ingestion dashboard/status view`
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -94,6 +95,7 @@ Current stage: `Stage 3 — ingestion backbone`
 | 2026-04-18 | `S3-01` | `v2/02-sp-api-auth` | Add the first Stage 3 ingestion observability schema boundary only: `ingestion_jobs`, `source_watermarks`, the minimum typed schema contract under `src/ingestion/*`, and directly related bounded tests without adding runner, retry, replay, backfill, UI, connector, or warehouse execution logic. | `complete` | `npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | Operator manual verification completed; migration also applied manually in Supabase SQL editor. Next bounded task is `S3-02` — implement idempotent job runner with retries and replay. |
 | 2026-04-18 | `S3-02` | `v2/02-sp-api-auth` | Add the bounded generic Stage 3 job runner only: idempotent submit/reuse, explicit `requested|processing|available|failed` transitions, explicit retry and replay paths, success-only `source_watermarks` updates, a stub executor, a task-local stub CLI, and directly related tests without live connector execution, scheduler, UI, backfill, or warehouse execution scope. | `complete` | `npm test passed; npm run web:lint passed; npm run web:build passed; ./node_modules/.bin/ts-node src/ingestion/jobRunnerCli.ts --scenario success passed; ./node_modules/.bin/ts-node src/ingestion/jobRunnerCli.ts --scenario retry passed; node scripts/v2-progress.mjs --write passed` | Operator manual verification completed. Next bounded task is `S3-03` — implement backfill by date range and safe reruns. |
 | 2026-04-18 | `S3-03` | `v2/02-sp-api-auth` | Add the bounded generic Stage 3 backfill path only: deterministic date-range slice planning, safe reruns on top of the existing job runner, explicit `created|reused_existing|rerun_failed|skipped_available` slice actions, a stub-only task-local CLI, and directly related tests without live connector execution, scheduler, UI, or warehouse execution scope. | `complete` | `npm test -- src/ingestion/backfillRunner.test.ts src/ingestion/backfillCli.test.ts passed; ./node_modules/.bin/ts-node src/ingestion/backfillCli.ts --scenario success passed; ./node_modules/.bin/ts-node src/ingestion/backfillCli.ts --scenario failed-only-rerun passed; npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S3-04` — model freshness_state, collection_state, finalization_state, source_confidence. |
+| 2026-04-18 | `S3-04` | `v2/02-sp-api-auth` | Add the bounded generic Stage 3 state-model layer only: canonical state families for freshness/collection/finalization/confidence, a stable typed state envelope, metadata-based persistence for current runner/backfill outputs, bounded derivation helpers, a stub-only task-local CLI, and directly related tests without live connector execution, UI, scheduler, dashboard implementation, or warehouse execution scope. | `complete` | `npm test -- src/ingestion/stateEnvelope.test.ts src/ingestion/stateEnvelopeCli.test.ts src/ingestion/jobRunner.test.ts src/ingestion/backfillRunner.test.ts passed; ./node_modules/.bin/ts-node src/ingestion/stateEnvelopeCli.ts --scenario success passed; ./node_modules/.bin/ts-node src/ingestion/stateEnvelopeCli.ts --scenario failed passed; npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S3-05` — build ingestion dashboard/status view. |
 
 ## Tests and verification
 - Codex in-task validation:

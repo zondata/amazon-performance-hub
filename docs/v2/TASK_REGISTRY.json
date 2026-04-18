@@ -712,7 +712,7 @@
       "stage": "S3",
       "stage_name": "Stage 3 \u2014 ingestion backbone",
       "title": "Model freshness_state, collection_state, finalization_state, source_confidence",
-      "status": "todo",
+      "status": "done",
       "priority": "must",
       "gate": false,
       "fast_track": true,

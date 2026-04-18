@@ -6,6 +6,11 @@ import type {
   IngestionRunKind,
   SourceWatermarkRecord,
 } from './schemaContract';
+import {
+  deriveIngestionStateEnvelope,
+  getIngestionStateEnvelopeFromJob,
+  persistIngestionStateEnvelope,
+} from './stateEnvelope';
 
 export const INGESTION_RUN_RESULT_FLAGS = [
   'created',
@@ -280,12 +285,20 @@ const buildInitialMetadata = (args: {
     attempt_history: [],
   };
 
-  return appendStatusHistory(metadata, {
+  const withHistory = appendStatusHistory(metadata, {
     from: null,
     to: 'requested',
     at: args.at,
     reason: 'job_created',
   });
+
+  return persistIngestionStateEnvelope(
+    withHistory,
+    deriveIngestionStateEnvelope({
+      collectionState: 'requested',
+      metadata: withHistory,
+    })
+  ) as RunnerMetadata;
 };
 
 const buildRequestedJobRecord = (args: {
@@ -681,12 +694,20 @@ export class IngestionJobRunner {
     if (operation === 'retried') {
       metadata.retry_count = getRetryCount(job) + 1;
     }
-    return appendStatusHistory(metadata, {
+    const withHistory = appendStatusHistory(metadata, {
       from: job.processing_status,
       to: 'processing',
       at,
       reason: operation,
     });
+
+    return persistIngestionStateEnvelope(
+      withHistory,
+      deriveIngestionStateEnvelope({
+        collectionState: 'processing',
+        metadata: withHistory,
+      })
+    ) as RunnerMetadata;
   }
 
   private buildFinishedMetadata(
@@ -706,13 +727,21 @@ export class IngestionJobRunner {
       reason: `${operation}_${outcome}`,
     });
 
-    return appendAttemptHistory(withHistory, {
+    const withAttempt = appendAttemptHistory(withHistory, {
       attempt_number: getAttemptCount(job),
       operation,
       at,
       outcome,
       error_code: errorCode,
     });
+
+    return persistIngestionStateEnvelope(
+      withAttempt,
+      deriveIngestionStateEnvelope({
+        collectionState: status,
+        metadata: withAttempt,
+      })
+    ) as RunnerMetadata;
   }
 
   private async updateWatermarkOnSuccess(
@@ -727,6 +756,7 @@ export class IngestionJobRunner {
     const existing = await this.repository.findWatermarkByScope(scope);
     const createdAt = existing?.created_at ?? this.now();
     const updatedAt = this.now();
+    const stateEnvelope = getIngestionStateEnvelopeFromJob(job);
 
     return this.repository.upsertWatermark({
       id: existing?.id ?? this.createJobId(),
@@ -742,7 +772,7 @@ export class IngestionJobRunner {
       watermark_end: job.source_window_end,
       status: 'available',
       notes: existing?.notes ?? null,
-      metadata: existing?.metadata ?? {},
+      metadata: persistIngestionStateEnvelope(existing?.metadata ?? {}, stateEnvelope),
       created_at: createdAt,
       updated_at: updatedAt,
     });
@@ -809,4 +839,3 @@ export const createStubIngestionExecutor = (
     getCallCount: () => callCount,
   };
 };
-

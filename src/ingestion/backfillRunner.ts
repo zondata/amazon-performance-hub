@@ -3,6 +3,10 @@ import type {
   IngestionProcessingStatus,
   IngestionRunKind,
 } from './schemaContract';
+import {
+  getIngestionStateEnvelopeFromJob,
+  type IngestionStateEnvelope,
+} from './stateEnvelope';
 import type {
   IngestionJobRepository,
   IngestionJobRunResult,
@@ -72,6 +76,7 @@ export interface IngestionBackfillSliceResult {
   action: IngestionBackfillAction;
   jobId: string;
   finalObservedJobStatus: IngestionProcessingStatus;
+  stateEnvelope: IngestionStateEnvelope;
   executorInvoked: boolean;
 }
 
@@ -282,30 +287,50 @@ const createActionCounts = (): Record<IngestionBackfillAction, number> => ({
 const toSliceJobRequest = (
   request: IngestionBackfillRequest,
   slice: IngestionBackfillSlice
-): IngestionJobRunRequest => ({
-  jobKey: request.jobKey,
-  sourceName: request.sourceName,
-  accountId: request.accountId,
-  marketplace: request.marketplace,
-  sourceWindowStart: slice.sourceWindowStart,
-  sourceWindowEnd: slice.sourceWindowEnd,
-  idempotencyKey: slice.idempotencyKey,
-  runKind: request.runKind,
-  scopeKey: request.scopeKey,
-  metadata: {
-    ...(request.baseMetadata ?? {}),
-    backfill: {
-      request_range_start: request.rangeStart,
-      request_range_end: request.rangeEnd,
-      slice_range_start: slice.rangeStart,
-      slice_range_end: slice.rangeEnd,
-      slice_index: slice.sliceIndex,
-      slice_unit: slice.sliceUnit,
-      slice_size: slice.sliceSize,
-      inclusive_range_end: true,
+): IngestionJobRunRequest => {
+  const baseMetadata = { ...(request.baseMetadata ?? {}) };
+  const existingHints =
+    baseMetadata.state_hints != null &&
+    typeof baseMetadata.state_hints === 'object' &&
+    !Array.isArray(baseMetadata.state_hints)
+      ? (baseMetadata.state_hints as IngestionJobRecord['metadata'])
+      : {};
+  const sourceCadence =
+    typeof existingHints.sourceCadence === 'string'
+      ? existingHints.sourceCadence
+      : slice.sliceUnit === 'week'
+        ? 'weekly'
+        : 'daily';
+
+  return {
+    jobKey: request.jobKey,
+    sourceName: request.sourceName,
+    accountId: request.accountId,
+    marketplace: request.marketplace,
+    sourceWindowStart: slice.sourceWindowStart,
+    sourceWindowEnd: slice.sourceWindowEnd,
+    idempotencyKey: slice.idempotencyKey,
+    runKind: request.runKind,
+    scopeKey: request.scopeKey,
+    metadata: {
+      ...baseMetadata,
+      state_hints: {
+        ...existingHints,
+        sourceCadence,
+      },
+      backfill: {
+        request_range_start: request.rangeStart,
+        request_range_end: request.rangeEnd,
+        slice_range_start: slice.rangeStart,
+        slice_range_end: slice.rangeEnd,
+        slice_index: slice.sliceIndex,
+        slice_unit: slice.sliceUnit,
+        slice_size: slice.sliceSize,
+        inclusive_range_end: true,
+      },
     },
-  },
-});
+  };
+};
 
 const toSliceResult = (
   slice: IngestionBackfillSlice,
@@ -317,6 +342,7 @@ const toSliceResult = (
   action,
   jobId: job.id,
   finalObservedJobStatus: job.processing_status,
+  stateEnvelope: getIngestionStateEnvelopeFromJob(job),
   executorInvoked,
 });
 
