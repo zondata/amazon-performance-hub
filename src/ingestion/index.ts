@@ -64,3 +64,21 @@ export {
   type StubExecutorStepFailure,
   type StubExecutorStepSuccess,
 } from './jobRunner';
+export {
+  INGESTION_BACKFILL_ACTIONS,
+  INGESTION_BACKFILL_RERUN_MODES,
+  INGESTION_BACKFILL_SLICE_UNITS,
+  IngestionBackfillError,
+  IngestionBackfillRunner,
+  buildBackfillSliceIdempotencyKey,
+  buildIngestionBackfillPlan,
+  type IngestionBackfillAction,
+  type IngestionBackfillJobRunner,
+  type IngestionBackfillPlan,
+  type IngestionBackfillRequest,
+  type IngestionBackfillRerunMode,
+  type IngestionBackfillRunResult,
+  type IngestionBackfillSlice,
+  type IngestionBackfillSliceResult,
+  type IngestionBackfillSliceUnit,
+} from './backfillRunner';

@@ -5,12 +5,12 @@ Last generated: 2026-04-18
 ## Overall
 
 - Total tasks: 72
-- Done: 27
+- Done: 28
 - Verify: 1
 - In progress: 1
 - Blocked: 0
-- Remaining open: 45
-- Remaining fast-track tasks: 17
+- Remaining open: 44
+- Remaining fast-track tasks: 16
 
 ## Stage summary
 
@@ -20,7 +20,7 @@ Last generated: 2026-04-18
 | Stage 1 — repo boundary for V2 | 3 | 0 | 0 | 0 | 0 | 3 | 3 | Yes |
 | Stage 2A — SP-API auth + first retail pulls | 10 | 1 | 1 | 0 | 1 | 4 | 4 | Yes |
 | Stage 2B — Ads API auth + first Sponsored Products pulls | 10 | 0 | 0 | 0 | 1 | 4 | 4 | Yes |
-| Stage 3 — ingestion backbone | 2 | 0 | 0 | 0 | 6 | 0 | 2 | No |
+| Stage 3 — ingestion backbone | 3 | 0 | 0 | 0 | 5 | 0 | 2 | No |
 | Stage 4 — canonical marts | 0 | 0 | 0 | 0 | 6 | 0 | 1 | No |
 | Stage 5 — memory system | 0 | 0 | 0 | 0 | 5 | 0 | 1 | No |
 | Stage 6 — human UI | 0 | 0 | 0 | 0 | 6 | 0 | 1 | No |
@@ -116,7 +116,6 @@ Last generated: 2026-04-18
 
 | ID | Status | Priority | Gate | Fast-track | Title |
 |---|---|---|---|---|---|
-| S3-03 | todo | must | no | yes | Implement backfill by date range and safe reruns |
 | S3-04 | todo | must | no | yes | Model freshness_state, collection_state, finalization_state, source_confidence |
 | S3-05 | todo | should | no | no | Build ingestion dashboard/status view |
 | S3-06 | todo | must | no | yes | Build manual Helium 10 rank CSV import with validation and dedupe |

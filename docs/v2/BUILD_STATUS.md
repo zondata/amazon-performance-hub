@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-18`
 Current branch: `v2/02-sp-api-auth`
-Current task: `S3-02 - Implement idempotent job runner with retries and replay`
+Current task: `S3-03 - Implement backfill by date range and safe reruns`
 Current stage: `Stage 3 — ingestion backbone`
 
 ## Stage checklist
@@ -12,25 +12,24 @@ Current stage: `Stage 3 — ingestion backbone`
 - [ ] `Stage 3` - ingestion backbone
 
 ## Current task card
-- Task ID: `S3-02`
-- Title: `Implement idempotent job runner with retries and replay`
-- Objective: Build only the bounded Stage 3 runtime backbone on top of `ingestion_jobs` and `source_watermarks`: a generic idempotent runner, explicit `requested -> processing -> available|failed` transitions, explicit retry and replay paths, success-only watermark updates, a stub executor, and directly related tests.
+- Task ID: `S3-03`
+- Title: `Implement backfill by date range and safe reruns`
+- Objective: Build only the bounded Stage 3 backfill backbone on top of the existing generic job runner: deterministic date-range slice planning, safe rerun behavior, success-only watermark carry-through via the runner, a stub-only proof path, and directly related tests.
 - Allowed files:
   - `docs/v2/BUILD_STATUS.md`
   - `docs/v2/TASK_REGISTRY.json`
   - `docs/v2/TASK_PROGRESS.md`
-  - `docs/v2/tasks/S3-02-idempotent-job-runner-retries-replay.md`
+  - `docs/v2/tasks/S3-03-backfill-date-range-safe-reruns.md`
   - `src/ingestion/*`
   - `src/testing/fixtures/*`
   - `package.json` only if a bounded task-local command alias were strictly required
-  - `supabase/migrations/*` only if a minimal follow-up migration were strictly required
+  - `supabase/migrations/*` only if a minimal follow-up migration were strictly required and could not be represented safely with existing job metadata
   - directly related tests only
 - Forbidden:
   - live Amazon connector execution
   - UI
   - scheduler
   - queue workers
-  - backfill logic
   - warehouse execution
   - marts
   - memory tables
@@ -45,14 +44,14 @@ Current stage: `Stage 3 — ingestion backbone`
   - [x] `node scripts/v2-progress.mjs --write`
 - Status: `complete`
 - Notes:
-  - Added a bounded generic runner in `src/ingestion/jobRunner.ts` with a source-agnostic request contract, idempotent submit/reuse behavior, explicit lifecycle transitions, explicit retry and replay entrypoints, success-only watermark updates, and an in-memory persistence boundary for proof/testing.
-  - Retry and replay audit state is stored in job `metadata`, so no follow-up migration was required for this task.
-  - Added a stub-only task-local CLI in `src/ingestion/jobRunnerCli.ts` with safe deterministic summaries for one success path and one failure-then-retry path.
-  - Added directly related tests in `src/ingestion/jobRunner.test.ts` and `src/ingestion/jobRunnerCli.test.ts`.
-  - The required WSL command set for this task passed without widening into live connector execution, scheduler, queue workers, UI, backfill, or warehouse execution.
+  - Added a bounded generic backfill boundary in `src/ingestion/backfillRunner.ts` with a source-agnostic request contract, deterministic day/week slicing, ascending non-overlapping inclusive date windows, stable per-slice idempotency keys, and explicit rerun modes `none | failed_only`.
+  - The backfill execution path reuses the existing Stage 3 job runner for all mutable operations, keeps successful slices non-duplicated, reuses in-flight slices, and reruns failed slices only through the explicit failed-only path.
+  - Added a stub-only task-local CLI in `src/ingestion/backfillCli.ts` with safe deterministic summaries for one success backfill path and one failed-only rerun path.
+  - Added directly related tests in `src/ingestion/backfillRunner.test.ts` and `src/ingestion/backfillCli.test.ts`.
+  - The required WSL command set passed without widening into live connector execution, scheduler, queue workers, UI, or warehouse execution.
   - `docs/v2/BUILD_PLAN.md` is not present on this branch; implementation used the canonical task spec, `docs/v2/BUILD_STATUS.md`, and `docs/v2/amazon-performance-hub-v2-build-plan.md` for the current Stage 3 reference.
-  - Operator manual verification completed with explicit reply `all passed`.
-  - Single next bounded build task: `S3-03 - Implement backfill by date range and safe reruns`
+  - MANUAL TEST REQUIRED before push.
+  - Single next bounded build task: `S3-04 - Model freshness_state, collection_state, finalization_state, source_confidence`
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -94,6 +93,7 @@ Current stage: `Stage 3 — ingestion backbone`
 | 2026-04-17 | `S2B-G4` | `v2/02-sp-api-auth` | Run the full bounded Stage 2B gate command set in WSL, apply only the minimum Stage 2B-local stabilization needed for those commands to pass together, and confirm the stage is green without widening into Stage 3, new Ads pull scope, UI, Supabase redesign, or warehouse redesign. | `complete` | `npm test passed; npm run verify:wsl passed; npm run adsapi:sync-profiles passed after an unrestricted rerun because the sandbox blocked outbound auth; export APP_ACCOUNT_ID=sourbear && npm run adsapi:pull-sp-campaign-daily -- --start-date 2026-04-10 --end-date 2026-04-16 passed after the bounded local-artifact reuse fix; export APP_ACCOUNT_ID=sourbear && npm run adsapi:pull-sp-target-daily -- --start-date 2026-04-10 --end-date 2026-04-16 passed after the bounded local-artifact reuse fix; npm run adsapi:persist-sp-daily passed; export APP_ACCOUNT_ID=sourbear && npm run adsapi:ingest-sp-campaign-daily passed after an unrestricted rerun because the sandbox blocked the existing Supabase-backed sink; export APP_ACCOUNT_ID=sourbear && npm run adsapi:ingest-sp-target-daily passed after an unrestricted rerun because the sandbox blocked the existing Supabase-backed sink; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S3-01` — create ingestion_jobs and source_watermarks schema. |
 | 2026-04-18 | `S3-01` | `v2/02-sp-api-auth` | Add the first Stage 3 ingestion observability schema boundary only: `ingestion_jobs`, `source_watermarks`, the minimum typed schema contract under `src/ingestion/*`, and directly related bounded tests without adding runner, retry, replay, backfill, UI, connector, or warehouse execution logic. | `complete` | `npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | Operator manual verification completed; migration also applied manually in Supabase SQL editor. Next bounded task is `S3-02` — implement idempotent job runner with retries and replay. |
 | 2026-04-18 | `S3-02` | `v2/02-sp-api-auth` | Add the bounded generic Stage 3 job runner only: idempotent submit/reuse, explicit `requested|processing|available|failed` transitions, explicit retry and replay paths, success-only `source_watermarks` updates, a stub executor, a task-local stub CLI, and directly related tests without live connector execution, scheduler, UI, backfill, or warehouse execution scope. | `complete` | `npm test passed; npm run web:lint passed; npm run web:build passed; ./node_modules/.bin/ts-node src/ingestion/jobRunnerCli.ts --scenario success passed; ./node_modules/.bin/ts-node src/ingestion/jobRunnerCli.ts --scenario retry passed; node scripts/v2-progress.mjs --write passed` | Operator manual verification completed. Next bounded task is `S3-03` — implement backfill by date range and safe reruns. |
+| 2026-04-18 | `S3-03` | `v2/02-sp-api-auth` | Add the bounded generic Stage 3 backfill path only: deterministic date-range slice planning, safe reruns on top of the existing job runner, explicit `created|reused_existing|rerun_failed|skipped_available` slice actions, a stub-only task-local CLI, and directly related tests without live connector execution, scheduler, UI, or warehouse execution scope. | `complete` | `npm test -- src/ingestion/backfillRunner.test.ts src/ingestion/backfillCli.test.ts passed; ./node_modules/.bin/ts-node src/ingestion/backfillCli.ts --scenario success passed; ./node_modules/.bin/ts-node src/ingestion/backfillCli.ts --scenario failed-only-rerun passed; npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S3-04` — model freshness_state, collection_state, finalization_state, source_confidence. |
 
 ## Tests and verification
 - Codex in-task validation:
