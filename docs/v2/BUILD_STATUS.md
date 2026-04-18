@@ -2,8 +2,8 @@
 
 Last updated: `2026-04-18`
 Current branch: `v2/02-sp-api-auth`
-Current task: `T-PLAYWRIGHT-01 - Ignore Playwright artifacts and formalize browser checks`
-Current stage: `Stage 3 — ingestion backbone`
+Current task: `T-PLAN-HELIUM10-01 - Build plan evaluation note`
+Current stage: `Stage 10 — ranking automation evaluation`
 
 ## Stage checklist
 - [x] `Stage 1` - Repo boundary and V2 route/module skeleton
@@ -12,46 +12,34 @@ Current stage: `Stage 3 — ingestion backbone`
 - [ ] `Stage 3` - ingestion backbone
 
 ## Current task card
-- Task ID: `T-PLAYWRIGHT-01`
-- Title: `Ignore Playwright artifacts and formalize browser checks`
-- Objective: Add the minimum repo hygiene and workflow policy needed so local Playwright smoke testing is safe, ignored correctly, and consistently reported in future V2 browser-facing tasks.
+- Task ID: `T-PLAN-HELIUM10-01`
+- Title: `Build plan evaluation note`
+- Objective: Update the V2 build plan to record the Helium 10 Playwright export evaluation path without changing the active manual CSV import fallback or claiming automation is proven.
 - Allowed files:
-  - `.gitignore`
-  - `AGENTS.md`
-  - `docs/v2/AGENTS.md`
-  - `docs/v2/CODEX_TASK_TEMPLATE.md`
+  - `docs/v2/amazon-performance-hub-v2-build-plan.md`
   - `docs/v2/BUILD_STATUS.md`
   - `docs/v2/TASK_REGISTRY.json`
   - `docs/v2/TASK_PROGRESS.md`
-  - `docs/v2/tasks/T-PLAYWRIGHT-01-ignore-artifacts-and-formalize-browser-checks.md`
+  - `docs/v2/tasks/T-PLAN-HELIUM10-01-build-plan-evaluation-note.md`
 - Forbidden:
   - application code
-  - `apps/web/*`
   - connector changes
-  - ingestion logic
-  - warehouse logic
-  - database migrations
-  - product behavior changes
-  - Playwright test logic changes unless strictly required for repo hygiene
-  - browser automation against Amazon Seller Central or Amazon Ads console
-  - broad refactors
+  - ingestion logic changes
+  - UI changes
+  - tests beyond doc-scope verification
+  - claims that automation is adopted, production-ready, or already proven
 - Required checks:
-  - [x] `git diff -- .gitignore AGENTS.md docs/v2/AGENTS.md docs/v2/CODEX_TASK_TEMPLATE.md docs/v2/BUILD_STATUS.md`
-  - [x] `npm run test:e2e:v2-admin-imports`
-  - [x] `npm run web:lint`
-  - [x] `node scripts/v2-progress.mjs --write`
+  - [x] `git diff -- docs/v2/amazon-performance-hub-v2-build-plan.md docs/v2/BUILD_STATUS.md`
 - Status: `complete`
 - Notes:
-  - Add `.gitignore` coverage for Playwright-generated artifacts so local smoke runs do not leave stageable noise in the repo.
-  - Formalize Playwright policy in both AGENTS files: local or staging app only, allowed for browser-facing V2 verification, forbidden against Amazon-operated consoles and live external login flows.
-  - Formalize browser-check reporting in the V2 task template so future UI tasks record exact Playwright commands, results, and whether manual verification still remains.
-  - Re-run the existing bounded `/v2/admin/imports` Playwright smoke test to prove the local browser path still works after the policy-only changes.
-  - `git check-ignore -v test-results/` now resolves to `.gitignore:15:test-results/`.
-  - Required verification passed: `git diff -- .gitignore AGENTS.md docs/v2/AGENTS.md docs/v2/CODEX_TASK_TEMPLATE.md docs/v2/BUILD_STATUS.md`, `npm run test:e2e:v2-admin-imports`, `npm run web:lint`, and `node scripts/v2-progress.mjs --write`.
-  - `npm run test:e2e:v2-admin-imports` passed with `1 passed (1.9s)` against the local `/v2/admin/imports` route.
-  - Scope check passed for this task: the intended task edits are limited to `.gitignore`, `AGENTS.md`, `docs/v2/AGENTS.md`, `docs/v2/CODEX_TASK_TEMPLATE.md`, `docs/v2/BUILD_STATUS.md`, and generated `docs/v2/TASK_PROGRESS.md`.
-  - Auto-verified: no manual verification remains because the ignore behavior, policy text, and required browser/lint/progress checks are all machine-checkable.
-  - Single next bounded build task remains `S3-06 - Build manual Helium 10 rank CSV import with validation and dedupe`
+  - Documentation-only task. No product code, Playwright code, ingestion code, or UI behavior changed.
+  - The build plan now records that Helium 10 has no API for the current Historical Data CSV export need.
+  - The build plan now records that a Playwright-based Historical Data CSV export path is under evaluation in local WSL using env/local secret storage.
+  - The build plan still keeps manual CSV import as the active supported fallback until automation is proven stable.
+  - The build plan explicitly avoids any claim that automation is already adopted or proven.
+  - Required verification passed: `git diff -- docs/v2/amazon-performance-hub-v2-build-plan.md docs/v2/BUILD_STATUS.md`.
+  - Auto-verified: no manual verification remains because this task changes documentation only.
+  - Next bounded product task remains the Helium 10 export proof task.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -96,6 +84,7 @@ Current stage: `Stage 3 — ingestion backbone`
 | 2026-04-18 | `S3-03` | `v2/02-sp-api-auth` | Add the bounded generic Stage 3 backfill path only: deterministic date-range slice planning, safe reruns on top of the existing job runner, explicit `created|reused_existing|rerun_failed|skipped_available` slice actions, a stub-only task-local CLI, and directly related tests without live connector execution, scheduler, UI, or warehouse execution scope. | `complete` | `npm test -- src/ingestion/backfillRunner.test.ts src/ingestion/backfillCli.test.ts passed; ./node_modules/.bin/ts-node src/ingestion/backfillCli.ts --scenario success passed; ./node_modules/.bin/ts-node src/ingestion/backfillCli.ts --scenario failed-only-rerun passed; npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S3-04` — model freshness_state, collection_state, finalization_state, source_confidence. |
 | 2026-04-18 | `S3-04` | `v2/02-sp-api-auth` | Add the bounded generic Stage 3 state-model layer only: canonical state families for freshness/collection/finalization/confidence, a stable typed state envelope, metadata-based persistence for current runner/backfill outputs, bounded derivation helpers, a stub-only task-local CLI, and directly related tests without live connector execution, UI, scheduler, dashboard implementation, or warehouse execution scope. | `complete` | `npm test -- src/ingestion/stateEnvelope.test.ts src/ingestion/stateEnvelopeCli.test.ts src/ingestion/jobRunner.test.ts src/ingestion/backfillRunner.test.ts passed; ./node_modules/.bin/ts-node src/ingestion/stateEnvelopeCli.ts --scenario success passed; ./node_modules/.bin/ts-node src/ingestion/stateEnvelopeCli.ts --scenario failed passed; npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S3-05` — build ingestion dashboard/status view. |
 | 2026-04-18 | `T-PLAYWRIGHT-01` | `v2/02-sp-api-auth` | Add only the bounded repo-hygiene and workflow policy follow-up for local Playwright usage: ignore generated artifacts, document allowed/forbidden browser-testing behavior in root/V2 AGENTS, and formalize browser-check reporting in the V2 task template without changing app behavior, connectors, ingestion, or warehouse code. | `complete` | `git diff -- .gitignore AGENTS.md docs/v2/AGENTS.md docs/v2/CODEX_TASK_TEMPLATE.md docs/v2/BUILD_STATUS.md passed; npm run test:e2e:v2-admin-imports passed; npm run web:lint passed; node scripts/v2-progress.mjs --write passed; git check-ignore -v test-results/ passed` | Auto-verified for task scope. No manual verification remains. Next bounded task is `S3-06` — build manual Helium 10 rank CSV import with validation and dedupe. |
+| 2026-04-18 | `T-PLAN-HELIUM10-01` | `v2/02-sp-api-auth` | Update the detailed V2 build plan with a Helium 10 Historical Data CSV export evaluation note, record the candidate local WSL Playwright path and its constraints, and keep manual CSV import as the active fallback without claiming automation is proven or adopted. | `complete` | `git diff -- docs/v2/amazon-performance-hub-v2-build-plan.md docs/v2/BUILD_STATUS.md passed` | Documentation-only task. Next bounded product task remains the Helium 10 export proof task. |
 
 ## Tests and verification
 - Codex in-task validation:

@@ -763,6 +763,14 @@ Evaluate in this order:
 2. vendor-supported export automation if allowed
 3. last resort manual import with strong tooling
 
+### Current evaluation note
+- Helium 10 does not currently provide an API path for the keyword-tracker Historical Data CSV export this workflow needs.
+- A Playwright-based Historical Data CSV export path is under evaluation in local WSL only.
+- The current evaluation target assumes dedicated Helium 10 credentials loaded from env or local secret storage, not the operator's personal browser session.
+- Manual CSV import remains the active supported fallback until the Playwright export path is proven stable.
+- Any future hosted or cloud execution design must not depend on the operator's personal Chrome session or an always-open interactive desktop browser.
+- If the local export path becomes stable and maintainable, update this build plan again to move the path from `under evaluation` to `proven local path`.
+
 ### Important rule
 Do **not** build fragile scraping as a foundation for V2 unless you accept the maintenance burden and terms risk.
 
@@ -824,6 +832,7 @@ Use both:
 
 ### Ranking
 Keep Helium 10 as ranking source until you have a stable automation path.
+For now, treat Playwright export automation as evaluation-only and keep manual CSV import as the supported fallback.
 
 ### Intraday
 Use Ads API / Marketing Stream and SP-API notifications for pulse, but keep “finalized” logic separate.
