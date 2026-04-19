@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-19`
 Current branch: `v2/02-sp-api-auth`
-Current task: `S3-06 - Build manual Helium 10 rank CSV import with validation and dedupe`
+Current task: `S3-G1 - Gate daily batch jobs runnable end-to-end`
 Current stage: `Stage 3 — ingestion backbone`
 
 ## Stage checklist
@@ -12,23 +12,22 @@ Current stage: `Stage 3 — ingestion backbone`
 - [ ] `Stage 3` - ingestion backbone
 
 ## Current task card
-- Task ID: `S3-06`
-- Title: `Build manual Helium 10 rank CSV import with validation and dedupe`
-- Objective: Continue on the supported manual Helium 10 ranking CSV import workflow, with validation and dedupe, instead of spending more time on Playwright export automation.
+- Task ID: `S3-G1`
+- Title: `Gate: run Stage 3 daily retail and ads batch jobs end-to-end through the ingestion backbone`
+- Objective: Prove one operator-triggered daily Stage 3 gate can run the already-built Stage 2A retail and Stage 2B Sponsored Products ads paths through the existing ingestion job/state model.
 - Status: `complete`
 - Notes:
-  - Helium 10 Playwright export automation remains deferred.
-  - Manual Helium 10 CSV upload/import is the active supported path.
-  - Added a bounded Stage 3 manual Helium 10 rank CSV import boundary under `src/ingestion/*`.
-  - The import accepts a local CSV path only; it does not fetch, scrape, or automate Helium 10.
-  - Validation requires CSV extension plus the required `Marketplace`, `ASIN`, `Keyword`, `Date Added`, `Organic Rank`, and `Sponsored Position` columns.
-  - Malformed rows fail with explicit row-numbered issues; mixed ASIN or mixed marketplace files are rejected.
-  - Duplicate identical rank rows inside a file are deduped deterministically; conflicting duplicate identity rows are rejected.
-  - Re-running the same file with the same Stage 3 repository reuses the existing idempotency key instead of invoking the executor again.
-  - The bounded CLI prints deterministic safe summaries with row counts, dedupe counts, job status, idempotency key, and watermark status.
-  - Added fixtures for valid, duplicate-row, malformed-rank, missing-column, and conflicting-duplicate cases under `src/testing/fixtures/helium10/`.
-  - `S3-06` is auto-verified by tests and CLI scenarios; no manual-only verification remains.
-  - Next active bounded task is `S3-G1` — Gate: daily batch jobs runnable end-to-end.
+  - Added one bounded Stage 3 daily batch gate under `src/ingestion/*`.
+  - The gate accepts `account_id`, `marketplace`, `start_date`, and `end_date`.
+  - The gate runs only two source groups, in order: retail sales and traffic daily, then Sponsored Products ads daily.
+  - The retail branch reuses the existing Stage 2A SP-API first-report artifact chain and local promotion path; an operator-supplied report ID can reuse the existing local report artifact chain without another SP-API poll.
+  - The ads branch reuses the existing Stage 2B sequence: profile sync, SP campaign daily pull, SP target daily pull, ads daily persistence, campaign ingest gate, and target ingest gate.
+  - Each source group is submitted through the existing Stage 3 job runner with deterministic idempotency keys and success-only source watermark updates.
+  - Failed retail stops the gate before ads; failed ads keeps successful retail state intact and returns non-zero.
+  - The bounded CLI is `./node_modules/.bin/ts-node src/ingestion/dailyBatchGateCli.ts --account-id <id> --marketplace <code> --start-date YYYY-MM-DD --end-date YYYY-MM-DD [--retail-report-id <id>]`.
+  - Stub scenarios are available for deterministic local proof without live Amazon credentials: `--scenario stub-success`, `--scenario stub-retail-failure`, and `--scenario stub-ads-failure`.
+  - The real WSL proof passed after an unrestricted rerun using retail report `485677020556` and ads date range `2026-04-10` to `2026-04-16`.
+  - `S3-G1` is auto-verified by tests, stub CLI, and real WSL proof; no manual-only verification remains for this bounded task.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -81,6 +80,7 @@ Current stage: `Stage 3 — ingestion backbone`
 | 2026-04-19 | `T-HELIUM10-EXPORT-01` | `v2/02-sp-api-auth` | Switch the bounded proof path to use the operator's existing Windows Chrome session/profile as the primary proof-only auth path, with no CAPTCHA solving and no Supabase import. | `blocked` | `npm test -- src/connectors/helium10/exportHistoricalData.test.ts passed; npm run helium10:export-proof first blocked with Windows Chrome already running, then after Chrome was closed returned login_ok=no because Chrome refused DevTools automation for the existing default profile; npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | Manual CSV import remains the active fallback. Next viable proof path is a non-default proof-only Chrome user-data directory where the operator manually signs into Helium 10 once; keep any future UI action operator-triggered, not silent background automation. |
 | 2026-04-19 | `T-HELIUM10-EXPORT-01` | `v2/02-sp-api-auth` | Stop the Helium 10 automation proof work, defer automation, and switch the active path back to manual CSV import. | `deferred` | `git diff --check passed` | Manual CSV import is the active supported path. Next active bounded task is `S3-06` — build manual Helium 10 rank CSV import with validation and dedupe. |
 | 2026-04-19 | `S3-06` | `v2/02-sp-api-auth` | Add a bounded manual Helium 10 rank CSV import path with strict validation, safe dedupe, deterministic summaries, and Stage 3 job/state integration without Helium 10 automation, UI changes, marts, workers, or schedulers. | `complete` | `npm test -- src/ingestion/manualHelium10RankImport.test.ts passed (8 tests); ./node_modules/.bin/ts-node src/ingestion/manualHelium10RankImportCli.ts --file src/testing/fixtures/helium10/h10-rank-valid.csv --account-id sourbear --marketplace US passed with accepted_rows=3 deduped_rows=0 job_status=available; ./node_modules/.bin/ts-node src/ingestion/manualHelium10RankImportCli.ts --file src/testing/fixtures/helium10/h10-rank-duplicates.csv --account-id sourbear --marketplace US passed with accepted_rows=3 deduped_rows=1 job_status=available; ./node_modules/.bin/ts-node src/ingestion/manualHelium10RankImportCli.ts --file src/testing/fixtures/helium10/h10-rank-malformed.csv --account-id sourbear --marketplace US failed as expected with invalid_organic_rank; npm test passed (234 files, 948 tests); npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | Auto-verified. Next bounded task is `S3-G1` — Gate: daily batch jobs runnable end-to-end. |
+| 2026-04-19 | `S3-G1` | `v2/02-sp-api-auth` | Add one bounded operator-triggered Stage 3 daily batch gate that runs the existing Stage 2A retail artifact chain and Stage 2B Sponsored Products daily path through the existing job runner/state/watermark model, without scheduler, workers, UI controls, marts, SB, SD, or warehouse redesign. | `complete` | `npm test -- src/ingestion/dailyBatchGate.test.ts passed (9 tests); ./node_modules/.bin/ts-node src/ingestion/dailyBatchGateCli.ts --account-id sourbear --marketplace US --start-date 2026-04-18 --end-date 2026-04-18 --scenario stub-success passed with retail_daily.status=available and ads_daily.status=available; ./node_modules/.bin/ts-node src/ingestion/dailyBatchGateCli.ts --account-id sourbear --marketplace US --start-date 2026-04-10 --end-date 2026-04-16 --retail-report-id 485677020556 first failed in the sandbox at adsapi:sync-profiles, then passed after an unrestricted rerun with retail row_count=1 and ads row_count=1279; npm test passed (235 files, 957 tests); npm run web:lint passed; npm run web:build passed` | Auto-verified. Stop before push and wait for operator approval. |
 
 ## Tests and verification
 - Codex in-task validation:
