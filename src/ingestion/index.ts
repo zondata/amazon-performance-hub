@@ -115,3 +115,17 @@ export {
   type IngestionStateHints,
   type SourceConfidence,
 } from './stateEnvelope';
+export {
+  MANUAL_H10_RANK_IMPORT_JOB_KEY,
+  MANUAL_H10_RANK_IMPORT_SOURCE_NAME,
+  ManualHelium10RankImportError,
+  runManualHelium10RankImport,
+  summarizeManualHelium10RankImport,
+  validateManualHelium10RankCsv,
+  type ManualHelium10RankImportOptions,
+  type ManualHelium10RankImportResult,
+  type ManualHelium10RankImportSummary,
+  type ManualHelium10RankKind,
+  type ManualHelium10RankRow,
+  type ManualHelium10RankValidationIssue,
+} from './manualHelium10RankImport';

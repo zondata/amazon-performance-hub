@@ -1,9 +1,9 @@
 # V2 Build Status
 
-Last updated: `2026-04-18`
+Last updated: `2026-04-19`
 Current branch: `v2/02-sp-api-auth`
-Current task: `T-PLAN-HELIUM10-01 - Build plan evaluation note`
-Current stage: `Stage 10 — ranking automation evaluation`
+Current task: `S3-06 - Build manual Helium 10 rank CSV import with validation and dedupe`
+Current stage: `Stage 3 — ingestion backbone`
 
 ## Stage checklist
 - [x] `Stage 1` - Repo boundary and V2 route/module skeleton
@@ -12,34 +12,23 @@ Current stage: `Stage 10 — ranking automation evaluation`
 - [ ] `Stage 3` - ingestion backbone
 
 ## Current task card
-- Task ID: `T-PLAN-HELIUM10-01`
-- Title: `Build plan evaluation note`
-- Objective: Update the V2 build plan to record the Helium 10 Playwright export evaluation path without changing the active manual CSV import fallback or claiming automation is proven.
-- Allowed files:
-  - `docs/v2/amazon-performance-hub-v2-build-plan.md`
-  - `docs/v2/BUILD_STATUS.md`
-  - `docs/v2/TASK_REGISTRY.json`
-  - `docs/v2/TASK_PROGRESS.md`
-  - `docs/v2/tasks/T-PLAN-HELIUM10-01-build-plan-evaluation-note.md`
-- Forbidden:
-  - application code
-  - connector changes
-  - ingestion logic changes
-  - UI changes
-  - tests beyond doc-scope verification
-  - claims that automation is adopted, production-ready, or already proven
-- Required checks:
-  - [x] `git diff -- docs/v2/amazon-performance-hub-v2-build-plan.md docs/v2/BUILD_STATUS.md`
+- Task ID: `S3-06`
+- Title: `Build manual Helium 10 rank CSV import with validation and dedupe`
+- Objective: Continue on the supported manual Helium 10 ranking CSV import workflow, with validation and dedupe, instead of spending more time on Playwright export automation.
 - Status: `complete`
 - Notes:
-  - Documentation-only task. No product code, Playwright code, ingestion code, or UI behavior changed.
-  - The build plan now records that Helium 10 has no API for the current Historical Data CSV export need.
-  - The build plan now records that a Playwright-based Historical Data CSV export path is under evaluation in local WSL using env/local secret storage.
-  - The build plan still keeps manual CSV import as the active supported fallback until automation is proven stable.
-  - The build plan explicitly avoids any claim that automation is already adopted or proven.
-  - Required verification passed: `git diff -- docs/v2/amazon-performance-hub-v2-build-plan.md docs/v2/BUILD_STATUS.md`.
-  - Auto-verified: no manual verification remains because this task changes documentation only.
-  - Next bounded product task remains the Helium 10 export proof task.
+  - Helium 10 Playwright export automation remains deferred.
+  - Manual Helium 10 CSV upload/import is the active supported path.
+  - Added a bounded Stage 3 manual Helium 10 rank CSV import boundary under `src/ingestion/*`.
+  - The import accepts a local CSV path only; it does not fetch, scrape, or automate Helium 10.
+  - Validation requires CSV extension plus the required `Marketplace`, `ASIN`, `Keyword`, `Date Added`, `Organic Rank`, and `Sponsored Position` columns.
+  - Malformed rows fail with explicit row-numbered issues; mixed ASIN or mixed marketplace files are rejected.
+  - Duplicate identical rank rows inside a file are deduped deterministically; conflicting duplicate identity rows are rejected.
+  - Re-running the same file with the same Stage 3 repository reuses the existing idempotency key instead of invoking the executor again.
+  - The bounded CLI prints deterministic safe summaries with row counts, dedupe counts, job status, idempotency key, and watermark status.
+  - Added fixtures for valid, duplicate-row, malformed-rank, missing-column, and conflicting-duplicate cases under `src/testing/fixtures/helium10/`.
+  - `S3-06` is auto-verified by tests and CLI scenarios; no manual-only verification remains.
+  - Next active bounded task is `S3-G1` — Gate: daily batch jobs runnable end-to-end.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -83,8 +72,15 @@ Current stage: `Stage 10 — ranking automation evaluation`
 | 2026-04-18 | `S3-02` | `v2/02-sp-api-auth` | Add the bounded generic Stage 3 job runner only: idempotent submit/reuse, explicit `requested|processing|available|failed` transitions, explicit retry and replay paths, success-only `source_watermarks` updates, a stub executor, a task-local stub CLI, and directly related tests without live connector execution, scheduler, UI, backfill, or warehouse execution scope. | `complete` | `npm test passed; npm run web:lint passed; npm run web:build passed; ./node_modules/.bin/ts-node src/ingestion/jobRunnerCli.ts --scenario success passed; ./node_modules/.bin/ts-node src/ingestion/jobRunnerCli.ts --scenario retry passed; node scripts/v2-progress.mjs --write passed` | Operator manual verification completed. Next bounded task is `S3-03` — implement backfill by date range and safe reruns. |
 | 2026-04-18 | `S3-03` | `v2/02-sp-api-auth` | Add the bounded generic Stage 3 backfill path only: deterministic date-range slice planning, safe reruns on top of the existing job runner, explicit `created|reused_existing|rerun_failed|skipped_available` slice actions, a stub-only task-local CLI, and directly related tests without live connector execution, scheduler, UI, or warehouse execution scope. | `complete` | `npm test -- src/ingestion/backfillRunner.test.ts src/ingestion/backfillCli.test.ts passed; ./node_modules/.bin/ts-node src/ingestion/backfillCli.ts --scenario success passed; ./node_modules/.bin/ts-node src/ingestion/backfillCli.ts --scenario failed-only-rerun passed; npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S3-04` — model freshness_state, collection_state, finalization_state, source_confidence. |
 | 2026-04-18 | `S3-04` | `v2/02-sp-api-auth` | Add the bounded generic Stage 3 state-model layer only: canonical state families for freshness/collection/finalization/confidence, a stable typed state envelope, metadata-based persistence for current runner/backfill outputs, bounded derivation helpers, a stub-only task-local CLI, and directly related tests without live connector execution, UI, scheduler, dashboard implementation, or warehouse execution scope. | `complete` | `npm test -- src/ingestion/stateEnvelope.test.ts src/ingestion/stateEnvelopeCli.test.ts src/ingestion/jobRunner.test.ts src/ingestion/backfillRunner.test.ts passed; ./node_modules/.bin/ts-node src/ingestion/stateEnvelopeCli.ts --scenario success passed; ./node_modules/.bin/ts-node src/ingestion/stateEnvelopeCli.ts --scenario failed passed; npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push. Next bounded task is `S3-05` — build ingestion dashboard/status view. |
+| 2026-04-18 | `S3-05` | `v2/02-sp-api-auth` | Add the bounded read-only Stage 3 status surface on `/v2/admin/imports`, backed only by `ingestion_jobs` and `source_watermarks`, with URL-driven source/account/marketplace filters, safe `metadata.state_envelope` rendering, bounded recent-job visibility, and directly related tests without job controls, scheduler, live connector execution, or warehouse scope. | `complete` | `npm test -- test/v2AdminImportsStatusView.test.ts passed; npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED before push because `/v2/admin/imports` changed browser-facing behavior. Next bounded task is `S3-06` — build manual Helium 10 rank CSV import with validation and dedupe. |
+| 2026-04-18 | `V2-PLAYWRIGHT-01` | `v2/02-sp-api-auth` | Add only the bounded local Playwright setup needed to smoke-test `/v2/admin/imports` on localhost, including root config, one smoke spec, and root npm scripts, without widening into product logic, connectors, warehouse changes, or any Amazon site automation. | `complete` | `npm install --package-lock=false passed; npx playwright install chromium passed; npm run test:e2e:v2-admin-imports passed` | Auto-verified for task scope. No push performed; branch still contains unrelated pre-existing working-tree changes outside this task. |
 | 2026-04-18 | `T-PLAYWRIGHT-01` | `v2/02-sp-api-auth` | Add only the bounded repo-hygiene and workflow policy follow-up for local Playwright usage: ignore generated artifacts, document allowed/forbidden browser-testing behavior in root/V2 AGENTS, and formalize browser-check reporting in the V2 task template without changing app behavior, connectors, ingestion, or warehouse code. | `complete` | `git diff -- .gitignore AGENTS.md docs/v2/AGENTS.md docs/v2/CODEX_TASK_TEMPLATE.md docs/v2/BUILD_STATUS.md passed; npm run test:e2e:v2-admin-imports passed; npm run web:lint passed; node scripts/v2-progress.mjs --write passed; git check-ignore -v test-results/ passed` | Auto-verified for task scope. No manual verification remains. Next bounded task is `S3-06` — build manual Helium 10 rank CSV import with validation and dedupe. |
-| 2026-04-18 | `T-PLAN-HELIUM10-01` | `v2/02-sp-api-auth` | Update the detailed V2 build plan with a Helium 10 Historical Data CSV export evaluation note, record the candidate local WSL Playwright path and its constraints, and keep manual CSV import as the active fallback without claiming automation is proven or adopted. | `complete` | `git diff -- docs/v2/amazon-performance-hub-v2-build-plan.md docs/v2/BUILD_STATUS.md passed` | Documentation-only task. Next bounded product task remains the Helium 10 export proof task. |
+| 2026-04-18 | `T-PLAN-HELIUM10-01` | `v2/02-sp-api-auth` | Update the detailed V2 build plan with a Helium 10 Historical Data CSV export evaluation note, record the candidate local WSL Playwright path and its constraints, and keep manual CSV import as the active fallback without claiming automation is proven or adopted. | `complete` | `git diff -- docs/v2/amazon-performance-hub-v2-build-plan.md docs/v2/BUILD_STATUS.md passed` | Automation proof was later deferred. Next active product task is `S3-06` — build manual Helium 10 rank CSV import with validation and dedupe. |
+| 2026-04-18 | `T-HELIUM10-EXPORT-01` | `v2/02-sp-api-auth` | Add only the bounded local WSL Helium 10 Historical Data export proof path: dedicated env-login automation, direct Keyword Tracker navigation, per-ASIN Historical Data export attempts for `B0B2K57W5R` and `B0FYPRWPN1`, controlled temp-folder download handling, CSV header validation, and focused failure reporting without UI changes, Supabase import, warehouse work, or scheduler scope. | `blocked` | `npm test -- src/connectors/helium10/exportHistoricalData.test.ts passed; npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed; npm run helium10:export-proof failed with login challenge "The verification data is incorrect." before any CSV download started` | MANUAL TEST REQUIRED because Helium 10 rejected the automated login submit. Manual CSV import remains the active fallback until this proof path is unblocked. |
+| 2026-04-19 | `T-HELIUM10-EXPORT-01` | `v2/02-sp-api-auth` | Resume the auth bootstrap/export proof and apply the confirmed Helium 10 login selector handling for the dedicated Playwright profile. | `blocked` | `npm test -- src/connectors/helium10/exportHistoricalData.test.ts passed; npm run helium10:auth:bootstrap -- --timeout-minutes 15 detected #loginform-email, filled credentials, submitted, then stayed on login_error=yes; npm run helium10:export-proof returned auth_requires_bootstrap for both ASINs; npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | MANUAL TEST REQUIRED: complete/correct the Helium 10 sign-in challenge in the dedicated bootstrap browser or validate the local `HELIUM_10_LOGIN` / `HELIUM_10_PASSWORD`; no CSV export can run until `out/helium10-playwright-auth/storage-state.json` is created. |
+| 2026-04-19 | `T-HELIUM10-EXPORT-01` | `v2/02-sp-api-auth` | Switch the bounded proof path to use the operator's existing Windows Chrome session/profile as the primary proof-only auth path, with no CAPTCHA solving and no Supabase import. | `blocked` | `npm test -- src/connectors/helium10/exportHistoricalData.test.ts passed; npm run helium10:export-proof first blocked with Windows Chrome already running, then after Chrome was closed returned login_ok=no because Chrome refused DevTools automation for the existing default profile; npm test passed; npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | Manual CSV import remains the active fallback. Next viable proof path is a non-default proof-only Chrome user-data directory where the operator manually signs into Helium 10 once; keep any future UI action operator-triggered, not silent background automation. |
+| 2026-04-19 | `T-HELIUM10-EXPORT-01` | `v2/02-sp-api-auth` | Stop the Helium 10 automation proof work, defer automation, and switch the active path back to manual CSV import. | `deferred` | `git diff --check passed` | Manual CSV import is the active supported path. Next active bounded task is `S3-06` — build manual Helium 10 rank CSV import with validation and dedupe. |
+| 2026-04-19 | `S3-06` | `v2/02-sp-api-auth` | Add a bounded manual Helium 10 rank CSV import path with strict validation, safe dedupe, deterministic summaries, and Stage 3 job/state integration without Helium 10 automation, UI changes, marts, workers, or schedulers. | `complete` | `npm test -- src/ingestion/manualHelium10RankImport.test.ts passed (8 tests); ./node_modules/.bin/ts-node src/ingestion/manualHelium10RankImportCli.ts --file src/testing/fixtures/helium10/h10-rank-valid.csv --account-id sourbear --marketplace US passed with accepted_rows=3 deduped_rows=0 job_status=available; ./node_modules/.bin/ts-node src/ingestion/manualHelium10RankImportCli.ts --file src/testing/fixtures/helium10/h10-rank-duplicates.csv --account-id sourbear --marketplace US passed with accepted_rows=3 deduped_rows=1 job_status=available; ./node_modules/.bin/ts-node src/ingestion/manualHelium10RankImportCli.ts --file src/testing/fixtures/helium10/h10-rank-malformed.csv --account-id sourbear --marketplace US failed as expected with invalid_organic_rank; npm test passed (234 files, 948 tests); npm run web:lint passed; npm run web:build passed; node scripts/v2-progress.mjs --write passed` | Auto-verified. Next bounded task is `S3-G1` — Gate: daily batch jobs runnable end-to-end. |
 
 ## Tests and verification
 - Codex in-task validation:

@@ -1,16 +1,16 @@
 # Amazon Performance Hub V2 — Task Progress
 
-Last generated: 2026-04-18
+Last generated: 2026-04-19
 
 ## Overall
 
 - Total tasks: 72
-- Done: 29
+- Done: 31
 - Verify: 1
 - In progress: 1
 - Blocked: 0
-- Remaining open: 43
-- Remaining fast-track tasks: 15
+- Remaining open: 41
+- Remaining fast-track tasks: 14
 
 ## Stage summary
 
@@ -20,7 +20,7 @@ Last generated: 2026-04-18
 | Stage 1 — repo boundary for V2 | 3 | 0 | 0 | 0 | 0 | 3 | 3 | Yes |
 | Stage 2A — SP-API auth + first retail pulls | 10 | 1 | 1 | 0 | 1 | 4 | 4 | Yes |
 | Stage 2B — Ads API auth + first Sponsored Products pulls | 10 | 0 | 0 | 0 | 1 | 4 | 4 | Yes |
-| Stage 3 — ingestion backbone | 4 | 0 | 0 | 0 | 4 | 0 | 2 | No |
+| Stage 3 — ingestion backbone | 6 | 0 | 0 | 0 | 2 | 0 | 2 | No |
 | Stage 4 — canonical marts | 0 | 0 | 0 | 0 | 6 | 0 | 1 | No |
 | Stage 5 — memory system | 0 | 0 | 0 | 0 | 5 | 0 | 1 | No |
 | Stage 6 — human UI | 0 | 0 | 0 | 0 | 6 | 0 | 1 | No |
@@ -116,8 +116,6 @@ Last generated: 2026-04-18
 
 | ID | Status | Priority | Gate | Fast-track | Title |
 |---|---|---|---|---|---|
-| S3-05 | todo | should | no | no | Build ingestion dashboard/status view |
-| S3-06 | todo | must | no | yes | Build manual Helium 10 rank CSV import with validation and dedupe |
 | S3-G1 | todo | must | yes | yes | Gate: daily batch jobs runnable end-to-end |
 | S3-G2 | todo | must | yes | yes | Gate: app can show current vs delayed vs final data state |
 
