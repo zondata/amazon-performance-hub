@@ -150,3 +150,22 @@ export {
   type DailyBatchSourceExecutor,
   type DailyBatchStepResult,
 } from './dailyBatchGate';
+export {
+  WEEKLY_QUERY_INTELLIGENCE_SEARCH_TERMS_JOB_KEY,
+  WEEKLY_QUERY_INTELLIGENCE_SEARCH_TERMS_SOURCE_NAME,
+  WEEKLY_QUERY_INTELLIGENCE_SQP_JOB_KEY,
+  WEEKLY_QUERY_INTELLIGENCE_SQP_SOURCE_NAME,
+  buildWeeklyQueryIntelligenceJobRequest,
+  createStubWeeklyQueryIntelligenceExecutor,
+  runRealSearchTermsWeeklyQueryIntelligence,
+  runRealSqpWeeklyQueryIntelligence,
+  runWeeklyQueryIntelligenceGate,
+  summarizeWeeklyQueryIntelligenceGate,
+  type WeeklyQueryIntelligenceGateOptions,
+  type WeeklyQueryIntelligenceGateRequest,
+  type WeeklyQueryIntelligenceGateResult,
+  type WeeklyQueryIntelligenceGateSourceResult,
+  type WeeklyQueryIntelligenceSourceExecutionSuccess,
+  type WeeklyQueryIntelligenceSourceExecutor,
+  type WeeklyQueryIntelligenceStepResult,
+} from './weeklyQueryIntelligenceGate';

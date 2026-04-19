@@ -265,7 +265,7 @@ export const summarizeSpApiSqpParseIngest = (args: {
   coverageStart: args.parsed.coverageStart,
   coverageEnd: args.parsed.coverageEnd,
   rowCount: args.parsed.rows.length,
-  uploadId: args.ingestResult.status === 'ok' ? args.ingestResult.uploadId ?? null : null,
+  uploadId: args.ingestResult.uploadId ?? null,
   warningsCount: args.parsed.warnings.length,
 });
 

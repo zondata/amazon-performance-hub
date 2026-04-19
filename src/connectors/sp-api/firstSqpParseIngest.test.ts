@@ -184,6 +184,28 @@ describe('sp-api sqp parse+ingest boundary', () => {
     expect(serialized).not.toContain('320');
   });
 
+  it('keeps the existing upload id when SQP input was already ingested', async () => {
+    const rawDir = makeTempDir();
+    const rawPath = path.join(rawDir, 'report-sqp-123.sqp.raw.csv');
+    fs.writeFileSync(rawPath, ASIN_SQP_CSV);
+
+    const summary = await runFirstSpApiSqpParseIngest({
+      rawFilePath: rawPath,
+      env: {
+        APP_ACCOUNT_ID: 'test-account',
+        APP_MARKETPLACE: 'US',
+      },
+      ingestImpl: async () => ({
+        status: 'already ingested',
+        uploadId: 'existing-upload-123',
+        rowCount: 1,
+      }),
+    });
+
+    expect(summary.uploadId).toBe('existing-upload-123');
+    expect(summary.rowCount).toBe(1);
+  });
+
   it('reuses the bounded ingest path after materializing gzip raw artifacts to a deterministic CSV path', async () => {
     const rawDir = makeTempDir();
     const rawPath = path.join(rawDir, 'report-sqp-123.sqp.raw.csv.gz');

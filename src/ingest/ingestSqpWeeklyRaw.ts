@@ -59,7 +59,11 @@ export async function ingestSqpWeeklyRaw(
       throw new Error(`Failed to check existing rows: ${countError.message}`);
     }
     if ((count ?? 0) > 0) {
-      return { status: "already ingested" };
+      return {
+        status: "already ingested",
+        uploadId: existingUpload.upload_id,
+        rowCount: count ?? undefined,
+      };
     }
   }
 
