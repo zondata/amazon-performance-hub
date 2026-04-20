@@ -11,6 +11,12 @@ Current stage: `Stage 3 — ingestion backbone`
 - [x] `Stage 2B` - Ads API auth + first Sponsored Products pulls
 - [ ] `Stage 3` - ingestion backbone
 
+## Fast-track minimum usable API-backed path
+- Status: active sequence adjustment, not an architecture change.
+- Reason: reach usable API-backed operation sooner by prioritizing the narrowest path that removes manual SalesTrend and ads dependencies while keeping manual ranking upload as the accepted fallback.
+- Current fast-track step: `FT-01` - finish SP-API retail sales and traffic ingest end-to-end as the active retail truth path.
+- Exit condition: return to normal task ordering when retail sales and traffic plus ads are API-backed in the active product overview path, SQP/Search Terms ingestion is runnable through the ingestion backbone, manual ranking upload remains usable, and the first V2 Overview page reads from marts only.
+
 ## Current task card
 - Task ID: `S3-G2`
 - Title: `Gate: run Stage 3 weekly query-intelligence jobs end-to-end through the ingestion backbone`
