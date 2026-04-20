@@ -14,21 +14,25 @@ Current stage: `Fast-track minimum usable API-backed path`
 ## Fast-track minimum usable API-backed path
 - Status: active sequence adjustment, not an architecture change.
 - Reason: reach usable API-backed operation sooner by prioritizing the narrowest path that removes manual SalesTrend and ads dependencies while keeping manual ranking upload as the accepted fallback.
-- Current fast-track step: `FT-03` - move the product overview mart off `si_sales_trend_daily_latest` and onto API-backed retail plus Ads-backed sources.
+- Current fast-track step: `FT-04` - ship the first usable V2 Overview page backed only by the product overview mart.
 - Exit condition: return to normal task ordering when retail sales and traffic plus ads are API-backed in the active product overview path, SQP/Search Terms ingestion is runnable through the ingestion backbone, manual ranking upload remains usable, and the first V2 Overview page reads from marts only.
 
 ## Current task card
-- Task ID: `FT-03`
-- Title: `Move product overview mart off SI and onto API-backed retail plus Ads-backed sources`
-- Objective: Cut the product overview mart off `si_sales_trend_daily_latest` and prove live retail metrics from SP-API truth plus ad spend from the existing Ads-backed truth source.
+- Task ID: `FT-04`
+- Title: `Ship the first usable V2 Overview page backed only by the product overview mart`
+- Objective: Make `/v2/overview/[asin]` usable for one ASIN and explicit date window by rendering only the FT-03 product overview mart output.
 - Status: `complete`
 - Notes:
-  - Product overview mart now reads retail metrics from `spapi_retail_sales_traffic_by_asin_truth` and ad spend from `sp_advertised_product_daily_fact_latest`.
-  - Legacy SI fallback remains disabled for this mart path.
-  - Root-cause follow-up found the previous live proof had `reportOptions.asinGranularity=PARENT`, so `salesAndTrafficByAsin` was empty; FT-03 now requests child-ASIN Sales and Traffic reports and maps `childAsin` as the canonical warehouse ASIN.
-  - Final live WSL proof used child-ASIN SP-API Sales and Traffic report `487536020563` for `sourbear`/`US`/`2026-04-04` and ASIN `B0FYPRWPN1`.
-  - Proof result: `ok=yes`, retail source `spapi_retail_sales_traffic_by_asin_truth`, ads source `sp_advertised_product_daily_fact_latest`, legacy SI fallback `no`, live non-null retail metrics returned.
-  - No UI, memory, MCP, ranking automation, scheduler, or unrelated mart scope was added.
+  - Replaced the `/v2/overview/[asin]` placeholder with a server-rendered mart-backed page.
+  - Added `apps/web/src/lib/v2/overview.ts` as the bounded page loader; it requires explicit `start` and `end` URL params and delegates metric construction to the FT-03 `buildProductOverviewMart` runtime path.
+  - Added `apps/web/src/app/v2/overview/[asin]/V2OverviewPageView.tsx` to render ASIN identity, date window, sales, orders, sessions, conversion rate, ad spend, TACOS, source/fallback state, no-data state, error state, and diagnostics.
+  - The page shows source state from the mart result: retail source `spapi_retail_sales_traffic_by_asin_truth`, retail truth source `sp-api-sales-and-traffic`, Ads source `sp_advertised_product_daily_fact_latest`, and legacy SI fallback `No`.
+  - The page does not read from `si_sales_trend_daily_latest`, raw retail tables, or raw Ads tables in the page layer.
+  - Added focused tests in `test/v2OverviewPage.test.ts` for explicit date parsing, required-date behavior, mart source loading, no SI fallback, required metric rendering, no-data state, diagnostics rendering, and bounded error state.
+  - Required checks passed: focused FT-04 tests, `npm test`, `npm run web:lint`, `npm run web:build`, and real WSL route proof outside sandbox.
+  - Real WSL proof route: `/v2/overview/B0FYPRWPN1?start=2026-04-04&end=2026-04-04` with `APP_ACCOUNT_ID=sourbear APP_MARKETPLACE=US`.
+  - Real WSL proof returned HTTP `200` and rendered `B0FYPRWPN1`, `2026-04-04 -> 2026-04-04`, sales `$62.97`, orders `4`, sessions `30`, conversion rate `13.3%`, ad spend `$31.23`, TACOS `49.6%`, retail source `spapi_retail_sales_traffic_by_asin_truth`, retail truth source `sp-api-sales-and-traffic`, Ads source `sp_advertised_product_daily_fact_latest`, and legacy SI fallback `No`.
+  - No Queries UI, memory, MCP, ranking automation, scheduler, root-cause panel, query mart, rank mart, or unrelated scope was added.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -86,6 +90,7 @@ Current stage: `Fast-track minimum usable API-backed path`
 | 2026-04-20 | `FT-01` | `v2/02-sp-api-auth` | Finish the SP-API Sales and Traffic retail ingest path by writing the existing real warehouse-ready artifact into bounded SP-API retail warehouse tables through the Stage 3 job/watermark model, with explicit account/marketplace identity and no SI SalesTrend fallback. | `complete` | `npm test -- src/warehouse/firstSalesTrafficWarehouseWrite.test.ts src/ingestion/firstSalesTrafficRetailIngest.test.ts passed (5 tests); npm run spapi:ingest-sales-traffic-retail -- --account-id sourbear --marketplace US --start-date 2026-04-12 --end-date 2026-04-12 --report-id 485677020556 --scenario stub-success passed; npm run spapi:ingest-sales-traffic-retail -- --account-id sourbear --marketplace US --start-date 2026-04-12 --end-date 2026-04-12 --report-id 485677020556 --scenario stub-failure failed as expected without a watermark; real WSL proof outside sandbox passed with job id 19bb5ae5-bc5d-4db2-8a33-7d4a6735e05a, row_count=1, watermark=available, target tables spapi_sales_and_traffic_by_date_report_rows and spapi_sales_and_traffic_by_asin_report_rows; live rerun passed with job_result=reused_existing and executor_invoked=no; npm test passed (239 files, 984 tests); npm run web:lint passed; npm run web:build passed` | Auto-verified. Next fast-track step is `FT-02` — land the API-backed retail fact or latest-view contract as the warehouse truth for retail sales and traffic. Stop before push and wait for operator approval. |
 | 2026-04-20 | `FT-02` | `v2/02-sp-api-auth` | Land the bounded SP-API retail Sales and Traffic truth contract by adding stable by-date and by-ASIN truth views plus a typed warehouse reader/proof CLI, without touching UI, marts, memory, MCP, ranking automation, scheduler, SB/SD, or legacy SI fallback paths. | `complete` | `npm test -- src/warehouse/retailSalesTrafficTruth.test.ts passed (4 tests); ./node_modules/.bin/ts-node src/warehouse/retailSalesTrafficTruthCli.ts --account-id sourbear --marketplace US --start-date 2026-04-12 --end-date 2026-04-18 --scenario stub-success passed with by_date_row_count=1 and by_asin_row_count=1; ./node_modules/.bin/ts-node src/warehouse/retailSalesTrafficTruthCli.ts --account-id sourbear --marketplace US --start-date 2026-04-12 --end-date 2026-04-18 --scenario stub-legacy-fallback failed as expected with invalid_truth_source; real WSL proof outside sandbox passed with truth surfaces spapi_retail_sales_traffic_by_date_truth and spapi_retail_sales_traffic_by_asin_truth, by_date_row_count=1, by_asin_row_count=0, source report id 485677020556, source ingestion job id 19bb5ae5-bc5d-4db2-8a33-7d4a6735e05a, and legacy_sales_trend_fallback=no; npm test passed (240 files, 988 tests); npm run web:lint passed; npm run web:build passed` | Auto-verified. Next fast-track step is `FT-03` — move the product overview mart off `si_sales_trend_daily_latest` and onto API-backed retail plus Ads-backed sources. Stop before push and wait for operator approval. |
 | 2026-04-20 | `FT-03` | `v2/02-sp-api-auth` | Move product overview mart off `si_sales_trend_daily_latest` and onto SP-API retail truth plus Ads-backed ad spend, with SI fallback disabled. | `complete` | `npm test -- src/connectors/sp-api/firstReportRequest.test.ts src/warehouse/firstSalesTrafficWarehouseWrite.test.ts src/ingestion/firstSalesTrafficRetailIngest.test.ts src/marts/productOverviewMart.test.ts` passed (24 tests); `npm test` passed (990 tests); `npm run web:lint` passed; `npm run web:build` passed; `git diff --check` passed; real WSL proof passed with child-ASIN report `487536020563`, mart `ok=yes`, retail source `spapi_retail_sales_traffic_by_asin_truth`, ads source `sp_advertised_product_daily_fact_latest`, legacy SI fallback `no`, and non-null live retail metrics for `B0FYPRWPN1`. | Auto-verified. Stop before push and wait for operator approval. |
+| 2026-04-20 | `FT-04` | `v2/02-sp-api-auth` | Ship the first usable `/v2/overview/[asin]` page backed only by the FT-03 product overview mart, with explicit `start`/`end` URL inputs, required core metrics, source/fallback state, no-data handling, diagnostics, and no Queries/memory/MCP/ranking/scheduler scope. | `complete` | `npm test -- test/v2OverviewPage.test.ts` passed (8 tests); `npm test` passed (241 files, 998 tests); `npm run web:lint` passed; `npm run web:build` passed; real WSL route proof outside sandbox passed with `APP_ACCOUNT_ID=sourbear APP_MARKETPLACE=US npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 49317`, then `curl http://127.0.0.1:49317/v2/overview/B0FYPRWPN1?start=2026-04-04&end=2026-04-04` returned HTTP 200 and rendered sales `$62.97`, orders `4`, sessions `30`, conversion rate `13.3%`, ad spend `$31.23`, TACOS `49.6%`, retail source `spapi_retail_sales_traffic_by_asin_truth`, retail truth source `sp-api-sales-and-traffic`, Ads source `sp_advertised_product_daily_fact_latest`, and legacy SI fallback `No`. | Auto-verified. Fast-track exit condition for first Overview page backed by marts only is met; next step is `FT-05` to resume query-facing work under the normal fast-track path. Stop before push and wait for operator approval. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -334,7 +339,23 @@ Current stage: `Fast-track minimum usable API-backed path`
 - Proof result: `ok=yes`, retail source `spapi_retail_sales_traffic_by_asin_truth`, retail truth source `sp-api-sales-and-traffic`, ads source `sp_advertised_product_daily_fact_latest`, legacy SI fallback `no`, row count `1`, diagnostics `0`, sales `62.97`, orders `4`, sessions `30`, ad spend `31.230000000000004`.
 
 
+- FT-04 validation completed:
+  - Added `apps/web/src/lib/v2/overview.ts` for the bounded `/v2/overview/[asin]` page loader.
+  - Added `apps/web/src/app/v2/overview/[asin]/V2OverviewPageView.tsx` and replaced the route placeholder in `apps/web/src/app/v2/overview/[asin]/page.tsx`.
+  - Updated the V2 layout copy in `apps/web/src/app/v2/layout.tsx` so the now-usable Overview route is not presented as a placeholder-only surface.
+  - Added focused tests in `test/v2OverviewPage.test.ts`.
+  - `npm test -- test/v2OverviewPage.test.ts` passed with `1` file and `8` tests.
+  - `npm test` passed with `241` files and `998` tests.
+  - `npm run web:lint` passed.
+  - `npm run web:build` passed.
+  - Real WSL route proof outside sandbox:
+    - Started local app with `APP_ACCOUNT_ID=sourbear APP_MARKETPLACE=US npm --prefix apps/web run dev -- --hostname 127.0.0.1 --port 49317`.
+    - Requested `http://127.0.0.1:49317/v2/overview/B0FYPRWPN1?start=2026-04-04&end=2026-04-04`.
+    - Route returned HTTP `200`.
+    - Rendered required mart-backed values: ASIN `B0FYPRWPN1`, date window `2026-04-04 -> 2026-04-04`, sales `$62.97`, orders `4`, sessions `30`, conversion rate `13.3%`, ad spend `$31.23`, TACOS `49.6%`.
+    - Rendered source/fallback state: retail source `spapi_retail_sales_traffic_by_asin_truth`, retail truth source `sp-api-sales-and-traffic`, Ads source `sp_advertised_product_daily_fact_latest`, and legacy SI fallback `No`.
+
 ## Open blockers
-- No FT-03 implementation blockers remain.
-- FT-03 is approved for push; prepare a clean commit containing only the approved FT-03 files and the FT-03 BUILD_STATUS hunks.
-- Unrelated pre-existing mart/admin/import/Playwright/package/task-spec worktree files must remain unstaged.
+- No FT-04 implementation blockers remain.
+- FT-04 is approved for push; prepare a clean commit containing only the approved FT-04 files and the FT-04 BUILD_STATUS hunks.
+- Unrelated pre-existing AGENTS, admin/import, Playwright, package.json, `src/marts/index.ts`, and scratch task-spec worktree files must remain unstaged.

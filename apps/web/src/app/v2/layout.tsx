@@ -10,11 +10,10 @@ export default function V2Layout({
       <section className="rounded-3xl border border-border bg-surface px-6 py-5 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-[0.35em] text-muted">Amazon Performance Hub V2</div>
-            <h1 className="text-2xl font-semibold text-foreground">Repo boundary placeholder</h1>
+            <div className="text-xs font-semibold uppercase text-muted">Amazon Performance Hub V2</div>
+            <h1 className="text-2xl font-semibold text-foreground">API-backed operator workspace</h1>
             <p className="max-w-3xl text-sm leading-6 text-muted">
-              These routes exist only to establish the V2 surface area. Amazon auth, ingestion, marts, and product
-              logic stay out of scope until later bounded tasks.
+              V2 routes expose bounded operator surfaces backed by curated marts and verified ingestion paths.
             </p>
           </div>
 
