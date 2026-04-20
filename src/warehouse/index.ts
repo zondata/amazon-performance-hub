@@ -123,3 +123,22 @@ export {
   type FirstSalesTrafficWarehouseSink,
   type FirstSalesTrafficWarehouseWriteSummary,
 } from './firstSalesTrafficWarehouseWrite';
+
+export {
+  RETAIL_SALES_TRAFFIC_TRUTH_CONTRACT_VERSION,
+  RETAIL_TRUTH_SOURCE,
+  SPAPI_RETAIL_SALES_TRAFFIC_BY_ASIN_TRUTH_VIEW,
+  SPAPI_RETAIL_SALES_TRAFFIC_BY_DATE_TRUTH_VIEW,
+  InMemoryRetailSalesTrafficTruthReader,
+  PostgresRetailSalesTrafficTruthReader,
+  RetailSalesTrafficTruthError,
+  runRetailSalesTrafficTruthProof,
+  selectRetailSalesTrafficByAsinTruthRows,
+  selectRetailSalesTrafficByDateTruthRows,
+  summarizeRetailSalesTrafficTruthProof,
+  type RetailSalesTrafficByAsinTruthRow,
+  type RetailSalesTrafficByDateTruthRow,
+  type RetailSalesTrafficTruthProofSummary,
+  type RetailSalesTrafficTruthQuery,
+  type RetailSalesTrafficTruthReader,
+} from './retailSalesTrafficTruth';

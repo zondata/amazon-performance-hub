@@ -2,7 +2,7 @@
 
 Last updated: `2026-04-20`
 Current branch: `v2/02-sp-api-auth`
-Current task: `FT-01 - Finish SP-API retail sales and traffic ingest end-to-end as the active retail truth path`
+Current task: `FT-02 - Land the API-backed retail fact/latest-view contract as the warehouse truth for retail sales and traffic`
 Current stage: `Fast-track minimum usable API-backed path`
 
 ## Stage checklist
@@ -14,27 +14,26 @@ Current stage: `Fast-track minimum usable API-backed path`
 ## Fast-track minimum usable API-backed path
 - Status: active sequence adjustment, not an architecture change.
 - Reason: reach usable API-backed operation sooner by prioritizing the narrowest path that removes manual SalesTrend and ads dependencies while keeping manual ranking upload as the accepted fallback.
-- Current fast-track step: `FT-02` - land the API-backed retail fact or latest-view contract as the warehouse truth for retail sales and traffic.
+- Current fast-track step: `FT-03` - move the product overview mart off `si_sales_trend_daily_latest` and onto API-backed retail plus Ads-backed sources.
 - Exit condition: return to normal task ordering when retail sales and traffic plus ads are API-backed in the active product overview path, SQP/Search Terms ingestion is runnable through the ingestion backbone, manual ranking upload remains usable, and the first V2 Overview page reads from marts only.
 
 ## Current task card
-- Task ID: `FT-01`
-- Title: `Finish SP-API retail sales and traffic ingest end-to-end as the active retail truth path`
-- Objective: Complete the bounded SP-API Sales and Traffic path so a real report artifact writes into the active retail warehouse boundary with explicit account/marketplace identity plus Stage 3 job and watermark state.
+- Task ID: `FT-02`
+- Title: `Land the API-backed retail fact/latest-view contract as the warehouse truth for retail sales and traffic`
+- Objective: Establish the bounded SP-API Sales and Traffic retail warehouse truth contract that downstream reads can use without depending on legacy SI SalesTrend.
 - Status: `complete`
 - Notes:
-  - Added migration `supabase/migrations/20260420120000_spapi_sales_traffic_retail_boundary.sql` for the bounded SP-API Sales and Traffic warehouse boundary tables `spapi_sales_and_traffic_by_date_report_rows` and `spapi_sales_and_traffic_by_asin_report_rows`, plus latest views for both targets.
-  - Added `src/warehouse/firstSalesTrafficWarehouseWrite.ts` to validate the existing warehouse-ready artifact, shape by-date and by-ASIN rows, preserve full `row_values` JSON, add typed retail fields, and write through a bounded sink with `legacy_sales_trend_fallback=false`.
-  - Added `src/ingestion/postgresIngestionJobRepository.ts` so the existing Stage 3 `IngestionJobRunner` can persist FT-01 jobs and source watermarks to Postgres.
-  - Added `src/ingestion/firstSalesTrafficRetailIngest.ts` and `src/ingestion/firstSalesTrafficRetailIngestCli.ts` as the retail-only FT-01 command path.
-  - Updated `src/ingestion/index.ts`, `src/warehouse/index.ts`, and `package.json` for the new bounded exports and `spapi:ingest-sales-traffic-retail` script.
-  - Added focused tests in `src/warehouse/firstSalesTrafficWarehouseWrite.test.ts` and `src/ingestion/firstSalesTrafficRetailIngest.test.ts` covering successful write shaping, account/marketplace propagation, duplicate rerun reuse, success-only watermark behavior, failure normalization, and deterministic summary checksum behavior.
-  - Required checks passed: focused FT-01 tests, CLI stub success, CLI stub failure expected fail, `npm test`, `npm run web:lint`, `npm run web:build`, real WSL proof outside sandbox, and live rerun reuse proof.
-  - Real WSL proof wrote report `485677020556` for `sourbear` / `US` / `2026-04-12` with job id `19bb5ae5-bc5d-4db2-8a33-7d4a6735e05a`, `row_count=1`, watermark `available`, target tables `spapi_sales_and_traffic_by_date_report_rows,spapi_sales_and_traffic_by_asin_report_rows`, and no SI/manual SalesTrend fallback.
-  - First live attempt failed before execution because `pg` returned timestamps as `Date` objects; the normalizer was fixed, and the FT-01 idempotency namespace was moved forward before the successful proof. A live rerun then returned `job_result=reused_existing` with `executor_invoked=no`.
-  - Extra non-required `./node_modules/.bin/tsc -p tsconfig.json --noEmit` was attempted and failed on pre-existing unrelated test type errors in connector test files: `src/connectors/ads-api/campaignIngestGate.test.ts`, `src/connectors/ads-api/targetIngestGate.test.ts`, `src/connectors/sp-api/firstSearchTermsRealPull.test.ts`, and `src/connectors/sp-api/firstSqpRealPull.test.ts`.
-  - No UI, mart, memory, MCP, ranking automation, scheduler, worker, diagnosis, or change-logging scope was added.
-  - Next fast-track step is `FT-02`.
+  - Added migration `supabase/migrations/20260420143000_spapi_retail_sales_traffic_truth_contract.sql` to create stable truth views `spapi_retail_sales_traffic_by_date_truth` and `spapi_retail_sales_traffic_by_asin_truth`.
+  - Truth views use deterministic latest selection over FT-01 fact rows by `exported_at desc`, `ingested_at desc`, `report_id desc`, and `canonical_record_id desc`.
+  - Truth views expose explicit `account_id`, `marketplace`, date/window identity, source report/job identity, `retail_truth_source='sp-api-sales-and-traffic'`, and `legacy_sales_trend_fallback=false`.
+  - Added bounded reader/proof module `src/warehouse/retailSalesTrafficTruth.ts` plus task-local CLI `src/warehouse/retailSalesTrafficTruthCli.ts`.
+  - Updated `src/warehouse/index.ts` exports for the FT-02 truth contract.
+  - Added focused tests in `src/warehouse/retailSalesTrafficTruth.test.ts` covering by-date reads, by-ASIN reads, deterministic latest selection, account/marketplace/ASIN filtering, proof summaries, and rejection of legacy SalesTrend fallback rows.
+  - Required checks passed: focused FT-02 tests, CLI stub success, CLI legacy-fallback negative expected fail, real WSL proof outside sandbox, `npm test`, `npm run web:lint`, and `npm run web:build`.
+  - Real WSL proof command: `./node_modules/.bin/ts-node src/warehouse/retailSalesTrafficTruthCli.ts --account-id sourbear --marketplace US --start-date 2026-04-12 --end-date 2026-04-12 --ensure-schema`.
+  - Real WSL proof passed with `ok=yes`, truth surfaces `spapi_retail_sales_traffic_by_date_truth,spapi_retail_sales_traffic_by_asin_truth`, `by_date_row_count=1`, `by_asin_row_count=0`, source report id `485677020556`, source ingestion job id `19bb5ae5-bc5d-4db2-8a33-7d4a6735e05a`, `retail_truth_source=sp-api-sales-and-traffic`, and `legacy_sales_trend_fallback=no`.
+  - No UI, mart cutover, memory, MCP, ranking automation, scheduler, worker, diagnosis, change logging, SB/SD expansion, or legacy SI fallback scope was added.
+  - Next fast-track step is `FT-03`.
 
 ## Task log
 | Date | Task ID | Branch | Scope | Result | Tests run | Follow-up |
@@ -90,6 +89,7 @@ Current stage: `Fast-track minimum usable API-backed path`
 | 2026-04-19 | `S3-G1` | `v2/02-sp-api-auth` | Add one bounded operator-triggered Stage 3 daily batch gate that runs the existing Stage 2A retail artifact chain and Stage 2B Sponsored Products daily path through the existing job runner/state/watermark model, without scheduler, workers, UI controls, marts, SB, SD, or warehouse redesign. | `complete` | `npm test -- src/ingestion/dailyBatchGate.test.ts passed (9 tests); ./node_modules/.bin/ts-node src/ingestion/dailyBatchGateCli.ts --account-id sourbear --marketplace US --start-date 2026-04-18 --end-date 2026-04-18 --scenario stub-success passed with retail_daily.status=available and ads_daily.status=available; ./node_modules/.bin/ts-node src/ingestion/dailyBatchGateCli.ts --account-id sourbear --marketplace US --start-date 2026-04-10 --end-date 2026-04-16 --retail-report-id 485677020556 first failed in the sandbox at adsapi:sync-profiles, then passed after an unrestricted rerun with retail row_count=1 and ads row_count=1279; npm test passed (235 files, 957 tests); npm run web:lint passed; npm run web:build passed` | Auto-verified. Stop before push and wait for operator approval. |
 | 2026-04-19 | `S3-G2` | `v2/02-sp-api-auth` | Add one bounded operator-triggered Stage 3 weekly query-intelligence gate that runs the existing Stage 2A SQP and Search Terms weekly pull/ingest paths through the existing job runner/state/watermark model, without scheduler, workers, UI controls, Ads API, warehouse redesign, marts, SB, SD, or Helium 10 work. | `complete` | `npm test -- src/connectors/sp-api/firstSqpParseIngest.test.ts src/ingestion/weeklyQueryIntelligenceGate.test.ts passed (18 tests); ./node_modules/.bin/ts-node src/ingestion/weeklyQueryIntelligenceGateCli.ts --account-id sourbear --marketplace US --marketplace-id ATVPDKIKX0DER --asin B0FYPRWPN1 --start-date 2026-04-05 --end-date 2026-04-11 --scenario stub-success passed with sqp_weekly.status=available and search_terms_weekly.status=available; exact live WSL proof passed outside sandbox with ok=yes, SQP/Search Terms statuses available, both watermarks available, SQP upload id fa09fe8d-7e28-4584-bda3-4f95f46135a5, Search Terms upload id 9d9f5f5e-b524-448e-aff7-da74abb4b4c1, and raw artifact paths for both source groups; npm test passed (236 files, 967 tests); npm run web:lint passed; npm run web:build passed` | Auto-verified. Stop before push and wait for operator approval. |
 | 2026-04-20 | `FT-01` | `v2/02-sp-api-auth` | Finish the SP-API Sales and Traffic retail ingest path by writing the existing real warehouse-ready artifact into bounded SP-API retail warehouse tables through the Stage 3 job/watermark model, with explicit account/marketplace identity and no SI SalesTrend fallback. | `complete` | `npm test -- src/warehouse/firstSalesTrafficWarehouseWrite.test.ts src/ingestion/firstSalesTrafficRetailIngest.test.ts passed (5 tests); npm run spapi:ingest-sales-traffic-retail -- --account-id sourbear --marketplace US --start-date 2026-04-12 --end-date 2026-04-12 --report-id 485677020556 --scenario stub-success passed; npm run spapi:ingest-sales-traffic-retail -- --account-id sourbear --marketplace US --start-date 2026-04-12 --end-date 2026-04-12 --report-id 485677020556 --scenario stub-failure failed as expected without a watermark; real WSL proof outside sandbox passed with job id 19bb5ae5-bc5d-4db2-8a33-7d4a6735e05a, row_count=1, watermark=available, target tables spapi_sales_and_traffic_by_date_report_rows and spapi_sales_and_traffic_by_asin_report_rows; live rerun passed with job_result=reused_existing and executor_invoked=no; npm test passed (239 files, 984 tests); npm run web:lint passed; npm run web:build passed` | Auto-verified. Next fast-track step is `FT-02` — land the API-backed retail fact or latest-view contract as the warehouse truth for retail sales and traffic. Stop before push and wait for operator approval. |
+| 2026-04-20 | `FT-02` | `v2/02-sp-api-auth` | Land the bounded SP-API retail Sales and Traffic truth contract by adding stable by-date and by-ASIN truth views plus a typed warehouse reader/proof CLI, without touching UI, marts, memory, MCP, ranking automation, scheduler, SB/SD, or legacy SI fallback paths. | `complete` | `npm test -- src/warehouse/retailSalesTrafficTruth.test.ts passed (4 tests); ./node_modules/.bin/ts-node src/warehouse/retailSalesTrafficTruthCli.ts --account-id sourbear --marketplace US --start-date 2026-04-12 --end-date 2026-04-18 --scenario stub-success passed with by_date_row_count=1 and by_asin_row_count=1; ./node_modules/.bin/ts-node src/warehouse/retailSalesTrafficTruthCli.ts --account-id sourbear --marketplace US --start-date 2026-04-12 --end-date 2026-04-18 --scenario stub-legacy-fallback failed as expected with invalid_truth_source; real WSL proof outside sandbox passed with truth surfaces spapi_retail_sales_traffic_by_date_truth and spapi_retail_sales_traffic_by_asin_truth, by_date_row_count=1, by_asin_row_count=0, source report id 485677020556, source ingestion job id 19bb5ae5-bc5d-4db2-8a33-7d4a6735e05a, and legacy_sales_trend_fallback=no; npm test passed (240 files, 988 tests); npm run web:lint passed; npm run web:build passed` | Auto-verified. Next fast-track step is `FT-03` — move the product overview mart off `si_sales_trend_daily_latest` and onto API-backed retail plus Ads-backed sources. Stop before push and wait for operator approval. |
 
 ## Tests and verification
 - Codex in-task validation:
@@ -314,9 +314,21 @@ Current stage: `Fast-track minimum usable API-backed path`
   - `npm run web:lint` passed.
   - `npm run web:build` passed.
   - Extra non-required `./node_modules/.bin/tsc -p tsconfig.json --noEmit` was attempted and failed on pre-existing unrelated connector test type errors outside FT-01 scope.
+- FT-02 validation completed:
+  - Added migration `supabase/migrations/20260420143000_spapi_retail_sales_traffic_truth_contract.sql` for stable SP-API retail truth views.
+  - Added `src/warehouse/retailSalesTrafficTruth.ts`, `src/warehouse/retailSalesTrafficTruthCli.ts`, and `src/warehouse/retailSalesTrafficTruth.test.ts`.
+  - Updated `src/warehouse/index.ts` exports for the bounded FT-02 truth contract.
+  - `npm test -- src/warehouse/retailSalesTrafficTruth.test.ts` passed with `1` file and `4` tests.
+  - `./node_modules/.bin/ts-node src/warehouse/retailSalesTrafficTruthCli.ts --account-id sourbear --marketplace US --start-date 2026-04-12 --end-date 2026-04-18 --scenario stub-success` passed with `ok=yes`, `by_date_row_count=1`, `by_asin_row_count=1`, `retail_truth_source=sp-api-sales-and-traffic`, and `legacy_sales_trend_fallback=no`.
+  - `./node_modules/.bin/ts-node src/warehouse/retailSalesTrafficTruthCli.ts --account-id sourbear --marketplace US --start-date 2026-04-12 --end-date 2026-04-18 --scenario stub-legacy-fallback` failed as expected with `error_code=invalid_truth_source`.
+  - Real WSL proof outside sandbox passed: `./node_modules/.bin/ts-node src/warehouse/retailSalesTrafficTruthCli.ts --account-id sourbear --marketplace US --start-date 2026-04-12 --end-date 2026-04-12 --ensure-schema`.
+  - Real proof returned `ok=yes`, truth surfaces `spapi_retail_sales_traffic_by_date_truth,spapi_retail_sales_traffic_by_asin_truth`, `by_date_row_count=1`, `by_asin_row_count=0`, source report id `485677020556`, source ingestion job id `19bb5ae5-bc5d-4db2-8a33-7d4a6735e05a`, `retail_truth_source=sp-api-sales-and-traffic`, and `legacy_sales_trend_fallback=no`.
+  - `npm test` passed with `240` files and `988` tests.
+  - `npm run web:lint` passed.
+  - `npm run web:build` passed.
 
 ## Open blockers
-- No FT-01 blockers remain.
-- FT-01 is ready for operator review and approval under the current local workflow rules.
-- Next fast-track step is `FT-02`.
+- No FT-02 blockers remain.
+- FT-02 is ready for operator review and approval under the current local workflow rules.
+- Next fast-track step is `FT-03`.
 - Stop before push and wait for operator approval.
