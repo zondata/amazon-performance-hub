@@ -361,7 +361,7 @@ const buildAsinRows = (args: {
   return args.batch.rows.map((row) => {
     const parentAsin = stringValue(row.rowValues, 'parentAsin');
     const childAsin = stringValue(row.rowValues, 'childAsin');
-    const asin = parentAsin ?? childAsin ?? stringValue(row.rowValues, 'asin');
+    const asin = childAsin ?? parentAsin ?? stringValue(row.rowValues, 'asin');
 
     return {
       ingestion_job_id: args.ingestionJobId,

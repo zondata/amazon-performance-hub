@@ -6,11 +6,61 @@ import {
   SpApiRequestError,
 } from './types';
 
+type CliArgs = {
+  startDate?: string;
+  endDate?: string;
+};
+
+const readValue = (argv: string[], index: number, flag: string): string => {
+  const value = argv[index + 1];
+  if (!value || value.startsWith('--')) {
+    throw new SpApiRequestError(
+      'request_build_error',
+      `Missing value for ${flag}`
+    );
+  }
+  return value;
+};
+
+const parseCliArgs = (argv: string[]): CliArgs => {
+  const args: CliArgs = {};
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === '--start-date') {
+      args.startDate = readValue(argv, index, arg);
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith('--start-date=')) {
+      args.startDate = arg.slice('--start-date='.length);
+      continue;
+    }
+    if (arg === '--end-date') {
+      args.endDate = readValue(argv, index, arg);
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith('--end-date=')) {
+      args.endDate = arg.slice('--end-date='.length);
+      continue;
+    }
+
+    throw new SpApiRequestError(
+      'request_build_error',
+      `Unknown CLI argument: ${arg}`
+    );
+  }
+
+  return args;
+};
+
 async function main(): Promise<void> {
   try {
     loadLocalEnvFiles();
 
-    const summary = await createFirstSalesAndTrafficReportRequest();
+    const args = parseCliArgs(process.argv.slice(2));
+    const summary = await createFirstSalesAndTrafficReportRequest(args);
 
     console.log('SP-API first report request succeeded.');
     console.log(`Endpoint: ${summary.endpoint}`);

@@ -29,8 +29,24 @@ describe('sp-api first report request boundary', () => {
       dataEndTime: '2026-04-12T23:59:59.000Z',
       reportOptions: {
         dateGranularity: 'DAY',
-        asinGranularity: 'PARENT',
-        skuGranularity: 'TOTAL',
+        asinGranularity: 'CHILD',
+      },
+    });
+  });
+
+  it('supports an explicit date window for bounded live proof reruns', () => {
+    expect(
+      buildFirstSalesAndTrafficReportRequestBody({
+        marketplaceId: 'ATVPDKIKX0DER',
+        startDate: '2026-04-12',
+        endDate: '2026-04-12',
+      })
+    ).toMatchObject({
+      dataStartTime: '2026-04-12T00:00:00.000Z',
+      dataEndTime: '2026-04-12T23:59:59.000Z',
+      reportOptions: {
+        dateGranularity: 'DAY',
+        asinGranularity: 'CHILD',
       },
     });
   });

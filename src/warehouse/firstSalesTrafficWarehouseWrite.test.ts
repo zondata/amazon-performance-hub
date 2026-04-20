@@ -158,6 +158,7 @@ const writeWarehouseReadyArtifact = (dir: string) => {
             'canonical_record_id',
             'source_record_index',
             'parentAsin',
+            'childAsin',
             'salesByAsin.orderedProductSales.amount',
             'salesByAsin.orderedProductSales.currencyCode',
             'salesByAsin.unitsOrdered',
@@ -178,7 +179,8 @@ const writeWarehouseReadyArtifact = (dir: string) => {
                 section_name: 'salesAndTrafficByAsin',
                 canonical_record_id: 'report-123:salesAndTrafficByAsin:0',
                 source_record_index: 0,
-                parentAsin: 'B0TESTASIN',
+                parentAsin: 'B0PARENTAS',
+                childAsin: 'B0TESTASIN',
                 'salesByAsin.orderedProductSales.amount': 50,
                 'salesByAsin.orderedProductSales.currencyCode': 'USD',
                 'salesByAsin.unitsOrdered': 2,
@@ -243,7 +245,8 @@ describe('FT-01 Sales and Traffic warehouse write', () => {
       account_id: 'sourbear',
       marketplace: 'US',
       asin: 'B0TESTASIN',
-      parent_asin: 'B0TESTASIN',
+      parent_asin: 'B0PARENTAS',
+      child_asin: 'B0TESTASIN',
       ordered_product_sales_amount: 50,
     });
   });

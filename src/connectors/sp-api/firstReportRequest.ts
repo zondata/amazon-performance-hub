@@ -17,8 +17,7 @@ export const FIRST_SALES_AND_TRAFFIC_REPORT_TYPE: SpApiReportType =
 
 export const FIRST_SALES_AND_TRAFFIC_REPORT_OPTIONS = {
   dateGranularity: 'DAY',
-  asinGranularity: 'PARENT',
-  skuGranularity: 'TOTAL',
+  asinGranularity: 'CHILD',
 } as const;
 
 const createFetchTransport = (): SpApiTransport => {
@@ -60,7 +59,47 @@ const asString = (value: unknown) => {
 const startOfUtcDay = (value: Date) =>
   new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
 
-export const buildFirstSalesAndTrafficReportWindow = (now: Date = new Date()) => {
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const normalizeReportDate = (value: string, field: string) => {
+  const trimmed = value.trim();
+  if (!DATE_RE.test(trimmed)) {
+    throw new SpApiRequestError(
+      'request_build_error',
+      `${field} must use YYYY-MM-DD`
+    );
+  }
+  return trimmed;
+};
+
+export const buildFirstSalesAndTrafficReportWindow = (
+  now: Date = new Date(),
+  args?: {
+    startDate?: string;
+    endDate?: string;
+  }
+) => {
+  if (args?.startDate || args?.endDate) {
+    if (!args.startDate || !args.endDate) {
+      throw new SpApiRequestError(
+        'request_build_error',
+        'Both startDate and endDate are required when overriding the report window'
+      );
+    }
+    const startDate = normalizeReportDate(args.startDate, 'startDate');
+    const endDate = normalizeReportDate(args.endDate, 'endDate');
+    if (startDate > endDate) {
+      throw new SpApiRequestError(
+        'request_build_error',
+        'startDate must be on or before endDate'
+      );
+    }
+    return {
+      dataStartTime: `${startDate}T00:00:00.000Z`,
+      dataEndTime: `${endDate}T23:59:59.000Z`,
+    };
+  }
+
   const currentDayStart = startOfUtcDay(now);
   const previousDayEnd = new Date(currentDayStart.getTime() - 1000);
   const previousDayStart = startOfUtcDay(previousDayEnd);
@@ -74,6 +113,8 @@ export const buildFirstSalesAndTrafficReportWindow = (now: Date = new Date()) =>
 export const buildFirstSalesAndTrafficReportRequestBody = (args: {
   marketplaceId: string;
   now?: Date;
+  startDate?: string;
+  endDate?: string;
 }): SpApiReportCreateRequestBody => {
   const marketplaceId = args.marketplaceId.trim();
   if (!marketplaceId) {
@@ -83,7 +124,10 @@ export const buildFirstSalesAndTrafficReportRequestBody = (args: {
     );
   }
 
-  const window = buildFirstSalesAndTrafficReportWindow(args.now);
+  const window = buildFirstSalesAndTrafficReportWindow(args.now, {
+    startDate: args.startDate,
+    endDate: args.endDate,
+  });
 
   return {
     reportType: FIRST_SALES_AND_TRAFFIC_REPORT_TYPE,
@@ -99,6 +143,8 @@ export const buildFirstSalesAndTrafficReportRequest = (args: {
   accessToken: string;
   marketplaceId: string;
   now?: Date;
+  startDate?: string;
+  endDate?: string;
 }): SpApiTransportRequest => {
   const accessToken = args.accessToken.trim();
   if (!accessToken) {
@@ -120,6 +166,8 @@ export const buildFirstSalesAndTrafficReportRequest = (args: {
       buildFirstSalesAndTrafficReportRequestBody({
         marketplaceId: args.marketplaceId,
         now: args.now,
+        startDate: args.startDate,
+        endDate: args.endDate,
       })
     ),
   };
@@ -153,6 +201,8 @@ export const createFirstSalesAndTrafficReportRequest = async (args?: {
   tokenTransport?: SpApiTransport;
   apiTransport?: SpApiTransport;
   now?: Date;
+  startDate?: string;
+  endDate?: string;
 }): Promise<SpApiFirstReportRequestSummary> => {
   const config = loadSpApiEnv(args?.envSource);
   const tokenTransport = args?.tokenTransport ?? createFetchTransport();
@@ -172,6 +222,8 @@ export const createFirstSalesAndTrafficReportRequest = async (args?: {
     accessToken: tokenResult.accessToken,
     marketplaceId: config.marketplaceId,
     now: args?.now,
+    startDate: args?.startDate,
+    endDate: args?.endDate,
   });
 
   let response: SpApiTransportResponse;

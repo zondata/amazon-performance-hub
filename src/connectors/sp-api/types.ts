@@ -77,8 +77,7 @@ export type SpApiReportCreateRequestBody =
       dataEndTime: string;
       reportOptions: {
         dateGranularity: 'DAY';
-        asinGranularity: 'PARENT';
-        skuGranularity: 'TOTAL';
+        asinGranularity: 'PARENT' | 'CHILD' | 'SKU';
       };
     }
   | {
