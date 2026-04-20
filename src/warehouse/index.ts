@@ -111,3 +111,15 @@ export {
   validateFirstSalesTrafficWarehouseWriteAuthority,
   writeFirstSalesTrafficWarehouseWriteAuthority,
 } from './firstSalesTrafficWarehouseWriteAuthority';
+
+export {
+  FIRST_REPORT_WAREHOUSE_WRITE_VERSION,
+  SPAPI_SALES_TRAFFIC_BY_ASIN_TABLE,
+  SPAPI_SALES_TRAFFIC_BY_DATE_TABLE,
+  PostgresFirstSalesTrafficWarehouseSink,
+  writeFirstSalesTrafficWarehouseRows,
+  type FirstSalesTrafficByAsinWarehouseRow,
+  type FirstSalesTrafficByDateWarehouseRow,
+  type FirstSalesTrafficWarehouseSink,
+  type FirstSalesTrafficWarehouseWriteSummary,
+} from './firstSalesTrafficWarehouseWrite';

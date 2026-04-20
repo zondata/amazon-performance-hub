@@ -151,6 +151,19 @@ export {
   type DailyBatchStepResult,
 } from './dailyBatchGate';
 export {
+  FT01_RETAIL_JOB_KEY,
+  FT01_RETAIL_SOURCE_NAME,
+  runFirstSalesTrafficRetailIngest,
+  summarizeFirstSalesTrafficRetailIngest,
+  type FirstSalesTrafficRetailIngestOptions,
+  type FirstSalesTrafficRetailIngestRequest,
+  type FirstSalesTrafficRetailIngestResult,
+} from './firstSalesTrafficRetailIngest';
+export {
+  PostgresIngestionJobRepository,
+  createPostgresPool,
+} from './postgresIngestionJobRepository';
+export {
   WEEKLY_QUERY_INTELLIGENCE_SEARCH_TERMS_JOB_KEY,
   WEEKLY_QUERY_INTELLIGENCE_SEARCH_TERMS_SOURCE_NAME,
   WEEKLY_QUERY_INTELLIGENCE_SQP_JOB_KEY,
