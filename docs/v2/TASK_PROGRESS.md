@@ -1,3 +1,6 @@
+> **⏸ PAUSED** — see `docs/v2/FREEZE.md`. Superseded by `/PLAN.md`.
+> Do not start new V2 tasks or mark new tasks complete while this banner is present.
+
 # Amazon Performance Hub V2 — Task Progress
 
 Last generated: 2026-04-19
@@ -103,7 +106,7 @@ Last generated: 2026-04-19
 | ID | Status | Priority | Gate | Fast-track | Title |
 |---|---|---|---|---|---|
 | S2A-02 | todo | must | no | yes | Create SP-API connection/auth persistence model |
-| S2A-06 | in_progress | must | no | yes | Implement Sales and Traffic Business Report parse + ingest |
+| S2A-06 | paused | must | no | yes | Implement Sales and Traffic Business Report parse + ingest — paused by FREEZE.md on 2026-04-20 |
 | S2A-09 | verify | should | no | no | Add SP-API admin connection health check and smoke route/command |
 
 ### Stage 2B — Ads API auth + first Sponsored Products pulls
