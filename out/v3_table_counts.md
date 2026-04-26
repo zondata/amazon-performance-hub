@@ -16,7 +16,7 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | ads_settings_snapshot_runs | 6 |
 | api_connections | 0 |
 | api_sync_cursors | 0 |
-| api_sync_runs | 4 |
+| api_sync_runs | 19 |
 | ads_optimizer_manual_overrides | 2 |
 | ads_optimizer_product_settings | 0 |
 | ads_optimizer_product_snapshot | 64 |
@@ -42,7 +42,7 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | bulk_sd_targets | 18834 |
 | bulk_targets | 558337 |
 | campaign_name_history | 1747 |
-| data_quality_checks | 20 |
+| data_quality_checks | 80 |
 | dim_keyword | 424 |
 | h10_keyword_tracker_raw | 190680 |
 | import_source_status | 29 |
@@ -65,7 +65,7 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | product_profile | 8 |
 | product_skus | 1 |
 | products | 8 |
-| report_data_status | 7 |
+| report_data_status | 22 |
 | sb_ad_group_name_history | 136 |
 | sb_attributed_purchases_daily_fact | 300 |
 | sb_campaign_daily_fact | 19389 |
@@ -81,11 +81,11 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | sb_stis_daily_fact | 1881 |
 | sb_stis_daily_raw | 2719 |
 | sd_ad_group_name_history | 71 |
-| sd_advertised_product_daily_fact | 325 |
+| sd_advertised_product_daily_fact | 470 |
 | sd_advertised_product_daily_raw | 325 |
-| sd_campaign_daily_fact | 325 |
-| sd_campaign_daily_fact_gold | 205 |
-| sd_campaign_daily_raw | 325 |
+| sd_campaign_daily_fact | 470 |
+| sd_campaign_daily_fact_gold | 365 |
+| sd_campaign_daily_raw | 470 |
 | sd_campaign_name_history | 71 |
 | sd_manual_name_overrides | 0 |
 | sd_mapping_issues | 0 |
@@ -105,7 +105,7 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | sp_category_id_map | 1 |
 | sp_manual_name_overrides | 15 |
 | sp_mapping_issues | 576 |
-| sp_placement_daily_fact | 250038 |
+| sp_placement_daily_fact | 252038 |
 | sp_placement_daily_raw | 280273 |
 | sp_placement_modifier_change_log | 119 |
 | sp_stis_daily_fact | 60447 |

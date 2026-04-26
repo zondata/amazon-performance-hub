@@ -388,25 +388,25 @@ Codex must complete this checklist for one table before moving to the next table
 
 ## Phase checklist
 
-- [ ] Complete SP table 1.
-- [ ] Complete SP table 2.
-- [ ] Complete SP table 3.
-- [ ] Complete SP table 4.
-- [ ] Complete SP table 5.
-- [ ] Complete SB table 1.
-- [ ] Complete SB table 2.
-- [ ] Complete SB table 3.
-- [ ] Complete SB table 4.
-- [ ] Complete SB table 5.
-- [ ] Complete SD table 1.
-- [ ] Complete SD table 2.
-- [ ] Complete SD table 3.
-- [ ] Complete SD table 4.
-- [ ] Complete SD table 5.
-- [ ] Run standard checks.
-- [ ] Update this plan checklist and `out/v3_build_progress.md`.
-- [ ] Write `out/v3_phase_reports/phase_04_ads_performance.md`.
-- [ ] Stop and report to Albert. Do not continue to Phase 5.
+- [x] Complete SP table 1.
+- [x] Complete SP table 2. Quality warning: 4 placement rows have negative impressions from source data.
+- [x] Complete SP table 3.
+- [x] Complete SP table 4.
+- [x] Complete SP table 5. Quality warning: existing exact duplicate natural-key rows prevent a unique index; non-unique natural-key lookup index added.
+- [x] Complete SB table 1.
+- [x] Complete SB table 2.
+- [x] Complete SB table 3.
+- [x] Complete SB table 4.
+- [x] Complete SB table 5.
+- [x] Complete SD table 1.
+- [x] Complete SD table 2.
+- [x] Complete SD table 3. Blocked as zero-row source report content after rerun.
+- [x] Complete SD table 4. Blocked as zero-row source report content after rerun.
+- [x] Complete SD table 5. Blocked as zero-row source report content after rerun.
+- [x] Run standard checks.
+- [x] Update this plan checklist and `out/v3_build_progress.md`.
+- [x] Write `out/v3_phase_reports/phase_04_ads_performance.md`.
+- [x] Stop and report to Albert. Do not continue to Phase 5.
 
 ## Phase 4 done criteria
 

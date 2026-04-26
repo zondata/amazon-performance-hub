@@ -1,18 +1,20 @@
--- Phase 3 schema-after-phase dump placeholder
--- Updated: 2026-04-26T20:52:00+08:00
+-- Phase 4 schema-after-phase dump placeholder
+-- Updated: 2026-04-26T21:35:00+08:00
 -- Project: aghtxbvgcazlowpujtjk
 --
 -- `supabase db dump --schema public --data-only=false --file out/v3_schema_after_phase.sql`
 -- could not complete in this WSL environment because the Supabase CLI dump path
 -- requires Docker and the Docker daemon is not reachable at /var/run/docker.sock.
 --
--- Phase 1, Phase 2, and Phase 3 remote schema changes were applied.
+-- Phase 1, Phase 2, Phase 3, and Phase 4 remote schema changes were applied.
 -- The applied Phase 1 migration is:
 -- `supabase/migrations/20260426110000_v3_database_control_layer.sql`
 -- The applied Phase 2 migration is:
 -- `supabase/migrations/20260426123000_v3_amazon_sales_traffic_timeseries.sql`
 -- The applied Phase 3 migration is:
 -- `supabase/migrations/20260426143000_v3_ads_settings_snapshot_logbook.sql`
+-- The applied Phase 4 migration is:
+-- `supabase/migrations/20260426160000_v3_ads_performance_natural_keys.sql`
 --
 -- Verified remote tables:
 -- - public.api_connections
@@ -27,3 +29,5 @@
 -- - public.v3_capture_ads_settings_snapshot(text, text, text, date)
 -- - public.log_changes.entity_level
 -- - public.log_changes.field_name
+-- - public.sp_advertised_product_daily_fact_natural_idx
+-- - public.sb_attributed_purchases_daily_fact_uq

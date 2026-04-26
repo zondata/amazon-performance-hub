@@ -1,5 +1,5 @@
 # Supabase Schema Snapshot
-Generated: 2026-04-26T12:47:17.458Z
+Generated: 2026-04-26T13:24:56.780Z
 
 ## accounts (BASE TABLE)
 | column | type | nullable |

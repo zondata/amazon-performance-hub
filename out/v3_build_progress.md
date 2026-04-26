@@ -10,7 +10,7 @@ Generated: 2026-04-26T18:47:08+08:00
 | Phase 1 - Database Control Layer | Applied and verified | Migration applied to linked Supabase project through the Supabase connector. Tables exist, contract tests pass, and a smoke insert path succeeded. |
 | Phase 2 - Amazon Sales & Traffic | Complete | Canonical table/view created and applied remotely, existing SP-API warehouse rows backfilled, one-day live SP-API sample pulled and ingested, latest 30-day refresh pulled and ingested, max-history backfill pulled and ingested, status/run/quality rows written, schema snapshot/build/test green. |
 | Phase 3 - Current Ads Settings and Automatic Ads Change Logbook | Applied and verified | Bulk snapshot settings view/function applied remotely, SP/SB/SD latest snapshots captured, SP wrote 11 automatic logbook changes, SB/SD captured with no changes, repeated snapshots created no duplicate log rows. |
-| Phase 4 - SP/SB/SD Ads Performance Reports | Not started | Not part of Phase 0. |
+| Phase 4 - SP/SB/SD Ads Performance Reports | Complete with documented data-quality/source blockers | All 15 target tables exist. 12 are populated and status/quality metadata was written. SD targeting/matched/purchased source files reran successfully but contained zero rows. SP placement has 4 negative-impression source rows; SP advertised product has duplicate exact rows, so only a non-unique natural-key index was added. |
 | Phase 5 - SQP Weekly and Monthly | Not started | Not part of Phase 0. |
 | Phase 6 - Helium 10 Keyword Ranking | Not started | Not part of Phase 0. |
 | Phase 7 - Manual Non-Ads Logbook | Not started | Not part of Phase 0. |
@@ -126,3 +126,31 @@ Generated: 2026-04-26T18:47:08+08:00
 - Automatic changes missing entity/field metadata: `0`.
 - `ads_settings_snapshot_runs` rows after proof rerun: `6`.
 - `report_data_status` rows for ads settings snapshots: `3`.
+
+## Phase 4 Checklist
+
+- [x] Verified all 15 ads performance tables exist.
+- [x] Added migration `supabase/migrations/20260426160000_v3_ads_performance_natural_keys.sql`.
+- [x] Added non-unique natural-key lookup index for `sp_advertised_product_daily_fact` because existing duplicate exact rows prevent a safe unique index.
+- [x] Added unique natural-key index for `sb_attributed_purchases_daily_fact`.
+- [x] Reran SD local backfill for `2026-02-11` through `2026-02-21` using `/mnt/d/Dropbox/AmazonReports`.
+- [x] Confirmed SD targeting, matched target, and purchased product source files exist but parse to zero rows for available local dates.
+- [x] Wrote `api_sync_runs`, `report_data_status`, and `data_quality_checks` for all 15 Phase 4 tables.
+- [x] Ran schema snapshot, focused migration test, and diff whitespace check.
+
+## Phase 4 Remote Verification
+
+- Populated tables: 12 of 15.
+- Zero-row/source-blocked tables: `sd_targeting_daily_fact`, `sd_matched_target_daily_fact`, `sd_purchased_product_daily_fact`.
+- `sp_campaign_hourly_fact_gold`: 92,883 rows, coverage `2026-01-01` through `2026-04-16`.
+- `sp_placement_daily_fact`: 252,038 rows, coverage `2025-07-12` through `2026-04-06`, 4 negative-impression source rows.
+- `sp_targeting_daily_fact`: 369,641 rows, coverage `2025-07-12` through `2026-04-16`.
+- `sp_stis_daily_fact`: 60,447 rows, coverage `2025-07-12` through `2026-04-06`.
+- `sp_advertised_product_daily_fact`: 60,675 rows, coverage `2026-01-26` through `2026-04-05`, 1,305 duplicate exact natural-key rows.
+- `sb_campaign_daily_fact_gold`: 3,296 rows, coverage `2026-01-01` through `2026-04-06`.
+- `sb_campaign_placement_daily_fact`: 13,884 rows, coverage `2025-12-09` through `2026-04-06`.
+- `sb_keyword_daily_fact`: 8,007 rows, coverage `2025-12-08` through `2026-04-04`.
+- `sb_stis_daily_fact`: 1,881 rows, coverage `2025-12-09` through `2026-04-05`.
+- `sb_attributed_purchases_daily_fact`: 300 rows, coverage `2025-08-02` through `2026-04-03`.
+- `sd_campaign_daily_fact_gold`: 365 rows, coverage `2025-12-08` through `2026-02-18`.
+- `sd_advertised_product_daily_fact`: 470 rows, coverage `2025-12-08` through `2026-02-18`.
