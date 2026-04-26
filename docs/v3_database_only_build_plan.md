@@ -508,20 +508,20 @@ After this phase, Albert can manually record listing/product changes such as tit
 
 ## Checklist
 
-- [ ] Verify existing `log_changes` structure.
-- [ ] Add missing non-ads logbook fields only if needed.
-- [ ] Create `change_outcome_evaluations` if missing.
-- [ ] Build minimal UI or CLI form for manual non-ads entries.
-- [ ] Do not build a dashboard.
-- [ ] Manual entry must support product/ASIN/SKU linking.
-- [ ] Manual entry must support why, reasoning, expected outcome, evaluation window, actual result, learning, and notes.
-- [ ] Evaluation can be added later without modifying the original change row.
-- [ ] Insert one test manual entry if safe.
-- [ ] Validate linked entity row exists.
-- [ ] Run standard checks.
-- [ ] Update this plan checklist and `out/v3_build_progress.md`.
-- [ ] Write `out/v3_phase_reports/phase_07_non_ads_logbook.md`.
-- [ ] Stop and report to Albert. Do not continue to Phase 8.
+- [x] Verify existing `log_changes` structure.
+- [x] Add missing non-ads logbook fields only if needed.
+- [x] Create `change_outcome_evaluations` if missing.
+- [x] Build minimal UI or CLI form for manual non-ads entries.
+- [x] Do not build a dashboard.
+- [x] Manual entry must support product/ASIN/SKU linking.
+- [x] Manual entry must support why, reasoning, expected outcome, evaluation window, actual result, learning, and notes.
+- [x] Evaluation can be added later without modifying the original change row.
+- [x] Insert one test manual entry if safe. Smoke insert was validated inside a rollback transaction.
+- [x] Validate linked entity row exists.
+- [x] Run standard checks. Build/test passed; migration list passed; Supabase CLI dump failed due temp-role auth/circuit breaker.
+- [x] Update this plan checklist and `out/v3_build_progress.md`.
+- [x] Write `out/v3_phase_reports/phase_07_non_ads_logbook.md`.
+- [x] Stop and report to Albert. Do not continue to Phase 8.
 
 ## Phase 7 done criteria
 

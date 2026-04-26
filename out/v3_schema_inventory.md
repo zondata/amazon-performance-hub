@@ -57,6 +57,7 @@ bulk_sd_product_ads
 bulk_sd_targets
 bulk_targets
 campaign_name_history
+change_outcome_evaluations
 data_quality_checks
 dim_keyword
 h10_keyword_tracker_raw
@@ -136,3 +137,5 @@ uploads
 ```
 
 Phase 5 added `sqp_monthly_raw`, `sqp_monthly_latest`, and `sqp_monthly_latest_enriched`.
+
+Phase 7 added `change_outcome_evaluations`, plus manual non-ads fields on `log_changes` and ASIN/SKU links on `log_change_entities`.

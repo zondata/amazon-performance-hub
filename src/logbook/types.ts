@@ -19,6 +19,8 @@ export type LogExperimentRow = LogExperimentInput & {
 export type LogChangeEntityInput = {
   entity_type: string;
   product_id?: string;
+  asin?: string;
+  sku?: string;
   campaign_id?: string;
   ad_group_id?: string;
   target_id?: string;
@@ -33,6 +35,9 @@ export type LogChangeInput = {
   change_type: string;
   summary: string;
   why?: string;
+  expected_outcome?: string;
+  evaluation_window_days?: number;
+  notes?: string;
   before_json?: unknown;
   after_json?: unknown;
   dedupe_key?: string;
@@ -47,4 +52,22 @@ export type LogChangeRow = LogChangeInput & {
   marketplace: string;
   created_at: string;
   dedupe_key?: string;
+};
+
+export type ChangeOutcomeEvaluationInput = {
+  change_id: string;
+  evaluated_at?: string;
+  window_start?: string;
+  window_end?: string;
+  actual_result?: string;
+  learning?: string;
+  notes?: string;
+  metrics_json?: unknown;
+};
+
+export type ChangeOutcomeEvaluationRow = ChangeOutcomeEvaluationInput & {
+  evaluation_id: string;
+  account_id: string;
+  marketplace: string;
+  created_at: string;
 };

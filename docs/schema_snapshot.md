@@ -1,5 +1,5 @@
 # Supabase Schema Snapshot
-Generated: 2026-04-26T14:10:57.130Z
+Generated: 2026-04-26T14:22:53.594Z
 
 ## accounts (BASE TABLE)
 | column | type | nullable |
@@ -578,6 +578,22 @@ Generated: 2026-04-26T14:10:57.130Z
 | valid_from | date | NO |
 | valid_to | date | YES |
 
+## change_outcome_evaluations (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| evaluation_id | uuid | NO |
+| change_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| evaluated_at | timestamp with time zone | NO |
+| window_start | date | YES |
+| window_end | date | YES |
+| actual_result | text | YES |
+| learning | text | YES |
+| notes | text | YES |
+| metrics_json | jsonb | YES |
+| created_at | timestamp with time zone | NO |
+
 ## data_quality_checks (BASE TABLE)
 | column | type | nullable |
 |---|---|---|
@@ -722,6 +738,8 @@ Generated: 2026-04-26T14:10:57.130Z
 | note | text | YES |
 | extra | jsonb | YES |
 | created_at | timestamp with time zone | NO |
+| asin | text | YES |
+| sku | text | YES |
 
 ## log_change_validations (BASE TABLE)
 | column | type | nullable |
@@ -755,6 +773,9 @@ Generated: 2026-04-26T14:10:57.130Z
 | dedupe_key | text | YES |
 | entity_level | text | YES |
 | field_name | text | YES |
+| expected_outcome | text | YES |
+| evaluation_window_days | integer | YES |
+| notes | text | YES |
 
 ## log_driver_campaign_intents (BASE TABLE)
 | column | type | nullable |

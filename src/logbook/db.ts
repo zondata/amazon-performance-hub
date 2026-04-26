@@ -1,5 +1,13 @@
 import { getSupabaseClient } from "../db/supabaseClient";
-import { LogChangeEntityInput, LogChangeInput, LogChangeRow, LogExperimentInput, LogExperimentRow } from "./types";
+import {
+  ChangeOutcomeEvaluationInput,
+  ChangeOutcomeEvaluationRow,
+  LogChangeEntityInput,
+  LogChangeInput,
+  LogChangeRow,
+  LogExperimentInput,
+  LogExperimentRow,
+} from "./types";
 
 export async function insertLogExperiment(params: {
   accountId: string;
@@ -34,6 +42,9 @@ export async function insertLogChange(params: {
     change_type: params.input.change_type,
     summary: params.input.summary,
     why: params.input.why ?? null,
+    expected_outcome: params.input.expected_outcome ?? null,
+    evaluation_window_days: params.input.evaluation_window_days ?? null,
+    notes: params.input.notes ?? null,
     before_json: params.input.before_json ?? null,
     after_json: params.input.after_json ?? null,
     dedupe_key: params.input.dedupe_key ?? null,
@@ -71,6 +82,9 @@ export async function upsertLogChangeWithDedupe(params: {
     change_type: params.input.change_type,
     summary: params.input.summary,
     why: params.input.why ?? null,
+    expected_outcome: params.input.expected_outcome ?? null,
+    evaluation_window_days: params.input.evaluation_window_days ?? null,
+    notes: params.input.notes ?? null,
     before_json: params.input.before_json ?? null,
     after_json: params.input.after_json ?? null,
     dedupe_key: params.input.dedupe_key,
@@ -119,6 +133,8 @@ export async function insertLogChangeEntities(params: {
     change_id: params.changeId,
     entity_type: entity.entity_type,
     product_id: entity.product_id ?? null,
+    asin: entity.asin ?? null,
+    sku: entity.sku ?? null,
     campaign_id: entity.campaign_id ?? null,
     ad_group_id: entity.ad_group_id ?? null,
     target_id: entity.target_id ?? null,
@@ -129,6 +145,38 @@ export async function insertLogChangeEntities(params: {
 
   const { error } = await client.from("log_change_entities").insert(rows);
   if (error) throw new Error(`Failed inserting log_change_entities: ${error.message}`);
+}
+
+export async function insertChangeOutcomeEvaluation(params: {
+  accountId: string;
+  marketplace: string;
+  input: ChangeOutcomeEvaluationInput;
+}): Promise<ChangeOutcomeEvaluationRow> {
+  const client = getSupabaseClient();
+  const payload: Record<string, unknown> = {
+    change_id: params.input.change_id,
+    account_id: params.accountId,
+    marketplace: params.marketplace,
+    window_start: params.input.window_start ?? null,
+    window_end: params.input.window_end ?? null,
+    actual_result: params.input.actual_result ?? null,
+    learning: params.input.learning ?? null,
+    notes: params.input.notes ?? null,
+    metrics_json: params.input.metrics_json ?? null,
+  };
+
+  if (params.input.evaluated_at) {
+    payload.evaluated_at = params.input.evaluated_at;
+  }
+
+  const { data, error } = await client
+    .from("change_outcome_evaluations")
+    .insert(payload)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(`Failed inserting change_outcome_evaluations: ${error.message}`);
+  return data as ChangeOutcomeEvaluationRow;
 }
 
 export async function linkExperimentChange(params: {

@@ -1,4 +1,9 @@
-import { LogChangeEntityInput, LogChangeInput, LogExperimentInput } from "./types";
+import {
+  ChangeOutcomeEvaluationInput,
+  LogChangeEntityInput,
+  LogChangeInput,
+  LogExperimentInput,
+} from "./types";
 
 type ParseResult<T> = { value: T; errors: string[] };
 
@@ -56,6 +61,26 @@ function optionalIsoDate(value: unknown, field: string, errors: string[]): strin
   return trimmed;
 }
 
+function optionalDateOnly(value: unknown, field: string, errors: string[]): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") {
+    errors.push(`${field} must be a string when provided`);
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    errors.push(`${field} must use YYYY-MM-DD format when provided`);
+    return undefined;
+  }
+  const parsed = new Date(`${trimmed}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    errors.push(`${field} must be a valid date when provided`);
+    return undefined;
+  }
+  return trimmed;
+}
+
 function parseExperimentInputRaw(raw: unknown): ParseResult<LogExperimentInput> {
   const errors: string[] = [];
   if (!isRecord(raw)) {
@@ -96,6 +121,8 @@ function parseEntityInputRaw(raw: unknown, index: number): ParseResult<LogChange
   const entity_type = requiredString(raw.entity_type, `entities[${index}].entity_type`, errors);
 
   const product_id = optionalString(raw.product_id, `entities[${index}].product_id`, errors);
+  const asin = optionalString(raw.asin, `entities[${index}].asin`, errors)?.toUpperCase();
+  const sku = optionalString(raw.sku, `entities[${index}].sku`, errors);
   const campaign_id = optionalString(raw.campaign_id, `entities[${index}].campaign_id`, errors);
   const ad_group_id = optionalString(raw.ad_group_id, `entities[${index}].ad_group_id`, errors);
   const target_id = optionalString(raw.target_id, `entities[${index}].target_id`, errors);
@@ -106,6 +133,8 @@ function parseEntityInputRaw(raw: unknown, index: number): ParseResult<LogChange
     value: {
       entity_type,
       product_id,
+      asin,
+      sku,
       campaign_id,
       ad_group_id,
       target_id,
@@ -129,6 +158,9 @@ function parseChangeInputRaw(raw: unknown): ParseResult<LogChangeInput> {
 
   const occurred_at = optionalIsoDate(raw.occurred_at, "occurred_at", errors);
   const why = optionalString(raw.why, "why", errors);
+  const expected_outcome = optionalString(raw.expected_outcome, "expected_outcome", errors);
+  const evaluation_window_days = optionalNumber(raw.evaluation_window_days, "evaluation_window_days", errors);
+  const notes = optionalString(raw.notes, "notes", errors);
   const source = optionalString(raw.source, "source", errors);
   const source_upload_id = optionalString(raw.source_upload_id, "source_upload_id", errors);
 
@@ -151,11 +183,46 @@ function parseChangeInputRaw(raw: unknown): ParseResult<LogChangeInput> {
       change_type,
       summary,
       why,
+      expected_outcome,
+      evaluation_window_days,
+      notes,
       before_json: raw.before_json,
       after_json: raw.after_json,
       source,
       source_upload_id,
       entities,
+    },
+    errors,
+  };
+}
+
+function parseChangeOutcomeEvaluationInputRaw(raw: unknown): ParseResult<ChangeOutcomeEvaluationInput> {
+  const errors: string[] = [];
+  if (!isRecord(raw)) {
+    return {
+      value: {} as ChangeOutcomeEvaluationInput,
+      errors: ["Change outcome evaluation JSON must be an object"],
+    };
+  }
+
+  const change_id = requiredString(raw.change_id, "change_id", errors);
+  const evaluated_at = optionalIsoDate(raw.evaluated_at, "evaluated_at", errors);
+  const window_start = optionalDateOnly(raw.window_start, "window_start", errors);
+  const window_end = optionalDateOnly(raw.window_end, "window_end", errors);
+  const actual_result = optionalString(raw.actual_result, "actual_result", errors);
+  const learning = optionalString(raw.learning, "learning", errors);
+  const notes = optionalString(raw.notes, "notes", errors);
+
+  return {
+    value: {
+      change_id,
+      evaluated_at,
+      window_start,
+      window_end,
+      actual_result,
+      learning,
+      notes,
+      metrics_json: raw.metrics_json,
     },
     errors,
   };
@@ -176,5 +243,11 @@ export function parseExperimentInput(raw: unknown): LogExperimentInput {
 export function parseChangeInput(raw: unknown): LogChangeInput {
   const result = parseChangeInputRaw(raw);
   throwIfErrors(result.errors, "Change");
+  return result.value;
+}
+
+export function parseChangeOutcomeEvaluationInput(raw: unknown): ChangeOutcomeEvaluationInput {
+  const result = parseChangeOutcomeEvaluationInputRaw(raw);
+  throwIfErrors(result.errors, "Change outcome evaluation");
   return result.value;
 }

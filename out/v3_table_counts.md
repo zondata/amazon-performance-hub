@@ -16,7 +16,7 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | ads_settings_snapshot_runs | 6 |
 | api_connections | 0 |
 | api_sync_cursors | 0 |
-| api_sync_runs | 23 |
+| api_sync_runs | 24 |
 | ads_optimizer_manual_overrides | 2 |
 | ads_optimizer_product_settings | 0 |
 | ads_optimizer_product_snapshot | 64 |
@@ -42,7 +42,8 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | bulk_sd_targets | 18834 |
 | bulk_targets | 558337 |
 | campaign_name_history | 1747 |
-| data_quality_checks | 95 |
+| change_outcome_evaluations | 0 |
+| data_quality_checks | 99 |
 | dim_keyword | 424 |
 | h10_keyword_tracker_raw | 230620 |
 | import_source_status | 29 |
@@ -65,7 +66,7 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | product_profile | 8 |
 | product_skus | 1 |
 | products | 8 |
-| report_data_status | 25 |
+| report_data_status | 28 |
 | sb_ad_group_name_history | 136 |
 | sb_attributed_purchases_daily_fact | 300 |
 | sb_campaign_daily_fact | 19389 |

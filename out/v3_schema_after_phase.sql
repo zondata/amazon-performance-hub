@@ -1,16 +1,23 @@
--- Phase 6 schema dump placeholder.
+-- Phase 7 schema dump placeholder.
 --
 -- `supabase db dump --schema public --data-only=false --file out/v3_schema_after_phase.sql`
--- failed because Docker is unavailable in this WSL environment.
+-- failed because the Supabase CLI temporary login role could not authenticate
+-- and then hit the pooler circuit breaker. In earlier attempts this command
+-- also required Docker, which is unavailable in this WSL environment.
 --
--- `supabase migration list` also failed because the Supabase CLI temporary
--- login role could not authenticate and then hit the pooler circuit breaker.
+-- `supabase migration list` succeeded for Phase 7.
 --
--- Direct SQL validation succeeded before the CLI circuit breaker and
--- `npm run schema:snapshot` updated `docs/schema_snapshot.md`.
+-- Direct schema changes and smoke validation succeeded through the Supabase
+-- project connector, and `npm run schema:snapshot` updated
+-- `docs/schema_snapshot.md`.
 --
--- Phase 6 did not add schema objects; it verified the existing H10 schema:
--- - public.h10_keyword_tracker_raw
--- - public.h10_keyword_tracker_latest
--- - public.h10_keyword_rank_daily_latest
--- - public.h10_keyword_rank_daily_with_dims
+-- Phase 7 applied migration:
+-- `supabase/migrations/20260426190000_v3_non_ads_logbook.sql`
+--
+-- New/changed live objects:
+-- - public.log_changes.expected_outcome
+-- - public.log_changes.evaluation_window_days
+-- - public.log_changes.notes
+-- - public.log_change_entities.asin
+-- - public.log_change_entities.sku
+-- - public.change_outcome_evaluations

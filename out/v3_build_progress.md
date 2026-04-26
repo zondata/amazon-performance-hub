@@ -206,3 +206,28 @@ Generated: 2026-04-26T18:47:08+08:00
 - Rank kind/value consistency failures: `0`.
 - Missing required identity/date fields: `0`.
 - Negative numeric metric rows: `0`.
+
+## Phase 7 Checklist
+
+- [x] Verified existing `log_changes`, `log_change_entities`, and `log_evaluations` structure.
+- [x] Added migration `supabase/migrations/20260426190000_v3_non_ads_logbook.sql`.
+- [x] Added `expected_outcome`, `evaluation_window_days`, and `notes` to `log_changes`.
+- [x] Added `asin` and `sku` links to `log_change_entities`.
+- [x] Created `change_outcome_evaluations` for append-only later evaluation.
+- [x] Extended logbook validation/types/db helpers for non-ads planning fields and evaluations.
+- [x] Added CLI command `npm run log:change:evaluate`.
+- [x] Applied the migration to linked Supabase project `aghtxbvgcazlowpujtjk` through the Supabase project connector.
+- [x] Validated a manual non-ads change insert, ASIN/SKU entity link, and outcome evaluation insert inside a rollback transaction.
+- [x] Wrote Phase 7 `api_sync_runs`, `report_data_status`, and `data_quality_checks`.
+- [x] Ran focused tests, `npm run schema:snapshot`, `supabase migration list`, `npm run build`, `npm test`, and `git diff --check`.
+- [x] Documented `supabase db dump` blocker.
+
+## Phase 7 Remote Verification
+
+- `log_changes` rows: `148`.
+- `log_change_entities` rows: `149`.
+- `change_outcome_evaluations` rows: `0`.
+- Smoke transaction inserted and rolled back: one non-ads change, one ASIN/SKU entity link, and one outcome evaluation.
+- Phase 7 quality checks written: `4`, all passed.
+- `supabase migration list` passed and showed remote migration `20260426142141 | v3_non_ads_logbook`.
+- `supabase db dump` failed because the Supabase CLI temporary login role could not authenticate and then hit the pooler circuit breaker.
