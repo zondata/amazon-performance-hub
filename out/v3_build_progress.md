@@ -44,8 +44,8 @@ Generated: 2026-04-26T18:47:08+08:00
 - [x] Added indexes for account, marketplace, source, table, date/range, freshness, and status dimensions.
 - [x] Added shared `data_status` convention: `live`, `preliminary`, `final`, `failed`, `manual_unknown`.
 - [x] Added helper SQL for data quality check writes: `record_data_quality_check(...)`.
-- [x] Inserted one test/manual-only connection row. Smoke row remains pending explicit cleanup approval.
-- [x] Inserted one test sync run and one data quality check. Smoke rows remain pending explicit cleanup approval.
+- [x] Inserted one test/manual-only connection row, then deleted it after explicit cleanup approval.
+- [x] Inserted one test sync run and one data quality check, then deleted all Phase 1 smoke rows after explicit cleanup approval.
 - [x] Validated no direct secret columns are introduced; `api_connections` stores `auth_secret_ref`.
 - [ ] Applied migration locally. Blocked because Docker daemon is unavailable.
 - [x] Applied migration to linked Supabase project through Supabase connector after local code checks passed.
@@ -57,5 +57,5 @@ Generated: 2026-04-26T18:47:08+08:00
 - Verified tables exist remotely: `api_connections`, `api_sync_runs`, `api_sync_cursors`, `ads_settings_snapshot_runs`, `report_data_status`, `data_quality_checks`.
 - Verified constraints and indexes are present through catalog queries.
 - Smoke insert path succeeded for `api_connections`, `api_sync_runs`, `api_sync_cursors`, `report_data_status`, and `data_quality_checks`.
-- Current Phase 1 smoke rows: one row each in `api_connections`, `api_sync_runs`, `api_sync_cursors`, `report_data_status`, and `data_quality_checks`; zero rows in `ads_settings_snapshot_runs`.
-- Cleanup DELETE was not executed because destructive cleanup requires explicit approval in this environment.
+- Deleted Phase 1 smoke rows after explicit cleanup approval: one row each from `api_connections`, `api_sync_runs`, `api_sync_cursors`, `report_data_status`, and `data_quality_checks`.
+- Verified final Phase 1 table row counts: all six Phase 1 control tables have `0` rows.

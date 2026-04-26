@@ -4,6 +4,8 @@ Generated: 2026-04-26T18:56:17+08:00
 
 Updated: 2026-04-26T19:07:12+08:00
 
+Smoke cleanup updated: 2026-04-26T19:15:03+08:00
+
 ## Phase Objective
 
 Add the V3 database control layer for API/manual connections, sync runs, cursors, ads settings snapshot runs, report freshness/finality, and data quality checks.
@@ -62,7 +64,9 @@ Not applicable for Phase 1.
 | Supabase connector table verification | Passed: all six Phase 1 tables exist remotely. |
 | Supabase connector catalog verification | Passed: constraints and indexes were returned for the Phase 1 tables. |
 | Supabase connector smoke insert | Passed: inserted one manual connection, sync run, cursor, report status row, and data quality check. |
-| Supabase connector row counts | Passed: one smoke row each in `api_connections`, `api_sync_runs`, `api_sync_cursors`, `report_data_status`, and `data_quality_checks`; zero rows in `ads_settings_snapshot_runs`. |
+| Supabase connector row counts after smoke insert | Passed: one smoke row each in `api_connections`, `api_sync_runs`, `api_sync_cursors`, `report_data_status`, and `data_quality_checks`; zero rows in `ads_settings_snapshot_runs`. |
+| Supabase connector smoke cleanup | Passed after explicit approval: deleted one smoke row each from `api_connections`, `api_sync_runs`, `api_sync_cursors`, `report_data_status`, and `data_quality_checks`. |
+| Supabase connector final row counts | Passed: all six Phase 1 control tables have `0` rows. |
 | `supabase start` | Blocked: Docker daemon unavailable at `/var/run/docker.sock`. |
 | `supabase migration list` | Blocked on repeat by Supabase CLI temp-role auth failure and pooler circuit breaker. |
 | `supabase db dump --schema public --data-only=false --file out/v3_schema_after_phase.sql` | Blocked: Docker daemon unavailable for dump tooling. |
@@ -77,7 +81,7 @@ Not applicable for Phase 1.
 
 - Docker is unavailable, so local Supabase validation cannot run.
 - Supabase CLI temp-role authentication is failing and hitting a remote pooler auth circuit breaker on `supabase migration list`.
-- Smoke rows remain in the Phase 1 control tables because the cleanup DELETE was blocked pending explicit destructive-action approval.
+- Phase 1 smoke rows were deleted after explicit destructive-action approval.
 
 ## What The System Can Now Do
 
@@ -85,4 +89,4 @@ The database can now record API/manual connections, sync runs, cursors, ads sett
 
 ## Next Recommended Phase
 
-Phase 2 will build Amazon Sales & Traffic ingestion. Before Phase 2, decide whether to keep or delete the Phase 1 smoke rows.
+Phase 2 will build Amazon Sales & Traffic ingestion.
