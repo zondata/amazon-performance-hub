@@ -4,7 +4,7 @@ Generated: 2026-04-26T18:47:08+08:00
 
 Project: `aghtxbvgcazlowpujtjk`
 
-Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector. These are planner/statistics row estimates, not exact `count(*)` scans.
+Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector unless noted. Phase 8 MCP view counts and cleanup candidate counts were exact `count(*)` checks.
 
 | Table | Estimated rows |
 | --- | ---: |
@@ -16,7 +16,7 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | ads_settings_snapshot_runs | 6 |
 | api_connections | 0 |
 | api_sync_cursors | 0 |
-| api_sync_runs | 24 |
+| api_sync_runs | 25 |
 | ads_optimizer_manual_overrides | 2 |
 | ads_optimizer_product_settings | 0 |
 | ads_optimizer_product_snapshot | 64 |
@@ -43,7 +43,7 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | bulk_targets | 558337 |
 | campaign_name_history | 1747 |
 | change_outcome_evaluations | 0 |
-| data_quality_checks | 99 |
+| data_quality_checks | 103 |
 | dim_keyword | 424 |
 | h10_keyword_tracker_raw | 230620 |
 | import_source_status | 29 |
@@ -66,7 +66,7 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | product_profile | 8 |
 | product_skus | 1 |
 | products | 8 |
-| report_data_status | 28 |
+| report_data_status | 38 |
 | sb_ad_group_name_history | 136 |
 | sb_attributed_purchases_daily_fact | 300 |
 | sb_campaign_daily_fact | 19389 |
@@ -120,3 +120,18 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | sqp_weekly_raw | 38154 |
 | ui_page_settings | 5 |
 | uploads | 1190 |
+
+## Phase 8 MCP View Exact Counts
+
+| View | Exact rows |
+| --- | ---: |
+| v_mcp_ads_change_logbook | 148 |
+| v_mcp_ads_current_settings | 13437 |
+| v_mcp_ads_performance_daily | 76167 |
+| v_mcp_ads_performance_hourly | 92883 |
+| v_mcp_data_freshness | 38 |
+| v_mcp_h10_keyword_rankings | 21140 |
+| v_mcp_non_ads_change_logbook | 3 |
+| v_mcp_sales_traffic_daily | 771 |
+| v_mcp_sqp_monthly | 304 |
+| v_mcp_sqp_weekly | 38154 |

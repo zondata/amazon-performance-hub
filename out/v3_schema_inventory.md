@@ -139,3 +139,18 @@ uploads
 Phase 5 added `sqp_monthly_raw`, `sqp_monthly_latest`, and `sqp_monthly_latest_enriched`.
 
 Phase 7 added `change_outcome_evaluations`, plus manual non-ads fields on `log_changes` and ASIN/SKU links on `log_change_entities`.
+
+Phase 8 added MCP-readable views:
+
+- `v_mcp_sales_traffic_daily`
+- `v_mcp_ads_current_settings`
+- `v_mcp_ads_performance_daily`
+- `v_mcp_ads_performance_hourly`
+- `v_mcp_sqp_weekly`
+- `v_mcp_sqp_monthly`
+- `v_mcp_h10_keyword_rankings`
+- `v_mcp_ads_change_logbook`
+- `v_mcp_non_ads_change_logbook`
+- `v_mcp_data_freshness`
+
+No Phase 8 cleanup candidate tables were dropped.

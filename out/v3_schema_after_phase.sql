@@ -1,23 +1,33 @@
--- Phase 7 schema dump placeholder.
+-- Phase 8 schema dump placeholder.
 --
 -- `supabase db dump --schema public --data-only=false --file out/v3_schema_after_phase.sql`
 -- failed because the Supabase CLI temporary login role could not authenticate
--- and then hit the pooler circuit breaker. In earlier attempts this command
--- also required Docker, which is unavailable in this WSL environment.
+-- and then hit the pooler circuit breaker.
 --
--- `supabase migration list` succeeded for Phase 7.
+-- `supabase migration list` succeeded for Phase 8 and showed local migration
+-- `20260426203000_v3_mcp_views`.
 --
--- Direct schema changes and smoke validation succeeded through the Supabase
--- project connector, and `npm run schema:snapshot` updated
--- `docs/schema_snapshot.md`.
+-- Direct schema changes and MCP view validation succeeded through the Supabase
+-- project connector. `node -r dotenv/config ./node_modules/.bin/ts-node
+-- scripts/schema_snapshot.ts dotenv_config_path=/home/albert/code/amazon-performance-hub/.env.local`
+-- updated `docs/schema_snapshot.md`.
 --
--- Phase 7 applied migration:
--- `supabase/migrations/20260426190000_v3_non_ads_logbook.sql`
+-- Phase 8 applied migration:
+-- `supabase/migrations/20260426203000_v3_mcp_views.sql`
 --
--- New/changed live objects:
--- - public.log_changes.expected_outcome
--- - public.log_changes.evaluation_window_days
--- - public.log_changes.notes
--- - public.log_change_entities.asin
--- - public.log_change_entities.sku
--- - public.change_outcome_evaluations
+-- New live MCP views:
+-- - public.v_mcp_sales_traffic_daily
+-- - public.v_mcp_ads_current_settings
+-- - public.v_mcp_ads_performance_daily
+-- - public.v_mcp_ads_performance_hourly
+-- - public.v_mcp_sqp_weekly
+-- - public.v_mcp_sqp_monthly
+-- - public.v_mcp_h10_keyword_rankings
+-- - public.v_mcp_ads_change_logbook
+-- - public.v_mcp_non_ads_change_logbook
+-- - public.v_mcp_data_freshness
+--
+-- Cleanup result:
+-- - No tables were dropped.
+-- - Cleanup candidate dependency, row-count, and backup/export command reports
+--   are documented in `out/v3_cleanup_candidates.md`.

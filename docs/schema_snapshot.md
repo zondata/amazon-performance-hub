@@ -1,5 +1,5 @@
 # Supabase Schema Snapshot
-Generated: 2026-04-26T14:22:53.594Z
+Generated: 2026-04-26T14:54:44.273Z
 
 ## accounts (BASE TABLE)
 | column | type | nullable |
@@ -4043,6 +4043,279 @@ Generated: 2026-04-26T14:22:53.594Z
 | field_value | text | YES |
 | field_value_json | jsonb | YES |
 | entity_label | text | YES |
+
+## v_mcp_ads_change_logbook (VIEW)
+| column | type | nullable |
+|---|---|---|
+| change_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| occurred_at | timestamp with time zone | YES |
+| channel | text | YES |
+| entity_level | text | YES |
+| change_type | text | YES |
+| field_name | text | YES |
+| summary | text | YES |
+| why | text | YES |
+| expected_outcome | text | YES |
+| evaluation_window_days | integer | YES |
+| notes | text | YES |
+| source | text | YES |
+| dedupe_key | text | YES |
+| linked_entities | jsonb | YES |
+| created_at | timestamp with time zone | YES |
+
+## v_mcp_ads_current_settings (VIEW)
+| column | type | nullable |
+|---|---|---|
+| channel | text | YES |
+| entity_level | text | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| snapshot_date | date | YES |
+| campaign_id | text | YES |
+| ad_group_id | text | YES |
+| target_id | text | YES |
+| ad_id | text | YES |
+| portfolio_id | text | YES |
+| name_raw | text | YES |
+| name_norm | text | YES |
+| state | text | YES |
+| budget | numeric | YES |
+| bid | numeric | YES |
+| bidding_strategy | text | YES |
+| placement_code | text | YES |
+| placement_percentage | numeric | YES |
+| match_type | text | YES |
+| is_negative | boolean | YES |
+| asin | text | YES |
+| sku | text | YES |
+
+## v_mcp_ads_performance_daily (VIEW)
+| column | type | nullable |
+|---|---|---|
+| channel | text | YES |
+| performance_level | text | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| date | date | YES |
+| campaign_id | text | YES |
+| ad_group_id | text | YES |
+| target_id | text | YES |
+| target_key | text | YES |
+| placement_code | text | YES |
+| entity_name | text | YES |
+| entity_name_norm | text | YES |
+| targeting_raw | text | YES |
+| targeting_norm | text | YES |
+| match_type_norm | text | YES |
+| cost_type | text | YES |
+| impressions | numeric | YES |
+| clicks | numeric | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | numeric | YES |
+| units | numeric | YES |
+| cpc | numeric | YES |
+| ctr | numeric | YES |
+| acos | numeric | YES |
+| roas | numeric | YES |
+| conversion_rate | numeric | YES |
+| top_of_search_impression_share | numeric | YES |
+| exported_at | timestamp with time zone | YES |
+
+## v_mcp_ads_performance_hourly (VIEW)
+| column | type | nullable |
+|---|---|---|
+| channel | text | YES |
+| performance_level | text | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| date | date | YES |
+| start_time | time without time zone | YES |
+| campaign_id | text | YES |
+| campaign_name_raw | text | YES |
+| campaign_name_norm | text | YES |
+| impressions | numeric | YES |
+| clicks | numeric | YES |
+| spend | numeric | YES |
+| sales | numeric | YES |
+| orders | numeric | YES |
+| units | numeric | YES |
+| cpc | numeric | YES |
+| ctr | numeric | YES |
+| acos | numeric | YES |
+| roas | numeric | YES |
+| conversion_rate | numeric | YES |
+| exported_at | timestamp with time zone | YES |
+| ingested_at | timestamp with time zone | YES |
+
+## v_mcp_data_freshness (VIEW)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | YES |
+| marketplace | text | YES |
+| table_name | text | YES |
+| source_type | text | YES |
+| source_name | text | YES |
+| scope_key | text | YES |
+| period_start | date | YES |
+| period_end | date | YES |
+| data_status | text | YES |
+| is_final | boolean | YES |
+| final_after_at | timestamp with time zone | YES |
+| finalized_at | timestamp with time zone | YES |
+| last_refreshed_at | timestamp with time zone | YES |
+| row_count | integer | YES |
+| coverage_json | jsonb | YES |
+| warnings | jsonb | YES |
+| latest_sync_status | text | YES |
+| latest_sync_finished_at | timestamp with time zone | YES |
+| latest_rows_read | integer | YES |
+| latest_rows_written | integer | YES |
+| latest_rows_failed | integer | YES |
+| latest_error_code | text | YES |
+| latest_error_message | text | YES |
+
+## v_mcp_h10_keyword_rankings (VIEW)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | YES |
+| marketplace | text | YES |
+| asin | text | YES |
+| title | text | YES |
+| keyword_raw | text | YES |
+| keyword_norm | text | YES |
+| keyword_sales | integer | YES |
+| search_volume | integer | YES |
+| organic_rank_raw | text | YES |
+| organic_rank_value | integer | YES |
+| organic_rank_kind | text | YES |
+| sponsored_pos_raw | text | YES |
+| sponsored_pos_value | integer | YES |
+| sponsored_pos_kind | text | YES |
+| observed_at | timestamp without time zone | YES |
+| observed_date | date | YES |
+| exported_at | timestamp with time zone | YES |
+| ingested_at | timestamp with time zone | YES |
+
+## v_mcp_non_ads_change_logbook (VIEW)
+| column | type | nullable |
+|---|---|---|
+| change_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| occurred_at | timestamp with time zone | YES |
+| channel | text | YES |
+| entity_level | text | YES |
+| change_type | text | YES |
+| field_name | text | YES |
+| summary | text | YES |
+| why | text | YES |
+| expected_outcome | text | YES |
+| evaluation_window_days | integer | YES |
+| notes | text | YES |
+| source | text | YES |
+| dedupe_key | text | YES |
+| linked_entities | jsonb | YES |
+| evaluation_count | integer | YES |
+| latest_evaluated_at | timestamp with time zone | YES |
+| evaluations | jsonb | YES |
+| created_at | timestamp with time zone | YES |
+
+## v_mcp_sales_traffic_daily (VIEW)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | YES |
+| marketplace | text | YES |
+| date | date | YES |
+| granularity | text | YES |
+| asin_granularity | text | YES |
+| parent_asin | text | YES |
+| child_asin | text | YES |
+| asin | text | YES |
+| sku | text | YES |
+| ordered_product_sales | numeric | YES |
+| ordered_product_sales_currency | text | YES |
+| units_ordered | integer | YES |
+| total_order_items | integer | YES |
+| shipped_product_sales | numeric | YES |
+| shipped_units | integer | YES |
+| refunds | integer | YES |
+| refund_rate | numeric | YES |
+| page_views | integer | YES |
+| sessions | integer | YES |
+| buy_box_percentage | numeric | YES |
+| order_item_session_percentage | numeric | YES |
+| unit_session_percentage | numeric | YES |
+| avg_sales_price_calc | numeric | YES |
+| unit_session_percentage_calc | numeric | YES |
+| data_status | text | YES |
+| is_final | boolean | YES |
+| last_refreshed_at | timestamp with time zone | YES |
+| exported_at | timestamp with time zone | YES |
+
+## v_mcp_sqp_monthly (VIEW)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | YES |
+| marketplace | text | YES |
+| scope_type | text | YES |
+| scope_value | text | YES |
+| period_start | date | YES |
+| period_end | date | YES |
+| reporting_date | date | YES |
+| search_query_raw | text | YES |
+| search_query_norm | text | YES |
+| search_query_score | integer | YES |
+| search_query_volume | integer | YES |
+| impressions_total | integer | YES |
+| impressions_self | integer | YES |
+| impressions_self_share | numeric | YES |
+| clicks_total | integer | YES |
+| clicks_rate_per_query | numeric | YES |
+| clicks_self | integer | YES |
+| clicks_self_share | numeric | YES |
+| cart_adds_total | integer | YES |
+| cart_add_rate_per_query | numeric | YES |
+| cart_adds_self | integer | YES |
+| cart_adds_self_share | numeric | YES |
+| purchases_total | integer | YES |
+| purchases_rate_per_query | numeric | YES |
+| purchases_self | integer | YES |
+| purchases_self_share | numeric | YES |
+| exported_at | timestamp with time zone | YES |
+
+## v_mcp_sqp_weekly (VIEW)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | YES |
+| marketplace | text | YES |
+| scope_type | text | YES |
+| scope_value | text | YES |
+| week_start | date | YES |
+| week_end | date | YES |
+| reporting_date | date | YES |
+| search_query_raw | text | YES |
+| search_query_norm | text | YES |
+| search_query_score | integer | YES |
+| search_query_volume | integer | YES |
+| impressions_total | integer | YES |
+| impressions_self | integer | YES |
+| impressions_self_share | numeric | YES |
+| clicks_total | integer | YES |
+| clicks_rate_per_query | numeric | YES |
+| clicks_self | integer | YES |
+| clicks_self_share | numeric | YES |
+| cart_adds_total | integer | YES |
+| cart_add_rate_per_query | numeric | YES |
+| cart_adds_self | integer | YES |
+| cart_adds_self_share | numeric | YES |
+| purchases_total | integer | YES |
+| purchases_rate_per_query | numeric | YES |
+| purchases_self | integer | YES |
+| purchases_self_share | numeric | YES |
+| exported_at | timestamp with time zone | YES |
 
 ## v_ppc_spend_reconciliation_daily (VIEW)
 | column | type | nullable |

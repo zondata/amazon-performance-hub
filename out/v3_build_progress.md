@@ -231,3 +231,36 @@ Generated: 2026-04-26T18:47:08+08:00
 - Phase 7 quality checks written: `4`, all passed.
 - `supabase migration list` passed and showed remote migration `20260426142141 | v3_non_ads_logbook`.
 - `supabase db dump` failed because the Supabase CLI temporary login role could not authenticate and then hit the pooler circuit breaker.
+
+## Phase 8 Checklist
+
+- [x] Created migration `supabase/migrations/20260426203000_v3_mcp_views.sql`.
+- [x] Applied MCP view migration to linked Supabase project `aghtxbvgcazlowpujtjk` through the Supabase project connector.
+- [x] Created all 10 required MCP views.
+- [x] Confirmed each MCP view returns rows or a valid empty result.
+- [x] Confirmed MCP view columns do not expose secret/token/password/auth fields.
+- [x] Confirmed recursive MCP view dependencies do not include cleanup candidate tables.
+- [x] Generated dependency report for every cleanup candidate table in `out/v3_cleanup_candidates.md`.
+- [x] Generated exact row-count report for every cleanup candidate table in `out/v3_cleanup_candidates.md`.
+- [x] Generated backup/export manifest for future cleanup in `out/v3_cleanup_candidates.md`.
+- [x] Dropped no tables because dependencies, live data, active UI/optimizer ownership, or unclear purpose remain.
+- [x] Wrote Phase 8 `api_sync_runs`, `report_data_status`, and `data_quality_checks`.
+- [x] Ran focused MCP migration tests, `npm run build`, schema snapshot, `supabase migration list`, and `supabase db dump`.
+- [x] Documented `supabase db dump` blocker.
+
+## Phase 8 Remote Verification
+
+- `v_mcp_sales_traffic_daily`: `771` rows.
+- `v_mcp_ads_current_settings`: `13,437` rows.
+- `v_mcp_ads_performance_daily`: `76,167` rows.
+- `v_mcp_ads_performance_hourly`: `92,883` rows.
+- `v_mcp_sqp_weekly`: `38,154` rows.
+- `v_mcp_sqp_monthly`: `304` rows.
+- `v_mcp_h10_keyword_rankings`: `21,140` rows.
+- `v_mcp_ads_change_logbook`: `148` rows.
+- `v_mcp_non_ads_change_logbook`: `3` rows.
+- `v_mcp_data_freshness`: `38` rows after Phase 8 status rows.
+- Secret-column scan returned `0` findings.
+- Cleanup candidate dependency scan showed no MCP-view dependency on candidate tables.
+- Cleanup candidate exact row-count report covered `44` candidate tables.
+- Tables dropped: `0`.
