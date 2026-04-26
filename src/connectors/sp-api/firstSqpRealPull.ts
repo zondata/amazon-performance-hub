@@ -30,6 +30,7 @@ import {
 export const FIRST_SQP_REPORT_TYPE =
   'GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT' as const;
 export const FIRST_SQP_REPORT_PERIOD = 'WEEK' as const;
+export type SqpReportPeriod = 'WEEK' | 'MONTH';
 export const DEFAULT_FIRST_SQP_STATUS_MAX_ATTEMPTS = 120;
 export const DEFAULT_FIRST_SQP_STATUS_POLL_INTERVAL_MS = 5000;
 
@@ -204,26 +205,43 @@ const validateFirstSqpAsinWindow = (args: {
   asin: string;
   startDate: string;
   endDate: string;
+  reportPeriod?: SqpReportPeriod;
 }) => {
   const asin = normalizeAsin(args.asin);
   const startDate = parseIsoDate(args.startDate, '--start-date');
   const endDate = parseIsoDate(args.endDate, '--end-date');
+  const reportPeriod = args.reportPeriod ?? FIRST_SQP_REPORT_PERIOD;
 
-  if (dayDiffUtc(startDate, endDate) !== 6) {
+  if (reportPeriod === 'MONTH') {
+    if (startDate.slice(8, 10) !== '01') {
+      throw new SpApiSqpPullError(
+        'validation_failed',
+        'The bounded monthly SQP real-pull path requires --start-date to be the first day of a month'
+      );
+    }
+    const expectedEnd = new Date(Date.UTC(Number(startDate.slice(0, 4)), Number(startDate.slice(5, 7)), 0));
+    const expectedEndDate = `${expectedEnd.getUTCFullYear()}-${String(expectedEnd.getUTCMonth() + 1).padStart(2, '0')}-${String(expectedEnd.getUTCDate()).padStart(2, '0')}`;
+    if (endDate !== expectedEndDate) {
+      throw new SpApiSqpPullError(
+        'validation_failed',
+        'The bounded monthly SQP real-pull path requires --end-date to be the last day of the same month'
+      );
+    }
+  } else if (dayDiffUtc(startDate, endDate) !== 6) {
     throw new SpApiSqpPullError(
       'validation_failed',
       'The bounded SQP real-pull path requires one 7-day WEEK window'
     );
   }
 
-  if (dayOfWeekUtc(startDate) !== 0) {
+  if (reportPeriod === 'WEEK' && dayOfWeekUtc(startDate) !== 0) {
     throw new SpApiSqpPullError(
       'validation_failed',
       'The bounded SQP real-pull path requires --start-date to be a Sunday'
     );
   }
 
-  if (dayOfWeekUtc(endDate) !== 6) {
+  if (reportPeriod === 'WEEK' && dayOfWeekUtc(endDate) !== 6) {
     throw new SpApiSqpPullError(
       'validation_failed',
       'The bounded SQP real-pull path requires --end-date to be a Saturday'
@@ -242,6 +260,7 @@ export const buildFirstSqpReportRequestBody = (args: {
   asin: string;
   startDate: string;
   endDate: string;
+  reportPeriod?: SqpReportPeriod;
 }): SpApiReportCreateRequestBody => {
   const marketplaceId = args.marketplaceId.trim();
   if (!marketplaceId) {
@@ -252,6 +271,7 @@ export const buildFirstSqpReportRequestBody = (args: {
   }
 
   const validated = validateFirstSqpAsinWindow(args);
+  const reportPeriod = args.reportPeriod ?? FIRST_SQP_REPORT_PERIOD;
 
   return {
     reportType: FIRST_SQP_REPORT_TYPE,
@@ -259,7 +279,7 @@ export const buildFirstSqpReportRequestBody = (args: {
     dataStartTime: validated.startDate,
     dataEndTime: validated.endDate,
     reportOptions: {
-      reportPeriod: FIRST_SQP_REPORT_PERIOD,
+      reportPeriod,
       asin: validated.asin,
     },
   };
@@ -272,6 +292,7 @@ export const buildFirstSqpReportRequest = (args: {
   asin: string;
   startDate: string;
   endDate: string;
+  reportPeriod?: SqpReportPeriod;
 }): SpApiTransportRequest => {
   const accessToken = args.accessToken.trim();
   if (!accessToken) {
@@ -295,6 +316,7 @@ export const buildFirstSqpReportRequest = (args: {
         asin: args.asin,
         startDate: args.startDate,
         endDate: args.endDate,
+        reportPeriod: args.reportPeriod,
       })
     ),
   };
@@ -646,6 +668,7 @@ export const runFirstSpApiSqpRealPullAndIngest = async (args: {
   asin: string;
   startDate: string;
   endDate: string;
+  reportPeriod?: SqpReportPeriod;
   maxAttempts?: number;
   pollIntervalMs?: number;
   envSource?: SpApiEnvSource;
@@ -664,6 +687,7 @@ export const runFirstSpApiSqpRealPullAndIngest = async (args: {
     asin: args.asin,
     startDate: args.startDate,
     endDate: args.endDate,
+    reportPeriod: args.reportPeriod,
   });
 
   const config = loadSpApiEnv(args.envSource);
@@ -691,6 +715,7 @@ export const runFirstSpApiSqpRealPullAndIngest = async (args: {
     asin: validatedWindow.asin,
     startDate: validatedWindow.startDate,
     endDate: validatedWindow.endDate,
+    reportPeriod: args.reportPeriod,
   });
 
   let createResponse: SpApiTransportResponse;

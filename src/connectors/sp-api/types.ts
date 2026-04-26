@@ -86,7 +86,7 @@ export type SpApiReportCreateRequestBody =
       dataStartTime: string;
       dataEndTime: string;
       reportOptions: {
-        reportPeriod: 'WEEK';
+        reportPeriod: 'WEEK' | 'MONTH';
         asin: string;
       };
     }

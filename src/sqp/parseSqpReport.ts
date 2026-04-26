@@ -49,6 +49,7 @@ export type SqpWeeklyRow = {
 };
 
 export type SqpWeeklyParseResult = {
+  periodType: "WEEK" | "MONTH";
   scopeType: SqpScopeType;
   scopeValue: string;
   weekStart: string;
@@ -279,10 +280,37 @@ function parseWeekRangeFromText(value: string): { weekStart: string; weekEnd: st
 }
 
 function parseWeekRangeFromFilename(filename: string): { weekStart: string; weekEnd: string } | null {
-  const match = filename.match(/_(\d{4})_(\d{2})_(\d{2})\.[^.]+$/i);
+  const match = filename.match(/_(\d{4})_(\d{2})_(\d{2})(?:\(\d+\))?\.[^.]+$/i);
   if (!match) return null;
   const weekEnd = `${match[1]}-${match[2]}-${match[3]}`;
   return { weekStart: addDaysUtc(weekEnd, -6), weekEnd };
+}
+
+function parseMonthRangeFromText(value: string): { weekStart: string; weekEnd: string } | null {
+  const range = parseWeekRangeFromText(value);
+  if (range) return range;
+
+  const isoMonth = value.match(/(\d{4})-(\d{2})/);
+  if (!isoMonth) return null;
+
+  const year = Number(isoMonth[1]);
+  const month = Number(isoMonth[2]);
+  const weekStart = `${isoMonth[1]}-${isoMonth[2]}-01`;
+  const endDate = new Date(Date.UTC(year, month, 0));
+  const weekEnd = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, "0")}-${String(endDate.getUTCDate()).padStart(2, "0")}`;
+  return { weekStart, weekEnd };
+}
+
+function parsePeriodRangeFromFilename(filename: string): { periodType: "WEEK" | "MONTH"; weekStart: string; weekEnd: string } | null {
+  const range = parseWeekRangeFromFilename(filename);
+  if (!range) return null;
+  if (!/month/i.test(filename)) return { periodType: "WEEK", ...range };
+
+  return {
+    periodType: "MONTH",
+    weekStart: `${range.weekEnd.slice(0, 8)}01`,
+    weekEnd: range.weekEnd,
+  };
 }
 
 function mapHeaders(headers: string[]): Record<SqpHeaderField, number | undefined> {
@@ -353,8 +381,8 @@ function parseSqpJsonReport(content: string): SqpWeeklyParseResult {
     throw new Error("SQP JSON artifact reportType is not Search Query Performance.");
   }
 
-  if (reportPeriod !== "WEEK") {
-    throw new Error("SQP JSON artifact must use WEEK reportPeriod.");
+  if (reportPeriod !== "WEEK" && reportPeriod !== "MONTH") {
+    throw new Error("SQP JSON artifact must use WEEK or MONTH reportPeriod.");
   }
 
   if (!asinList) {
@@ -459,6 +487,7 @@ function parseSqpJsonReport(content: string): SqpWeeklyParseResult {
   }
 
   return {
+    periodType: reportPeriod,
     scopeType: "asin",
     scopeValue: requestedAsins[0],
     weekStart: coverageStart,
@@ -492,11 +521,15 @@ export function parseSqpReport(input: string, filenameHint?: string): SqpWeeklyP
   const scopeType = resolveScopeType(metadata, filename);
   const scopeValue = resolveScopeValue(scopeType, metadata);
 
-  const rangeFromMeta = parseWeekRangeFromText(metadata["select week"] ?? "");
-  const rangeFromFilename = parseWeekRangeFromFilename(filename);
+  const periodType = metadata["select month"] || /month/i.test(filename) ? "MONTH" : "WEEK";
+  const rangeFromMeta =
+    periodType === "MONTH"
+      ? parseMonthRangeFromText(metadata["select month"] ?? metadata["select week"] ?? "")
+      : parseWeekRangeFromText(metadata["select week"] ?? "");
+  const rangeFromFilename = parsePeriodRangeFromFilename(filename);
   const resolvedRange = rangeFromMeta ?? rangeFromFilename;
   if (!resolvedRange) {
-    throw new Error("Unable to determine SQP week range from metadata or filename.");
+    throw new Error("Unable to determine SQP period range from metadata or filename.");
   }
 
   const warnings: string[] = [];
@@ -560,6 +593,7 @@ export function parseSqpReport(input: string, filenameHint?: string): SqpWeeklyP
   }
 
   return {
+    periodType,
     scopeType,
     scopeValue,
     weekStart: resolvedRange.weekStart,

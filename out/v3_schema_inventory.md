@@ -129,7 +129,10 @@ sp_targeting_daily_fact
 sp_targeting_daily_raw
 spapi_sales_and_traffic_by_asin_report_rows
 spapi_sales_and_traffic_by_date_report_rows
+sqp_monthly_raw
 sqp_weekly_raw
 ui_page_settings
 uploads
 ```
+
+Phase 5 added `sqp_monthly_raw`, `sqp_monthly_latest`, and `sqp_monthly_latest_enriched`.

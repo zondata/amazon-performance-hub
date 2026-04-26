@@ -1,33 +1,20 @@
--- Phase 4 schema-after-phase dump placeholder
--- Updated: 2026-04-26T21:35:00+08:00
--- Project: aghtxbvgcazlowpujtjk
+-- Phase 5 schema dump placeholder.
 --
 -- `supabase db dump --schema public --data-only=false --file out/v3_schema_after_phase.sql`
--- could not complete in this WSL environment because the Supabase CLI dump path
--- requires Docker and the Docker daemon is not reachable at /var/run/docker.sock.
+-- failed because Docker is unavailable in this WSL environment.
 --
--- Phase 1, Phase 2, Phase 3, and Phase 4 remote schema changes were applied.
--- The applied Phase 1 migration is:
--- `supabase/migrations/20260426110000_v3_database_control_layer.sql`
--- The applied Phase 2 migration is:
--- `supabase/migrations/20260426123000_v3_amazon_sales_traffic_timeseries.sql`
--- The applied Phase 3 migration is:
--- `supabase/migrations/20260426143000_v3_ads_settings_snapshot_logbook.sql`
--- The applied Phase 4 migration is:
--- `supabase/migrations/20260426160000_v3_ads_performance_natural_keys.sql`
+-- Direct `pg_dump` fallback was attempted with `DATABASE_URL`, but the Supabase
+-- pooler was temporarily circuit-breaker blocked after Supabase CLI temp-role
+-- authentication failures.
 --
--- Verified remote tables:
--- - public.api_connections
--- - public.api_sync_runs
--- - public.api_sync_cursors
--- - public.ads_settings_snapshot_runs
--- - public.report_data_status
--- - public.data_quality_checks
--- - public.amazon_sales_traffic_timeseries
--- - public.amazon_sales_traffic_timeseries_latest
--- - public.v3_ads_settings_snapshot_rows
--- - public.v3_capture_ads_settings_snapshot(text, text, text, date)
--- - public.log_changes.entity_level
--- - public.log_changes.field_name
--- - public.sp_advertised_product_daily_fact_natural_idx
--- - public.sb_attributed_purchases_daily_fact_uq
+-- The live schema was still verified before the circuit breaker through direct
+-- SQL and `npm run schema:snapshot`; see `docs/schema_snapshot.md` and
+-- `out/v3_phase_reports/phase_05_sqp.md`.
+--
+-- Phase 5 applied migration:
+-- `supabase/migrations/20260426173000_v3_sqp_monthly_raw.sql`
+--
+-- New live objects:
+-- - public.sqp_monthly_raw
+-- - public.sqp_monthly_latest
+-- - public.sqp_monthly_latest_enriched

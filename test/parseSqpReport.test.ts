@@ -19,6 +19,7 @@ describe("parseSqpReport", () => {
       "US_Search_Query_Performance_Brand_View_Simple_Week_2026_02_07.csv"
     );
 
+    expect(result.periodType).toBe("WEEK");
     expect(result.scopeType).toBe("brand");
     expect(result.scopeValue).toBe("sourbear");
     expect(result.weekStart).toBe("2026-02-01");
@@ -64,5 +65,24 @@ Reporting Date,Search Query
     );
 
     expect(result.rows[0].clicks_rate_per_query).toBeCloseTo(0.0072, 7);
+  });
+
+  it("parses monthly SQP metadata and filename period", () => {
+    const csv = `ASIN or Product=["B0B2K57W5R"],Reporting Range=["Monthly"],Select month=["2026-03"]
+Reporting Date,Search Query,Search Query Score,Search Query Volume,Impressions: Total Count,Impressions: ASIN Count
+2026-03-31,hair growth serum,250,8000,600,90
+`;
+
+    const result = parseSqpReport(
+      csv,
+      "US_Search_Query_Performance_ASIN_View_Simple_Month_2026_03_31.csv"
+    );
+
+    expect(result.periodType).toBe("MONTH");
+    expect(result.scopeType).toBe("asin");
+    expect(result.scopeValue).toBe("B0B2K57W5R");
+    expect(result.weekStart).toBe("2026-03-01");
+    expect(result.weekEnd).toBe("2026-03-31");
+    expect(result.rows).toHaveLength(1);
   });
 });

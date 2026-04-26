@@ -5,7 +5,7 @@ import { parseSqpReport } from "../sqp/parseSqpReport";
 import { chunkArray, hashFileSha256 } from "./utils";
 import { retryAsync, isTransientSupabaseError, formatRetryError } from "../lib/retry";
 
-export type SqpWeeklyIngestResult = {
+export type SqpMonthlyIngestResult = {
   status: "ok" | "already ingested";
   uploadId?: string;
   rowCount?: number;
@@ -16,12 +16,12 @@ export type SqpWeeklyIngestResult = {
   scopeValue?: string;
 };
 
-export async function ingestSqpWeeklyRaw(
+export async function ingestSqpMonthlyRaw(
   csvPath: string,
   accountId: string,
   marketplace: string,
   exportedAtOverride?: string
-): Promise<SqpWeeklyIngestResult> {
+): Promise<SqpMonthlyIngestResult> {
   const client = getSupabaseClient();
   const fileHash = hashFileSha256(csvPath);
   const filename = path.basename(csvPath);
@@ -52,7 +52,7 @@ export async function ingestSqpWeeklyRaw(
 
   if (existingUpload?.upload_id) {
     const { count, error: countError } = await client
-      .from("sqp_weekly_raw")
+      .from("sqp_monthly_raw")
       .select("upload_id", { count: "exact", head: true })
       .eq("upload_id", existingUpload.upload_id);
     if (countError) {
@@ -69,10 +69,9 @@ export async function ingestSqpWeeklyRaw(
 
   const stats = fs.statSync(csvPath);
   const exportedAt = exportedAtOverride ?? stats.mtime.toISOString();
-
   const parsed = parseSqpReport(csvPath);
-  if (parsed.periodType !== "WEEK") {
-    throw new Error(`SQP weekly ingest requires a WEEK artifact; received ${parsed.periodType}.`);
+  if (parsed.periodType !== "MONTH") {
+    throw new Error(`SQP monthly ingest requires a MONTH artifact; received ${parsed.periodType}.`);
   }
 
   const { error: accountError } = await client
@@ -116,18 +115,16 @@ export async function ingestSqpWeeklyRaw(
     marketplace,
     scope_type: parsed.scopeType,
     scope_value: parsed.scopeValue,
-    week_start: parsed.weekStart,
-    week_end: parsed.weekEnd,
+    period_start: parsed.weekStart,
+    period_end: parsed.weekEnd,
     reporting_date: row.reporting_date,
     search_query_raw: row.search_query_raw,
     search_query_norm: row.search_query_norm,
     search_query_score: row.search_query_score,
     search_query_volume: row.search_query_volume,
-
     impressions_total: row.impressions_total,
     impressions_self: row.impressions_self,
     impressions_self_share: row.impressions_self_share,
-
     clicks_total: row.clicks_total,
     clicks_rate_per_query: row.clicks_rate_per_query,
     clicks_self: row.clicks_self,
@@ -137,7 +134,6 @@ export async function ingestSqpWeeklyRaw(
     clicks_same_day_ship: row.clicks_same_day_ship,
     clicks_1d_ship: row.clicks_1d_ship,
     clicks_2d_ship: row.clicks_2d_ship,
-
     cart_adds_total: row.cart_adds_total,
     cart_add_rate_per_query: row.cart_add_rate_per_query,
     cart_adds_self: row.cart_adds_self,
@@ -147,7 +143,6 @@ export async function ingestSqpWeeklyRaw(
     cart_adds_same_day_ship: row.cart_adds_same_day_ship,
     cart_adds_1d_ship: row.cart_adds_1d_ship,
     cart_adds_2d_ship: row.cart_adds_2d_ship,
-
     purchases_total: row.purchases_total,
     purchases_rate_per_query: row.purchases_rate_per_query,
     purchases_self: row.purchases_self,
@@ -157,13 +152,12 @@ export async function ingestSqpWeeklyRaw(
     purchases_same_day_ship: row.purchases_same_day_ship,
     purchases_1d_ship: row.purchases_1d_ship,
     purchases_2d_ship: row.purchases_2d_ship,
-
     exported_at: exportedAt,
   }));
 
   for (const chunk of chunkArray(rowsToInsert, 500)) {
-    const { error } = await client.from("sqp_weekly_raw").insert(chunk);
-    if (error) throw new Error(`Failed inserting sqp_weekly_raw: ${error.message}`);
+    const { error } = await client.from("sqp_monthly_raw").insert(chunk);
+    if (error) throw new Error(`Failed inserting sqp_monthly_raw: ${error.message}`);
   }
 
   return {

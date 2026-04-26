@@ -431,23 +431,23 @@ After this phase, the system has weekly and monthly SQP query-funnel data in Sup
 
 ## Checklist
 
-- [ ] Verify or create `sqp_monthly_raw`.
-- [ ] Verify weekly SQP importer.
-- [ ] Build SP-API SQP puller where API permission exists.
-- [ ] Keep manual upload fallback.
-- [ ] Pull one weekly sample.
-- [ ] Validate weekly boundaries.
-- [ ] Backfill weekly SQP to maximum available history or until Amazon returns unavailable.
-- [ ] Pull one monthly sample.
-- [ ] Validate monthly boundaries.
-- [ ] Backfill monthly SQP to maximum available history.
-- [ ] Refresh latest 4 weeks and latest 2 months.
-- [ ] Validate no duplicate query/period keys.
-- [ ] Write sync/status/check rows.
-- [ ] Run standard checks.
-- [ ] Update this plan checklist and `out/v3_build_progress.md`.
-- [ ] Write `out/v3_phase_reports/phase_05_sqp.md`.
-- [ ] Stop and report to Albert. Do not continue to Phase 6.
+- [x] Verify or create `sqp_monthly_raw`.
+- [x] Verify weekly SQP importer.
+- [x] Build SP-API SQP puller where API permission exists.
+- [x] Keep manual upload fallback.
+- [x] Pull one weekly sample.
+- [x] Validate weekly boundaries.
+- [x] Backfill weekly SQP to maximum available history or until Amazon returns unavailable.
+- [x] Pull one monthly sample.
+- [x] Validate monthly boundaries.
+- [x] Backfill monthly SQP to maximum available history.
+- [x] Refresh latest 4 weeks and latest 2 months.
+- [x] Validate no duplicate query/period keys.
+- [x] Write sync/status/check rows.
+- [x] Run standard checks. Build/test passed; Supabase CLI migration list and dump were externally blocked.
+- [x] Update this plan checklist and `out/v3_build_progress.md`.
+- [x] Write `out/v3_phase_reports/phase_05_sqp.md`.
+- [x] Stop and report to Albert. Do not continue to Phase 6.
 
 ## Phase 5 done criteria
 

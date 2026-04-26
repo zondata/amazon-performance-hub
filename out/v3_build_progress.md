@@ -154,3 +154,29 @@ Generated: 2026-04-26T18:47:08+08:00
 - `sb_attributed_purchases_daily_fact`: 300 rows, coverage `2025-08-02` through `2026-04-03`.
 - `sd_campaign_daily_fact_gold`: 365 rows, coverage `2025-12-08` through `2026-02-18`.
 - `sd_advertised_product_daily_fact`: 470 rows, coverage `2025-12-08` through `2026-02-18`.
+
+## Phase 5 Checklist
+
+- [x] Created and applied migration `supabase/migrations/20260426173000_v3_sqp_monthly_raw.sql`.
+- [x] Verified existing weekly SQP importer and fixed safe import guard in `src/cli/ingestSqpWeeklyDate.ts`.
+- [x] Added monthly SQP parser support, monthly manual ingest CLI, and monthly SP-API pull/ingest CLI.
+- [x] Confirmed weekly manual upload fallback by rerunning Dropbox backfill over available SQP folders.
+- [x] Pulled weekly SP-API sample for ASIN `B0FYPRWPN1`, week `2026-04-12` through `2026-04-18`, report `489161020569`, 62 rows.
+- [x] Backfilled monthly SP-API SQP for ASIN `B0FYPRWPN1` from `2025-12-01` through `2026-03-31`.
+- [x] Refreshed latest two complete monthly periods: February and March 2026.
+- [x] Validated period boundaries, duplicate natural keys, and negative SQP metrics.
+- [x] Wrote Phase 5 `api_sync_runs`, `report_data_status`, and `data_quality_checks`.
+- [x] Ran `npm run schema:snapshot`, `npm run build`, `npm test`, and `git diff --check`.
+- [x] Documented Supabase CLI blockers: `supabase migration list` failed temp-role auth, and `supabase db dump` failed because Docker is unavailable.
+
+## Phase 5 Remote Verification
+
+- `sqp_weekly_raw`: 38,154 total rows; `sourbear`/`US` coverage `2025-06-28` through `2026-04-18`.
+- `sqp_monthly_raw`: 304 total rows; `sourbear`/`US` coverage `2025-12-31` through `2026-03-31`.
+- Weekly duplicate natural keys: `0`.
+- Monthly duplicate natural keys: `0`.
+- Weekly negative metric rows: `0`.
+- Monthly negative metric rows: `0`.
+- Weekly period boundary failures: `0`.
+- Monthly period boundary failures: `0`.
+- November 2025 monthly boundary: SP-API returned an artifact without `dataByAsin` rows for `B0FYPRWPN1`.
