@@ -188,20 +188,20 @@ After this phase, the database can record API/manual connections, every sync run
 
 ## Checklist
 
-- [ ] Create migration for missing control tables only.
-- [ ] Use create-if-not-exists/idempotent SQL where practical.
-- [ ] Add indexes for `account_id`, `marketplace`, `source_type`, `table_name`, date/range columns, and sync status.
-- [ ] Add `data_status` convention: `live`, `preliminary`, `final`, `failed`, `manual_unknown`.
-- [ ] Add helper SQL or TypeScript utilities for creating sync runs and writing data quality checks.
+- [x] Create migration for missing control tables only.
+- [x] Use create-if-not-exists/idempotent SQL where practical.
+- [x] Add indexes for `account_id`, `marketplace`, `source_type`, `table_name`, date/range columns, and sync status.
+- [x] Add `data_status` convention: `live`, `preliminary`, `final`, `failed`, `manual_unknown`.
+- [x] Add helper SQL or TypeScript utilities for creating sync runs and writing data quality checks.
 - [ ] Insert one test/manual-only connection row if safe.
 - [ ] Insert one test sync run and one data quality check if safe.
-- [ ] Validate no secrets are stored directly.
+- [x] Validate no secrets are stored directly.
 - [ ] Apply migration locally first.
 - [ ] Apply migration to linked Supabase project only after local validation passes.
-- [ ] Run standard checks.
-- [ ] Update this plan checklist and `out/v3_build_progress.md`.
-- [ ] Write `out/v3_phase_reports/phase_01_control_layer.md`.
-- [ ] Stop and report to Albert. Do not continue to Phase 2.
+- [x] Run standard checks.
+- [x] Update this plan checklist and `out/v3_build_progress.md`.
+- [x] Write `out/v3_phase_reports/phase_01_control_layer.md`.
+- [x] Stop and report to Albert. Do not continue to Phase 2.
 
 ## Phase 1 done criteria
 

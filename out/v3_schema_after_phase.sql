@@ -1,7 +1,11 @@
--- Phase 0 schema-after-phase dump placeholder
--- Generated: 2026-04-26T18:47:08+08:00
+-- Phase 1 schema-after-phase dump placeholder
+-- Generated: 2026-04-26T18:56:17+08:00
 -- Project: aghtxbvgcazlowpujtjk
 --
 -- `supabase db dump --schema public --data-only=false --file out/v3_schema_after_phase.sql`
--- was externally blocked by local Docker availability / Supabase CLI temp-role authentication.
--- No remote schema changes were applied in Phase 0.
+-- could not complete in this WSL environment because the Supabase CLI dump path
+-- requires Docker and the Docker daemon is not reachable at /var/run/docker.sock.
+--
+-- No Phase 1 remote schema changes were applied.
+-- The local Phase 1 migration prepared for validation is:
+-- `supabase/migrations/20260426110000_v3_database_control_layer.sql`

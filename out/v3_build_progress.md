@@ -7,7 +7,7 @@ Generated: 2026-04-26T18:47:08+08:00
 | Phase | Status | Notes |
 | --- | --- | --- |
 | Phase 0 - Repo, Supabase, and Migration Baseline | Complete with documented external blockers | Repo/branch/project verified, schema inventory and counts written, local invalid migration blocker fixed, build/test green. Supabase CLI dump/local start blocked externally. |
-| Phase 1 - Database Control Layer | Not started | Do not start until Albert explicitly approves Phase 1. |
+| Phase 1 - Database Control Layer | Implementation prepared, apply blocked | Idempotent migration and tests are committed locally. Local Supabase/Docker validation and remote apply are blocked, so control tables are not yet confirmed in Supabase. |
 | Phase 2 - Amazon Sales & Traffic | Not started | Not part of Phase 0. |
 | Phase 3 - Current Ads Settings and Automatic Ads Change Logbook | Not started | Not part of Phase 0. |
 | Phase 4 - SP/SB/SD Ads Performance Reports | Not started | Not part of Phase 0. |
@@ -36,3 +36,18 @@ Generated: 2026-04-26T18:47:08+08:00
 - [x] Created this progress file.
 - [x] Ran standard checks; build/test passed, final migration list/dump blocked externally as documented.
 - [x] Wrote `out/v3_phase_reports/phase_00_baseline.md`.
+
+## Phase 1 Checklist
+
+- [x] Created migration for missing control tables only: `20260426110000_v3_database_control_layer.sql`.
+- [x] Used `create table if not exists`, `create index if not exists`, and idempotent trigger/function definitions where practical.
+- [x] Added indexes for account, marketplace, source, table, date/range, freshness, and status dimensions.
+- [x] Added shared `data_status` convention: `live`, `preliminary`, `final`, `failed`, `manual_unknown`.
+- [x] Added helper SQL for data quality check writes: `record_data_quality_check(...)`.
+- [ ] Inserted one test/manual-only connection row. Blocked because migration was not applied.
+- [ ] Inserted one test sync run and one data quality check. Blocked because migration was not applied.
+- [x] Validated no direct secret columns are introduced; `api_connections` stores `auth_secret_ref`.
+- [ ] Applied migration locally. Blocked because Docker daemon is unavailable.
+- [ ] Applied migration to linked Supabase project. Blocked by local validation gate and Supabase CLI auth failures.
+- [x] Ran standard code checks: `npm run build` and `npm test`.
+- [x] Wrote `out/v3_phase_reports/phase_01_control_layer.md`.
