@@ -8,7 +8,8 @@ Source: Supabase project connector metadata (`public` schema). The Supabase CLI 
 
 ## Summary
 
-- Public base tables found: 105
+- Public base tables found at Phase 0: 105
+- Phase 1 control tables applied remotely: 6
 - Remote migrations applied through: `20260215170000`
 - Local migrations after `20260215170000` are not applied remotely.
 - Local invalid migration filename warnings were fixed by removing skipped duplicate files `006a_sp_placement_raw_norm.sql` and `006b_sp_placement_latest_norm.sql`.
@@ -22,6 +23,7 @@ ad_group_name_history
 ads_change_set_items
 ads_change_sets
 ads_objective_presets
+ads_settings_snapshot_runs
 ads_optimizer_manual_overrides
 ads_optimizer_product_settings
 ads_optimizer_product_snapshot
@@ -32,6 +34,9 @@ ads_optimizer_rule_pack_versions
 ads_optimizer_rule_packs
 ads_optimizer_runs
 ads_optimizer_target_snapshot
+api_connections
+api_sync_cursors
+api_sync_runs
 bulk_ad_groups
 bulk_campaigns
 bulk_placements
@@ -47,6 +52,7 @@ bulk_sd_product_ads
 bulk_sd_targets
 bulk_targets
 campaign_name_history
+data_quality_checks
 dim_keyword
 h10_keyword_tracker_raw
 import_source_status
@@ -69,6 +75,7 @@ product_cost_history
 product_profile
 product_skus
 products
+report_data_status
 sb_ad_group_name_history
 sb_attributed_purchases_daily_fact
 sb_campaign_daily_fact

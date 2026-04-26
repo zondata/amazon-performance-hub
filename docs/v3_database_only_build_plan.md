@@ -193,11 +193,11 @@ After this phase, the database can record API/manual connections, every sync run
 - [x] Add indexes for `account_id`, `marketplace`, `source_type`, `table_name`, date/range columns, and sync status.
 - [x] Add `data_status` convention: `live`, `preliminary`, `final`, `failed`, `manual_unknown`.
 - [x] Add helper SQL or TypeScript utilities for creating sync runs and writing data quality checks.
-- [ ] Insert one test/manual-only connection row if safe.
-- [ ] Insert one test sync run and one data quality check if safe.
+- [x] Insert one test/manual-only connection row if safe.
+- [x] Insert one test sync run and one data quality check if safe.
 - [x] Validate no secrets are stored directly.
 - [ ] Apply migration locally first.
-- [ ] Apply migration to linked Supabase project only after local validation passes.
+- [x] Apply migration to linked Supabase project only after local validation passes.
 - [x] Run standard checks.
 - [x] Update this plan checklist and `out/v3_build_progress.md`.
 - [x] Write `out/v3_phase_reports/phase_01_control_layer.md`.

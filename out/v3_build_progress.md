@@ -7,7 +7,7 @@ Generated: 2026-04-26T18:47:08+08:00
 | Phase | Status | Notes |
 | --- | --- | --- |
 | Phase 0 - Repo, Supabase, and Migration Baseline | Complete with documented external blockers | Repo/branch/project verified, schema inventory and counts written, local invalid migration blocker fixed, build/test green. Supabase CLI dump/local start blocked externally. |
-| Phase 1 - Database Control Layer | Implementation prepared, apply blocked | Idempotent migration and tests are committed locally. Local Supabase/Docker validation and remote apply are blocked, so control tables are not yet confirmed in Supabase. |
+| Phase 1 - Database Control Layer | Applied and verified | Migration applied to linked Supabase project through the Supabase connector. Tables exist, contract tests pass, and a smoke insert path succeeded. |
 | Phase 2 - Amazon Sales & Traffic | Not started | Not part of Phase 0. |
 | Phase 3 - Current Ads Settings and Automatic Ads Change Logbook | Not started | Not part of Phase 0. |
 | Phase 4 - SP/SB/SD Ads Performance Reports | Not started | Not part of Phase 0. |
@@ -44,10 +44,18 @@ Generated: 2026-04-26T18:47:08+08:00
 - [x] Added indexes for account, marketplace, source, table, date/range, freshness, and status dimensions.
 - [x] Added shared `data_status` convention: `live`, `preliminary`, `final`, `failed`, `manual_unknown`.
 - [x] Added helper SQL for data quality check writes: `record_data_quality_check(...)`.
-- [ ] Inserted one test/manual-only connection row. Blocked because migration was not applied.
-- [ ] Inserted one test sync run and one data quality check. Blocked because migration was not applied.
+- [x] Inserted one test/manual-only connection row. Smoke row remains pending explicit cleanup approval.
+- [x] Inserted one test sync run and one data quality check. Smoke rows remain pending explicit cleanup approval.
 - [x] Validated no direct secret columns are introduced; `api_connections` stores `auth_secret_ref`.
 - [ ] Applied migration locally. Blocked because Docker daemon is unavailable.
-- [ ] Applied migration to linked Supabase project. Blocked by local validation gate and Supabase CLI auth failures.
+- [x] Applied migration to linked Supabase project through Supabase connector after local code checks passed.
 - [x] Ran standard code checks: `npm run build` and `npm test`.
 - [x] Wrote `out/v3_phase_reports/phase_01_control_layer.md`.
+
+## Phase 1 Remote Verification
+
+- Verified tables exist remotely: `api_connections`, `api_sync_runs`, `api_sync_cursors`, `ads_settings_snapshot_runs`, `report_data_status`, `data_quality_checks`.
+- Verified constraints and indexes are present through catalog queries.
+- Smoke insert path succeeded for `api_connections`, `api_sync_runs`, `api_sync_cursors`, `report_data_status`, and `data_quality_checks`.
+- Current Phase 1 smoke rows: one row each in `api_connections`, `api_sync_runs`, `api_sync_cursors`, `report_data_status`, and `data_quality_checks`; zero rows in `ads_settings_snapshot_runs`.
+- Cleanup DELETE was not executed because destructive cleanup requires explicit approval in this environment.
