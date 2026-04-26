@@ -471,18 +471,18 @@ After this phase, the system can import H10 keyword ranking uploads into Supabas
 
 ## Checklist
 
-- [ ] Inspect existing H10 importer.
-- [ ] Confirm required columns and natural key.
-- [ ] Parse organic rank into `organic_rank_value` and `organic_rank_kind`.
-- [ ] Parse sponsored rank into `sponsored_pos_value` and `sponsored_pos_kind`.
-- [ ] Add duplicate protection.
-- [ ] Import one sample if available.
-- [ ] Validate no duplicate `account_id + marketplace + asin + keyword_norm + observed_date`.
-- [ ] Write upload/import status.
-- [ ] Run standard checks.
-- [ ] Update this plan checklist and `out/v3_build_progress.md`.
-- [ ] Write `out/v3_phase_reports/phase_06_h10.md`.
-- [ ] Stop and report to Albert. Do not continue to Phase 7.
+- [x] Inspect existing H10 importer.
+- [x] Confirm required columns and natural key.
+- [x] Parse organic rank into `organic_rank_value` and `organic_rank_kind`.
+- [x] Parse sponsored rank into `sponsored_pos_value` and `sponsored_pos_kind`.
+- [x] Add duplicate protection.
+- [x] Import one sample if available.
+- [x] Validate no duplicate `account_id + marketplace + asin + keyword_norm + observed_date`.
+- [x] Write upload/import status.
+- [x] Run standard checks. Build/test passed; Supabase CLI migration list and dump were externally blocked.
+- [x] Update this plan checklist and `out/v3_build_progress.md`.
+- [x] Write `out/v3_phase_reports/phase_06_h10.md`.
+- [x] Stop and report to Albert. Do not continue to Phase 7.
 
 ## Phase 6 done criteria
 

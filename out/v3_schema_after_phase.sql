@@ -1,20 +1,16 @@
--- Phase 5 schema dump placeholder.
+-- Phase 6 schema dump placeholder.
 --
 -- `supabase db dump --schema public --data-only=false --file out/v3_schema_after_phase.sql`
 -- failed because Docker is unavailable in this WSL environment.
 --
--- Direct `pg_dump` fallback was attempted with `DATABASE_URL`, but the Supabase
--- pooler was temporarily circuit-breaker blocked after Supabase CLI temp-role
--- authentication failures.
+-- `supabase migration list` also failed because the Supabase CLI temporary
+-- login role could not authenticate and then hit the pooler circuit breaker.
 --
--- The live schema was still verified before the circuit breaker through direct
--- SQL and `npm run schema:snapshot`; see `docs/schema_snapshot.md` and
--- `out/v3_phase_reports/phase_05_sqp.md`.
+-- Direct SQL validation succeeded before the CLI circuit breaker and
+-- `npm run schema:snapshot` updated `docs/schema_snapshot.md`.
 --
--- Phase 5 applied migration:
--- `supabase/migrations/20260426173000_v3_sqp_monthly_raw.sql`
---
--- New live objects:
--- - public.sqp_monthly_raw
--- - public.sqp_monthly_latest
--- - public.sqp_monthly_latest_enriched
+-- Phase 6 did not add schema objects; it verified the existing H10 schema:
+-- - public.h10_keyword_tracker_raw
+-- - public.h10_keyword_tracker_latest
+-- - public.h10_keyword_rank_daily_latest
+-- - public.h10_keyword_rank_daily_with_dims

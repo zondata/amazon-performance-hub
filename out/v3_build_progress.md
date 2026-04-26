@@ -180,3 +180,29 @@ Generated: 2026-04-26T18:47:08+08:00
 - Weekly period boundary failures: `0`.
 - Monthly period boundary failures: `0`.
 - November 2025 monthly boundary: SP-API returned an artifact without `dataByAsin` rows for `B0FYPRWPN1`.
+
+## Phase 6 Checklist
+
+- [x] Inspected existing H10 table, parser, CLIs, backfill pipeline, fixtures, and tests.
+- [x] Confirmed `h10_keyword_tracker_raw` required identity/date/rank columns and raw uniqueness.
+- [x] Confirmed organic rank parsing into `organic_rank_value` and `organic_rank_kind`.
+- [x] Confirmed sponsored rank parsing into `sponsored_pos_value` and `sponsored_pos_kind`.
+- [x] Confirmed duplicate protection through upload file hash idempotency, raw exact uniqueness, and daily latest dedupe view.
+- [x] Fixed `src/cli/ingestHelium10KeywordTrackerDate.ts` import guard so backfill imports do not execute CLI `main()`.
+- [x] Ran H10 backfill from `/mnt/d/Dropbox/AmazonReports` for `2026-02-11` through `2026-04-23`.
+- [x] Imported missing H10 snapshots for `2026-03-16`, `2026-04-19`, `2026-04-21`, and `2026-04-23`.
+- [x] Validated rank kind/value consistency, required fields, negative values, raw exact duplicates, and daily latest natural-key duplicates.
+- [x] Wrote Phase 6 `api_sync_runs`, `report_data_status`, and `data_quality_checks`.
+- [x] Ran `npm run schema:snapshot`; Supabase CLI migration list and dump remain externally blocked.
+
+## Phase 6 Remote Verification
+
+- `h10_keyword_tracker_raw`: 230,620 total rows.
+- `h10_keyword_tracker_raw` for `sourbear`/`US`: 157,451 rows, coverage `2025-08-12` through `2026-04-22`.
+- `h10_keyword_rank_daily_latest` for `sourbear`/`US`: 12,528 rows, coverage `2025-08-12` through `2026-04-22`.
+- Raw exact duplicate keys `(account_id, marketplace, asin, keyword_norm, observed_at, exported_at)`: `0`.
+- Daily latest duplicate keys `(account_id, marketplace, asin, keyword_norm, observed_date)`: `0`.
+- Raw overlapping daily duplicate rows across rolling exports: `144,923` warning rows; expected because H10 exports include history and latest view resolves them.
+- Rank kind/value consistency failures: `0`.
+- Missing required identity/date fields: `0`.
+- Negative numeric metric rows: `0`.
