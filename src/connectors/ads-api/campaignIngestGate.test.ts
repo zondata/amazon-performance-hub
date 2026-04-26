@@ -162,10 +162,10 @@ describe('campaign ingest gate', () => {
         tempCsvPath: path.join(dir, 'gate.csv'),
         gateRunId: '2026-04-17T08:15:30.123Z',
       })
-    ).rejects.toMatchObject<Partial<AdsApiCampaignIngestGateError>>({
+    ).rejects.toMatchObject({
       code: 'sink_failed',
       message: 'Campaign ingest sink failed: network down',
-    });
+    } satisfies Partial<AdsApiCampaignIngestGateError>);
   });
 
   it('writes a gate CSV and reuses the current campaign ingest sink', async () => {

@@ -172,10 +172,10 @@ describe('target ingest gate', () => {
         tempXlsxPath: path.join(dir, 'gate.xlsx'),
         gateRunId: '2026-04-17T08:15:30.123Z',
       })
-    ).rejects.toMatchObject<Partial<AdsApiTargetIngestGateError>>({
+    ).rejects.toMatchObject({
       code: 'sink_failed',
       message: 'Target ingest sink failed: network down',
-    });
+    } satisfies Partial<AdsApiTargetIngestGateError>);
   });
 
   it('writes a gate workbook and reuses the current targeting ingest sink', async () => {

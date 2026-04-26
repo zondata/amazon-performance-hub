@@ -1,0 +1,7 @@
+-- Phase 0 schema-after-phase dump placeholder
+-- Generated: 2026-04-26T18:47:08+08:00
+-- Project: aghtxbvgcazlowpujtjk
+--
+-- `supabase db dump --schema public --data-only=false --file out/v3_schema_after_phase.sql`
+-- was externally blocked by local Docker availability / Supabase CLI temp-role authentication.
+-- No remote schema changes were applied in Phase 0.

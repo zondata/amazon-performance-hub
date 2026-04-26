@@ -1,0 +1,123 @@
+# V3 Phase 0 Schema Inventory
+
+Generated: 2026-04-26T18:47:08+08:00
+
+Project: `aghtxbvgcazlowpujtjk`
+
+Source: Supabase project connector metadata (`public` schema). The Supabase CLI schema dump was blocked; see `out/v3_live_schema_phase0.sql`.
+
+## Summary
+
+- Public base tables found: 105
+- Remote migrations applied through: `20260215170000`
+- Local migrations after `20260215170000` are not applied remotely.
+- Local invalid migration filename warnings were fixed by removing skipped duplicate files `006a_sp_placement_raw_norm.sql` and `006b_sp_placement_latest_norm.sql`.
+- `014_latest_tiebreak.sql` now defensively creates/backfills `sp_placement_daily_raw.placement_raw_norm` before views use it.
+
+## Tables
+
+```text
+accounts
+ad_group_name_history
+ads_change_set_items
+ads_change_sets
+ads_objective_presets
+ads_optimizer_manual_overrides
+ads_optimizer_product_settings
+ads_optimizer_product_snapshot
+ads_optimizer_recommendation_overrides
+ads_optimizer_recommendation_snapshot
+ads_optimizer_role_transition_log
+ads_optimizer_rule_pack_versions
+ads_optimizer_rule_packs
+ads_optimizer_runs
+ads_optimizer_target_snapshot
+bulk_ad_groups
+bulk_campaigns
+bulk_placements
+bulk_portfolios
+bulk_product_ads
+bulk_sb_ad_groups
+bulk_sb_campaigns
+bulk_sb_placements
+bulk_sb_targets
+bulk_sd_ad_groups
+bulk_sd_campaigns
+bulk_sd_product_ads
+bulk_sd_targets
+bulk_targets
+campaign_name_history
+dim_keyword
+h10_keyword_tracker_raw
+import_source_status
+ingestion_jobs
+keyword_group_members
+keyword_group_sets
+keyword_groups
+log_change_entities
+log_change_validations
+log_changes
+log_driver_campaign_intents
+log_evaluations
+log_experiment_changes
+log_experiment_events
+log_experiment_phases
+log_experiments
+log_product_kiv_items
+portfolio_name_history
+product_cost_history
+product_profile
+product_skus
+products
+sb_ad_group_name_history
+sb_attributed_purchases_daily_fact
+sb_campaign_daily_fact
+sb_campaign_daily_fact_gold
+sb_campaign_daily_raw
+sb_campaign_name_history
+sb_campaign_placement_daily_fact
+sb_campaign_placement_daily_raw
+sb_keyword_daily_fact
+sb_keyword_daily_raw
+sb_manual_name_overrides
+sb_mapping_issues
+sb_stis_daily_fact
+sb_stis_daily_raw
+sd_ad_group_name_history
+sd_advertised_product_daily_fact
+sd_advertised_product_daily_raw
+sd_campaign_daily_fact
+sd_campaign_daily_fact_gold
+sd_campaign_daily_raw
+sd_campaign_name_history
+sd_manual_name_overrides
+sd_mapping_issues
+sd_matched_target_daily_fact
+sd_matched_target_daily_raw
+sd_purchased_product_daily_fact
+sd_purchased_product_daily_raw
+sd_targeting_daily_fact
+sd_targeting_daily_raw
+search_terms_market_weekly_raw
+si_sales_trend_daily_raw
+source_watermarks
+sp_advertised_product_daily_fact
+sp_campaign_daily_raw
+sp_campaign_hourly_fact
+sp_campaign_hourly_fact_gold
+sp_category_id_map
+sp_manual_name_overrides
+sp_mapping_issues
+sp_placement_daily_fact
+sp_placement_daily_raw
+sp_placement_modifier_change_log
+sp_stis_daily_fact
+sp_stis_daily_raw
+sp_targeting_daily_fact
+sp_targeting_daily_raw
+spapi_sales_and_traffic_by_asin_report_rows
+spapi_sales_and_traffic_by_date_report_rows
+sqp_weekly_raw
+ui_page_settings
+uploads
+```

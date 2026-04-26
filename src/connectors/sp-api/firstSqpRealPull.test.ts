@@ -203,7 +203,7 @@ describe('sp-api sqp first real pull boundary', () => {
         rowCount: 1,
         uploadId: 'upload-123',
         warningsCount: 0,
-      };
+      } as const;
     });
 
     const summary = await runFirstSpApiSqpRealPullAndIngest({

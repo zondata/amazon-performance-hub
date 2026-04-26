@@ -1,5 +1,27 @@
 -- Ensure deterministic latest views by breaking exported_at ties with uploads.ingested_at and upload_id.
 
+-- Local reset safety: older non-timestamped migration 006a was skipped by Supabase CLI,
+-- but these latest views partition by placement_raw_norm.
+alter table sp_placement_daily_raw
+  add column if not exists placement_raw_norm text;
+
+update sp_placement_daily_raw
+set placement_raw_norm = lower(trim(placement_raw))
+where placement_raw_norm is null;
+
+alter table sp_placement_daily_raw
+  alter column placement_raw_norm set not null;
+
+alter table sp_placement_daily_raw
+  drop constraint if exists sp_placement_daily_raw_uq;
+
+alter table sp_placement_daily_raw
+  add constraint sp_placement_daily_raw_uq
+  unique (account_id, date, campaign_name_norm, placement_code, placement_raw_norm, exported_at);
+
+create index if not exists sp_placement_daily_raw_ix_acct_campaign_place_raw
+  on sp_placement_daily_raw (account_id, campaign_name_norm, placement_code, placement_raw_norm);
+
 -- Drop latest views first to avoid CREATE OR REPLACE column shape conflicts
 drop view if exists
   sp_campaign_hourly_latest,

@@ -1,0 +1,14 @@
+-- Phase 0 live schema dump placeholder
+-- Generated: 2026-04-26T18:47:08+08:00
+-- Project: aghtxbvgcazlowpujtjk
+--
+-- `supabase db dump --schema public --data-only=false --file out/v3_live_schema_phase0.sql`
+-- could not complete in this WSL environment.
+--
+-- Blockers observed:
+-- 1. Supabase CLI temp-role authentication failed and then hit the remote pooler auth circuit breaker.
+-- 2. A concurrent dump attempt required Docker, but Docker daemon was not reachable at /var/run/docker.sock.
+--
+-- Schema inventory for Phase 0 was produced through the Supabase project connector instead:
+-- - out/v3_schema_inventory.md
+-- - out/v3_table_counts.md

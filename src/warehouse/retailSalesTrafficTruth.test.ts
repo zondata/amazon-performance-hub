@@ -205,8 +205,8 @@ describe('FT-02 retail Sales and Traffic truth contract', () => {
           endDate: '2026-04-12',
         },
       })
-    ).rejects.toMatchObject<RetailSalesTrafficTruthError>({
+    ).rejects.toMatchObject({
       code: 'invalid_truth_source',
-    });
+    } satisfies Partial<RetailSalesTrafficTruthError>);
   });
 });
