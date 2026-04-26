@@ -307,23 +307,23 @@ Logbook:
 
 ## Checklist
 
-- [ ] Inspect existing bulk/manual upload importers.
-- [ ] Inspect existing Ads API helpers, if any.
-- [ ] Build API-first current settings snapshot puller for SP.
-- [ ] Build manual bulksheet fallback for SP if not already working.
-- [ ] Insert first SP snapshot without logging false changes.
-- [ ] Build SP snapshot diff and automatic ads log insert.
-- [ ] Repeat for SB.
-- [ ] Repeat for SD.
-- [ ] Detect changes for campaign name, state, budget, bidding strategy, portfolio, ad group name, default bid, target expression, keyword text, match type, target bid, negative/positive state, placement modifier, product ad SKU/ASIN, SD tactic, SD cost type, and SD bid optimization.
-- [ ] Ensure every automatic change has `before_json`, `after_json`, `entity_level`, `field_name`, `source`, `dedupe_key`, and linked entities.
-- [ ] Ensure repeated snapshots do not create duplicate logbook rows.
-- [ ] Write snapshot runs to `ads_settings_snapshot_runs`.
-- [ ] Write status rows to `report_data_status` where applicable.
-- [ ] Run standard checks.
-- [ ] Update this plan checklist and `out/v3_build_progress.md`.
-- [ ] Write `out/v3_phase_reports/phase_03_ads_settings_logbook.md`.
-- [ ] Stop and report to Albert. Do not continue to Phase 4.
+- [x] Inspect existing bulk/manual upload importers.
+- [x] Inspect existing Ads API helpers, if any.
+- [x] Verify API-first current settings puller scope for SP. No new Ads API puller was built; Phase 3 uses the existing bulk facts layer per database-only/current no-new-puller scope.
+- [x] Build manual bulksheet fallback for SP if not already working.
+- [x] Insert first SP snapshot without logging false changes.
+- [x] Build SP snapshot diff and automatic ads log insert.
+- [x] Repeat for SB.
+- [x] Repeat for SD.
+- [x] Detect changes for campaign name, state, budget, bidding strategy, portfolio, ad group name, default bid, target expression, keyword text, match type, target bid, negative/positive state, placement modifier, product ad SKU/ASIN, SD tactic, SD cost type, and SD bid optimization.
+- [x] Ensure every automatic change has `before_json`, `after_json`, `entity_level`, `field_name`, `source`, `dedupe_key`, and linked entities.
+- [x] Ensure repeated snapshots do not create duplicate logbook rows.
+- [x] Write snapshot runs to `ads_settings_snapshot_runs`.
+- [x] Write status rows to `report_data_status` where applicable.
+- [x] Run standard checks.
+- [x] Update this plan checklist and `out/v3_build_progress.md`.
+- [x] Write `out/v3_phase_reports/phase_03_ads_settings_logbook.md`.
+- [x] Stop and report to Albert. Do not continue to Phase 4.
 
 ## Phase 3 done criteria
 

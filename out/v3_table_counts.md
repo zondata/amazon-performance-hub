@@ -13,7 +13,7 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | ads_change_set_items | 133 |
 | ads_change_sets | 22 |
 | ads_objective_presets | 0 |
-| ads_settings_snapshot_runs | 0 |
+| ads_settings_snapshot_runs | 6 |
 | api_connections | 0 |
 | api_sync_cursors | 0 |
 | api_sync_runs | 4 |
@@ -50,9 +50,9 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | keyword_group_members | 727 |
 | keyword_group_sets | 5 |
 | keyword_groups | 38 |
-| log_change_entities | 138 |
+| log_change_entities | 149 |
 | log_change_validations | 132 |
-| log_changes | 137 |
+| log_changes | 148 |
 | log_driver_campaign_intents | 1 |
 | log_evaluations | 0 |
 | log_experiment_changes | 0 |
@@ -65,7 +65,7 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | product_profile | 8 |
 | product_skus | 1 |
 | products | 8 |
-| report_data_status | 4 |
+| report_data_status | 7 |
 | sb_ad_group_name_history | 136 |
 | sb_attributed_purchases_daily_fact | 300 |
 | sb_campaign_daily_fact | 19389 |

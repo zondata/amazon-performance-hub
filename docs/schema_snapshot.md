@@ -1,5 +1,5 @@
 # Supabase Schema Snapshot
-Generated: 2026-04-26T12:05:36.695Z
+Generated: 2026-04-26T12:47:17.458Z
 
 ## accounts (BASE TABLE)
 | column | type | nullable |
@@ -753,6 +753,8 @@ Generated: 2026-04-26T12:05:36.695Z
 | source_upload_id | text | YES |
 | created_at | timestamp with time zone | NO |
 | dedupe_key | text | YES |
+| entity_level | text | YES |
+| field_name | text | YES |
 
 ## log_driver_campaign_intents (BASE TABLE)
 | column | type | nullable |
@@ -3855,6 +3857,23 @@ Generated: 2026-04-26T12:05:36.695Z
 | coverage_end | date | YES |
 | snapshot_date | date | YES |
 | row_count | bigint | YES |
+
+## v3_ads_settings_snapshot_rows (VIEW)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | YES |
+| channel | text | YES |
+| snapshot_date | date | YES |
+| entity_level | text | YES |
+| entity_key | text | YES |
+| campaign_id | text | YES |
+| ad_group_id | text | YES |
+| target_id | text | YES |
+| ad_id | text | YES |
+| field_name | text | YES |
+| field_value | text | YES |
+| field_value_json | jsonb | YES |
+| entity_label | text | YES |
 
 ## v_ppc_spend_reconciliation_daily (VIEW)
 | column | type | nullable |
