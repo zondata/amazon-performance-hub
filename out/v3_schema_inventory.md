@@ -10,6 +10,7 @@ Source: Supabase project connector metadata (`public` schema). The Supabase CLI 
 
 - Public base tables found at Phase 0: 105
 - Phase 1 control tables applied remotely: 6
+- Phase 2 Sales & Traffic tables/views applied remotely: `amazon_sales_traffic_timeseries`, `amazon_sales_traffic_timeseries_latest`
 - Remote migrations applied through: `20260215170000`
 - Local migrations after `20260215170000` are not applied remotely.
 - Local invalid migration filename warnings were fixed by removing skipped duplicate files `006a_sp_placement_raw_norm.sql` and `006b_sp_placement_latest_norm.sql`.
@@ -37,6 +38,7 @@ ads_optimizer_target_snapshot
 api_connections
 api_sync_cursors
 api_sync_runs
+amazon_sales_traffic_timeseries
 bulk_ad_groups
 bulk_campaigns
 bulk_placements

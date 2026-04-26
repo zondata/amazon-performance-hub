@@ -1,5 +1,5 @@
 # Supabase Schema Snapshot
-Generated: 2026-03-15T05:33:46.411Z
+Generated: 2026-04-26T12:05:36.695Z
 
 ## accounts (BASE TABLE)
 | column | type | nullable |
@@ -247,6 +247,152 @@ Generated: 2026-03-15T05:33:46.411Z
 | snapshot_payload_json | jsonb | NO |
 | created_at | timestamp with time zone | NO |
 
+## ads_settings_snapshot_runs (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| snapshot_run_id | uuid | NO |
+| sync_run_id | uuid | YES |
+| account_id | text | NO |
+| marketplace | text | NO |
+| channel | text | NO |
+| source_type | text | NO |
+| snapshot_date | date | NO |
+| exported_at | timestamp with time zone | YES |
+| started_at | timestamp with time zone | YES |
+| finished_at | timestamp with time zone | YES |
+| status | text | NO |
+| data_status | text | NO |
+| entities_seen | integer | NO |
+| changes_detected | integer | NO |
+| log_changes_written | integer | NO |
+| source_upload_id | uuid | YES |
+| previous_snapshot_run_id | uuid | YES |
+| summary_json | jsonb | NO |
+| error_message | text | YES |
+| last_refreshed_at | timestamp with time zone | NO |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+
+## amazon_sales_traffic_timeseries (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| sync_run_id | uuid | YES |
+| ingestion_job_id | uuid | YES |
+| source | text | NO |
+| report_type | text | NO |
+| report_id | text | YES |
+| report_family | text | NO |
+| granularity | text | NO |
+| asin_granularity | text | NO |
+| period_start | date | NO |
+| period_end | date | NO |
+| date | date | NO |
+| parent_asin | text | YES |
+| child_asin | text | YES |
+| asin | text | YES |
+| sku | text | YES |
+| ordered_product_sales | numeric | YES |
+| ordered_product_sales_currency | text | YES |
+| b2b_ordered_product_sales | numeric | YES |
+| units_ordered | integer | YES |
+| total_order_items | integer | YES |
+| shipped_product_sales | numeric | YES |
+| shipped_units | integer | YES |
+| refunds | integer | YES |
+| refund_rate | numeric | YES |
+| page_views | integer | YES |
+| sessions | integer | YES |
+| buy_box_percentage | numeric | YES |
+| order_item_session_percentage | numeric | YES |
+| unit_session_percentage | numeric | YES |
+| avg_sales_price_calc | numeric | YES |
+| unit_session_percentage_calc | numeric | YES |
+| data_status | text | NO |
+| is_final | boolean | NO |
+| final_after_at | timestamp with time zone | YES |
+| finalized_at | timestamp with time zone | YES |
+| last_refreshed_at | timestamp with time zone | NO |
+| raw_json | jsonb | NO |
+| source_metadata | jsonb | NO |
+| canonical_record_id | text | NO |
+| source_record_index | integer | NO |
+| exported_at | timestamp with time zone | NO |
+| ingested_at | timestamp with time zone | NO |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+
+## api_connections (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| connection_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| source_type | text | NO |
+| provider | text | NO |
+| connection_name | text | NO |
+| auth_secret_ref | text | YES |
+| status | text | NO |
+| scopes | jsonb | NO |
+| metadata | jsonb | NO |
+| last_verified_at | timestamp with time zone | YES |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+
+## api_sync_cursors (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| cursor_id | uuid | NO |
+| connection_id | uuid | YES |
+| account_id | text | NO |
+| marketplace | text | NO |
+| source_type | text | NO |
+| source_name | text | NO |
+| scope_key | text | NO |
+| cursor_kind | text | NO |
+| cursor_value | text | YES |
+| window_start | timestamp with time zone | YES |
+| window_end | timestamp with time zone | YES |
+| last_sync_run_id | uuid | YES |
+| last_refreshed_at | timestamp with time zone | NO |
+| metadata | jsonb | NO |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+
+## api_sync_runs (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| sync_run_id | uuid | NO |
+| connection_id | uuid | YES |
+| account_id | text | NO |
+| marketplace | text | NO |
+| source_type | text | NO |
+| source_name | text | NO |
+| table_name | text | NO |
+| sync_kind | text | NO |
+| status | text | NO |
+| data_status | text | NO |
+| requested_at | timestamp with time zone | NO |
+| started_at | timestamp with time zone | YES |
+| finished_at | timestamp with time zone | YES |
+| source_window_start | timestamp with time zone | YES |
+| source_window_end | timestamp with time zone | YES |
+| backfill_start | date | YES |
+| backfill_end | date | YES |
+| rows_read | integer | YES |
+| rows_written | integer | YES |
+| rows_failed | integer | YES |
+| error_code | text | YES |
+| error_message | text | YES |
+| request_json | jsonb | NO |
+| result_json | jsonb | NO |
+| raw_json | jsonb | YES |
+| last_refreshed_at | timestamp with time zone | NO |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+
 ## bulk_ad_groups (BASE TABLE)
 | column | type | nullable |
 |---|---|---|
@@ -432,6 +578,30 @@ Generated: 2026-03-15T05:33:46.411Z
 | valid_from | date | NO |
 | valid_to | date | YES |
 
+## data_quality_checks (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| check_id | uuid | NO |
+| sync_run_id | uuid | YES |
+| account_id | text | NO |
+| marketplace | text | NO |
+| table_name | text | NO |
+| check_name | text | NO |
+| check_category | text | NO |
+| status | text | NO |
+| severity | text | NO |
+| checked_at | timestamp with time zone | NO |
+| period_start | date | YES |
+| period_end | date | YES |
+| rows_checked | integer | YES |
+| failing_rows | integer | YES |
+| metric_name | text | YES |
+| expected_json | jsonb | NO |
+| actual_json | jsonb | NO |
+| details_json | jsonb | NO |
+| message | text | YES |
+| created_at | timestamp with time zone | NO |
+
 ## dim_keyword (BASE TABLE)
 | column | type | nullable |
 |---|---|---|
@@ -463,6 +633,50 @@ Generated: 2026-03-15T05:33:46.411Z
 | observed_at | timestamp without time zone | NO |
 | observed_date | date | NO |
 | exported_at | timestamp with time zone | NO |
+
+## import_source_status (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| account_id | text | NO |
+| source_type | text | NO |
+| last_attempted_at | timestamp with time zone | NO |
+| last_original_filename | text | YES |
+| last_upload_id | uuid | YES |
+| ingest_status | text | NO |
+| ingest_row_count | integer | YES |
+| ingest_message | text | YES |
+| map_status | text | NO |
+| map_fact_rows | integer | YES |
+| map_issue_rows | integer | YES |
+| map_message | text | YES |
+| unresolved | boolean | NO |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+
+## ingestion_jobs (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| job_key | text | NO |
+| source_name | text | NO |
+| account_id | text | YES |
+| marketplace | text | YES |
+| requested_at | timestamp with time zone | NO |
+| source_window_start | timestamp with time zone | YES |
+| source_window_end | timestamp with time zone | YES |
+| retrieved_at | timestamp with time zone | YES |
+| started_at | timestamp with time zone | YES |
+| finished_at | timestamp with time zone | YES |
+| processing_status | text | NO |
+| run_kind | text | NO |
+| idempotency_key | text | NO |
+| checksum | text | YES |
+| row_count | integer | YES |
+| error_code | text | YES |
+| error_message | text | YES |
+| metadata | jsonb | NO |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
 
 ## keyword_group_members (BASE TABLE)
 | column | type | nullable |
@@ -707,6 +921,30 @@ Generated: 2026-03-15T05:33:46.411Z
 | title | text | YES |
 | created_at | timestamp with time zone | YES |
 | updated_at | timestamp with time zone | YES |
+
+## report_data_status (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| status_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| table_name | text | NO |
+| source_type | text | NO |
+| source_name | text | NO |
+| scope_key | text | NO |
+| period_start | date | YES |
+| period_end | date | YES |
+| data_status | text | NO |
+| is_final | boolean | NO |
+| final_after_at | timestamp with time zone | YES |
+| finalized_at | timestamp with time zone | YES |
+| last_sync_run_id | uuid | YES |
+| last_refreshed_at | timestamp with time zone | NO |
+| row_count | integer | YES |
+| coverage_json | jsonb | NO |
+| warnings | jsonb | NO |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
 
 ## sb_ad_group_name_history (BASE TABLE)
 | column | type | nullable |
@@ -1404,6 +1642,26 @@ Generated: 2026-03-15T05:33:46.411Z
 | conversion_rate | numeric | YES |
 | exported_at | timestamp with time zone | NO |
 
+## search_terms_market_weekly_raw (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| upload_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| marketplace_id | text | NO |
+| week_start | date | NO |
+| week_end | date | NO |
+| department_name_raw | text | NO |
+| department_name_norm | text | NO |
+| search_term_raw | text | NO |
+| search_term_norm | text | NO |
+| search_frequency_rank | integer | NO |
+| clicked_asin | text | NO |
+| click_share_rank | integer | NO |
+| click_share | numeric | NO |
+| conversion_share | numeric | NO |
+| exported_at | timestamp with time zone | NO |
+
 ## si_sales_trend_daily_raw (BASE TABLE)
 | column | type | nullable |
 |---|---|---|
@@ -1446,6 +1704,26 @@ Generated: 2026-03-15T05:33:46.411Z
 | refund_per_unit | numeric | YES |
 | avg_sales_price | numeric | YES |
 | exported_at | timestamp with time zone | NO |
+
+## source_watermarks (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| source_name | text | NO |
+| account_id | text | YES |
+| marketplace | text | YES |
+| scope_key | text | NO |
+| last_requested_at | timestamp with time zone | YES |
+| last_available_at | timestamp with time zone | YES |
+| last_success_at | timestamp with time zone | YES |
+| last_job_id | uuid | YES |
+| watermark_start | timestamp with time zone | YES |
+| watermark_end | timestamp with time zone | YES |
+| status | text | NO |
+| notes | text | YES |
+| metadata | jsonb | NO |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
 
 ## sp_advertised_product_daily_fact (BASE TABLE)
 | column | type | nullable |
@@ -1770,6 +2048,68 @@ Generated: 2026-03-15T05:33:46.411Z
 | top_of_search_impression_share | numeric | YES |
 | exported_at | timestamp with time zone | NO |
 
+## spapi_sales_and_traffic_by_asin_report_rows (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| ingestion_job_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| report_id | text | NO |
+| report_family | text | NO |
+| report_type | text | NO |
+| section_name | text | NO |
+| canonical_record_id | text | NO |
+| source_record_index | integer | NO |
+| report_window_start | date | NO |
+| report_window_end | date | NO |
+| date | date | YES |
+| asin | text | YES |
+| parent_asin | text | YES |
+| child_asin | text | YES |
+| sku | text | YES |
+| ordered_product_sales_amount | numeric | YES |
+| ordered_product_sales_currency | text | YES |
+| units_ordered | integer | YES |
+| total_order_items | integer | YES |
+| sessions | integer | YES |
+| page_views | integer | YES |
+| buy_box_percentage | numeric | YES |
+| unit_session_percentage | numeric | YES |
+| row_values | jsonb | NO |
+| source_metadata | jsonb | NO |
+| exported_at | timestamp with time zone | NO |
+| ingested_at | timestamp with time zone | NO |
+
+## spapi_sales_and_traffic_by_date_report_rows (BASE TABLE)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| ingestion_job_id | uuid | NO |
+| account_id | text | NO |
+| marketplace | text | NO |
+| report_id | text | NO |
+| report_family | text | NO |
+| report_type | text | NO |
+| section_name | text | NO |
+| canonical_record_id | text | NO |
+| source_record_index | integer | NO |
+| report_window_start | date | NO |
+| report_window_end | date | NO |
+| date | date | NO |
+| ordered_product_sales_amount | numeric | YES |
+| ordered_product_sales_currency | text | YES |
+| units_ordered | integer | YES |
+| total_order_items | integer | YES |
+| sessions | integer | YES |
+| page_views | integer | YES |
+| buy_box_percentage | numeric | YES |
+| unit_session_percentage | numeric | YES |
+| row_values | jsonb | NO |
+| source_metadata | jsonb | NO |
+| exported_at | timestamp with time zone | NO |
+| ingested_at | timestamp with time zone | NO |
+
 ## sqp_weekly_raw (BASE TABLE)
 | column | type | nullable |
 |---|---|---|
@@ -1895,6 +2235,58 @@ Generated: 2026-03-15T05:33:46.411Z
 | orders | bigint | YES |
 | units | bigint | YES |
 | top_of_search_impression_share | numeric | YES |
+
+## amazon_sales_traffic_timeseries_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| sync_run_id | uuid | YES |
+| ingestion_job_id | uuid | YES |
+| source | text | YES |
+| report_type | text | YES |
+| report_id | text | YES |
+| report_family | text | YES |
+| granularity | text | YES |
+| asin_granularity | text | YES |
+| period_start | date | YES |
+| period_end | date | YES |
+| date | date | YES |
+| parent_asin | text | YES |
+| child_asin | text | YES |
+| asin | text | YES |
+| sku | text | YES |
+| ordered_product_sales | numeric | YES |
+| ordered_product_sales_currency | text | YES |
+| b2b_ordered_product_sales | numeric | YES |
+| units_ordered | integer | YES |
+| total_order_items | integer | YES |
+| shipped_product_sales | numeric | YES |
+| shipped_units | integer | YES |
+| refunds | integer | YES |
+| refund_rate | numeric | YES |
+| page_views | integer | YES |
+| sessions | integer | YES |
+| buy_box_percentage | numeric | YES |
+| order_item_session_percentage | numeric | YES |
+| unit_session_percentage | numeric | YES |
+| avg_sales_price_calc | numeric | YES |
+| unit_session_percentage_calc | numeric | YES |
+| data_status | text | YES |
+| is_final | boolean | YES |
+| final_after_at | timestamp with time zone | YES |
+| finalized_at | timestamp with time zone | YES |
+| last_refreshed_at | timestamp with time zone | YES |
+| raw_json | jsonb | YES |
+| source_metadata | jsonb | YES |
+| canonical_record_id | text | YES |
+| source_record_index | integer | YES |
+| exported_at | timestamp with time zone | YES |
+| ingested_at | timestamp with time zone | YES |
+| created_at | timestamp with time zone | YES |
+| updated_at | timestamp with time zone | YES |
+| rn | bigint | YES |
 
 ## bulk_targets_enriched (VIEW)
 | column | type | nullable |
@@ -3005,6 +3397,136 @@ Generated: 2026-03-15T05:33:46.411Z
 | roas | numeric | YES |
 | conversion_rate | numeric | YES |
 | top_of_search_impression_share | numeric | YES |
+| exported_at | timestamp with time zone | YES |
+| ingested_at | timestamp with time zone | YES |
+| rn | bigint | YES |
+
+## spapi_retail_sales_traffic_by_asin_truth (VIEW)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | YES |
+| ingestion_job_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| report_id | text | YES |
+| report_family | text | YES |
+| report_type | text | YES |
+| section_name | text | YES |
+| canonical_record_id | text | YES |
+| source_record_index | integer | YES |
+| report_window_start | date | YES |
+| report_window_end | date | YES |
+| date | date | YES |
+| asin | text | YES |
+| parent_asin | text | YES |
+| child_asin | text | YES |
+| sku | text | YES |
+| ordered_product_sales_amount | numeric | YES |
+| ordered_product_sales_currency | text | YES |
+| units_ordered | integer | YES |
+| total_order_items | integer | YES |
+| sessions | integer | YES |
+| page_views | integer | YES |
+| buy_box_percentage | numeric | YES |
+| unit_session_percentage | numeric | YES |
+| row_values | jsonb | YES |
+| source_metadata | jsonb | YES |
+| exported_at | timestamp with time zone | YES |
+| ingested_at | timestamp with time zone | YES |
+| retail_truth_source | text | YES |
+| legacy_sales_trend_fallback | boolean | YES |
+
+## spapi_retail_sales_traffic_by_date_truth (VIEW)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | YES |
+| ingestion_job_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| report_id | text | YES |
+| report_family | text | YES |
+| report_type | text | YES |
+| section_name | text | YES |
+| canonical_record_id | text | YES |
+| source_record_index | integer | YES |
+| report_window_start | date | YES |
+| report_window_end | date | YES |
+| date | date | YES |
+| ordered_product_sales_amount | numeric | YES |
+| ordered_product_sales_currency | text | YES |
+| units_ordered | integer | YES |
+| total_order_items | integer | YES |
+| sessions | integer | YES |
+| page_views | integer | YES |
+| buy_box_percentage | numeric | YES |
+| unit_session_percentage | numeric | YES |
+| row_values | jsonb | YES |
+| source_metadata | jsonb | YES |
+| exported_at | timestamp with time zone | YES |
+| ingested_at | timestamp with time zone | YES |
+| retail_truth_source | text | YES |
+| legacy_sales_trend_fallback | boolean | YES |
+
+## spapi_sales_and_traffic_by_asin_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | YES |
+| ingestion_job_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| report_id | text | YES |
+| report_family | text | YES |
+| report_type | text | YES |
+| section_name | text | YES |
+| canonical_record_id | text | YES |
+| source_record_index | integer | YES |
+| report_window_start | date | YES |
+| report_window_end | date | YES |
+| date | date | YES |
+| asin | text | YES |
+| parent_asin | text | YES |
+| child_asin | text | YES |
+| sku | text | YES |
+| ordered_product_sales_amount | numeric | YES |
+| ordered_product_sales_currency | text | YES |
+| units_ordered | integer | YES |
+| total_order_items | integer | YES |
+| sessions | integer | YES |
+| page_views | integer | YES |
+| buy_box_percentage | numeric | YES |
+| unit_session_percentage | numeric | YES |
+| row_values | jsonb | YES |
+| source_metadata | jsonb | YES |
+| exported_at | timestamp with time zone | YES |
+| ingested_at | timestamp with time zone | YES |
+| rn | bigint | YES |
+
+## spapi_sales_and_traffic_by_date_latest (VIEW)
+| column | type | nullable |
+|---|---|---|
+| id | uuid | YES |
+| ingestion_job_id | uuid | YES |
+| account_id | text | YES |
+| marketplace | text | YES |
+| report_id | text | YES |
+| report_family | text | YES |
+| report_type | text | YES |
+| section_name | text | YES |
+| canonical_record_id | text | YES |
+| source_record_index | integer | YES |
+| report_window_start | date | YES |
+| report_window_end | date | YES |
+| date | date | YES |
+| ordered_product_sales_amount | numeric | YES |
+| ordered_product_sales_currency | text | YES |
+| units_ordered | integer | YES |
+| total_order_items | integer | YES |
+| sessions | integer | YES |
+| page_views | integer | YES |
+| buy_box_percentage | numeric | YES |
+| unit_session_percentage | numeric | YES |
+| row_values | jsonb | YES |
+| source_metadata | jsonb | YES |
 | exported_at | timestamp with time zone | YES |
 | ingested_at | timestamp with time zone | YES |
 | rn | bigint | YES |

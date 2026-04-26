@@ -1,14 +1,16 @@
--- Phase 1 schema-after-phase dump placeholder
--- Updated: 2026-04-26T19:07:12+08:00
+-- Phase 2 schema-after-phase dump placeholder
+-- Updated: 2026-04-26T20:00:00+08:00
 -- Project: aghtxbvgcazlowpujtjk
 --
 -- `supabase db dump --schema public --data-only=false --file out/v3_schema_after_phase.sql`
 -- could not complete in this WSL environment because the Supabase CLI dump path
 -- requires Docker and the Docker daemon is not reachable at /var/run/docker.sock.
 --
--- Phase 1 remote schema changes were applied through the Supabase connector.
+-- Phase 1 and Phase 2 remote schema changes were applied through the Supabase connector.
 -- The applied Phase 1 migration is:
 -- `supabase/migrations/20260426110000_v3_database_control_layer.sql`
+-- The applied Phase 2 migration is:
+-- `supabase/migrations/20260426123000_v3_amazon_sales_traffic_timeseries.sql`
 --
 -- Verified remote tables:
 -- - public.api_connections
@@ -17,3 +19,5 @@
 -- - public.ads_settings_snapshot_runs
 -- - public.report_data_status
 -- - public.data_quality_checks
+-- - public.amazon_sales_traffic_timeseries
+-- - public.amazon_sales_traffic_timeseries_latest

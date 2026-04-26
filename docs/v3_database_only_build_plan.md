@@ -235,21 +235,21 @@ Required column groups:
 
 ## Checklist
 
-- [ ] Inspect existing code for SP-API auth/report helpers.
-- [ ] Create or update table migration.
-- [ ] Build one-day sample pull for `GET_SALES_AND_TRAFFIC_REPORT`.
-- [ ] Insert/upsert sample rows.
-- [ ] Validate derived metrics.
-- [ ] Validate natural key uniqueness.
-- [ ] Backfill maximum available Sales & Traffic history allowed by Amazon for this report.
-- [ ] Refresh the latest 7–30 days and mark them non-final when appropriate.
-- [ ] Write `report_data_status` rows.
-- [ ] Write `api_sync_runs` and `data_quality_checks`.
-- [ ] Add or update MCP-friendly view for sales traffic if simple and safe.
-- [ ] Run standard checks.
-- [ ] Update this plan checklist and `out/v3_build_progress.md`.
-- [ ] Write `out/v3_phase_reports/phase_02_sales_traffic.md`.
-- [ ] Stop and report to Albert. Do not continue to Phase 3.
+- [x] Inspect existing code for SP-API auth/report helpers.
+- [x] Create or update table migration.
+- [x] Build one-day sample pull for `GET_SALES_AND_TRAFFIC_REPORT`.
+- [x] Insert/upsert sample rows from existing proven SP-API retail warehouse rows.
+- [x] Validate derived metrics.
+- [x] Validate natural key uniqueness.
+- [x] Backfill maximum available Sales & Traffic history allowed by Amazon for this report.
+- [x] Refresh the latest 7–30 days and mark them non-final when appropriate.
+- [x] Write `report_data_status` rows.
+- [x] Write `api_sync_runs` and `data_quality_checks`.
+- [x] Add or update MCP-friendly view for sales traffic if simple and safe.
+- [x] Run standard checks.
+- [x] Update this plan checklist and `out/v3_build_progress.md`.
+- [x] Write `out/v3_phase_reports/phase_02_sales_traffic.md`.
+- [x] Stop and report to Albert. Do not continue to Phase 3.
 
 ## Phase 2 done criteria
 

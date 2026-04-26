@@ -16,7 +16,7 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | ads_settings_snapshot_runs | 0 |
 | api_connections | 0 |
 | api_sync_cursors | 0 |
-| api_sync_runs | 0 |
+| api_sync_runs | 4 |
 | ads_optimizer_manual_overrides | 2 |
 | ads_optimizer_product_settings | 0 |
 | ads_optimizer_product_snapshot | 64 |
@@ -42,7 +42,7 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | bulk_sd_targets | 18834 |
 | bulk_targets | 558337 |
 | campaign_name_history | 1747 |
-| data_quality_checks | 0 |
+| data_quality_checks | 20 |
 | dim_keyword | 424 |
 | h10_keyword_tracker_raw | 190680 |
 | import_source_status | 29 |
@@ -65,7 +65,7 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | product_profile | 8 |
 | product_skus | 1 |
 | products | 8 |
-| report_data_status | 0 |
+| report_data_status | 4 |
 | sb_ad_group_name_history | 136 |
 | sb_attributed_purchases_daily_fact | 300 |
 | sb_campaign_daily_fact | 19389 |
@@ -112,8 +112,9 @@ Source: `pg_stat_user_tables.n_live_tup` through the Supabase project connector.
 | sp_stis_daily_raw | 60695 |
 | sp_targeting_daily_fact | 369641 |
 | sp_targeting_daily_raw | 385497 |
-| spapi_sales_and_traffic_by_asin_report_rows | 4 |
-| spapi_sales_and_traffic_by_date_report_rows | 3 |
+| spapi_sales_and_traffic_by_asin_report_rows | 14 |
+| spapi_sales_and_traffic_by_date_report_rows | 761 |
+| amazon_sales_traffic_timeseries | 771 |
 | sqp_weekly_raw | 38092 |
 | ui_page_settings | 5 |
 | uploads | 1175 |
