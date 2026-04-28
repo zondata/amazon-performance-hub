@@ -912,46 +912,45 @@ const countStepRows = (steps: DailyBatchStepResult[]): number =>
     return sum;
   }, 0);
 
-const markAdsPendingRequestImported = async (
+const markAdsPendingRequestsImported = async (
   pool: Pool,
   options: CliOptions
-): Promise<string | null> => {
+): Promise<string[]> => {
   const result = await pool.query(
     `
-      with candidate as (
-        select id
-        from public.ads_api_report_requests
-        where account_id = $1
-          and marketplace = $2
-          and source_type = 'ads_api_sp_campaign_daily'
-          and start_date = $3::date
-          and end_date = $4::date
-          and status in (
-            'created',
-            'requested',
-            'pending',
-            'polling',
-            'pending_timeout',
-            'completed'
-          )
-        order by updated_at desc
-        limit 1
-      )
       update public.ads_api_report_requests request
       set
         status = 'imported',
         status_details = coalesce(request.status_details, 'imported'),
-        notes = 'Imported into sp_campaign_hourly_fact_gold by the V3 Ads sync batch.',
+        notes = case
+          when request.source_type = 'ads_api_sp_campaign_daily'
+            then 'Imported into sp_campaign_hourly_fact_gold by the V3 Ads sync batch.'
+          when request.source_type = 'ads_api_sp_target_daily'
+            then 'Imported into sp_targeting_daily_fact by the V3 Ads sync batch.'
+          else request.notes
+        end,
         completed_at = coalesce(request.completed_at, now()),
         last_polled_at = coalesce(request.last_polled_at, now())
-      from candidate
-      where request.id = candidate.id
+      where request.account_id = $1
+        and request.marketplace = $2
+        and request.start_date = $3::date
+        and request.end_date = $4::date
+        and request.source_type in ('ads_api_sp_campaign_daily', 'ads_api_sp_target_daily')
+        and request.status in (
+          'created',
+          'requested',
+          'pending',
+          'polling',
+          'pending_timeout',
+          'completed'
+        )
       returning request.report_id::text as report_id
     `,
     [options.accountId, options.marketplace, options.from, options.to]
   );
-  const row = result.rows[0];
-  return row && typeof row.report_id === 'string' ? row.report_id : null;
+  return result.rows
+    .map((row) => (typeof row.report_id === 'string' ? row.report_id : null))
+    .filter((value): value is string => value != null);
 };
 
 const queryCoverageStats = async (
@@ -1545,9 +1544,9 @@ const runAdsSource = async (pool: Pool, options: CliOptions): Promise<{
     throw error;
   }
   const steps = result.steps as JsonValue;
-  const importedReportId = await markAdsPendingRequestImported(pool, options);
-  if (importedReportId) {
-    notes.push(`imported report_id=${importedReportId}`);
+  const importedReportIds = await markAdsPendingRequestsImported(pool, options);
+  if (importedReportIds.length > 0) {
+    notes.push(`imported report_ids=${importedReportIds.join(',')}`);
   }
 
   return {

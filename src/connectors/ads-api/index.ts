@@ -64,8 +64,11 @@ export {
   writeSpCampaignDailyArtifacts,
 } from './spCampaignDaily';
 export {
+  ADS_API_SP_TARGET_DAILY_DIAGNOSTIC_ARTIFACT_PATH,
   ADS_API_SP_TARGET_DAILY_NORMALIZED_ARTIFACT_PATH,
   ADS_API_SP_TARGET_DAILY_RAW_ARTIFACT_PATH,
+  DEFAULT_SP_TARGET_DAILY_MAX_ATTEMPTS,
+  DEFAULT_SP_TARGET_DAILY_POLL_INTERVAL_MS,
   MAX_SP_TARGET_DAILY_WINDOW_DAYS,
   POLLABLE_SP_TARGET_DAILY_STATUSES,
   TERMINAL_SP_TARGET_DAILY_FAILURE_STATUSES,
@@ -82,6 +85,7 @@ export {
   parseSpTargetDailyReportMetadata,
   requestSpTargetDailyReport,
   runSpTargetDailyPull,
+  type SpTargetDailyPendingRequestStore,
   validateProfileSyncArtifactForSpTargetDaily,
   writeSpTargetDailyArtifacts,
 } from './spTargetDaily';

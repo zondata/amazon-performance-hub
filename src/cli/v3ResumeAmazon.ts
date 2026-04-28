@@ -187,6 +187,7 @@ const listPendingRequests = async (
   const result = await pool.query(
     `
       select
+        distinct on (start_date, end_date)
         id::text as id,
         report_id::text as report_id,
         status::text as status,
@@ -200,9 +201,9 @@ const listPendingRequests = async (
       from public.ads_api_report_requests
       where account_id = $1
         and marketplace = $2
-        and source_type = 'ads_api_sp_campaign_daily'
+        and source_type in ('ads_api_sp_campaign_daily', 'ads_api_sp_target_daily')
         and status = any($3::text[])
-      order by start_date asc, updated_at asc
+      order by start_date asc, end_date asc, updated_at desc
     `,
     [args.accountId, args.marketplace, [...ACTIVE_PENDING_REQUEST_STATUSES]]
   );
