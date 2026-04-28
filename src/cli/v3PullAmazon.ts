@@ -58,6 +58,7 @@ interface CliOptions {
   finality: string | null;
   force: boolean;
   preset: PullPreset | null;
+  diagnose: boolean;
 }
 
 interface SyncRunRecordInput {
@@ -127,8 +128,16 @@ interface SourceRunResult {
 interface CommandResult {
   command: string;
   args: string[];
+  exitCode: number;
+  status: 'failed' | 'success' | 'timed_out';
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
   stdout: string;
   stderr: string;
+  stdoutTail: string[];
+  stderrTail: string[];
+  errorMessage: string | null;
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -474,6 +483,15 @@ const parseNumberLine = (text: string, label: string): number | null => {
   return Number.isFinite(value) ? value : null;
 };
 
+const redactSensitiveText = (value: string): string =>
+  value
+    .replace(
+      /((?:access|refresh|client|service[_-]?role)[_-]?token["'=:\s]+)([^\s'",]+)/gi,
+      '$1[REDACTED]'
+    )
+    .replace(/(authorization:\s*bearer\s+)([^\s]+)/gi, '$1[REDACTED]')
+    .replace(/("?(?:secret|password)"?\s*[:=]\s*")([^"]+)(")/gi, '$1[REDACTED]$3');
+
 const normalizeSources = (raw: string | null): PullSource[] => {
   if (!raw || raw === 'all') {
     return [...SOURCES];
@@ -564,6 +582,7 @@ export function parseV3PullAmazonArgs(argv: string[]): CliOptions {
   let finality: string | null = null;
   let force = false;
   let preset: PullPreset | null = null;
+  let diagnose = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -647,6 +666,10 @@ export function parseV3PullAmazonArgs(argv: string[]): CliOptions {
       force = true;
       continue;
     }
+    if (arg === '--diagnose') {
+      diagnose = true;
+      continue;
+    }
     if (arg === '--preset') {
       preset = readFlagValue(argv, index, arg) as PullPreset;
       index += 1;
@@ -703,6 +726,7 @@ export function parseV3PullAmazonArgs(argv: string[]): CliOptions {
     finality: readTrimmed(finality),
     force,
     preset: normalizedPreset,
+    diagnose,
   };
 }
 
@@ -727,6 +751,7 @@ const runCommand = async (
   env: NodeJS.ProcessEnv
 ): Promise<CommandResult> =>
   new Promise((resolve, reject) => {
+    const startedAt = new Date().toISOString();
     const child = spawn(command, args, {
       cwd: process.cwd(),
       env,
@@ -734,29 +759,82 @@ const runCommand = async (
     });
     let stdout = '';
     let stderr = '';
+    let finished = false;
+    const timeoutMs = 30 * 60 * 1000;
+    const streamOutput = optionsShouldStream();
+    const timer = setTimeout(() => {
+      if (finished) return;
+      child.kill('SIGTERM');
+    }, timeoutMs);
+
+    const appendChunk = (
+      streamName: 'stderr' | 'stdout',
+      chunk: string
+    ): void => {
+      const safeChunk = redactSensitiveText(chunk);
+      if (streamName === 'stdout') {
+        stdout += safeChunk;
+        if (streamOutput) process.stdout.write(safeChunk);
+      } else {
+        stderr += safeChunk;
+        if (streamOutput) process.stderr.write(safeChunk);
+      }
+    };
+
     child.stdout.on('data', (chunk) => {
-      stdout += String(chunk);
+      appendChunk('stdout', String(chunk));
     });
     child.stderr.on('data', (chunk) => {
-      stderr += String(chunk);
+      appendChunk('stderr', String(chunk));
     });
-    child.on('error', reject);
-    child.on('close', (code) => {
-      const result = { command, args, stdout, stderr };
-      if (code === 0) {
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on('close', (code, signal) => {
+      finished = true;
+      clearTimeout(timer);
+      const finishedAt = new Date().toISOString();
+      const durationMs =
+        new Date(finishedAt).getTime() - new Date(startedAt).getTime();
+      const timedOut = signal === 'SIGTERM' && code === null;
+      const result: CommandResult = {
+        command,
+        args,
+        exitCode: code ?? 1,
+        status: timedOut ? 'timed_out' : code === 0 ? 'success' : 'failed',
+        startedAt,
+        finishedAt,
+        durationMs,
+        stdout,
+        stderr,
+        stdoutTail: tailLines(stdout, 200),
+        stderrTail: tailLines(stderr, 200),
+        errorMessage:
+          timedOut
+            ? `${[command, ...args].join(' ')} timed out after ${timeoutMs}ms`
+            : code === 0
+            ? null
+            : `${[command, ...args].join(' ')} exited with code ${code}`,
+      };
+      if (code === 0 && !timedOut) {
         resolve(result);
         return;
       }
       reject(
         new Error(
-          `${[command, ...args].join(' ')} exited with code ${code}\n${tailLines(
-            stderr || stdout,
-            12
-          ).join('\n')}`
+          [
+            result.errorMessage ?? 'Command failed.',
+            `stdout tail: ${result.stdoutTail.join(' || ') || 'none'}`,
+            `stderr tail: ${result.stderrTail.join(' || ') || 'none'}`,
+            `duration_ms: ${result.durationMs}`,
+          ].join('\n')
         )
       );
     });
   });
+
+const optionsShouldStream = (): boolean => process.env.GITHUB_ACTIONS === 'true';
 
 const runNpmScript = async (
   scriptName: string,
@@ -768,6 +846,7 @@ const buildProcessEnv = (options: CliOptions): NodeJS.ProcessEnv => ({
   ...process.env,
   APP_ACCOUNT_ID: options.accountId,
   APP_MARKETPLACE: options.marketplace,
+  V3_PULL_AMAZON_DIAGNOSE: options.diagnose ? '1' : '0',
 });
 
 const requireDatabaseUrl = (): string => {
@@ -1383,7 +1462,10 @@ const runAdsSource = async (options: CliOptions): Promise<{
     startDate: options.from,
     endDate: options.to,
   };
-  const result = await runRealAdsDailyBatch(request);
+  const result = await runRealAdsDailyBatch(request, {
+    diagnose: options.diagnose,
+    timeoutMs: 30 * 60 * 1000,
+  });
   const steps = result.steps as JsonValue;
 
   return {
@@ -1643,6 +1725,95 @@ const executeSource = async (pool: Pool, options: CliOptions, source: PullSource
   return runSettingsSource(pool, options);
 };
 
+const describeCommandFailure = (details: Record<string, unknown>): string => {
+  const command =
+    typeof details.command === 'string' ? details.command : 'unknown command';
+  const exitCode =
+    typeof details.exit_code === 'number' || typeof details.exit_code === 'string'
+      ? String(details.exit_code)
+      : 'unknown';
+  const durationMs =
+    typeof details.duration_ms === 'number' || typeof details.duration_ms === 'string'
+      ? String(details.duration_ms)
+      : 'unknown';
+  return `${command} failed (exit=${exitCode}, duration_ms=${durationMs})`;
+};
+
+const toFailureDetails = (error: unknown): {
+  blockers: string[];
+  warnings: string[];
+  notes: string[];
+  details: JsonObject;
+} => {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    const maybeError = error as {
+      code?: unknown;
+      message: string;
+      metadata?: unknown;
+      steps?: unknown;
+    };
+    const metadata =
+      typeof maybeError.metadata === 'object' && maybeError.metadata !== null
+        ? (maybeError.metadata as Record<string, unknown>)
+        : null;
+    const stderrTail = Array.isArray(metadata?.stderr_tail)
+      ? metadata.stderr_tail
+          .filter((value): value is string => typeof value === 'string')
+          .slice(-5)
+      : [];
+    const stdoutTail = Array.isArray(metadata?.stdout_tail)
+      ? metadata.stdout_tail
+          .filter((value): value is string => typeof value === 'string')
+          .slice(-5)
+      : [];
+
+    const blockers = [maybeError.message];
+    if (metadata?.command) {
+      blockers.push(describeCommandFailure(metadata));
+    }
+
+    const notes: string[] = [];
+    if (stderrTail.length > 0) {
+      notes.push(`stderr tail: ${stderrTail.join(' | ')}`);
+    }
+    if (stdoutTail.length > 0) {
+      notes.push(`stdout tail: ${stdoutTail.join(' | ')}`);
+    }
+
+    return {
+      blockers,
+      warnings: [],
+      notes,
+      details: {
+        error_code:
+          typeof maybeError.code === 'string' ? maybeError.code : 'source_failed',
+        error_message: maybeError.message,
+        error_metadata: (metadata ?? {}) as JsonValue,
+        error_steps:
+          Array.isArray(maybeError.steps) || typeof maybeError.steps === 'object'
+            ? ((maybeError.steps ?? []) as JsonValue)
+            : [],
+      },
+    };
+  }
+
+  const message = error instanceof Error ? error.message : 'Unknown source failure';
+  return {
+    blockers: [message],
+    warnings: [],
+    notes: [],
+    details: {
+      error_code: 'source_failed',
+      error_message: message,
+    },
+  };
+};
+
 const coverageNotes = (sourceResult: SourceRunResult, spec: CoverageSpec): string | null => {
   const parts = [...sourceResult.blockers, ...sourceResult.warnings, ...sourceResult.notes];
   if (parts.length === 0) return null;
@@ -1791,6 +1962,7 @@ const printSummary = (results: SourceRunResult[]): void => {
         `latest=${result.latestAvailableDate ?? 'n/a'}`,
         `missing=${result.missingRanges.length > 0 ? result.missingRanges.join('; ') : 'none'}`,
         `blockers=${result.blockers.length > 0 ? result.blockers.join(' | ') : 'none'}`,
+        `notes=${result.notes.length > 0 ? result.notes.join(' | ') : 'none'}`,
       ].join(' | ')
     );
   }
@@ -1821,12 +1993,13 @@ async function main(): Promise<void> {
     sourceWindowEnd: requestedWindow.end,
     backfillStart: options.mode === 'backfill' ? options.from : null,
     backfillEnd: options.mode === 'backfill' ? options.to : null,
-    requestJson: {
-      mode: options.mode,
-      dry_run: options.dryRun,
-      from: options.from,
-      to: options.to,
-      sources: options.sources,
+      requestJson: {
+        mode: options.mode,
+        dry_run: options.dryRun,
+        diagnose: options.diagnose,
+        from: options.from,
+        to: options.to,
+        sources: options.sources,
       preset: options.preset,
       recent_days: options.recentDays,
       finality: options.finality,
@@ -1866,7 +2039,54 @@ async function main(): Promise<void> {
       const missingEnv = collectMissingEnv(sourceEnvMap[source]);
       let result: SourceRunResult;
 
-      if (missingEnv.length > 0) {
+      try {
+        if (missingEnv.length > 0) {
+          const finishedAt = new Date().toISOString();
+          result = {
+            source,
+            sourceType:
+              source === 'settings' ? 'bulk_snapshot' : source === 'ads' ? 'ads_api' : 'sp_api',
+            sourceName: source,
+            syncRunId: childRunId,
+            status: 'blocked',
+            rowsRead: 0,
+            rowsWritten: 0,
+            latestAvailableDate: null,
+            missingRanges: [`${options.from} -> ${options.to}`],
+            blockers: [`Missing required environment variables: ${missingEnv.join(', ')}`],
+            warnings: [],
+            notes: [],
+            details: {},
+          };
+          await updateSyncRun(pool, childRunId, {
+            status: 'failed',
+            dataStatus: 'failed',
+            finishedAt,
+            rowsRead: 0,
+            rowsWritten: 0,
+            rowsFailed: 0,
+            errorCode: 'missing_env',
+            errorMessage: result.blockers[0],
+            resultJson: {
+              parent_sync_run_id: parentSyncRunId,
+              source,
+              status: result.status,
+              blockers: result.blockers,
+            },
+            lastRefreshedAt: finishedAt,
+          });
+          await refreshCoverageForSource(pool, options, result, finishedAt);
+          results.push(result);
+          continue;
+        }
+
+        if (source === 'ads') {
+          loadAdsApiEnvForProfileSync(buildProcessEnv(options));
+        } else if (source === 'sales' || source === 'sqp') {
+          loadSpApiEnv(buildProcessEnv(options));
+        }
+
+        const executed = await executeSource(pool, options, source);
         const finishedAt = new Date().toISOString();
         result = {
           source,
@@ -1874,79 +2094,83 @@ async function main(): Promise<void> {
             source === 'settings' ? 'bulk_snapshot' : source === 'ads' ? 'ads_api' : 'sp_api',
           sourceName: source,
           syncRunId: childRunId,
-          status: 'blocked',
-          rowsRead: 0,
-          rowsWritten: 0,
-          latestAvailableDate: null,
-          missingRanges: [`${options.from} -> ${options.to}`],
-          blockers: [`Missing required environment variables: ${missingEnv.join(', ')}`],
-          warnings: [],
-          notes: [],
-          details: {},
+          ...executed,
         };
+        const dataStatus = deriveDataStatus({
+          sourceStatus: result.status,
+          latestDate: result.latestAvailableDate,
+          finality: options.finality,
+        });
         await updateSyncRun(pool, childRunId, {
-          status: 'failed',
-          dataStatus: 'failed',
+          status:
+            result.status === 'failed' || result.status === 'blocked'
+              ? 'failed'
+              : result.status === 'skipped'
+              ? 'skipped'
+              : 'succeeded',
+          dataStatus,
           finishedAt,
-          rowsRead: 0,
-          rowsWritten: 0,
+          rowsRead: result.rowsRead,
+          rowsWritten: result.rowsWritten,
           rowsFailed: 0,
-          errorCode: 'missing_env',
-          errorMessage: result.blockers[0],
+          errorCode:
+            result.status === 'failed' || result.status === 'blocked'
+              ? 'source_blocked'
+              : null,
+          errorMessage:
+            result.status === 'failed' || result.status === 'blocked'
+              ? result.blockers.join(' | ')
+              : null,
           resultJson: {
             parent_sync_run_id: parentSyncRunId,
             source,
             status: result.status,
+            latest_available_date: result.latestAvailableDate,
+            missing_ranges: result.missingRanges,
             blockers: result.blockers,
+            warnings: result.warnings,
+            notes: result.notes,
+            details: result.details,
+          },
+          rawJson: {
+            source_details: result.details,
           },
           lastRefreshedAt: finishedAt,
         });
         await refreshCoverageForSource(pool, options, result, finishedAt);
         results.push(result);
         continue;
-      }
-
-      if (source === 'ads') {
-        loadAdsApiEnvForProfileSync(buildProcessEnv(options));
-      } else if (source === 'sales' || source === 'sqp') {
-        loadSpApiEnv(buildProcessEnv(options));
-      }
-
-      const executed = await executeSource(pool, options, source);
+      } catch (error) {
       const finishedAt = new Date().toISOString();
-      result = {
+      const failure = toFailureDetails(error);
+      const result: SourceRunResult = {
         source,
         sourceType:
           source === 'settings' ? 'bulk_snapshot' : source === 'ads' ? 'ads_api' : 'sp_api',
         sourceName: source,
         syncRunId: childRunId,
-        ...executed,
+        status: 'failed',
+        rowsRead: 0,
+        rowsWritten: 0,
+        latestAvailableDate: null,
+        missingRanges: [`${options.from} -> ${options.to}`],
+        blockers: failure.blockers,
+        warnings: failure.warnings,
+        notes: failure.notes,
+        details: failure.details,
       };
-      const dataStatus = deriveDataStatus({
-        sourceStatus: result.status,
-        latestDate: result.latestAvailableDate,
-        finality: options.finality,
-      });
       await updateSyncRun(pool, childRunId, {
-        status:
-          result.status === 'failed' || result.status === 'blocked'
-            ? 'failed'
-            : result.status === 'skipped'
-            ? 'skipped'
-            : 'succeeded',
-        dataStatus,
+        status: 'failed',
+        dataStatus: 'failed',
         finishedAt,
-        rowsRead: result.rowsRead,
-        rowsWritten: result.rowsWritten,
+        rowsRead: 0,
+        rowsWritten: 0,
         rowsFailed: 0,
         errorCode:
-          result.status === 'failed' || result.status === 'blocked'
-            ? 'source_blocked'
-            : null,
-        errorMessage:
-          result.status === 'failed' || result.status === 'blocked'
-            ? result.blockers.join(' | ')
-            : null,
+          typeof failure.details.error_code === 'string'
+            ? failure.details.error_code
+            : 'source_failed',
+        errorMessage: result.blockers.join(' | '),
         resultJson: {
           parent_sync_run_id: parentSyncRunId,
           source,
@@ -1965,6 +2189,7 @@ async function main(): Promise<void> {
       });
       await refreshCoverageForSource(pool, options, result, finishedAt);
       results.push(result);
+      }
     }
 
     const successCount = results.filter((result) =>

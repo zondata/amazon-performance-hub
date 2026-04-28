@@ -31,6 +31,14 @@ What each command does:
 - `v3:pull:sales`: Sales & Traffic-only sync wrapper.
 - `v3:pull:sqp`: SQP weekly/monthly-only sync wrapper.
 
+Ads diagnostics:
+
+```bash
+npm run v3:pull:amazon -- --account-id sourbear --marketplace US --sources ads --mode manual --from YYYY-MM-DD --to YYYY-MM-DD --diagnose
+```
+
+- `--diagnose` keeps the sync in the normal Phase 9 path, but streams child Ads command stdout/stderr and preserves command tails in the final failure report.
+
 ## GitHub Actions manual run
 
 Workflow path:
@@ -98,6 +106,7 @@ order by source_type, table_name, granularity;
 - Local WSL runs: check `.env.local`.
 - GitHub Actions runs: check repository secrets by name.
 - Missing secret failures should show the missing secret name only, never its value.
+- Ads failures: rerun with `--diagnose` to stream the underlying `adsapi:*` command output and capture stdout/stderr tails in the final error summary.
 
 ## Safety
 

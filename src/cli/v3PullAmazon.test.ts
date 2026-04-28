@@ -45,6 +45,22 @@ describe('parseV3PullAmazonArgs', () => {
     expect(args.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
+  it('parses diagnose mode without changing the selected sync mode', () => {
+    const args = parseV3PullAmazonArgs([
+      '--account-id=sourbear',
+      '--marketplace=US',
+      '--from=2026-04-21',
+      '--to=2026-04-21',
+      '--sources=ads',
+      '--mode=manual',
+      '--diagnose',
+    ]);
+
+    expect(args.sources).toEqual(['ads']);
+    expect(args.mode).toBe('manual');
+    expect(args.diagnose).toBe(true);
+  });
+
   it('rejects unsupported sources', () => {
     expect(() =>
       parseV3PullAmazonArgs([
@@ -73,6 +89,7 @@ describe('v3-amazon-data-sync workflow', () => {
     expect(workflow).toContain('workflow_dispatch:');
     expect(workflow).toContain('schedule:');
     expect(workflow).toContain('npm run v3:pull:amazon --');
+    expect(workflow).toContain('--sources');
   });
 
   it('references secrets by name instead of hardcoding values', () => {
@@ -84,6 +101,7 @@ describe('v3-amazon-data-sync workflow', () => {
     expect(workflow).toContain('${{ secrets.SP_API_LWA_CLIENT_SECRET }}');
     expect(workflow).not.toMatch(/advertising-api\.amazon\.com\/v\d/);
     expect(runbook).toContain('`.env.local` must never be committed.');
+    expect(runbook).toContain('--diagnose');
     expect(runbook).not.toMatch(/client_secret=/i);
     expect(runbook).not.toMatch(/refresh_token=/i);
   });
