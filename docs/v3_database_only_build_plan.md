@@ -29,6 +29,11 @@ The system will:
 
 This build will not build a full dashboard, optimizer, recommendation engine, or complex UI. The priority is a fast, clean, reliable database.
 
+V3 governance note:
+
+- Before implementing ideas beyond the active approved phase, check `docs/V3_IDEAS_AND_OPERATOR_NOTES.md`.
+- If an idea may drift from the approved V3 core system, record it there first unless Albert explicitly approves immediate implementation.
+
 ## 1. Global Codex Operating Rules
 
 Codex must follow these rules for every phase.

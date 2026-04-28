@@ -15,6 +15,7 @@ Generated: 2026-04-26T18:47:08+08:00
 | Phase 6 - Helium 10 Keyword Ranking | Not started | Not part of Phase 0. |
 | Phase 7 - Manual Non-Ads Logbook | Not started | Not part of Phase 0. |
 | Phase 8 - MCP Views and Cleanup | Not started | No cleanup/drop actions allowed before Phase 8. |
+| Phase 9 - Amazon Data Sync Automation | Complete with explicit partial-source blockers | Unified V3 sync CLI, coverage table/view, GitHub Actions workflow, runbook, and Phase 9 reports added. Sales automation verified live, ads dry-run verified, unsupported SB/SD/SP subpaths recorded as blocked instead of faking success. |
 
 ## Phase 0 Checklist
 
@@ -258,6 +259,37 @@ Generated: 2026-04-26T18:47:08+08:00
 - `v_mcp_sqp_monthly`: `304` rows.
 - `v_mcp_h10_keyword_rankings`: `21,140` rows.
 - `v_mcp_ads_change_logbook`: `148` rows.
+
+## Phase 9 Checklist
+
+- [x] Confirmed `.env.local` exists and is ignored by Git.
+- [x] Confirmed `.env.local` is not tracked.
+- [x] Wrote `out/v3_phase9_env_check.md` without secret values.
+- [x] Created migration `supabase/migrations/20260428110000_v3_data_coverage_status.sql`.
+- [x] Applied the Phase 9 coverage migration directly to the linked database through `psql` and `DATABASE_URL`.
+- [x] Created `data_coverage_status`.
+- [x] Created `v_mcp_data_coverage_status`.
+- [x] Added unified manual CLI `src/cli/v3PullAmazon.ts`.
+- [x] Added package scripts `v3:pull:amazon`, `v3:pull:today`, `v3:pull:recent`, `v3:pull:ads`, `v3:pull:sales`, `v3:pull:sqp`.
+- [x] Added GitHub Actions workflow `.github/workflows/v3-amazon-data-sync.yml`.
+- [x] Added runbook `docs/V3_AMAZON_DATA_SYNC_RUNBOOK.md`.
+- [x] Ran required manual sales one-day live test.
+- [x] Ran required ads dry-run test.
+- [x] Ran required recent sales dry-run test and fixed the dry-run exit-code bug it exposed.
+- [x] Verified coverage rows exist after Phase 9 runs.
+- [x] Ran `git diff --check`, `npm run build`, and `npm test`.
+- [x] Wrote Phase 9 reports in `out/`.
+
+## Phase 9 Verification
+
+- local env-name verification passed for Ads API, SP-API, `DATABASE_URL`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`.
+- local `.env.local` still lacks `APP_ACCOUNT_ID` and `APP_MARKETPLACE`; the new CLI accepts CLI args for those values and the GitHub workflow expects them from inputs or secrets.
+- required manual test commands completed with final exit code `0`.
+- `data_coverage_status` now contains Phase 9 rows for `sourbear` / `US`, including:
+  - `amazon_sales_traffic_timeseries`: `success`, `delayed_expected`
+  - `sp_campaign_hourly_fact_gold`: `partial`, `stale`
+  - `sp_targeting_daily_fact`: `partial`, `stale`
+  - unsupported SP/SB/SD tables: explicit `blocked` coverage rows
 - `v_mcp_non_ads_change_logbook`: `3` rows.
 - `v_mcp_data_freshness`: `38` rows after Phase 8 status rows.
 - Secret-column scan returned `0` findings.
