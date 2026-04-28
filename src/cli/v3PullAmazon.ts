@@ -61,6 +61,7 @@ interface CliOptions {
   preset: PullPreset | null;
   diagnose: boolean;
   resumePending: boolean;
+  softPendingExit: boolean;
 }
 
 interface SyncRunRecordInput {
@@ -586,6 +587,7 @@ export function parseV3PullAmazonArgs(argv: string[]): CliOptions {
   let preset: PullPreset | null = null;
   let diagnose = false;
   let resumePending = false;
+  let softPendingExit = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -677,6 +679,10 @@ export function parseV3PullAmazonArgs(argv: string[]): CliOptions {
       resumePending = true;
       continue;
     }
+    if (arg === '--soft-pending-exit') {
+      softPendingExit = true;
+      continue;
+    }
     if (arg === '--preset') {
       preset = readFlagValue(argv, index, arg) as PullPreset;
       index += 1;
@@ -735,6 +741,7 @@ export function parseV3PullAmazonArgs(argv: string[]): CliOptions {
     preset: normalizedPreset,
     diagnose,
     resumePending,
+    softPendingExit,
   };
 }
 
@@ -856,6 +863,7 @@ const buildProcessEnv = (options: CliOptions): NodeJS.ProcessEnv => ({
   APP_MARKETPLACE: options.marketplace,
   V3_PULL_AMAZON_DIAGNOSE: options.diagnose ? '1' : '0',
   V3_PULL_AMAZON_RESUME_PENDING: options.resumePending ? '1' : '0',
+  V3_PULL_AMAZON_SOFT_PENDING_EXIT: options.softPendingExit ? '1' : '0',
 });
 
 const requireDatabaseUrl = (): string => {
@@ -903,6 +911,48 @@ const countStepRows = (steps: DailyBatchStepResult[]): number =>
     }
     return sum;
   }, 0);
+
+const markAdsPendingRequestImported = async (
+  pool: Pool,
+  options: CliOptions
+): Promise<string | null> => {
+  const result = await pool.query(
+    `
+      with candidate as (
+        select id
+        from public.ads_api_report_requests
+        where account_id = $1
+          and marketplace = $2
+          and source_type = 'ads_api_sp_campaign_daily'
+          and start_date = $3::date
+          and end_date = $4::date
+          and status in (
+            'created',
+            'requested',
+            'pending',
+            'polling',
+            'pending_timeout',
+            'completed'
+          )
+        order by updated_at desc
+        limit 1
+      )
+      update public.ads_api_report_requests request
+      set
+        status = 'imported',
+        status_details = coalesce(request.status_details, 'imported'),
+        notes = 'Imported into sp_campaign_hourly_fact_gold by the V3 Ads sync batch.',
+        completed_at = coalesce(request.completed_at, now()),
+        last_polled_at = coalesce(request.last_polled_at, now())
+      from candidate
+      where request.id = candidate.id
+      returning request.report_id::text as report_id
+    `,
+    [options.accountId, options.marketplace, options.from, options.to]
+  );
+  const row = result.rows[0];
+  return row && typeof row.report_id === 'string' ? row.report_id : null;
+};
 
 const queryCoverageStats = async (
   pool: Pool,
@@ -1427,7 +1477,7 @@ const runSalesSource = async (options: CliOptions): Promise<{
   };
 };
 
-const runAdsSource = async (options: CliOptions): Promise<{
+const runAdsSource = async (pool: Pool, options: CliOptions): Promise<{
   status: SourceResultStatus;
   rowsRead: number | null;
   rowsWritten: number | null;
@@ -1495,6 +1545,10 @@ const runAdsSource = async (options: CliOptions): Promise<{
     throw error;
   }
   const steps = result.steps as JsonValue;
+  const importedReportId = await markAdsPendingRequestImported(pool, options);
+  if (importedReportId) {
+    notes.push(`imported report_id=${importedReportId}`);
+  }
 
   return {
     status: warnings.length > 0 ? 'partial' : 'success',
@@ -1549,12 +1603,12 @@ export const classifyAdsPendingFailure = (
   const diagnosticPath =
     combinedText.match(/Diagnostic artifact path:\s*(.+)$/m)?.[1]?.trim() ?? null;
   const nextAction =
-    options.mode === 'scheduled'
+    options.mode === 'scheduled' || options.softPendingExit
       ? 'Amazon still has the Ads report pending. Let the next scheduled run poll the saved report id, or rerun manually with --resume-pending.'
       : 'Rerun the same request with --resume-pending to continue polling the saved report id instead of creating a duplicate report.';
 
   return {
-    status: options.mode === 'scheduled' ? 'pending' : 'blocked',
+    status: options.mode === 'scheduled' || options.softPendingExit ? 'pending' : 'blocked',
     rowsRead: 0,
     rowsWritten: 0,
     latestAvailableDate: null,
@@ -1818,7 +1872,7 @@ const executeSource = async (pool: Pool, options: CliOptions, source: PullSource
     return runSalesSource(options);
   }
   if (source === 'ads') {
-    return runAdsSource(options);
+    return runAdsSource(pool, options);
   }
   if (source === 'sqp') {
     return runSqpSource(pool, options);
@@ -2099,6 +2153,7 @@ async function main(): Promise<void> {
         dry_run: options.dryRun,
         diagnose: options.diagnose,
         resume_pending: options.resumePending,
+        soft_pending_exit: options.softPendingExit,
         from: options.from,
         to: options.to,
         sources: options.sources,
@@ -2134,6 +2189,7 @@ async function main(): Promise<void> {
           mode: options.mode,
           source,
           resume_pending: options.resumePending,
+          soft_pending_exit: options.softPendingExit,
           source_required_env: sourceEnvMap[source],
         },
         resultJson: {},
@@ -2304,7 +2360,7 @@ async function main(): Promise<void> {
     }
 
     const toleratedStatuses: SourceResultStatus[] =
-      options.mode === 'scheduled'
+      options.mode === 'scheduled' || options.softPendingExit
         ? ['success', 'partial', 'skipped', 'pending']
         : ['success', 'partial', 'skipped'];
     const successCount = results.filter((result) =>

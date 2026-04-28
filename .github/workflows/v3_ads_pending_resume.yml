@@ -1,0 +1,79 @@
+name: V3 Ads Pending Resume
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+    inputs:
+      account_id:
+        description: Account slug
+        required: false
+        default: ''
+        type: string
+      marketplace:
+        description: Marketplace code
+        required: false
+        default: ''
+        type: string
+      max_pending_age_hours:
+        description: Maximum pending age before expiring the saved report id
+        required: false
+        default: '72'
+        type: string
+
+concurrency:
+  group: v3-ads-sync-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && inputs.account_id || secrets.APP_ACCOUNT_ID }}-${{ github.event_name == 'workflow_dispatch' && inputs.marketplace || secrets.APP_MARKETPLACE }}
+  cancel-in-progress: false
+
+jobs:
+  resume-pending:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      AMAZON_ADS_CLIENT_ID: ${{ secrets.AMAZON_ADS_CLIENT_ID }}
+      AMAZON_ADS_CLIENT_SECRET: ${{ secrets.AMAZON_ADS_CLIENT_SECRET }}
+      AMAZON_ADS_REFRESH_TOKEN: ${{ secrets.AMAZON_ADS_REFRESH_TOKEN }}
+      AMAZON_ADS_API_BASE_URL: ${{ secrets.AMAZON_ADS_API_BASE_URL }}
+      AMAZON_ADS_PROFILE_ID: ${{ secrets.AMAZON_ADS_PROFILE_ID }}
+      ADS_API_REPORT_MAX_ATTEMPTS: '240'
+      ADS_API_REPORT_POLL_INTERVAL_MS: '5000'
+      ADS_API_MAX_PENDING_AGE_HOURS: ${{ github.event_name == 'workflow_dispatch' && inputs.max_pending_age_hours || '72' }}
+      APP_ACCOUNT_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.account_id || secrets.APP_ACCOUNT_ID }}
+      APP_MARKETPLACE: ${{ github.event_name == 'workflow_dispatch' && inputs.marketplace || secrets.APP_MARKETPLACE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Resume pending Ads reports
+        run: >
+          npm run v3:resume:amazon --
+          --account-id "${APP_ACCOUNT_ID}"
+          --marketplace "${APP_MARKETPLACE}"
+          --mode scheduled
+          --max-pending-age-hours "${ADS_API_MAX_PENDING_AGE_HOURS}"
+          --soft-pending-exit
+
+      - name: Check Ads freshness
+        run: >
+          npm run v3:check:ads-freshness --
+          --account-id "${APP_ACCOUNT_ID}"
+          --marketplace "${APP_MARKETPLACE}"
+          --max-pending-age-hours "${ADS_API_MAX_PENDING_AGE_HOURS}"
+
+      - name: Upload out artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v3-ads-pending-resume-out
+          path: out/
+          if-no-files-found: ignore

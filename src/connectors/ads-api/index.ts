@@ -57,6 +57,7 @@ export {
   requestSpCampaignDailyReport,
   runSpCampaignDailyPull,
   type SpCampaignDailyPendingRequestRecord,
+  type SpCampaignDailyPendingRequestStatus,
   type SpCampaignDailyPendingRequestStore,
   type SpCampaignDailyPollingDiagnostic,
   validateProfileSyncArtifactForSpCampaignDaily,

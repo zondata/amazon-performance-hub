@@ -46,6 +46,10 @@ on:
         default: false
         type: boolean
 
+concurrency:
+  group: v3-ads-sync-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && inputs.account_id || secrets.APP_ACCOUNT_ID }}-${{ github.event_name == 'workflow_dispatch' && inputs.marketplace || secrets.APP_MARKETPLACE }}
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -60,6 +64,7 @@ jobs:
       AMAZON_ADS_PROFILE_ID: ${{ secrets.AMAZON_ADS_PROFILE_ID }}
       ADS_API_REPORT_MAX_ATTEMPTS: '240'
       ADS_API_REPORT_POLL_INTERVAL_MS: '5000'
+      ADS_API_MAX_PENDING_AGE_HOURS: '72'
       SP_API_LWA_CLIENT_ID: ${{ secrets.SP_API_LWA_CLIENT_ID }}
       SP_API_LWA_CLIENT_SECRET: ${{ secrets.SP_API_LWA_CLIENT_SECRET }}
       SP_API_REFRESH_TOKEN: ${{ secrets.SP_API_REFRESH_TOKEN }}
@@ -109,6 +114,14 @@ jobs:
             exit 1
           fi
 
+      - name: Resume pending Ads reports
+        run: >
+          npm run v3:resume:amazon --
+          --account-id "${APP_ACCOUNT_ID}"
+          --marketplace "${APP_MARKETPLACE}"
+          --mode scheduled
+          --soft-pending-exit
+
       - name: Run V3 sync
         run: >
           npm run v3:pull:amazon --
@@ -117,6 +130,7 @@ jobs:
           --sources "${{ github.event_name == 'workflow_dispatch' && inputs.sources || 'all' }}"
           --mode "${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'scheduled' }}"
           --recent-days "${{ github.event_name == 'workflow_dispatch' && inputs.recent_days || '30' }}"
+          --resume-pending
           ${{ github.event_name == 'workflow_dispatch' && inputs.from_date != '' && format('--from {0}', inputs.from_date) || '' }}
           ${{ github.event_name == 'workflow_dispatch' && inputs.to_date != '' && format('--to {0}', inputs.to_date) || '' }}
           ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '--dry-run' || '' }}
