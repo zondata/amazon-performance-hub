@@ -1,0 +1,90 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+import { describe, expect, it } from 'vitest';
+
+import { parseV3PullAmazonArgs } from './v3PullAmazon';
+
+describe('parseV3PullAmazonArgs', () => {
+  it('parses an explicit manual command', () => {
+    const args = parseV3PullAmazonArgs([
+      '--account-id',
+      'sourbear',
+      '--marketplace',
+      'US',
+      '--from',
+      '2026-04-21',
+      '--to',
+      '2026-04-21',
+      '--sources',
+      'sales,ads',
+      '--mode',
+      'manual',
+    ]);
+
+    expect(args.accountId).toBe('sourbear');
+    expect(args.marketplace).toBe('US');
+    expect(args.from).toBe('2026-04-21');
+    expect(args.to).toBe('2026-04-21');
+    expect(args.sources).toEqual(['sales', 'ads']);
+    expect(args.mode).toBe('manual');
+    expect(args.dryRun).toBe(false);
+  });
+
+  it('applies the recent preset defaults', () => {
+    const args = parseV3PullAmazonArgs([
+      '--account-id=sourbear',
+      '--marketplace=US',
+      '--preset=recent',
+      '--dry-run',
+    ]);
+
+    expect(args.sources).toEqual(['ads', 'sales', 'sqp', 'settings']);
+    expect(args.mode).toBe('dry-run');
+    expect(args.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(args.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('rejects unsupported sources', () => {
+    expect(() =>
+      parseV3PullAmazonArgs([
+        '--account-id=sourbear',
+        '--marketplace=US',
+        '--from=2026-04-21',
+        '--to=2026-04-21',
+        '--sources=foo',
+      ])
+    ).toThrow(/Unsupported --sources/);
+  });
+});
+
+describe('v3-amazon-data-sync workflow', () => {
+  const workflowPath = path.resolve(
+    process.cwd(),
+    '.github/workflows/v3-amazon-data-sync.yml'
+  );
+  const runbookPath = path.resolve(
+    process.cwd(),
+    'docs/V3_AMAZON_DATA_SYNC_RUNBOOK.md'
+  );
+
+  it('exists and calls the unified CLI', () => {
+    const workflow = fs.readFileSync(workflowPath, 'utf8');
+    expect(workflow).toContain('workflow_dispatch:');
+    expect(workflow).toContain('schedule:');
+    expect(workflow).toContain('npm run v3:pull:amazon --');
+  });
+
+  it('references secrets by name instead of hardcoding values', () => {
+    const workflow = fs.readFileSync(workflowPath, 'utf8');
+    const runbook = fs.readFileSync(runbookPath, 'utf8');
+    expect(workflow).toContain('${{ secrets.DATABASE_URL }}');
+    expect(workflow).toContain('${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}');
+    expect(workflow).toContain('${{ secrets.AMAZON_ADS_CLIENT_SECRET }}');
+    expect(workflow).toContain('${{ secrets.SP_API_LWA_CLIENT_SECRET }}');
+    expect(workflow).not.toMatch(/advertising-api\.amazon\.com\/v\d/);
+    expect(runbook).toContain('`.env.local` must never be committed.');
+    expect(runbook).not.toMatch(/client_secret=/i);
+    expect(runbook).not.toMatch(/refresh_token=/i);
+  });
+});

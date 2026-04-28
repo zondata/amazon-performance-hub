@@ -1396,3 +1396,31 @@ Verification:
   - commit SHA
   - commit message
   - whether the working tree is clean
+
+## V3 drift-control addendum
+
+These rules apply to database-only V3 work in this repo and must be preserved alongside the existing instructions above.
+
+- Before implementing V3 feature work, read `docs/V3_IDEAS_AND_OPERATOR_NOTES.md`.
+- Before implementing any new V3 phase, read `docs/v3_database_only_build_plan.md`.
+- Treat the V3 core system boundary as:
+  - Supabase database
+  - Amazon API/manual data ingestion
+  - Sales & Traffic
+  - SP/SB/SD ads data
+  - SQP weekly/monthly
+  - H10 manual ranking upload
+  - ads settings snapshots
+  - ads change logbook
+  - manual non-ads logbook
+  - data coverage/freshness tracking
+  - MCP-readable views
+  - automation/manual pull commands only when approved
+- Anything outside that boundary is possible drift unless Albert explicitly approves it.
+- If Albert suggests an idea that may drift from the approved V3 core system, stop and say so clearly.
+- Recommend recording the idea in `docs/V3_IDEAS_AND_OPERATOR_NOTES.md` first unless Albert explicitly approves implementation now.
+- Do not treat "quick fix", "small helper", "temporary UI", or "just one table" as drift exemptions.
+- Do not create new tables when existing tables/views can satisfy the requirement.
+- Do not build V3 UI unless the active approved phase explicitly includes UI.
+- Do not build V3 automation unless the active approved phase explicitly includes automation.
+- Prefer small approved phases and documentation-first clarification over chat-driven implementation.
