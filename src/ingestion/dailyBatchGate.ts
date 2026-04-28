@@ -90,11 +90,26 @@ export interface DailyBatchGateOptions {
 interface CommandResult {
   command: string;
   args: string[];
+  exitCode: number;
+  status: 'failed' | 'success' | 'timed_out';
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
   stdout: string;
   stderr: string;
+  stdoutTail: string[];
+  stderrTail: string[];
+  errorMessage: string | null;
 }
 
-class DailyBatchGateError extends Error {
+interface CommandRunOptions {
+  sourceName?: string;
+  targetName?: string;
+  streamOutput?: boolean;
+  timeoutMs?: number;
+}
+
+export class DailyBatchGateError extends Error {
   readonly code: string;
   readonly metadata?: JsonObject;
   readonly steps?: DailyBatchStepResult[];
@@ -228,6 +243,18 @@ const tailLines = (value: string, count = 12): string[] => {
   return lines.slice(Math.max(lines.length - count, 0));
 };
 
+const redactSensitiveText = (value: string): string =>
+  value
+    .replace(
+      /((?:access|refresh|client|service[_-]?role)[_-]?token["'=:\s]+)([^\s'",]+)/gi,
+      '$1[REDACTED]'
+    )
+    .replace(/(authorization:\s*bearer\s+)([^\s]+)/gi, '$1[REDACTED]')
+    .replace(/("?(?:secret|password)"?\s*[:=]\s*")([^"]+)(")/gi, '$1[REDACTED]$3');
+
+const shouldStreamCommandOutput = (streamOutput?: boolean): boolean =>
+  streamOutput === true || process.env.GITHUB_ACTIONS === 'true';
+
 const parseLineValue = (text: string, label: string): string | null => {
   const match = text.match(new RegExp(`^${label}:\\s*(.+)$`, 'm'));
   return match?.[1]?.trim() ?? null;
@@ -249,17 +276,33 @@ const buildCommandStep = (
   status: 'success',
   summary: {
     command: [result.command, ...result.args].join(' '),
-    stdout_tail: tailLines(result.stdout, 8),
+    duration_ms: result.durationMs,
+    stdout_tail: result.stdoutTail.slice(-8),
     ...extra,
+  },
+});
+
+const buildFailedCommandStep = (
+  name: string,
+  error: DailyBatchGateError
+): DailyBatchStepResult => ({
+  name,
+  status: 'failed',
+  summary: {
+    code: error.code,
+    message: error.message,
+    ...(error.metadata ?? {}),
   },
 });
 
 const runCommand = async (
   command: string,
   args: string[],
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
+  options: CommandRunOptions = {}
 ): Promise<CommandResult> =>
   new Promise((resolve, reject) => {
+    const startedAt = new Date().toISOString();
     const child = spawn(command, args, {
       cwd: process.cwd(),
       env,
@@ -267,36 +310,84 @@ const runCommand = async (
     });
     let stdout = '';
     let stderr = '';
+    let finished = false;
+    const streamOutput = shouldStreamCommandOutput(options.streamOutput);
+    const timeoutMs = options.timeoutMs ?? 30 * 60 * 1000;
+    const timer = setTimeout(() => {
+      if (finished) return;
+      child.kill('SIGTERM');
+    }, timeoutMs);
+
+    const appendChunk = (
+      streamName: 'stderr' | 'stdout',
+      chunk: string
+    ): void => {
+      const safeChunk = redactSensitiveText(chunk);
+      if (streamName === 'stdout') {
+        stdout += safeChunk;
+        if (streamOutput) process.stdout.write(safeChunk);
+      } else {
+        stderr += safeChunk;
+        if (streamOutput) process.stderr.write(safeChunk);
+      }
+    };
 
     child.stdout.on('data', (chunk) => {
-      stdout += String(chunk);
+      appendChunk('stdout', String(chunk));
     });
     child.stderr.on('data', (chunk) => {
-      stderr += String(chunk);
+      appendChunk('stderr', String(chunk));
     });
     child.on('error', (error) => {
+      clearTimeout(timer);
       reject(error);
     });
-    child.on('close', (code) => {
-      const result = {
+    child.on('close', (code, signal) => {
+      finished = true;
+      clearTimeout(timer);
+      const finishedAt = new Date().toISOString();
+      const durationMs =
+        new Date(finishedAt).getTime() - new Date(startedAt).getTime();
+      const timedOut = signal === 'SIGTERM' && code === null;
+      const result: CommandResult = {
         command,
         args,
+        exitCode: code ?? 1,
+        status: timedOut ? 'timed_out' : code === 0 ? 'success' : 'failed',
+        startedAt,
+        finishedAt,
+        durationMs,
         stdout,
         stderr,
+        stdoutTail: tailLines(stdout, 200),
+        stderrTail: tailLines(stderr, 200),
+        errorMessage:
+          timedOut
+            ? `${[command, ...args].join(' ')} timed out after ${timeoutMs}ms`
+            : code === 0
+            ? null
+            : `${[command, ...args].join(' ')} exited with code ${code}`,
       };
-      if (code === 0) {
+      if (code === 0 && !timedOut) {
         resolve(result);
         return;
       }
       reject(
         new DailyBatchGateError({
-          code: 'command_failed',
-          message: `${[command, ...args].join(' ')} exited with code ${code}`,
+          code: timedOut ? 'command_timed_out' : 'command_failed',
+          message: result.errorMessage ?? 'Command failed.',
           metadata: {
             command: [command, ...args].join(' '),
-            stdout_tail: tailLines(stdout),
-            stderr_tail: tailLines(stderr),
+            args,
+            source_name: options.sourceName ?? null,
+            target_name: options.targetName ?? null,
+            stdout_tail: result.stdoutTail,
+            stderr_tail: result.stderrTail,
             exit_code: code,
+            status: result.status,
+            duration_ms: durationMs,
+            started_at: startedAt,
+            finished_at: finishedAt,
           },
         })
       );
@@ -306,7 +397,8 @@ const runCommand = async (
 const runNpmScript = async (
   scriptName: string,
   scriptArgs: string[],
-  request: DailyBatchGateRequest
+  request: DailyBatchGateRequest,
+  options: CommandRunOptions = {}
 ): Promise<CommandResult> => {
   const args =
     scriptArgs.length > 0
@@ -317,7 +409,7 @@ const runNpmScript = async (
     ...process.env,
     APP_ACCOUNT_ID: request.accountId,
     APP_MARKETPLACE: request.marketplace,
-  });
+  }, options);
 };
 
 export const runRealRetailDailyBatch: DailyBatchSourceExecutor = async (
@@ -505,10 +597,16 @@ export const runRealRetailDailyBatchWithOptions = async (
   }
 };
 
-export const runRealAdsDailyBatch: DailyBatchSourceExecutor = async (
-  request
+export const runRealAdsDailyBatch = async (
+  request: DailyBatchGateRequest,
+  options: { diagnose?: boolean; timeoutMs?: number } = {}
 ) => {
   const steps: DailyBatchStepResult[] = [];
+  const commandOptions: CommandRunOptions = {
+    sourceName: 'ads',
+    streamOutput: options.diagnose,
+    timeoutMs: options.timeoutMs,
+  };
 
   const runStep = async (
     name: string,
@@ -516,10 +614,20 @@ export const runRealAdsDailyBatch: DailyBatchSourceExecutor = async (
     args: string[] = [],
     extra: (result: CommandResult) => JsonObject = () => ({})
   ) => {
-    const result = await runNpmScript(scriptName, args, request);
-    const step = buildCommandStep(name, result, extra(result));
-    steps.push(step);
-    return result;
+    try {
+      const result = await runNpmScript(scriptName, args, request, {
+        ...commandOptions,
+        targetName: name,
+      });
+      const step = buildCommandStep(name, result, extra(result));
+      steps.push(step);
+      return result;
+    } catch (error) {
+      if (error instanceof DailyBatchGateError) {
+        steps.push(buildFailedCommandStep(name, error));
+      }
+      throw error;
+    }
   };
 
   try {
