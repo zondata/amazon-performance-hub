@@ -33,10 +33,11 @@ type CliArgs = {
   maxAttempts: number;
   pollIntervalMs: number;
   resumePending: boolean;
+  resumePendingOnly: boolean;
 };
 
 const USAGE =
-  'Usage: npm run adsapi:pull-sp-campaign-daily -- --start-date YYYY-MM-DD --end-date YYYY-MM-DD [--diagnose] [--resume-pending] [--max-attempts N] [--poll-interval-ms N]';
+  'Usage: npm run adsapi:pull-sp-campaign-daily -- --start-date YYYY-MM-DD --end-date YYYY-MM-DD [--diagnose] [--resume-pending] [--resume-pending-only] [--max-attempts N] [--poll-interval-ms N]';
 
 const readInteger = (value: string | undefined, label: string): number => {
   const parsed = Number.parseInt(value ?? '', 10);
@@ -103,6 +104,7 @@ const parseArgs = (argv: string[]): CliArgs => {
   let endDate: string | null = null;
   let diagnose = false;
   let resumePending = false;
+  let resumePendingOnly = false;
   let maxAttempts = readEnvInteger(
     'ADS_API_REPORT_MAX_ATTEMPTS',
     DEFAULT_SP_CAMPAIGN_DAILY_MAX_ATTEMPTS
@@ -132,6 +134,11 @@ const parseArgs = (argv: string[]): CliArgs => {
       resumePending = true;
       continue;
     }
+    if (arg === '--resume-pending-only') {
+      resumePending = true;
+      resumePendingOnly = true;
+      continue;
+    }
     if (arg === '--max-attempts') {
       maxAttempts = readInteger(argv[index + 1], '--max-attempts');
       index += 1;
@@ -154,6 +161,7 @@ const parseArgs = (argv: string[]): CliArgs => {
     maxAttempts,
     pollIntervalMs,
     resumePending,
+    resumePendingOnly,
   };
 };
 
@@ -355,7 +363,7 @@ async function main(): Promise<void> {
     const databaseUrl = readDatabaseUrl();
     if (databaseUrl) {
       pool = createPostgresPool(databaseUrl);
-    } else if (cliArgs.resumePending) {
+    } else if (cliArgs.resumePendingOnly) {
       throw new AdsApiSpCampaignDailyError(
         'pending_report_not_found',
         'DATABASE_URL is required to resume a pending Ads SP campaign report.'
@@ -400,7 +408,7 @@ async function main(): Promise<void> {
         maxAttempts: cliArgs.maxAttempts,
         pollIntervalMs: cliArgs.pollIntervalMs,
         pendingStore,
-        resumePendingOnly: cliArgs.resumePending,
+        resumePendingOnly: cliArgs.resumePendingOnly,
         diagnosticPath: ADS_API_SP_CAMPAIGN_DAILY_DIAGNOSTIC_ARTIFACT_PATH,
         onPollUpdate:
           cliArgs.diagnose || process.env.GITHUB_ACTIONS === 'true'
