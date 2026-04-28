@@ -47,7 +47,7 @@ on:
         type: boolean
 
 concurrency:
-  group: v3-ads-sync-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && inputs.account_id || secrets.APP_ACCOUNT_ID }}-${{ github.event_name == 'workflow_dispatch' && inputs.marketplace || secrets.APP_MARKETPLACE }}
+  group: v3-ads-sync-${{ github.repository }}-${{ github.ref_name || 'default' }}
   cancel-in-progress: false
 
 jobs:
