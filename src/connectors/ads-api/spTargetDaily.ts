@@ -36,6 +36,11 @@ export const ADS_API_SP_TARGET_DAILY_NORMALIZED_ARTIFACT_PATH = path.resolve(
   'out/ads-api-sp-target-daily/normalized/sp-target-daily.normalized.json'
 );
 
+export const ADS_API_SP_TARGET_DAILY_DIAGNOSTIC_ARTIFACT_PATH = path.resolve(
+  process.cwd(),
+  'out/ads-api-sp-target-daily/diagnostics/sp-target-daily.polling-diagnostic.json'
+);
+
 const REPORTING_REPORTS_PATH = '/reporting/reports';
 const SP_TARGET_REPORT_COLUMNS = [
   'campaignId',
@@ -58,6 +63,8 @@ const SP_TARGET_REPORT_COLUMNS = [
 ] as const;
 
 export const MAX_SP_TARGET_DAILY_WINDOW_DAYS = 31;
+export const DEFAULT_SP_TARGET_DAILY_MAX_ATTEMPTS = 180;
+export const DEFAULT_SP_TARGET_DAILY_POLL_INTERVAL_MS = 5000;
 export const TERMINAL_SP_TARGET_DAILY_SUCCESS_STATUSES = [
   'SUCCESS',
   'COMPLETED',
@@ -79,6 +86,63 @@ export const POLLABLE_SP_TARGET_DAILY_STATUSES = [
 const DUPLICATE_REPORT_ID_PATTERN =
   /duplicate of\s*:\s*(?<reportId>[0-9a-fA-F-]{36})/i;
 
+type SpTargetDailyPendingRequestRecord = {
+  reportId: string;
+  status: string | null;
+  statusDetails: string | null;
+  attemptCount: number;
+  diagnosticPath: string | null;
+  lastResponseJson: Record<string, unknown>;
+};
+
+type SpTargetDailyPendingRequestState = {
+  reportId: string;
+  status:
+    | 'completed'
+    | 'created'
+    | 'failed'
+    | 'imported'
+    | 'pending'
+    | 'pending_timeout'
+    | 'polling'
+    | 'requested'
+    | 'stale_expired';
+  statusDetails: string | null;
+  attemptCount: number;
+  requestPayloadJson: Record<string, unknown>;
+  lastResponseJson: Record<string, unknown>;
+  diagnosticPath: string | null;
+  notes: string | null;
+  retryAfterAt: string | null;
+  lastPolledAt: string | null;
+  completedAt: string | null;
+  failedAt: string | null;
+};
+
+export interface SpTargetDailyPendingRequestStore {
+  findReusablePendingRequest(args: {
+    accountId: string;
+    marketplace: string;
+    profileId: string;
+    reportTypeId: string;
+    sourceType: string;
+    startDate: string;
+    endDate: string;
+  }): Promise<SpTargetDailyPendingRequestRecord | null>;
+  upsertPendingRequest(args: {
+    accountId: string;
+    marketplace: string;
+    profileId: string;
+    adProduct: string;
+    reportTypeId: string;
+    sourceType: string;
+    targetTable: string;
+    startDate: string;
+    endDate: string;
+    state: SpTargetDailyPendingRequestState;
+  }): Promise<void>;
+}
+
 const readString = (value: unknown): string | null => {
   if (typeof value !== 'string') {
     return null;
@@ -86,6 +150,62 @@ const readString = (value: unknown): string | null => {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const maskProfileId = (value: string): string =>
+  value.length <= 4 ? '****' : `${'*'.repeat(Math.max(value.length - 4, 4))}${value.slice(-4)}`;
+
+const readHeader = (
+  headers: Record<string, string | null> | undefined,
+  name: string
+): string | null => headers?.[name.toLowerCase()] ?? null;
+
+const sanitizeJsonValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeJsonValue(entry));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+        key,
+        sanitizeJsonValue(entry),
+      ])
+    );
+  }
+  if (typeof value === 'string') {
+    return value
+      .replace(
+        /((?:access|refresh|client|service[_-]?role|session|bearer|token|signature)[_-]?token?["'=:\s]+)([^\s'",]+)/gi,
+        '$1[REDACTED]'
+      )
+      .replace(/(authorization:\s*bearer\s+)([^\s]+)/gi, '$1[REDACTED]')
+      .replace(/([?&](?:token|signature|x-amz-signature|x-amz-credential|x-amz-security-token|x-amz-date|x-amz-expires)=)([^&]+)/gi, '$1[REDACTED]');
+  }
+  return value;
+};
+
+const isSpTargetSuccessStatus = (status: string | null): boolean =>
+  status != null &&
+  (TERMINAL_SP_TARGET_DAILY_SUCCESS_STATUSES as readonly string[]).includes(status);
+
+const isSpTargetFailureStatus = (status: string | null): boolean =>
+  status != null &&
+  (TERMINAL_SP_TARGET_DAILY_FAILURE_STATUSES as readonly string[]).includes(status);
+
+const toSpTargetPendingRequestStatus = (
+  status: string | null,
+  fallback: SpTargetDailyPendingRequestState['status']
+): SpTargetDailyPendingRequestState['status'] => {
+  const normalized = status?.toUpperCase() ?? null;
+  if (isSpTargetSuccessStatus(normalized)) return 'completed';
+  if (isSpTargetFailureStatus(normalized)) return 'failed';
+  if (
+    normalized &&
+    (POLLABLE_SP_TARGET_DAILY_STATUSES as readonly string[]).includes(normalized)
+  ) {
+    return normalized === 'PENDING' ? 'pending' : 'polling';
+  }
+  return fallback;
 };
 
 const readStringLike = (value: unknown): string | null => {
@@ -333,6 +453,7 @@ const normalizeReportError = (
     | 'report_request_failed'
     | 'invalid_response'
     | 'report_timeout'
+    | 'pending_timeout'
     | 'report_failed'
     | 'download_failed',
   message: string,
@@ -347,73 +468,185 @@ export const requestSpTargetDailyReport = async (args: {
   maxAttempts?: number;
   pollIntervalMs?: number;
   sleep?: (ms: number) => Promise<void>;
+  pendingStore?: SpTargetDailyPendingRequestStore | null;
+  resumePendingOnly?: boolean;
+  diagnosticPath?: string | null;
 }): Promise<AdsApiSpTargetDailyReportMetadata> => {
-  const maxAttempts = args.maxAttempts ?? 180;
-  const pollIntervalMs = args.pollIntervalMs ?? 5000;
+  const maxAttempts = args.maxAttempts ?? DEFAULT_SP_TARGET_DAILY_MAX_ATTEMPTS;
+  const pollIntervalMs =
+    args.pollIntervalMs ?? DEFAULT_SP_TARGET_DAILY_POLL_INTERVAL_MS;
   const sleep =
     args.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const requestPayload = buildSpTargetDailyCreateRequestBody({
+    dateRange: args.dateRange,
+  }) as Record<string, unknown>;
+  const sourceType = 'ads_api_sp_target_daily';
+  const targetTable = 'sp_targeting_daily_fact';
+  const resolveRetryAfterAt = (value: string | null): string | null => {
+    if (!value) return null;
+    const seconds = Number.parseInt(value, 10);
+    if (!Number.isFinite(seconds) || seconds < 0) return null;
+    return new Date(Date.now() + seconds * 1000).toISOString();
+  };
+  const persistPendingState = async (state: SpTargetDailyPendingRequestState): Promise<void> => {
+    if (!args.pendingStore) return;
+    await args.pendingStore.upsertPendingRequest({
+      accountId: args.config.appAccountId,
+      marketplace: args.config.appMarketplace,
+      profileId: args.config.profileId,
+      adProduct: 'SPONSORED_PRODUCTS',
+      reportTypeId: 'spTargets',
+      sourceType,
+      targetTable,
+      startDate: args.dateRange.startDate,
+      endDate: args.dateRange.endDate,
+      state,
+    });
+  };
+
+  const reusablePending =
+    (await args.pendingStore?.findReusablePendingRequest({
+      accountId: args.config.appAccountId,
+      marketplace: args.config.appMarketplace,
+      profileId: args.config.profileId,
+      reportTypeId: 'spTargets',
+      sourceType,
+      startDate: args.dateRange.startDate,
+      endDate: args.dateRange.endDate,
+    })) ?? null;
+
+  if (!reusablePending && args.resumePendingOnly) {
+    throw normalizeReportError(
+      'pending_timeout',
+      `No reusable pending Ads SP target report was found for ${args.dateRange.startDate} -> ${args.dateRange.endDate}.`
+    );
+  }
 
   let createResponse;
+  let createResponseHeaders: Record<string, string | null> | undefined;
+  let createResponseJson: unknown = {};
+  let latest = reusablePending
+    ? ({
+        reportId: reusablePending.reportId,
+        status: reusablePending.status,
+        statusDetails: reusablePending.statusDetails,
+        location: null,
+        fileSize: null,
+      } satisfies AdsApiSpTargetDailyReportMetadata)
+    : await (async (): Promise<AdsApiSpTargetDailyReportMetadata> => {
+        try {
+          createResponse = await args.transport(
+            buildSpTargetDailyCreateRequest({
+              config: args.config,
+              accessToken: args.accessToken,
+              dateRange: args.dateRange,
+            })
+          );
+          createResponseJson = createResponse.json;
+          createResponseHeaders = createResponse.headers;
+        } catch (error) {
+          throw normalizeReportError(
+            'transport_error',
+            'Amazon Ads target daily report request failed before a response was received',
+            { details: error }
+          );
+        }
 
-  try {
-    createResponse = await args.transport(
-      buildSpTargetDailyCreateRequest({
-        config: args.config,
-        accessToken: args.accessToken,
-        dateRange: args.dateRange,
-      })
-    );
-  } catch (error) {
-    throw normalizeReportError(
-      'transport_error',
-      'Amazon Ads target daily report request failed before a response was received',
-      { details: error }
-    );
-  }
+        const duplicateReportId =
+          createResponse.status === 425
+            ? extractDuplicateReportId(createResponse.json)
+            : null;
 
-  const duplicateReportId =
-    createResponse.status === 425
-      ? extractDuplicateReportId(createResponse.json)
-      : null;
+        if (
+          (createResponse.status < 200 || createResponse.status >= 300) &&
+          !duplicateReportId
+        ) {
+          throw normalizeReportError(
+            'report_request_failed',
+            `Amazon Ads target daily report request failed with status ${createResponse.status}`,
+            { status: createResponse.status, details: createResponse.json }
+          );
+        }
 
-  if (
-    (createResponse.status < 200 || createResponse.status >= 300) &&
-    !duplicateReportId
-  ) {
-    throw normalizeReportError(
-      'report_request_failed',
-      `Amazon Ads target daily report request failed with status ${createResponse.status}`,
-      { status: createResponse.status, details: createResponse.json }
-    );
-  }
+        const created =
+          duplicateReportId != null
+            ? ({
+                reportId: duplicateReportId,
+                status: 'PENDING',
+                statusDetails: 'duplicate_report_request',
+                location: null,
+                fileSize: null,
+              } satisfies AdsApiSpTargetDailyReportMetadata)
+            : parseSpTargetDailyReportMetadata(createResponse.json);
 
-  const created =
-    duplicateReportId != null
-      ? ({
-          reportId: duplicateReportId,
-          status: 'PENDING',
-          statusDetails: 'duplicate_report_request',
-          location: null,
-          fileSize: null,
-        } satisfies AdsApiSpTargetDailyReportMetadata)
-      : parseSpTargetDailyReportMetadata(createResponse.json);
+        if (!created) {
+          throw normalizeReportError(
+            'invalid_response',
+            'Amazon Ads target daily report request returned an invalid response payload',
+            { status: createResponse.status, details: createResponse.json }
+          );
+        }
 
-  if (!created) {
-    throw normalizeReportError(
-      'invalid_response',
-      'Amazon Ads target daily report request returned an invalid response payload',
-      { status: createResponse.status, details: createResponse.json }
-    );
-  }
+        await persistPendingState({
+          reportId: created.reportId,
+          status: toSpTargetPendingRequestStatus(created.status, 'requested'),
+          statusDetails: created.statusDetails,
+          attemptCount: 0,
+          requestPayloadJson: requestPayload,
+          lastResponseJson: sanitizeJsonValue(createResponse.json) as Record<string, unknown>,
+          diagnosticPath: args.diagnosticPath ?? null,
+          notes: duplicateReportId
+            ? 'Amazon returned a duplicate-report id; reusing the existing target report.'
+            : null,
+          retryAfterAt: null,
+          lastPolledAt: null,
+          completedAt: null,
+          failedAt: null,
+        });
 
-  let latest = created;
+        return created;
+      })();
+
+  let lastResponseJson: unknown =
+    reusablePending?.lastResponseJson ?? createResponseJson;
+  let lastRetryAfter = readHeader(createResponseHeaders, 'retry-after');
+  await persistPendingState({
+    reportId: latest.reportId,
+    status: toSpTargetPendingRequestStatus(
+      latest.status,
+      reusablePending ? 'pending' : 'requested'
+    ),
+    statusDetails: latest.statusDetails,
+    attemptCount: reusablePending?.attemptCount ?? 0,
+    requestPayloadJson: requestPayload,
+    lastResponseJson: sanitizeJsonValue(lastResponseJson) as Record<string, unknown>,
+    diagnosticPath: args.diagnosticPath ?? reusablePending?.diagnosticPath ?? null,
+    notes: reusablePending
+      ? 'Reused an existing pending target report id before creating a new one.'
+      : null,
+    retryAfterAt: null,
+    lastPolledAt: new Date().toISOString(),
+    completedAt: null,
+    failedAt: null,
+  });
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const status = latest.status?.toUpperCase() ?? null;
-    if (
-      status &&
-      (TERMINAL_SP_TARGET_DAILY_SUCCESS_STATUSES as readonly string[]).includes(status)
-    ) {
+    if (isSpTargetSuccessStatus(status)) {
+      await persistPendingState({
+        reportId: latest.reportId,
+        status: 'completed',
+        statusDetails: latest.statusDetails,
+        attemptCount: (reusablePending?.attemptCount ?? 0) + attempt - 1,
+        requestPayloadJson: requestPayload,
+        lastResponseJson: sanitizeJsonValue(lastResponseJson) as Record<string, unknown>,
+        diagnosticPath: args.diagnosticPath ?? reusablePending?.diagnosticPath ?? null,
+        notes: 'Amazon Ads SP target report reached a terminal success status.',
+        retryAfterAt: null,
+        lastPolledAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        failedAt: null,
+      });
       return latest;
     }
 
@@ -421,10 +654,22 @@ export const requestSpTargetDailyReport = async (args: {
       return latest;
     }
 
-    if (
-      status &&
-      (TERMINAL_SP_TARGET_DAILY_FAILURE_STATUSES as readonly string[]).includes(status)
-    ) {
+    if (isSpTargetFailureStatus(status)) {
+      const failedAt = new Date().toISOString();
+      await persistPendingState({
+        reportId: latest.reportId,
+        status: 'failed',
+        statusDetails: latest.statusDetails,
+        attemptCount: (reusablePending?.attemptCount ?? 0) + attempt - 1,
+        requestPayloadJson: requestPayload,
+        lastResponseJson: sanitizeJsonValue(lastResponseJson) as Record<string, unknown>,
+        diagnosticPath: args.diagnosticPath ?? reusablePending?.diagnosticPath ?? null,
+        notes: `Amazon Ads SP target report reached terminal failure status ${latest.status}.`,
+        retryAfterAt: null,
+        lastPolledAt: failedAt,
+        completedAt: null,
+        failedAt,
+      });
       throw normalizeReportError(
         'report_failed',
         `Amazon Ads target daily report ended with terminal status ${latest.status}`,
@@ -438,7 +683,7 @@ export const requestSpTargetDailyReport = async (args: {
         buildSpTargetDailyStatusRequest({
           config: args.config,
           accessToken: args.accessToken,
-          reportId: created.reportId,
+          reportId: latest.reportId,
         })
       );
     } catch (error) {
@@ -467,12 +712,39 @@ export const requestSpTargetDailyReport = async (args: {
     }
 
     latest = parsedStatus;
+    lastResponseJson = statusResponse.json;
+    lastRetryAfter = readHeader(statusResponse.headers, 'retry-after');
+    await persistPendingState({
+      reportId: latest.reportId,
+      status: toSpTargetPendingRequestStatus(latest.status?.toUpperCase() ?? null, 'polling'),
+      statusDetails: latest.statusDetails,
+      attemptCount: (reusablePending?.attemptCount ?? 0) + attempt,
+      requestPayloadJson: requestPayload,
+      lastResponseJson: sanitizeJsonValue(statusResponse.json) as Record<string, unknown>,
+      diagnosticPath: args.diagnosticPath ?? reusablePending?.diagnosticPath ?? null,
+      notes: null,
+      retryAfterAt: resolveRetryAfterAt(lastRetryAfter),
+      lastPolledAt: new Date().toISOString(),
+      completedAt: null,
+      failedAt: null,
+    });
 
     const nextStatus = latest.status?.toUpperCase() ?? null;
-    if (
-      nextStatus &&
-      (TERMINAL_SP_TARGET_DAILY_SUCCESS_STATUSES as readonly string[]).includes(nextStatus)
-    ) {
+    if (isSpTargetSuccessStatus(nextStatus)) {
+      await persistPendingState({
+        reportId: latest.reportId,
+        status: 'completed',
+        statusDetails: latest.statusDetails,
+        attemptCount: (reusablePending?.attemptCount ?? 0) + attempt,
+        requestPayloadJson: requestPayload,
+        lastResponseJson: sanitizeJsonValue(statusResponse.json) as Record<string, unknown>,
+        diagnosticPath: args.diagnosticPath ?? reusablePending?.diagnosticPath ?? null,
+        notes: 'Amazon Ads SP target report reached a terminal success status.',
+        retryAfterAt: null,
+        lastPolledAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        failedAt: null,
+      });
       return latest;
     }
 
@@ -480,10 +752,22 @@ export const requestSpTargetDailyReport = async (args: {
       return latest;
     }
 
-    if (
-      nextStatus &&
-      (TERMINAL_SP_TARGET_DAILY_FAILURE_STATUSES as readonly string[]).includes(nextStatus)
-    ) {
+    if (isSpTargetFailureStatus(nextStatus)) {
+      const failedAt = new Date().toISOString();
+      await persistPendingState({
+        reportId: latest.reportId,
+        status: 'failed',
+        statusDetails: latest.statusDetails,
+        attemptCount: (reusablePending?.attemptCount ?? 0) + attempt,
+        requestPayloadJson: requestPayload,
+        lastResponseJson: sanitizeJsonValue(statusResponse.json) as Record<string, unknown>,
+        diagnosticPath: args.diagnosticPath ?? reusablePending?.diagnosticPath ?? null,
+        notes: `Amazon Ads SP target report reached terminal failure status ${latest.status}.`,
+        retryAfterAt: null,
+        lastPolledAt: new Date().toISOString(),
+        completedAt: null,
+        failedAt,
+      });
       throw normalizeReportError(
         'report_failed',
         `Amazon Ads target daily report ended with terminal status ${latest.status}`,
@@ -496,9 +780,31 @@ export const requestSpTargetDailyReport = async (args: {
     }
   }
 
+  await persistPendingState({
+    reportId: latest.reportId,
+    status: 'pending_timeout',
+    statusDetails: latest.statusDetails,
+    attemptCount: (reusablePending?.attemptCount ?? 0) + maxAttempts,
+    requestPayloadJson: requestPayload,
+    lastResponseJson: sanitizeJsonValue(lastResponseJson) as Record<string, unknown>,
+    diagnosticPath: args.diagnosticPath ?? reusablePending?.diagnosticPath ?? null,
+    notes:
+      'Amazon Ads target daily report remained pending. Retry the saved report id instead of creating a duplicate request.',
+    retryAfterAt: resolveRetryAfterAt(lastRetryAfter),
+    lastPolledAt: new Date().toISOString(),
+    completedAt: null,
+    failedAt: null,
+  });
+
   throw normalizeReportError(
-    'report_timeout',
-    `Amazon Ads target daily report did not reach a terminal status after ${maxAttempts} attempts`,
+    'pending_timeout',
+    [
+      `Amazon Ads target daily report remained pending after ${maxAttempts} attempts.`,
+      `report_id=${latest.reportId}`,
+      `date_range=${args.dateRange.startDate}->${args.dateRange.endDate}`,
+      `profile_id=${maskProfileId(args.config.profileId)}`,
+      `poll_interval_ms=${pollIntervalMs}`,
+    ].join(' '),
     { details: latest }
   );
 };
@@ -765,6 +1071,9 @@ export const runSpTargetDailyPull = async (args: {
   pollIntervalMs?: number;
   sleep?: (ms: number) => Promise<void>;
   generatedAt?: string;
+  pendingStore?: SpTargetDailyPendingRequestStore | null;
+  resumePendingOnly?: boolean;
+  diagnosticPath?: string | null;
 }): Promise<{
   validatedArtifact: AdsApiValidatedProfileSyncArtifact;
   metadata: AdsApiSpTargetDailyReportMetadata;
@@ -786,6 +1095,9 @@ export const runSpTargetDailyPull = async (args: {
     maxAttempts: args.maxAttempts,
     pollIntervalMs: args.pollIntervalMs,
     sleep: args.sleep,
+    pendingStore: args.pendingStore,
+    resumePendingOnly: args.resumePendingOnly,
+    diagnosticPath: args.diagnosticPath,
   });
 
   const rawRowsPayload = await downloadSpTargetDailyReport({

@@ -657,7 +657,13 @@ export const runRealAdsDailyBatch = async (
     const targetPull = await runStep(
       'adsapi:pull-sp-target-daily',
       'adsapi:pull-sp-target-daily',
-      ['--start-date', request.startDate, '--end-date', request.endDate],
+      [
+        '--start-date',
+        request.startDate,
+        '--end-date',
+        request.endDate,
+        ...(request.resumePending ? ['--resume-pending'] : []),
+      ],
       (result) => ({
         row_count: parseNumberLine(result.stdout, 'Row count'),
         normalized_artifact_path: parseLineValue(

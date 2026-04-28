@@ -395,6 +395,7 @@ export class AdsApiSpTargetDailyError extends Error {
     | 'report_request_failed'
     | 'invalid_response'
     | 'report_timeout'
+    | 'pending_timeout'
     | 'report_failed'
     | 'download_failed';
   readonly status?: number;
@@ -410,6 +411,7 @@ export class AdsApiSpTargetDailyError extends Error {
       | 'report_request_failed'
       | 'invalid_response'
       | 'report_timeout'
+      | 'pending_timeout'
       | 'report_failed'
       | 'download_failed',
     message: string,
