@@ -21,6 +21,7 @@ type SourceResultStatus =
   | 'blocked'
   | 'failed'
   | 'no_data'
+  | 'pending'
   | 'partial'
   | 'skipped'
   | 'success';
@@ -59,6 +60,7 @@ interface CliOptions {
   force: boolean;
   preset: PullPreset | null;
   diagnose: boolean;
+  resumePending: boolean;
 }
 
 interface SyncRunRecordInput {
@@ -583,6 +585,7 @@ export function parseV3PullAmazonArgs(argv: string[]): CliOptions {
   let force = false;
   let preset: PullPreset | null = null;
   let diagnose = false;
+  let resumePending = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -670,6 +673,10 @@ export function parseV3PullAmazonArgs(argv: string[]): CliOptions {
       diagnose = true;
       continue;
     }
+    if (arg === '--resume-pending') {
+      resumePending = true;
+      continue;
+    }
     if (arg === '--preset') {
       preset = readFlagValue(argv, index, arg) as PullPreset;
       index += 1;
@@ -727,6 +734,7 @@ export function parseV3PullAmazonArgs(argv: string[]): CliOptions {
     force,
     preset: normalizedPreset,
     diagnose,
+    resumePending,
   };
 }
 
@@ -847,6 +855,7 @@ const buildProcessEnv = (options: CliOptions): NodeJS.ProcessEnv => ({
   APP_ACCOUNT_ID: options.accountId,
   APP_MARKETPLACE: options.marketplace,
   V3_PULL_AMAZON_DIAGNOSE: options.diagnose ? '1' : '0',
+  V3_PULL_AMAZON_RESUME_PENDING: options.resumePending ? '1' : '0',
 });
 
 const requireDatabaseUrl = (): string => {
@@ -969,6 +978,7 @@ const toCoverageLastStatus = (
 ): CoverageLastStatus => {
   if (sourceStatus === 'success') return 'success';
   if (sourceStatus === 'partial') return defaultStatus === 'success' ? 'partial' : defaultStatus;
+  if (sourceStatus === 'pending') return 'blocked';
   if (sourceStatus === 'blocked') return rowCount > 0 ? 'blocked' : 'blocked';
   if (sourceStatus === 'no_data') return 'no_data';
   if (sourceStatus === 'skipped') return rowCount > 0 ? 'success' : 'unknown';
@@ -982,7 +992,11 @@ const buildMissingRanges = (args: {
   sourceStatus: SourceResultStatus;
   blockers: string[];
 }): string[] => {
-  if (args.sourceStatus === 'blocked' || args.sourceStatus === 'failed') {
+  if (
+    args.sourceStatus === 'blocked' ||
+    args.sourceStatus === 'failed' ||
+    args.sourceStatus === 'pending'
+  ) {
     return [`${args.requestedFrom} -> ${args.requestedTo}`];
   }
   if (!args.latestDate) {
@@ -1344,6 +1358,7 @@ const deriveDataStatus = (args: {
   finality: string | null;
 }): V3DataStatus => {
   if (args.sourceStatus === 'failed') return 'failed';
+  if (args.sourceStatus === 'pending') return 'manual_unknown';
   if (args.sourceStatus === 'blocked') return args.latestDate ? 'manual_unknown' : 'failed';
   if (args.finality === 'final') return 'final';
   if (!args.latestDate) return 'manual_unknown';
@@ -1461,11 +1476,24 @@ const runAdsSource = async (options: CliOptions): Promise<{
     marketplace: options.marketplace,
     startDate: options.from,
     endDate: options.to,
+    resumePending: options.resumePending,
   };
-  const result = await runRealAdsDailyBatch(request, {
-    diagnose: options.diagnose,
-    timeoutMs: 30 * 60 * 1000,
-  });
+  let result;
+  try {
+    result = await runRealAdsDailyBatch(request, {
+      diagnose: options.diagnose,
+      timeoutMs: 30 * 60 * 1000,
+    });
+  } catch (error) {
+    const pendingFailure = classifyAdsPendingFailure(error, options);
+    if (pendingFailure) {
+      return {
+        ...pendingFailure,
+        warnings: [...warnings, ...pendingFailure.warnings],
+      };
+    }
+    throw error;
+  }
   const steps = result.steps as JsonValue;
 
   return {
@@ -1481,6 +1509,79 @@ const runAdsSource = async (options: CliOptions): Promise<{
       row_count: result.rowCount,
       steps,
       metadata: result.metadata,
+    },
+  };
+};
+
+export const classifyAdsPendingFailure = (
+  error: unknown,
+  options: CliOptions
+): {
+  status: SourceResultStatus;
+  rowsRead: number | null;
+  rowsWritten: number | null;
+  latestAvailableDate: string | null;
+  missingRanges: string[];
+  blockers: string[];
+  warnings: string[];
+  notes: string[];
+  details: JsonObject;
+} | null => {
+  if (!(error instanceof Error)) return null;
+  const details =
+    typeof (error as { metadata?: unknown }).metadata === 'object' &&
+    (error as { metadata?: unknown }).metadata !== null
+      ? ((error as { metadata?: Record<string, unknown> }).metadata ?? {})
+      : {};
+  const stderrTail = Array.isArray(details.stderr_tail)
+    ? details.stderr_tail.filter((value): value is string => typeof value === 'string')
+    : [];
+  const stdoutTail = Array.isArray(details.stdout_tail)
+    ? details.stdout_tail.filter((value): value is string => typeof value === 'string')
+    : [];
+  const combinedText = [error.message, ...stderrTail, ...stdoutTail].join('\n');
+  if (!combinedText.includes('pending_timeout') && !combinedText.includes('remained pending')) {
+    return null;
+  }
+
+  const reportId =
+    combinedText.match(/report_id=([0-9a-fA-F-]{8,})/)?.[1] ?? null;
+  const diagnosticPath =
+    combinedText.match(/Diagnostic artifact path:\s*(.+)$/m)?.[1]?.trim() ?? null;
+  const nextAction =
+    options.mode === 'scheduled'
+      ? 'Amazon still has the Ads report pending. Let the next scheduled run poll the saved report id, or rerun manually with --resume-pending.'
+      : 'Rerun the same request with --resume-pending to continue polling the saved report id instead of creating a duplicate report.';
+
+  return {
+    status: options.mode === 'scheduled' ? 'pending' : 'blocked',
+    rowsRead: 0,
+    rowsWritten: 0,
+    latestAvailableDate: null,
+    missingRanges: [`${options.from} -> ${options.to}`],
+    blockers: [
+      reportId
+        ? `Amazon Ads SP campaign report is still pending in Amazon. report_id=${reportId}`
+        : 'Amazon Ads SP campaign report is still pending in Amazon.',
+    ],
+    warnings: [],
+    notes: [
+      nextAction,
+      ...(diagnosticPath ? [`diagnostic artifact: ${diagnosticPath}`] : []),
+      ...(stderrTail.length > 0 ? [`stderr tail: ${stderrTail.slice(-3).join(' | ')}`] : []),
+    ],
+    details: {
+      error_code: 'pending_timeout',
+      error_message: error.message,
+      error_metadata: details as JsonValue,
+      report_id: reportId,
+      diagnostic_path: diagnosticPath,
+      pending_scope: {
+        account_id: options.accountId,
+        marketplace: options.marketplace,
+        from: options.from,
+        to: options.to,
+      },
     },
   };
 };
@@ -1997,6 +2098,7 @@ async function main(): Promise<void> {
         mode: options.mode,
         dry_run: options.dryRun,
         diagnose: options.diagnose,
+        resume_pending: options.resumePending,
         from: options.from,
         to: options.to,
         sources: options.sources,
@@ -2031,6 +2133,7 @@ async function main(): Promise<void> {
           parent_sync_run_id: parentSyncRunId,
           mode: options.mode,
           source,
+          resume_pending: options.resumePending,
           source_required_env: sourceEnvMap[source],
         },
         resultJson: {},
@@ -2103,7 +2206,9 @@ async function main(): Promise<void> {
         });
         await updateSyncRun(pool, childRunId, {
           status:
-            result.status === 'failed' || result.status === 'blocked'
+            result.status === 'failed' ||
+            result.status === 'blocked' ||
+            result.status === 'pending'
               ? 'failed'
               : result.status === 'skipped'
               ? 'skipped'
@@ -2114,11 +2219,17 @@ async function main(): Promise<void> {
           rowsWritten: result.rowsWritten,
           rowsFailed: 0,
           errorCode:
-            result.status === 'failed' || result.status === 'blocked'
-              ? 'source_blocked'
+            result.status === 'failed' ||
+            result.status === 'blocked' ||
+            result.status === 'pending'
+              ? typeof result.details.error_code === 'string'
+                ? result.details.error_code
+                : 'source_blocked'
               : null,
           errorMessage:
-            result.status === 'failed' || result.status === 'blocked'
+            result.status === 'failed' ||
+            result.status === 'blocked' ||
+            result.status === 'pending'
               ? result.blockers.join(' | ')
               : null,
           resultJson: {
@@ -2192,23 +2303,34 @@ async function main(): Promise<void> {
       }
     }
 
+    const toleratedStatuses: SourceResultStatus[] =
+      options.mode === 'scheduled'
+        ? ['success', 'partial', 'skipped', 'pending']
+        : ['success', 'partial', 'skipped'];
     const successCount = results.filter((result) =>
-      ['success', 'partial', 'skipped'].includes(result.status)
+      toleratedStatuses.includes(result.status)
     ).length;
     const anySuccess = results.some((result) =>
-      ['success', 'partial', 'skipped'].includes(result.status)
+      toleratedStatuses.includes(result.status)
     );
+    const parentDataStatus =
+      results.length > 0 &&
+      results.every((result) => result.status === 'pending' || result.status === 'blocked')
+        ? 'manual_unknown'
+        : anySuccess
+        ? 'live'
+        : 'failed';
     const finishedAt = new Date().toISOString();
 
     await updateSyncRun(pool, parentSyncRunId, {
       status: anySuccess ? 'succeeded' : 'failed',
-      dataStatus: anySuccess ? 'live' : 'failed',
+      dataStatus: parentDataStatus,
       finishedAt,
       rowsRead: results.reduce((sum, result) => sum + (result.rowsRead ?? 0), 0),
       rowsWritten: results.reduce((sum, result) => sum + (result.rowsWritten ?? 0), 0),
       rowsFailed: results.length - successCount,
       errorCode: anySuccess ? null : 'all_sources_failed',
-      errorMessage: anySuccess ? null : 'All selected sources failed or were blocked.',
+      errorMessage: anySuccess ? null : 'All selected sources failed, were blocked, or remained pending.',
       resultJson: {
         source_results: results.map((result) => ({
           source: result.source,
@@ -2226,7 +2348,9 @@ async function main(): Promise<void> {
 
     if (!anySuccess) {
       process.exitCode = 1;
-    } else if (results.some((result) => ['blocked', 'failed'].includes(result.status))) {
+    } else if (
+      results.some((result) => ['blocked', 'failed', 'pending'].includes(result.status))
+    ) {
       process.exitCode = 0;
     }
   } finally {

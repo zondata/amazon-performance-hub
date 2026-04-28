@@ -27,6 +27,7 @@ export interface DailyBatchGateRequest {
   marketplace: string;
   startDate: string;
   endDate: string;
+  resumePending?: boolean;
 }
 
 export interface DailyBatchStepResult extends JsonObject {
@@ -638,7 +639,13 @@ export const runRealAdsDailyBatch = async (
     const campaignPull = await runStep(
       'adsapi:pull-sp-campaign-daily',
       'adsapi:pull-sp-campaign-daily',
-      ['--start-date', request.startDate, '--end-date', request.endDate],
+      [
+        '--start-date',
+        request.startDate,
+        '--end-date',
+        request.endDate,
+        ...(request.resumePending ? ['--resume-pending'] : []),
+      ],
       (result) => ({
         row_count: parseNumberLine(result.stdout, 'Row count'),
         normalized_artifact_path: parseLineValue(

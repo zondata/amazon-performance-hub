@@ -56,6 +56,8 @@ export {
   parseSpCampaignDailyRowsFromCsv,
   requestSpCampaignDailyReport,
   runSpCampaignDailyPull,
+  type SpCampaignDailyPendingRequestRecord,
+  type SpCampaignDailyPendingRequestStore,
   type SpCampaignDailyPollingDiagnostic,
   validateProfileSyncArtifactForSpCampaignDaily,
   writeSpCampaignDailyArtifacts,

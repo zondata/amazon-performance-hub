@@ -270,7 +270,8 @@ describe('Amazon Ads SP campaign daily boundary', () => {
     }
 
     expect(thrown).toBeTruthy();
-    expect(thrown?.message).toContain('did not reach a terminal status after 3 attempts');
+    expect((thrown as { code?: string }).code).toBe('pending_timeout');
+    expect(thrown?.message).toContain('remained pending after 3 attempts');
     expect(thrown?.message).toContain('report_id=rpt-123');
     expect(thrown?.message).not.toContain('secret-signature');
     const details = (thrown as { details?: Record<string, unknown> }).details ?? {};
@@ -280,6 +281,81 @@ describe('Amazon Ads SP campaign daily boundary', () => {
     expect(details.retryAfter).toBe('30');
     expect(Array.isArray(details.lastStatuses)).toBe(true);
     expect(JSON.stringify(details.lastResponseBodyTail)).not.toContain('secret-signature');
+  });
+
+  it('reuses an existing pending report instead of creating a duplicate', async () => {
+    const config = loadAdsApiEnvForProfileSync(profileSyncEnv);
+    const dateRange = buildAdsApiDateRange({
+      startDate: '2026-04-10',
+      endDate: '2026-04-16',
+    });
+    const pendingStore = {
+      findReusablePendingRequest: vi.fn(async () => ({
+        reportId: 'rpt-existing',
+        status: 'PENDING',
+        statusDetails: 'awaiting_generation',
+        attemptCount: 12,
+        diagnosticPath: '/tmp/diag.json',
+        lastResponseJson: {},
+      })),
+      upsertPendingRequest: vi.fn(async () => {}),
+    };
+    const transport = vi.fn(async () => ({
+      status: 200,
+      json: {
+        reportId: 'rpt-existing',
+        status: 'SUCCESS',
+        location: 'https://download.example/report',
+      },
+      headers: {},
+    }));
+
+    const result = await requestSpCampaignDailyReport({
+      config,
+      accessToken: 'access-token',
+      dateRange,
+      transport,
+      pendingStore,
+      pollIntervalMs: 0,
+      sleep: async () => {},
+    });
+
+    expect(result.reportId).toBe('rpt-existing');
+    expect(transport).toHaveBeenCalledTimes(1);
+    const firstRequest = (
+      transport.mock.calls as unknown as Array<Array<{ method?: string; url?: string }>>
+    )[0]?.[0];
+    expect(firstRequest?.method).toBe('GET');
+    expect(String(firstRequest?.url ?? '')).toContain('/rpt-existing');
+    expect(pendingStore.findReusablePendingRequest).toHaveBeenCalledOnce();
+  });
+
+  it('fails clearly when resume-pending is requested but no saved report exists', async () => {
+    const config = loadAdsApiEnvForProfileSync(profileSyncEnv);
+    const dateRange = buildAdsApiDateRange({
+      startDate: '2026-04-10',
+      endDate: '2026-04-16',
+    });
+    const pendingStore = {
+      findReusablePendingRequest: vi.fn(async () => null),
+      upsertPendingRequest: vi.fn(async () => {}),
+    };
+
+    let thrown: unknown;
+    try {
+      await requestSpCampaignDailyReport({
+        config,
+        accessToken: 'access-token',
+        dateRange,
+        transport: vi.fn(),
+        pendingStore,
+        resumePendingOnly: true,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect((thrown as { code?: string }).code).toBe('pending_report_not_found');
   });
 
   it('emits poll updates for the create phase and every fifteenth attempt', async () => {
@@ -321,7 +397,7 @@ describe('Amazon Ads SP campaign daily boundary', () => {
           updates.push({ kind: update.kind, attempt: update.snapshot.attempt });
         },
       })
-    ).rejects.toThrowError('did not reach a terminal status after 16 attempts');
+    ).rejects.toThrowError('remained pending after 16 attempts');
 
     expect(updates).toEqual([
       { kind: 'create', attempt: 0 },
@@ -369,7 +445,7 @@ describe('Amazon Ads SP campaign daily boundary', () => {
         },
       })
     ).rejects.toThrowError(
-      `did not reach a terminal status after ${DEFAULT_SP_CAMPAIGN_DAILY_MAX_ATTEMPTS} attempts`
+      `remained pending after ${DEFAULT_SP_CAMPAIGN_DAILY_MAX_ATTEMPTS} attempts`
     );
 
     expect(sleepCalls).toBe(DEFAULT_SP_CAMPAIGN_DAILY_MAX_ATTEMPTS - 1);
@@ -538,5 +614,75 @@ describe('Amazon Ads SP campaign daily boundary', () => {
 
     expect(fs.existsSync(rawArtifactPath)).toBe(true);
     expect(fs.existsSync(normalizedArtifactPath)).toBe(true);
+  });
+
+  it('resumes a saved pending report through the full pull path and downloads once ready', async () => {
+    const config = loadAdsApiEnvForProfileSync(profileSyncEnv);
+    const dateRange = buildAdsApiDateRange({
+      startDate: '2026-04-10',
+      endDate: '2026-04-16',
+    });
+    const artifactPath = writeProfileArtifact();
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'adsapi-sp-campaign-resume-'));
+    tempDirs.push(outDir);
+    const pendingStore = {
+      findReusablePendingRequest: vi.fn(async () => ({
+        reportId: 'rpt-existing',
+        status: 'PENDING',
+        statusDetails: null,
+        attemptCount: 3,
+        diagnosticPath: null,
+        lastResponseJson: {},
+      })),
+      upsertPendingRequest: vi.fn(async () => {}),
+    };
+    const transport = vi.fn(async () => ({
+      status: 200,
+      json: {
+        reportId: 'rpt-existing',
+        status: 'SUCCESS',
+        location: 'https://download.example/report',
+        fileSize: 456,
+      },
+      headers: {},
+    }));
+    const downloadTransport = vi.fn(async () => ({
+      status: 200,
+      body: Buffer.from(
+        JSON.stringify([
+          {
+            campaignId: '1',
+            campaignName: 'Resumed Campaign',
+            campaignStatus: 'enabled',
+            date: '2026-04-10',
+            impressions: 10,
+            clicks: 1,
+            cost: 2.34,
+            sales14d: 4.56,
+            purchases14d: 1,
+          },
+        ])
+      ),
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    const result = await runSpCampaignDailyPull({
+      config,
+      accessToken: 'access-token',
+      dateRange,
+      transport,
+      downloadTransport,
+      artifactPath,
+      rawArtifactPath: path.join(outDir, 'raw.json'),
+      normalizedArtifactPath: path.join(outDir, 'normalized.json'),
+      pendingStore,
+      resumePendingOnly: true,
+      pollIntervalMs: 0,
+      sleep: async () => {},
+    });
+
+    expect(result.metadata.reportId).toBe('rpt-existing');
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(downloadTransport).toHaveBeenCalledTimes(1);
   });
 });

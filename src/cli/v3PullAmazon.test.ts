@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { parseV3PullAmazonArgs } from './v3PullAmazon';
+import { classifyAdsPendingFailure, parseV3PullAmazonArgs } from './v3PullAmazon';
 
 describe('parseV3PullAmazonArgs', () => {
   it('parses an explicit manual command', () => {
@@ -61,6 +61,21 @@ describe('parseV3PullAmazonArgs', () => {
     expect(args.diagnose).toBe(true);
   });
 
+  it('parses resume-pending for ads reruns', () => {
+    const args = parseV3PullAmazonArgs([
+      '--account-id=sourbear',
+      '--marketplace=US',
+      '--from=2026-04-21',
+      '--to=2026-04-21',
+      '--sources=ads',
+      '--mode=manual',
+      '--resume-pending',
+    ]);
+
+    expect(args.sources).toEqual(['ads']);
+    expect(args.resumePending).toBe(true);
+  });
+
   it('rejects unsupported sources', () => {
     expect(() =>
       parseV3PullAmazonArgs([
@@ -102,7 +117,54 @@ describe('v3-amazon-data-sync workflow', () => {
     expect(workflow).not.toMatch(/advertising-api\.amazon\.com\/v\d/);
     expect(runbook).toContain('`.env.local` must never be committed.');
     expect(runbook).toContain('--diagnose');
+    expect(runbook).toContain('--resume-pending');
     expect(runbook).not.toMatch(/client_secret=/i);
     expect(runbook).not.toMatch(/refresh_token=/i);
+  });
+});
+
+describe('classifyAdsPendingFailure', () => {
+  const buildBaseArgs = (mode: 'manual' | 'scheduled') =>
+    parseV3PullAmazonArgs([
+      '--account-id=sourbear',
+      '--marketplace=US',
+      '--from=2026-04-21',
+      '--to=2026-04-21',
+      '--sources=ads',
+      `--mode=${mode}`,
+    ]);
+
+  it('keeps manual ads runs blocked and actionable when Amazon leaves the report pending', () => {
+    const error = Object.assign(new Error('command failed'), {
+      metadata: {
+        stderr_tail: [
+          'Amazon Ads campaign daily error code: pending_timeout',
+          'Amazon Ads campaign daily error: Amazon Ads campaign daily report remained pending after 240 attempts. report_id=23d14b56-c1fe-4469-b530-a6f77cba27d4',
+          'Diagnostic artifact path: /tmp/sp-campaign-daily.polling-diagnostic.json',
+        ],
+      },
+    });
+
+    const result = classifyAdsPendingFailure(error, buildBaseArgs('manual'));
+
+    expect(result?.status).toBe('blocked');
+    expect(result?.blockers[0]).toContain('report_id=23d14b56-c1fe-4469-b530-a6f77cba27d4');
+    expect(result?.notes.join(' ')).toContain('--resume-pending');
+  });
+
+  it('treats scheduled ads runs as pending instead of a hard infrastructure failure', () => {
+    const error = Object.assign(new Error('command failed'), {
+      metadata: {
+        stderr_tail: [
+          'Amazon Ads campaign daily error code: pending_timeout',
+          'Amazon Ads campaign daily error: Amazon Ads campaign daily report remained pending after 240 attempts. report_id=23d14b56-c1fe-4469-b530-a6f77cba27d4',
+        ],
+      },
+    });
+
+    const result = classifyAdsPendingFailure(error, buildBaseArgs('scheduled'));
+
+    expect(result?.status).toBe('pending');
+    expect(result?.details.error_code).toBe('pending_timeout');
   });
 });
