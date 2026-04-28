@@ -31,7 +31,10 @@ export {
   toAdsProfileSummaryEntry,
 } from './profiles';
 export {
+  ADS_API_SP_CAMPAIGN_DAILY_DIAGNOSTIC_ARTIFACT_PATH,
   ADS_API_PROFILE_SYNC_ARTIFACT_PATH,
+  DEFAULT_SP_CAMPAIGN_DAILY_MAX_ATTEMPTS,
+  DEFAULT_SP_CAMPAIGN_DAILY_POLL_INTERVAL_MS,
   ADS_API_SP_CAMPAIGN_DAILY_NORMALIZED_ARTIFACT_PATH,
   ADS_API_SP_CAMPAIGN_DAILY_RAW_ARTIFACT_PATH,
   MAX_SP_CAMPAIGN_DAILY_WINDOW_DAYS,
@@ -53,6 +56,7 @@ export {
   parseSpCampaignDailyRowsFromCsv,
   requestSpCampaignDailyReport,
   runSpCampaignDailyPull,
+  type SpCampaignDailyPollingDiagnostic,
   validateProfileSyncArtifactForSpCampaignDaily,
   writeSpCampaignDailyArtifacts,
 } from './spCampaignDaily';

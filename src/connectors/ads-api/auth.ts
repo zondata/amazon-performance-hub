@@ -195,8 +195,14 @@ export const adsApiFetchTransport: AdsApiTransport = async (request) => {
     }
   }
 
+  const headers: Record<string, string | null> = {};
+  response.headers.forEach((value, key) => {
+    headers[key.toLowerCase()] = value;
+  });
+
   return {
     status: response.status,
     json,
+    headers,
   };
 };
