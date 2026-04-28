@@ -260,9 +260,20 @@ export type SpCampaignDailyPendingRequestRecord = {
   lastResponseJson: Record<string, unknown>;
 };
 
+export type SpCampaignDailyPendingRequestStatus =
+  | 'completed'
+  | 'created'
+  | 'failed'
+  | 'imported'
+  | 'pending'
+  | 'pending_timeout'
+  | 'polling'
+  | 'requested'
+  | 'stale_expired';
+
 type SpCampaignDailyPendingRequestState = {
   reportId: string;
-  status: 'completed' | 'created' | 'failed' | 'pending' | 'pending_timeout' | 'polling';
+  status: SpCampaignDailyPendingRequestStatus;
   statusDetails: string | null;
   attemptCount: number;
   requestPayloadJson: Record<string, unknown>;
@@ -745,7 +756,7 @@ export const requestSpCampaignDailyReport = async (args: {
 
         await persistPendingState({
           reportId: parsed.reportId,
-          status: toPendingRequestStatus(parsed.status, 'created'),
+          status: toPendingRequestStatus(parsed.status, 'requested'),
           statusDetails: parsed.statusDetails,
           attemptCount: 0,
           requestPayloadJson: requestPayload,
@@ -784,7 +795,7 @@ export const requestSpCampaignDailyReport = async (args: {
   });
   await persistPendingState({
     reportId: created.reportId,
-    status: toPendingRequestStatus(created.status, reusablePending ? 'pending' : 'created'),
+    status: toPendingRequestStatus(created.status, reusablePending ? 'pending' : 'requested'),
     statusDetails: created.statusDetails,
     attemptCount: reusablePending?.attemptCount ?? 0,
     requestPayloadJson: requestPayload,

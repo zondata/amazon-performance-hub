@@ -178,7 +178,7 @@ const createPendingRequestStore = (
           and source_type = $5
           and start_date = $6::date
           and end_date = $7::date
-          and status in ('created', 'pending', 'polling', 'pending_timeout')
+          and status in ('created', 'requested', 'pending', 'polling', 'pending_timeout')
         order by updated_at desc
         limit 1
       `,
