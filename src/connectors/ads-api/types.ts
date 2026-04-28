@@ -275,10 +275,12 @@ export class AdsApiSpCampaignDailyError extends Error {
     | 'profile_sync_artifact_missing'
     | 'profile_sync_artifact_invalid'
     | 'profile_sync_artifact_mismatch'
+    | 'pending_report_not_found'
     | 'transport_error'
     | 'report_request_failed'
     | 'invalid_response'
     | 'report_timeout'
+    | 'pending_timeout'
     | 'report_failed'
     | 'download_failed';
   readonly status?: number;
@@ -290,10 +292,12 @@ export class AdsApiSpCampaignDailyError extends Error {
       | 'profile_sync_artifact_missing'
       | 'profile_sync_artifact_invalid'
       | 'profile_sync_artifact_mismatch'
+      | 'pending_report_not_found'
       | 'transport_error'
       | 'report_request_failed'
       | 'invalid_response'
       | 'report_timeout'
+      | 'pending_timeout'
       | 'report_failed'
       | 'download_failed',
     message: string,
