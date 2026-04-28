@@ -47,6 +47,7 @@ export type AdsApiTransportRequest = {
 export type AdsApiTransportResponse = {
   status: number;
   json: unknown;
+  headers?: Record<string, string | null>;
 };
 
 export type AdsApiTransport = (

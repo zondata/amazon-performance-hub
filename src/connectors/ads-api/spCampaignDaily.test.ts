@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildAdsApiDateRange,
+  DEFAULT_SP_CAMPAIGN_DAILY_MAX_ATTEMPTS,
   buildSpCampaignDailyCreateRequest,
   buildSpCampaignDailyCreateRequestBody,
   normalizeSpCampaignDailyRows,
@@ -221,6 +222,157 @@ describe('Amazon Ads SP campaign daily boundary', () => {
     ).rejects.toThrowError(
       'Amazon Ads campaign daily report request returned an invalid response payload'
     );
+  });
+
+  it('records timeout diagnostics with status history and redacted response tails', async () => {
+    const config = loadAdsApiEnvForProfileSync(profileSyncEnv);
+    const dateRange = buildAdsApiDateRange({
+      startDate: '2026-04-10',
+      endDate: '2026-04-16',
+    });
+    const transport = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: 200,
+        json: {
+          reportId: 'rpt-123',
+          status: 'PENDING',
+        },
+        headers: {},
+      })
+      .mockResolvedValue({
+        status: 200,
+        json: {
+          reportId: 'rpt-123',
+          status: 'PROCESSING',
+          statusDetails: 'still generating',
+          note:
+            'https://download.example/report?X-Amz-Signature=secret-signature&token=abc',
+        },
+        headers: {
+          'retry-after': '30',
+        },
+      });
+
+    let thrown: Error | null = null;
+    try {
+      await requestSpCampaignDailyReport({
+        config,
+        accessToken: 'access-token',
+        dateRange,
+        transport,
+        maxAttempts: 3,
+        pollIntervalMs: 0,
+        sleep: async () => {},
+      });
+    } catch (error) {
+      thrown = error as Error;
+    }
+
+    expect(thrown).toBeTruthy();
+    expect(thrown?.message).toContain('did not reach a terminal status after 3 attempts');
+    expect(thrown?.message).toContain('report_id=rpt-123');
+    expect(thrown?.message).not.toContain('secret-signature');
+    const details = (thrown as { details?: Record<string, unknown> }).details ?? {};
+    expect(details.reportId).toBe('rpt-123');
+    expect(details.maxAttempts).toBe(3);
+    expect(details.pollIntervalMs).toBe(0);
+    expect(details.retryAfter).toBe('30');
+    expect(Array.isArray(details.lastStatuses)).toBe(true);
+    expect(JSON.stringify(details.lastResponseBodyTail)).not.toContain('secret-signature');
+  });
+
+  it('emits poll updates for the create phase and every fifteenth attempt', async () => {
+    const config = loadAdsApiEnvForProfileSync(profileSyncEnv);
+    const dateRange = buildAdsApiDateRange({
+      startDate: '2026-04-10',
+      endDate: '2026-04-16',
+    });
+    const transport = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: 200,
+        json: {
+          reportId: 'rpt-123',
+          status: 'PENDING',
+        },
+        headers: {},
+      })
+      .mockResolvedValue({
+        status: 200,
+        json: {
+          reportId: 'rpt-123',
+          status: 'QUEUED',
+        },
+        headers: {},
+      });
+    const updates: Array<{ kind: string; attempt: number }> = [];
+
+    await expect(
+      requestSpCampaignDailyReport({
+        config,
+        accessToken: 'access-token',
+        dateRange,
+        transport,
+        maxAttempts: 16,
+        pollIntervalMs: 0,
+        sleep: async () => {},
+        onPollUpdate: (update) => {
+          updates.push({ kind: update.kind, attempt: update.snapshot.attempt });
+        },
+      })
+    ).rejects.toThrowError('did not reach a terminal status after 16 attempts');
+
+    expect(updates).toEqual([
+      { kind: 'create', attempt: 0 },
+      { kind: 'poll', attempt: 1 },
+      { kind: 'poll', attempt: 15 },
+      { kind: 'timeout', attempt: 16 },
+    ]);
+  });
+
+  it('uses the new default max-attempt budget when one is not provided', async () => {
+    const config = loadAdsApiEnvForProfileSync(profileSyncEnv);
+    const dateRange = buildAdsApiDateRange({
+      startDate: '2026-04-10',
+      endDate: '2026-04-16',
+    });
+    const transport = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: 200,
+        json: {
+          reportId: 'rpt-123',
+          status: 'PENDING',
+        },
+        headers: {},
+      })
+      .mockResolvedValue({
+        status: 200,
+        json: {
+          reportId: 'rpt-123',
+          status: 'PROCESSING',
+        },
+        headers: {},
+      });
+    let sleepCalls = 0;
+
+    await expect(
+      requestSpCampaignDailyReport({
+        config,
+        accessToken: 'access-token',
+        dateRange,
+        transport,
+        pollIntervalMs: 0,
+        sleep: async () => {
+          sleepCalls += 1;
+        },
+      })
+    ).rejects.toThrowError(
+      `did not reach a terminal status after ${DEFAULT_SP_CAMPAIGN_DAILY_MAX_ATTEMPTS} attempts`
+    );
+
+    expect(sleepCalls).toBe(DEFAULT_SP_CAMPAIGN_DAILY_MAX_ATTEMPTS - 1);
   });
 
   it('normalizes campaign daily rows into the required row shape', () => {

@@ -35,9 +35,13 @@ Ads diagnostics:
 
 ```bash
 npm run v3:pull:amazon -- --account-id sourbear --marketplace US --sources ads --mode manual --from YYYY-MM-DD --to YYYY-MM-DD --diagnose
+npm run adsapi:pull-sp-campaign-daily -- --start-date YYYY-MM-DD --end-date YYYY-MM-DD --diagnose
 ```
 
 - `--diagnose` keeps the sync in the normal Phase 9 path, but streams child Ads command stdout/stderr and preserves command tails in the final failure report.
+- SP campaign polling can also be tuned with:
+  - `ADS_API_REPORT_MAX_ATTEMPTS`
+  - `ADS_API_REPORT_POLL_INTERVAL_MS`
 
 ## GitHub Actions manual run
 
@@ -107,6 +111,7 @@ order by source_type, table_name, granularity;
 - GitHub Actions runs: check repository secrets by name.
 - Missing secret failures should show the missing secret name only, never its value.
 - Ads failures: rerun with `--diagnose` to stream the underlying `adsapi:*` command output and capture stdout/stderr tails in the final error summary.
+- Ads report timeout: check `out/ads-api-sp-campaign-daily/diagnostics/sp-campaign-daily.polling-diagnostic.json` in the workflow artifact or local `out/` folder for report id, last statuses, retry-after, and the redacted last response body tail.
 
 ## Safety
 

@@ -35,6 +35,11 @@ export const ADS_API_SP_CAMPAIGN_DAILY_NORMALIZED_ARTIFACT_PATH = path.resolve(
   'out/ads-api-sp-campaign-daily/normalized/sp-campaign-daily.normalized.json'
 );
 
+export const ADS_API_SP_CAMPAIGN_DAILY_DIAGNOSTIC_ARTIFACT_PATH = path.resolve(
+  process.cwd(),
+  'out/ads-api-sp-campaign-daily/diagnostics/sp-campaign-daily.polling-diagnostic.json'
+);
+
 const REPORTING_REPORTS_PATH = '/reporting/reports';
 const SP_CAMPAIGN_REPORT_TYPE_ID = 'spCampaigns';
 const SP_CAMPAIGN_REPORT_COLUMNS = [
@@ -52,6 +57,8 @@ const SP_CAMPAIGN_REPORT_COLUMNS = [
 ] as const;
 
 export const MAX_SP_CAMPAIGN_DAILY_WINDOW_DAYS = 31;
+export const DEFAULT_SP_CAMPAIGN_DAILY_MAX_ATTEMPTS = 240;
+export const DEFAULT_SP_CAMPAIGN_DAILY_POLL_INTERVAL_MS = 5000;
 export const TERMINAL_SP_CAMPAIGN_DAILY_SUCCESS_STATUSES = [
   'SUCCESS',
   'COMPLETED',
@@ -81,6 +88,133 @@ const readString = (value: unknown): string | null => {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const maskProfileId = (value: string): string =>
+  value.length <= 4 ? '****' : `${'*'.repeat(Math.max(value.length - 4, 4))}${value.slice(-4)}`;
+
+const redactSensitiveText = (value: string): string =>
+  value
+    .replace(
+      /((?:access|refresh|client|service[_-]?role|session|bearer|token|signature)[_-]?token?["'=:\s]+)([^\s'",]+)/gi,
+      '$1[REDACTED]'
+    )
+    .replace(/(authorization:\s*bearer\s+)([^\s]+)/gi, '$1[REDACTED]')
+    .replace(/([?&](?:token|signature|x-amz-signature|x-amz-credential|x-amz-security-token|x-amz-date|x-amz-expires)=)([^&]+)/gi, '$1[REDACTED]');
+
+const safeStringify = (value: unknown): string => {
+  try {
+    return redactSensitiveText(JSON.stringify(value));
+  } catch {
+    return redactSensitiveText(String(value));
+  }
+};
+
+const toTailLines = (value: string, count = 10): string[] =>
+  value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-count);
+
+const readHeader = (
+  headers: Record<string, string | null> | undefined,
+  name: string
+): string | null => headers?.[name.toLowerCase()] ?? null;
+
+const isSuccessStatus = (status: string | null): boolean =>
+  status != null &&
+  (TERMINAL_SP_CAMPAIGN_DAILY_SUCCESS_STATUSES as readonly string[]).includes(status);
+
+const isFailureStatus = (status: string | null): boolean =>
+  status != null &&
+  (TERMINAL_SP_CAMPAIGN_DAILY_FAILURE_STATUSES as readonly string[]).includes(status);
+
+const shouldLogPollAttempt = (attempt: number): boolean =>
+  attempt === 0 || attempt === 1 || attempt % 15 === 0;
+
+const buildPollSnapshot = (args: {
+  attempt: number;
+  metadata: AdsApiSpCampaignDailyReportMetadata;
+  responseStatus?: number | null;
+  retryAfter?: string | null;
+}): SpCampaignDailyPollSnapshot => ({
+  attempt: args.attempt,
+  status: args.metadata.status?.toUpperCase() ?? null,
+  statusDetails: args.metadata.statusDetails,
+  hasLocation: !!args.metadata.location,
+  responseStatus: args.responseStatus ?? null,
+  retryAfter: args.retryAfter ?? null,
+  receivedAt: new Date().toISOString(),
+});
+
+const buildPollingDiagnostic = (args: {
+  config: AdsApiProfileSyncEnvConfig;
+  dateRange: AdsApiDateRange;
+  reportId: string;
+  maxAttempts: number;
+  pollIntervalMs: number;
+  startedAtMs: number;
+  latest: AdsApiSpCampaignDailyReportMetadata;
+  lastResponseJson: unknown;
+  lastRetryAfter: string | null;
+  history: SpCampaignDailyPollSnapshot[];
+}): SpCampaignDailyPollingDiagnostic => ({
+  reportId: args.reportId,
+  startDate: args.dateRange.startDate,
+  endDate: args.dateRange.endDate,
+  maskedProfileId: maskProfileId(args.config.profileId),
+  pollMethod: 'GET',
+  pollUrl: buildSpCampaignDailyStatusRequest({
+    config: args.config,
+    accessToken: '[REDACTED]',
+    reportId: args.reportId,
+  }).url,
+  maxAttempts: args.maxAttempts,
+  pollIntervalMs: args.pollIntervalMs,
+  totalElapsedMs: Date.now() - args.startedAtMs,
+  lastStatuses: args.history.slice(-10),
+  latestStatus: args.latest.status?.toUpperCase() ?? null,
+  latestStatusDetails: args.latest.statusDetails,
+  retryAfter: args.lastRetryAfter,
+  lastResponseBodyTail: toTailLines(safeStringify(args.lastResponseJson), 10),
+  suggestedNextAction:
+    'Rerun with --diagnose if needed, review the polling diagnostic artifact, and check Amazon Ads Status for reporting delays before retrying.',
+});
+
+type SpCampaignDailyPollSnapshot = {
+  attempt: number;
+  status: string | null;
+  statusDetails: string | null;
+  hasLocation: boolean;
+  responseStatus: number | null;
+  retryAfter: string | null;
+  receivedAt: string;
+};
+
+export type SpCampaignDailyPollingDiagnostic = {
+  reportId: string;
+  startDate: string;
+  endDate: string;
+  maskedProfileId: string;
+  pollMethod: 'GET';
+  pollUrl: string;
+  maxAttempts: number;
+  pollIntervalMs: number;
+  totalElapsedMs: number;
+  lastStatuses: SpCampaignDailyPollSnapshot[];
+  latestStatus: string | null;
+  latestStatusDetails: string | null;
+  retryAfter: string | null;
+  lastResponseBodyTail: string[];
+  suggestedNextAction: string;
+};
+
+type SpCampaignDailyPollUpdate = {
+  kind: 'create' | 'poll' | 'timeout';
+  reportId: string;
+  snapshot: SpCampaignDailyPollSnapshot;
+  diagnostic?: SpCampaignDailyPollingDiagnostic;
 };
 
 const readStringLike = (value: unknown): string | null => {
@@ -402,10 +536,13 @@ export const requestSpCampaignDailyReport = async (args: {
   maxAttempts?: number;
   pollIntervalMs?: number;
   sleep?: (ms: number) => Promise<void>;
+  onPollUpdate?: (update: SpCampaignDailyPollUpdate) => void;
 }): Promise<AdsApiSpCampaignDailyReportMetadata> => {
-  const maxAttempts = args.maxAttempts ?? 180;
-  const pollIntervalMs = args.pollIntervalMs ?? 5000;
+  const maxAttempts = args.maxAttempts ?? DEFAULT_SP_CAMPAIGN_DAILY_MAX_ATTEMPTS;
+  const pollIntervalMs =
+    args.pollIntervalMs ?? DEFAULT_SP_CAMPAIGN_DAILY_POLL_INTERVAL_MS;
   const sleep = args.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const startedAtMs = Date.now();
 
   let createResponse;
 
@@ -461,13 +598,25 @@ export const requestSpCampaignDailyReport = async (args: {
   }
 
   let latest = created;
+  const statusHistory: SpCampaignDailyPollSnapshot[] = [];
+  let lastResponseJson: unknown = createResponse.json;
+  let lastRetryAfter = readHeader(createResponse.headers, 'retry-after');
+  const createdSnapshot = buildPollSnapshot({
+    attempt: 0,
+    metadata: created,
+    responseStatus: createResponse.status,
+    retryAfter: lastRetryAfter,
+  });
+  statusHistory.push(createdSnapshot);
+  args.onPollUpdate?.({
+    kind: 'create',
+    reportId: created.reportId,
+    snapshot: createdSnapshot,
+  });
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const status = latest.status?.toUpperCase() ?? null;
-    if (
-      status &&
-      (TERMINAL_SP_CAMPAIGN_DAILY_SUCCESS_STATUSES as readonly string[]).includes(status)
-    ) {
+    if (isSuccessStatus(status)) {
       return latest;
     }
 
@@ -475,10 +624,7 @@ export const requestSpCampaignDailyReport = async (args: {
       return latest;
     }
 
-    if (
-      status &&
-      (TERMINAL_SP_CAMPAIGN_DAILY_FAILURE_STATUSES as readonly string[]).includes(status)
-    ) {
+    if (isFailureStatus(status)) {
       throw normalizeReportError(
         'report_failed',
         `Amazon Ads campaign daily report ended with terminal status ${latest.status}`,
@@ -521,12 +667,25 @@ export const requestSpCampaignDailyReport = async (args: {
     }
 
     latest = parsedStatus;
+    lastResponseJson = statusResponse.json;
+    lastRetryAfter = readHeader(statusResponse.headers, 'retry-after');
+    const snapshot = buildPollSnapshot({
+      attempt,
+      metadata: latest,
+      responseStatus: statusResponse.status,
+      retryAfter: lastRetryAfter,
+    });
+    statusHistory.push(snapshot);
+    if (shouldLogPollAttempt(attempt)) {
+      args.onPollUpdate?.({
+        kind: 'poll',
+        reportId: created.reportId,
+        snapshot,
+      });
+    }
 
     const nextStatus = latest.status?.toUpperCase() ?? null;
-    if (
-      nextStatus &&
-      (TERMINAL_SP_CAMPAIGN_DAILY_SUCCESS_STATUSES as readonly string[]).includes(nextStatus)
-    ) {
+    if (isSuccessStatus(nextStatus)) {
       return latest;
     }
 
@@ -534,10 +693,7 @@ export const requestSpCampaignDailyReport = async (args: {
       return latest;
     }
 
-    if (
-      nextStatus &&
-      (TERMINAL_SP_CAMPAIGN_DAILY_FAILURE_STATUSES as readonly string[]).includes(nextStatus)
-    ) {
+    if (isFailureStatus(nextStatus)) {
       throw normalizeReportError(
         'report_failed',
         `Amazon Ads campaign daily report ended with terminal status ${latest.status}`,
@@ -550,10 +706,40 @@ export const requestSpCampaignDailyReport = async (args: {
     }
   }
 
+  const diagnostic = buildPollingDiagnostic({
+    config: args.config,
+    dateRange: args.dateRange,
+    reportId: created.reportId,
+    maxAttempts,
+    pollIntervalMs,
+    startedAtMs,
+    latest,
+    lastResponseJson,
+    lastRetryAfter,
+    history: statusHistory,
+  });
+  args.onPollUpdate?.({
+    kind: 'timeout',
+    reportId: created.reportId,
+    snapshot: statusHistory[statusHistory.length - 1] ?? createdSnapshot,
+    diagnostic,
+  });
+
   throw normalizeReportError(
     'report_timeout',
-    `Amazon Ads campaign daily report did not reach a terminal status after ${maxAttempts} attempts`,
-    { details: latest }
+    [
+      `Amazon Ads campaign daily report did not reach a terminal status after ${maxAttempts} attempts.`,
+      `report_id=${created.reportId}`,
+      `date_range=${args.dateRange.startDate}->${args.dateRange.endDate}`,
+      `profile_id=${maskProfileId(args.config.profileId)}`,
+      `poll_interval_ms=${pollIntervalMs}`,
+      `elapsed_ms=${diagnostic.totalElapsedMs}`,
+      `last_statuses=${diagnostic.lastStatuses
+        .map((entry) => entry.status ?? '(none)')
+        .join(', ') || '(none)'}`,
+      `next_action=${diagnostic.suggestedNextAction}`,
+    ].join(' '),
+    { details: diagnostic }
   );
 };
 
@@ -921,6 +1107,7 @@ export const runSpCampaignDailyPull = async (args: {
   pollIntervalMs?: number;
   sleep?: (ms: number) => Promise<void>;
   generatedAt?: string;
+  onPollUpdate?: (update: SpCampaignDailyPollUpdate) => void;
 }): Promise<{
   validatedArtifact: AdsApiValidatedProfileSyncArtifact;
   metadata: AdsApiSpCampaignDailyReportMetadata;
@@ -942,6 +1129,7 @@ export const runSpCampaignDailyPull = async (args: {
     maxAttempts: args.maxAttempts,
     pollIntervalMs: args.pollIntervalMs,
     sleep: args.sleep,
+    onPollUpdate: args.onPollUpdate,
   });
 
   const rawRowsPayload = await downloadSpCampaignDailyReport({
