@@ -3,9 +3,11 @@ import Link from 'next/link';
 import { getPipelineStatus } from '@/lib/pipeline-status/getPipelineStatus';
 
 const formatValue = (value: string | null) => value ?? '—';
-const PREVIEW_LIMIT = 110;
+const PREVIEW_LIMIT = 120;
 
-const badgeClassName = (tone: 'positive' | 'muted' | 'warning' | 'danger' | 'neutral') => {
+const badgeClassName = (
+  tone: 'positive' | 'muted' | 'warning' | 'danger' | 'neutral'
+) => {
   if (tone === 'positive') {
     return 'border-emerald-200 bg-emerald-50 text-emerald-700';
   }
@@ -21,14 +23,6 @@ const badgeClassName = (tone: 'positive' | 'muted' | 'warning' | 'danger' | 'neu
   return 'border-border bg-surface text-foreground';
 };
 
-const countBadgeTone = (count: number, positiveTone: 'warning' | 'danger') =>
-  count > 0 ? positiveTone : 'muted';
-
-const formatImplementationStatus = (value: string) =>
-  value === 'implemented' ? 'Implemented' : 'Not implemented';
-
-const formatCoverageStatus = (value: string) => value.replace(/_/g, ' ');
-
 const previewText = (value: string | null, limit = PREVIEW_LIMIT) => {
   if (!value) {
     return '—';
@@ -42,21 +36,28 @@ const previewText = (value: string | null, limit = PREVIEW_LIMIT) => {
   return `${normalized.slice(0, limit - 1)}…`;
 };
 
+const statusTone = (status: string) => {
+  if (status === 'success') return 'positive';
+  if (status === 'partial_success') return 'warning';
+  if (status === 'warning') return 'warning';
+  if (status === 'failed') return 'danger';
+  if (status === 'blocked' || status === 'not_implemented' || status === 'no_coverage') {
+    return 'muted';
+  }
+  return 'neutral';
+};
+
+const statusLabel = (status: string) => status.replace(/_/g, ' ');
+
 export default async function PipelineStatusPage() {
-  const rows = await getPipelineStatus();
+  const { rows, batchSummary } = await getPipelineStatus();
   const totalSources = rows.length;
   const implementedSources = rows.filter(
     (row) => row.implementationStatus === 'implemented'
   ).length;
   const notImplementedSources = totalSources - implementedSources;
-  const activePendingTotal = rows.reduce(
-    (sum, row) => sum + row.activePendingCount,
-    0
-  );
-  const failedOrStaleTotal = rows.reduce(
-    (sum, row) => sum + row.failedOrStaleCount,
-    0
-  );
+  const activePendingTotal = rows.reduce((sum, row) => sum + row.activePendingCount, 0);
+  const failedOrStaleTotal = rows.reduce((sum, row) => sum + row.failedOrStaleCount, 0);
 
   return (
     <div className="space-y-5">
@@ -70,8 +71,8 @@ export default async function PipelineStatusPage() {
               Pipeline Status
             </h1>
             <p className="mt-2 max-w-3xl text-sm text-muted">
-              Plain status view for implemented Amazon pull loops and unsupported
-              sources. Unsupported sources are marked as not implemented, not failed.
+              Each row below reflects its own source group. Batch-level failures are shown
+              separately and do not overwrite successful source-group rows.
             </p>
           </div>
           <Link
@@ -82,6 +83,31 @@ export default async function PipelineStatusPage() {
           </Link>
         </div>
       </section>
+
+      {batchSummary ? (
+        <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
+          <div className="flex flex-wrap items-start gap-3">
+            <span
+              className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClassName(
+                statusTone(batchSummary.status)
+              )}`}
+            >
+              Ads batch {statusLabel(batchSummary.status)}
+            </span>
+            <p className="max-w-4xl text-sm text-foreground">{batchSummary.summary}</p>
+          </div>
+          {batchSummary.technicalDetails ? (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-sm text-muted">
+                Show technical details
+              </summary>
+              <pre className="mt-2 max-h-48 overflow-auto rounded-lg border border-border bg-surface px-3 py-2 text-xs whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                {batchSummary.technicalDetails}
+              </pre>
+            </details>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -122,46 +148,49 @@ export default async function PipelineStatusPage() {
           data-aph-hscroll-axis="x"
           className="max-h-[70vh] overflow-auto rounded-xl border border-border"
         >
-          <table className="w-full min-w-[1380px] table-fixed text-left text-sm">
+          <table className="w-full min-w-[1420px] table-fixed text-left text-sm">
             <thead className="text-xs uppercase tracking-wider text-muted">
               <tr>
-                <th className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3 shadow-sm w-[13rem]">
+                <th className="sticky top-0 z-10 w-[13rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Source group
                 </th>
-                <th className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3 shadow-sm w-[15rem]">
+                <th className="sticky top-0 z-10 w-[15rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Source type
                 </th>
-                <th className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3 shadow-sm w-[14rem]">
+                <th className="sticky top-0 z-10 w-[14rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Target table
                 </th>
-                <th className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3 shadow-sm w-[9rem]">
+                <th className="sticky top-0 z-10 w-[9rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Implementation
                 </th>
-                <th className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3 shadow-sm w-[10rem]">
+                <th className="sticky top-0 z-10 w-[9rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
+                  Row status
+                </th>
+                <th className="sticky top-0 z-10 w-[10rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Latest period end
                 </th>
-                <th className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3 shadow-sm w-[12rem]">
+                <th className="sticky top-0 z-10 w-[12rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Last successful import
                 </th>
-                <th className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3 shadow-sm w-[11rem]">
+                <th className="sticky top-0 z-10 w-[10rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Coverage status
                 </th>
-                <th className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3 text-center shadow-sm w-[7rem]">
+                <th className="sticky top-0 z-10 w-[7rem] border-b border-border bg-surface px-4 py-3 text-center shadow-sm">
                   Active pending
                 </th>
-                <th className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3 text-center shadow-sm w-[8rem]">
+                <th className="sticky top-0 z-10 w-[8rem] border-b border-border bg-surface px-4 py-3 text-center shadow-sm">
                   Oldest age
                 </th>
-                <th className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3 text-center shadow-sm w-[7rem]">
+                <th className="sticky top-0 z-10 w-[7rem] border-b border-border bg-surface px-4 py-3 text-center shadow-sm">
                   Failed/stale
                 </th>
-                <th className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3 shadow-sm w-[12rem]">
+                <th className="sticky top-0 z-10 w-[12rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   retry_after_at
                 </th>
-                <th className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3 shadow-sm w-[18rem]">
+                <th className="sticky top-0 z-10 w-[18rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Next action
                 </th>
-                <th className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3 shadow-sm w-[22rem]">
+                <th className="sticky top-0 z-10 w-[24rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Notes
                 </th>
               </tr>
@@ -175,10 +204,7 @@ export default async function PipelineStatusPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 align-top text-muted">
-                    <div
-                      className="max-w-[15rem] break-all"
-                      title={row.sourceType}
-                    >
+                    <div className="max-w-[15rem] break-all" title={row.sourceType}>
                       {row.sourceType}
                     </div>
                   </td>
@@ -196,7 +222,16 @@ export default async function PipelineStatusPage() {
                         row.implementationStatus === 'implemented' ? 'positive' : 'muted'
                       )}`}
                     >
-                      {formatImplementationStatus(row.implementationStatus)}
+                      {statusLabel(row.implementationStatus)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 align-top text-muted">
+                    <span
+                      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClassName(
+                        statusTone(row.sourceGroupStatus)
+                      )}`}
+                    >
+                      {statusLabel(row.sourceGroupStatus)}
                     </span>
                   </td>
                   <td className="px-4 py-3 align-top text-muted">
@@ -212,22 +247,16 @@ export default async function PipelineStatusPage() {
                   <td className="px-4 py-3 align-top text-muted">
                     <span
                       className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClassName(
-                        row.currentCoverageStatus === 'not_implemented'
-                          ? 'muted'
-                          : row.failedOrStaleCount > 0
-                            ? 'danger'
-                            : row.activePendingCount > 0
-                              ? 'warning'
-                              : 'neutral'
+                        statusTone(row.sourceGroupStatus)
                       )}`}
                     >
-                      {formatCoverageStatus(row.currentCoverageStatus)}
+                      {row.currentCoverageStatus}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center align-top text-muted">
                     <span
                       className={`inline-flex min-w-10 justify-center rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClassName(
-                        countBadgeTone(row.activePendingCount, 'warning')
+                        row.activePendingCount > 0 ? 'warning' : 'muted'
                       )}`}
                     >
                       {row.activePendingCount}
@@ -239,7 +268,7 @@ export default async function PipelineStatusPage() {
                   <td className="px-4 py-3 text-center align-top text-muted">
                     <span
                       className={`inline-flex min-w-10 justify-center rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClassName(
-                        countBadgeTone(row.failedOrStaleCount, 'danger')
+                        row.failedOrStaleCount > 0 ? 'danger' : 'muted'
                       )}`}
                     >
                       {row.failedOrStaleCount}
@@ -259,22 +288,21 @@ export default async function PipelineStatusPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 align-top text-muted">
-                    {row.notes ? (
-                      <details className="max-w-[22rem]">
-                        <summary
-                          className="max-h-12 cursor-pointer list-none overflow-hidden text-sm whitespace-normal break-words [overflow-wrap:anywhere]"
-                          title={row.notes}
-                        >
-                          <span className="font-medium text-foreground">View note</span>
-                          <span className="ml-2 text-muted">{previewText(row.notes)}</span>
-                        </summary>
-                        <div className="mt-2 max-h-48 overflow-auto rounded-lg border border-border bg-surface px-3 py-2 text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                          {row.notes}
-                        </div>
-                      </details>
-                    ) : (
-                      '—'
-                    )}
+                    <div className="max-w-[24rem]">
+                      <div className="max-h-12 overflow-hidden whitespace-normal break-words [overflow-wrap:anywhere]">
+                        {previewText(row.friendlySummary)}
+                      </div>
+                      {row.technicalDetails ? (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-xs text-muted">
+                            Show technical details
+                          </summary>
+                          <pre className="mt-2 max-h-48 overflow-auto rounded-lg border border-border bg-surface px-3 py-2 text-xs whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                            {row.technicalDetails}
+                          </pre>
+                        </details>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}

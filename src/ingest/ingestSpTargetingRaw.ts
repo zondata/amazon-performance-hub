@@ -11,6 +11,7 @@ export type SpTargetingIngestResult = {
   coverageStart?: string | null;
   coverageEnd?: string | null;
   rowCount?: number;
+  duplicateIdenticalRowCount?: number;
 };
 
 type ExistingTargetingUploadRow = {
@@ -23,6 +24,117 @@ type ExistingTargetingUploadRow = {
 
 type SpTargetingIngestOptions = {
   reprocessUploadId?: string;
+};
+
+type SpTargetingInsertRow = {
+  upload_id: string;
+  account_id: string;
+  date: string;
+  portfolio_name_raw: string | null;
+  portfolio_name_norm: string | null;
+  campaign_name_raw: string;
+  campaign_name_norm: string;
+  ad_group_name_raw: string;
+  ad_group_name_norm: string;
+  targeting_raw: string;
+  targeting_norm: string;
+  match_type_raw: string | null;
+  match_type_norm: string | null;
+  impressions: number | null;
+  clicks: number | null;
+  spend: number | null;
+  sales: number | null;
+  orders: number | null;
+  units: number | null;
+  cpc: number | null;
+  ctr: number | null;
+  acos: number | null;
+  roas: number | null;
+  conversion_rate: number | null;
+  top_of_search_impression_share: number | null;
+  exported_at: string;
+};
+
+const TARGETING_ON_CONFLICT =
+  "account_id,date,campaign_name_norm,ad_group_name_norm,targeting_norm,match_type_norm,exported_at";
+
+const buildTargetingDuplicateKey = (row: SpTargetingInsertRow): string =>
+  [
+    row.account_id,
+    row.date,
+    row.campaign_name_norm,
+    row.ad_group_name_norm,
+    row.targeting_norm,
+    row.match_type_norm ?? "",
+    row.exported_at,
+  ].join("||");
+
+const summarizeTargetingKey = (row: SpTargetingInsertRow): string =>
+  [
+    `date=${row.date}`,
+    `campaign=${row.campaign_name_raw}`,
+    `ad_group=${row.ad_group_name_raw}`,
+    `targeting=${row.targeting_raw}`,
+    `match_type=${row.match_type_raw ?? row.match_type_norm ?? "UNKNOWN"}`,
+    `exported_at=${row.exported_at}`,
+  ].join(", ");
+
+const serializeTargetingComparable = (row: SpTargetingInsertRow): string =>
+  JSON.stringify({
+    date: row.date,
+    portfolio_name_raw: row.portfolio_name_raw,
+    portfolio_name_norm: row.portfolio_name_norm,
+    campaign_name_raw: row.campaign_name_raw,
+    campaign_name_norm: row.campaign_name_norm,
+    ad_group_name_raw: row.ad_group_name_raw,
+    ad_group_name_norm: row.ad_group_name_norm,
+    targeting_raw: row.targeting_raw,
+    targeting_norm: row.targeting_norm,
+    match_type_raw: row.match_type_raw,
+    match_type_norm: row.match_type_norm,
+    impressions: row.impressions,
+    clicks: row.clicks,
+    spend: row.spend,
+    sales: row.sales,
+    orders: row.orders,
+    units: row.units,
+    cpc: row.cpc,
+    ctr: row.ctr,
+    acos: row.acos,
+    roas: row.roas,
+    conversion_rate: row.conversion_rate,
+    top_of_search_impression_share: row.top_of_search_impression_share,
+    exported_at: row.exported_at,
+  });
+
+const dedupeTargetingRows = (
+  rows: SpTargetingInsertRow[]
+): { rows: SpTargetingInsertRow[]; duplicateIdenticalRowCount: number } => {
+  const deduped = new Map<string, SpTargetingInsertRow>();
+  let duplicateIdenticalRowCount = 0;
+
+  for (const row of rows) {
+    const key = buildTargetingDuplicateKey(row);
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, row);
+      continue;
+    }
+
+    if (serializeTargetingComparable(existing) === serializeTargetingComparable(row)) {
+      duplicateIdenticalRowCount += 1;
+      continue;
+    }
+
+    throw new Error(
+      `Duplicate targeting rows with conflicting metrics were detected during ingest. Sample key: ${summarizeTargetingKey(row)}`
+    );
+  }
+
+  return {
+    rows: [...deduped.values()],
+    duplicateIdenticalRowCount,
+  };
 };
 
 async function fetchExistingTargetingUpload(uploadId: string): Promise<ExistingTargetingUploadRow> {
@@ -163,7 +275,11 @@ export async function ingestSpTargetingRaw(
     }
   }
 
-  const rowsToInsert = rows.map((row) => ({
+  if (!uploadId) {
+    throw new Error("Failed to resolve upload_id before targeting raw insert.");
+  }
+
+  const rowsToInsert: SpTargetingInsertRow[] = rows.map((row) => ({
     upload_id: uploadId,
     account_id: accountId,
     date: row.date,
@@ -192,8 +308,18 @@ export async function ingestSpTargetingRaw(
     exported_at: exportedAt,
   }));
 
-  for (const chunk of chunkArray(rowsToInsert, 500)) {
-    const { error } = await client.from("sp_targeting_daily_raw").insert(chunk);
+  const {
+    rows: dedupedRowsToInsert,
+    duplicateIdenticalRowCount,
+  } = dedupeTargetingRows(rowsToInsert);
+
+  for (const chunk of chunkArray(dedupedRowsToInsert, 500)) {
+    const { error } = await client
+      .from("sp_targeting_daily_raw")
+      .upsert(chunk, {
+        onConflict: TARGETING_ON_CONFLICT,
+        ignoreDuplicates: true,
+      });
     if (error) throw new Error(`Failed inserting sp_targeting_daily_raw: ${error.message}`);
   }
 
@@ -202,6 +328,7 @@ export async function ingestSpTargetingRaw(
     uploadId,
     coverageStart,
     coverageEnd,
-    rowCount: rowsToInsert.length,
+    rowCount: dedupedRowsToInsert.length,
+    duplicateIdenticalRowCount,
   };
 }

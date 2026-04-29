@@ -128,10 +128,44 @@ interface SourceRunResult {
   details: JsonObject;
 }
 
+type AdsCoverageSourceKey =
+  | 'sp_campaign_hourly'
+  | 'sp_targeting_daily';
+
+type AdsCoverageDescriptor = {
+  sourceName: AdsCoverageSourceKey;
+  label: string;
+  successStep: string;
+  relevantSteps: string[];
+};
+
 const ADS_IMPLEMENTED_COVERAGE_TABLES = new Set([
   'sp_campaign_hourly',
   'sp_targeting_daily',
 ]);
+
+const ADS_COVERAGE_DESCRIPTORS: Record<AdsCoverageSourceKey, AdsCoverageDescriptor> = {
+  sp_campaign_hourly: {
+    sourceName: 'sp_campaign_hourly',
+    label: 'SP Campaign Daily',
+    successStep: 'adsapi:ingest-sp-campaign-daily',
+    relevantSteps: [
+      'adsapi:pull-sp-campaign-daily',
+      'adsapi:persist-sp-daily',
+      'adsapi:ingest-sp-campaign-daily',
+    ],
+  },
+  sp_targeting_daily: {
+    sourceName: 'sp_targeting_daily',
+    label: 'SP Targeting Daily',
+    successStep: 'adsapi:ingest-sp-target-daily',
+    relevantSteps: [
+      'adsapi:pull-sp-target-daily',
+      'adsapi:persist-sp-daily',
+      'adsapi:ingest-sp-target-daily',
+    ],
+  },
+};
 
 const ADS_UNSUPPORTED_COVERAGE_MESSAGES: Record<string, string> = {
   sp_placement_daily:
@@ -518,6 +552,176 @@ const parseNumberLine = (text: string, label: string): number | null => {
   if (!raw) return null;
   const value = Number.parseInt(raw, 10);
   return Number.isFinite(value) ? value : null;
+};
+
+const isDailyBatchStepResult = (value: unknown): value is DailyBatchStepResult => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.name === 'string' &&
+    typeof candidate.status === 'string' &&
+    candidate.summary != null &&
+    typeof candidate.summary === 'object' &&
+    !Array.isArray(candidate.summary)
+  );
+};
+
+const readDailyBatchSteps = (details: JsonObject): DailyBatchStepResult[] => {
+  const raw = details.steps;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter((value): value is DailyBatchStepResult => isDailyBatchStepResult(value));
+};
+
+const stepLabel = (name: string): string => {
+  switch (name) {
+    case 'adsapi:pull-sp-campaign-daily':
+      return 'SP Campaign Daily pull';
+    case 'adsapi:pull-sp-target-daily':
+      return 'SP Targeting Daily pull';
+    case 'adsapi:persist-sp-daily':
+      return 'SP daily normalization/persist';
+    case 'adsapi:ingest-sp-campaign-daily':
+      return 'SP Campaign Daily ingest';
+    case 'adsapi:ingest-sp-target-daily':
+      return 'SP Targeting Daily ingest';
+    default:
+      return name;
+  }
+};
+
+const stepSummaryValue = (step: DailyBatchStepResult, key: string): string | null => {
+  const raw = step.summary[key];
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return String(raw);
+  }
+  return null;
+};
+
+const isDuplicateTargetingFailure = (step: DailyBatchStepResult): boolean => {
+  const haystack = [
+    stepSummaryValue(step, 'message'),
+    stepSummaryValue(step, 'code'),
+    ...(
+      Array.isArray(step.summary.stderr_tail)
+        ? step.summary.stderr_tail.filter((value): value is string => typeof value === 'string')
+        : []
+    ),
+    ...(
+      Array.isArray(step.summary.stdout_tail)
+        ? step.summary.stdout_tail.filter((value): value is string => typeof value === 'string')
+        : []
+    ),
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return /duplicate key|duplicate targeting rows|sp_targeting_daily_raw_uq/i.test(haystack);
+};
+
+export const deriveAdsImplementedCoverageResult = (
+  sourceResult: SourceRunResult,
+  spec: CoverageSpec
+): SourceRunResult | null => {
+  const descriptor = ADS_COVERAGE_DESCRIPTORS[spec.sourceName as AdsCoverageSourceKey];
+  if (!descriptor) {
+    return null;
+  }
+
+  const steps = readDailyBatchSteps(sourceResult.details);
+  if (steps.length === 0) {
+    return {
+      ...sourceResult,
+      warnings: sourceResult.warnings.filter(
+        (warning) => !Object.values(ADS_UNSUPPORTED_COVERAGE_MESSAGES).includes(warning)
+      ),
+    };
+  }
+  const firstFailedStep = steps.find((step) => step.status === 'failed') ?? null;
+  const successStep = steps.find(
+    (step) => step.name === descriptor.successStep && step.status === 'success'
+  ) ?? null;
+  const relevantFailedStep = steps.find(
+    (step) =>
+      descriptor.relevantSteps.includes(step.name) && step.status === 'failed'
+  ) ?? null;
+
+  const successIndex = successStep
+    ? steps.findIndex((step) => step === successStep)
+    : -1;
+  const firstFailedIndex = firstFailedStep
+    ? steps.findIndex((step) => step === firstFailedStep)
+    : -1;
+
+  if (successStep) {
+    const warnings: string[] = [];
+    if (firstFailedStep && firstFailedIndex > successIndex) {
+      warnings.push(
+        `${descriptor.label} ingested successfully, but the overall Ads API batch later failed at ${stepLabel(firstFailedStep.name)}.`
+      );
+    }
+
+    return {
+      ...sourceResult,
+      status: 'success',
+      blockers: [],
+      warnings,
+      notes: [
+        `${descriptor.label} ingested successfully for the latest available period.`,
+      ],
+    };
+  }
+
+  if (relevantFailedStep) {
+    const blockers = [
+      descriptor.sourceName === 'sp_targeting_daily' && isDuplicateTargetingFailure(relevantFailedStep)
+        ? 'SP Targeting Daily failed because duplicate targeting rows were detected during ingest.'
+        : `${descriptor.label} failed during ${stepLabel(relevantFailedStep.name)}.`,
+    ];
+    const notes =
+      descriptor.sourceName === 'sp_targeting_daily'
+        ? [
+            'Campaign data already loaded remains usable. Fix the targeting ingest dedupe behavior, then rerun the Ads API refresh.',
+          ]
+        : ['Review the failed ingest step and rerun the Ads API refresh.'];
+
+    return {
+      ...sourceResult,
+      status: 'failed',
+      blockers,
+      warnings: [],
+      notes,
+    };
+  }
+
+  if (firstFailedStep) {
+    return {
+      ...sourceResult,
+      status: 'blocked',
+      blockers: [
+        `${descriptor.label} did not complete because the Ads API batch stopped at ${stepLabel(firstFailedStep.name)}.`,
+      ],
+      warnings: [],
+      notes: ['Resolve the earlier Ads batch failure, then rerun the Ads API refresh.'],
+    };
+  }
+
+  return {
+    ...sourceResult,
+    status:
+      sourceResult.status === 'pending' || sourceResult.status === 'blocked'
+        ? sourceResult.status
+        : 'blocked',
+    blockers: [...sourceResult.blockers],
+    warnings: [],
+    notes: [...sourceResult.notes],
+  };
 };
 
 const redactSensitiveText = (value: string): string =>
@@ -1245,7 +1449,10 @@ const upsertCoverageStatus = async (pool: Pool, args: {
         latest_period_end = excluded.latest_period_end,
         latest_complete_period_end = excluded.latest_complete_period_end,
         last_attempted_run_at = excluded.last_attempted_run_at,
-        last_successful_run_at = excluded.last_successful_run_at,
+        last_successful_run_at = coalesce(
+          excluded.last_successful_run_at,
+          data_coverage_status.last_successful_run_at
+        ),
         last_sync_run_id = excluded.last_sync_run_id,
         last_status = excluded.last_status,
         freshness_status = excluded.freshness_status,
@@ -2003,7 +2210,10 @@ const toFailureDetails = (error: unknown): {
 };
 
 const coverageNotes = (sourceResult: SourceRunResult, spec: CoverageSpec): string | null => {
-  const parts = [...sourceResult.blockers, ...sourceResult.warnings, ...sourceResult.notes];
+  const operatorNotes = sourceResult.notes.filter(
+    (note) => !/^stderr tail:|^stdout tail:/i.test(note)
+  );
+  const parts = [...sourceResult.blockers, ...sourceResult.warnings, ...operatorNotes];
   if (parts.length === 0) return null;
   return `[${spec.sourceName}] ${parts.join(' | ')}`;
 };
@@ -2017,12 +2227,10 @@ export const deriveCoverageSourceResult = (
   }
 
   if (ADS_IMPLEMENTED_COVERAGE_TABLES.has(spec.sourceName)) {
-    return {
-      ...sourceResult,
-      warnings: sourceResult.warnings.filter(
-        (warning) => !Object.values(ADS_UNSUPPORTED_COVERAGE_MESSAGES).includes(warning)
-      ),
-    };
+    const implementedResult = deriveAdsImplementedCoverageResult(sourceResult, spec);
+    if (implementedResult) {
+      return implementedResult;
+    }
   }
 
   const unsupportedMessage = ADS_UNSUPPORTED_COVERAGE_MESSAGES[spec.sourceName];
