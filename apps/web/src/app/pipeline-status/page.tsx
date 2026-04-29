@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { getPipelineStatus } from '@/lib/pipeline-status/getPipelineStatus';
 
 const formatValue = (value: string | null) => value ?? '—';
+const PREVIEW_LIMIT = 110;
 
 const badgeClassName = (tone: 'positive' | 'muted' | 'warning' | 'danger' | 'neutral') => {
   if (tone === 'positive') {
@@ -27,6 +28,19 @@ const formatImplementationStatus = (value: string) =>
   value === 'implemented' ? 'Implemented' : 'Not implemented';
 
 const formatCoverageStatus = (value: string) => value.replace(/_/g, ' ');
+
+const previewText = (value: string | null, limit = PREVIEW_LIMIT) => {
+  if (!value) {
+    return '—';
+  }
+
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= limit) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, limit - 1)}…`;
+};
 
 export default async function PipelineStatusPage() {
   const rows = await getPipelineStatus();
@@ -237,14 +251,30 @@ export default async function PipelineStatusPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 align-top text-muted">
-                    <div className="max-w-[18rem] whitespace-normal break-words">
-                      {row.nextAction}
+                    <div
+                      className="max-h-12 max-w-[18rem] overflow-hidden whitespace-normal break-words [overflow-wrap:anywhere]"
+                      title={row.nextAction}
+                    >
+                      {previewText(row.nextAction)}
                     </div>
                   </td>
                   <td className="px-4 py-3 align-top text-muted">
-                    <div className="max-w-[22rem] whitespace-normal break-words [overflow-wrap:anywhere]">
-                      {row.notes || '—'}
-                    </div>
+                    {row.notes ? (
+                      <details className="max-w-[22rem]">
+                        <summary
+                          className="max-h-12 cursor-pointer list-none overflow-hidden text-sm whitespace-normal break-words [overflow-wrap:anywhere]"
+                          title={row.notes}
+                        >
+                          <span className="font-medium text-foreground">View note</span>
+                          <span className="ml-2 text-muted">{previewText(row.notes)}</span>
+                        </summary>
+                        <div className="mt-2 max-h-48 overflow-auto rounded-lg border border-border bg-surface px-3 py-2 text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                          {row.notes}
+                        </div>
+                      </details>
+                    ) : (
+                      '—'
+                    )}
                   </td>
                 </tr>
               ))}
