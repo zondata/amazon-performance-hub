@@ -197,4 +197,37 @@ describe('buildPipelineStatusRows', () => {
     expect(targetRow.technicalDetails).toContain('sp_targeting_daily_raw_uq');
     expect(pageData.batchSummary?.status).toBe('failed');
   });
+
+  it('shows a friendly stale-success coverage label', () => {
+    const rows = buildPipelineStatusRows({
+      specs: [
+        {
+          sourceGroup: 'SP target daily',
+          sourceType: 'ads_api_sp_target_daily',
+          targetTable: 'sp_targeting_daily_fact',
+          implementationStatus: 'implemented',
+          pendingSourceType: 'ads_api_sp_target_daily',
+        },
+      ],
+      coverageRows: [
+        {
+          sourceType: 'ads_api_sp_target_daily',
+          tableName: 'sp_targeting_daily_fact',
+          lastStatus: 'success',
+          freshnessStatus: 'stale',
+          latestPeriodEnd: '2026-04-21T00:00:00.000Z',
+          lastSuccessfulRunAt: '2026-04-29T14:40:49.568Z',
+          lastSyncRunId: null,
+          notes: 'SP Targeting Daily imported successfully for the latest available period.',
+        },
+      ],
+      pendingRows: [],
+      nowIso: '2026-04-30T12:00:00.000Z',
+    }).rows;
+
+    expect(rows[0].sourceGroupStatus).toBe('warning');
+    expect(rows[0].currentCoverageStatus).toBe(
+      'Successful import, data is stale'
+    );
+  });
 });

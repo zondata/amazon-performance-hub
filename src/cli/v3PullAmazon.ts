@@ -217,7 +217,7 @@ const SOURCES: PullSource[] = ['ads', 'sales', 'sqp', 'settings'];
 const COVERAGE_SPECS: CoverageSpec[] = [
   {
     source: 'sales',
-    sourceType: 'sp_api',
+    sourceType: 'sp_api_sales_traffic_daily',
     sourceName: 'sales_traffic',
     tableName: 'amazon_sales_traffic_timeseries',
     granularity: 'daily',

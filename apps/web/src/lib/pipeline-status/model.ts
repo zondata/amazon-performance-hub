@@ -85,7 +85,7 @@ export const PIPELINE_STATUS_SPECS: PipelineStatusSpec[] = [
   {
     sourceGroup: 'Sales & Traffic',
     sourceType: 'sp_api_sales_traffic_daily',
-    targetTable: 'sales_traffic_daily_fact',
+    targetTable: 'amazon_sales_traffic_timeseries',
     implementationStatus: 'implemented',
   },
   {
@@ -209,12 +209,15 @@ const formatPendingAgeHours = (createdAt: string | null, nowIso: string): string
 
 const coverageStatusLabel = (
   status: PipelineSourceGroupStatus,
-  freshnessStatus: string | null
+  freshnessStatus: string | null,
+  coverageLastStatus: string | null
 ): string => {
+  if (coverageLastStatus === 'success' && freshnessStatus === 'stale') {
+    return 'Successful import, data is stale';
+  }
   if (status === 'success') {
     if (freshnessStatus === 'fresh') return 'updated';
     if (freshnessStatus === 'delayed_expected') return 'live';
-    if (freshnessStatus === 'stale') return 'Successful import, data is stale';
     return 'success';
   }
   if (status === 'warning') {
@@ -553,7 +556,8 @@ export const buildPipelineStatusRows = (args: {
       lastSuccessfulImportTime: coverage?.lastSuccessfulRunAt ?? null,
       currentCoverageStatus: coverageStatusLabel(
         sourceGroupStatus,
-        coverage?.freshnessStatus ?? null
+        coverage?.freshnessStatus ?? null,
+        coverage?.lastStatus ?? null
       ),
       activePendingCount: activePending.length,
       oldestPendingAge: oldestPending
