@@ -167,10 +167,10 @@ export default async function PipelineStatusPage() {
                   Row status
                 </th>
                 <th className="sticky top-0 z-10 w-[10rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
-                  Latest period end
+                  Latest report day
                 </th>
                 <th className="sticky top-0 z-10 w-[12rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
-                  Last successful import
+                  Imported at
                 </th>
                 <th className="sticky top-0 z-10 w-[10rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Coverage status
