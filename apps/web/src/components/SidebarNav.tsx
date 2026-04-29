@@ -35,6 +35,7 @@ const SECONDARY_NAV_ITEMS: NavItem[] = [
   { label: 'Logbook', href: '/logbook/experiments', icon: LogbookIcon },
   { label: 'Bulksheet Ops', href: '/bulksheet-ops/sp-update', icon: BulksheetOpsIcon },
   { label: 'Imports & Health', href: '/imports-health', badge: 'Live', icon: ImportsHealthIcon },
+  { label: 'Pipeline Status', href: '/pipeline-status', badge: 'Ops', icon: ImportsHealthIcon },
   { label: 'Settings', href: '/settings/keyword-ai-packs', icon: SettingsIcon },
 ];
 
