@@ -214,6 +214,7 @@ const coverageStatusLabel = (
   if (status === 'success') {
     if (freshnessStatus === 'fresh') return 'updated';
     if (freshnessStatus === 'delayed_expected') return 'live';
+    if (freshnessStatus === 'stale') return 'Successful import, data is stale';
     return 'success';
   }
   if (status === 'warning') {
