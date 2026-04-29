@@ -37,7 +37,7 @@ Ads diagnostics:
 npm run v3:pull:amazon -- --account-id sourbear --marketplace US --sources ads --mode manual --from YYYY-MM-DD --to YYYY-MM-DD --diagnose
 npm run v3:pull:amazon -- --account-id sourbear --marketplace US --sources ads --mode manual --from YYYY-MM-DD --to YYYY-MM-DD --resume-pending
 npm run v3:resume:amazon -- --account-id sourbear --marketplace US --mode scheduled --soft-pending-exit
-npm run v3:check:ads-freshness -- --account-id sourbear --marketplace US
+npm run v3:check:ads-pending-health -- --account-id sourbear --marketplace US
 npm run adsapi:pull-sp-campaign-daily -- --start-date YYYY-MM-DD --end-date YYYY-MM-DD --diagnose
 npm run adsapi:pull-sp-campaign-daily -- --start-date YYYY-MM-DD --end-date YYYY-MM-DD --resume-pending
 ```
@@ -45,7 +45,7 @@ npm run adsapi:pull-sp-campaign-daily -- --start-date YYYY-MM-DD --end-date YYYY
 - `--diagnose` keeps the sync in the normal Phase 9 path, but streams child Ads command stdout/stderr and preserves command tails in the final failure report.
 - `--resume-pending` polls the most recent saved pending SP campaign report for the same account, marketplace, profile, and date window instead of creating a duplicate Amazon report request.
 - `v3:resume:amazon` scans `public.ads_api_report_requests`, resumes active pending Ads report ids automatically, expires stale pending requests after the max pending age, and can exit successfully on recoverable `pending_timeout` states when `--soft-pending-exit` is enabled.
-- `v3:check:ads-freshness` writes `out/v3_ads_pending_resume_report.md` and fails only when Ads coverage has no active automatic recovery path.
+- `v3:check:ads-pending-health` writes `out/v3_ads_pending_resume_report.md` and fails only for unhealthy pending states such as `failed`, `stale_expired`, or `completed` rows that stay unimported past the grace window.
 - SP campaign polling can also be tuned with:
   - `ADS_API_REPORT_MAX_ATTEMPTS`
   - `ADS_API_REPORT_POLL_INTERVAL_MS`
@@ -69,7 +69,7 @@ Manual trigger:
 
 - The workflow also runs once daily by cron.
 - The daily workflow resumes saved pending Ads report ids before creating new requests and then runs the normal lookback sync with `--resume-pending` so active matching requests are reused instead of duplicated.
-- `V3 Ads Pending Resume` runs every 15 minutes on a separate schedule, polls saved pending report ids, and keeps retrying them automatically until they import, fail, or age out.
+- `V3 Ads Pending Resume` runs every 30 minutes on a separate schedule, short-polls saved pending report ids, and keeps retrying them automatically until they import, fail, or age out.
 - Both workflows use GitHub secrets for credentials and default account/marketplace values.
 
 ## Required GitHub secrets

@@ -98,6 +98,8 @@
     "v3:pull:sqp": "ts-node src/cli/v3PullAmazon.ts --preset sqp",
     "v3:resume:amazon": "ts-node src/cli/v3ResumeAmazon.ts",
     "v3:check:ads-freshness": "ts-node src/cli/v3CheckAdsFreshness.ts",
+    "v3:check:ads-pending-health": "ts-node src/cli/v3CheckAdsPendingHealth.ts",
+    "v3:verify:ads-loop": "ts-node src/cli/v3VerifyAdsLoop.ts",
     "schema:snapshot": "node -r dotenv/config ./node_modules/.bin/ts-node scripts/schema_snapshot.ts dotenv_config_path=.env.local",
     "keywords:import": "ts-node scripts/import_keyword_groups_from_csv.ts",
     "product:seed": "ts-node scripts/product_seed.ts",
@@ -137,7 +139,7 @@
     "spapi:gate-first-report-warehouse-write-authority": "ts-node src/warehouse/firstSalesTrafficWarehouseWriteAuthorityCli.ts",
     "spapi:ingest-sales-traffic-retail": "ts-node src/ingestion/firstSalesTrafficRetailIngestCli.ts",
     "web:dev": "npm --prefix apps/web run dev",
-    "web:build": "npm --prefix apps/web run build",
+    "web:build": "bash -lc 'cd apps/web && node ../../scripts/webBuildWithEnv.cjs'",
     "web:lint": "npm --prefix apps/web run lint"
   },
   "dependencies": {

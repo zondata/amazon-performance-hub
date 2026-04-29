@@ -1,0 +1,51 @@
+name: V3 Ads Loop Verification
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 7 * * *'
+
+concurrency:
+  group: v3-ads-loop-verification-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-ads-loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      APP_ACCOUNT_ID: ${{ secrets.APP_ACCOUNT_ID }}
+      APP_MARKETPLACE: ${{ secrets.APP_MARKETPLACE }}
+      ADS_API_MAX_PENDING_AGE_HOURS: '72'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Verify V3 Ads loop
+        run: >
+          npm run v3:verify:ads-loop --
+          --account-id "${APP_ACCOUNT_ID}"
+          --marketplace "${APP_MARKETPLACE}"
+          --lookback-hours 36
+          --max-pending-age-hours "${ADS_API_MAX_PENDING_AGE_HOURS}"
+
+      - name: Upload verification report
+        uses: actions/upload-artifact@v4
+        with:
+          name: v3-ads-loop-verification-report
+          path: out/v3_ads_loop_verification.md

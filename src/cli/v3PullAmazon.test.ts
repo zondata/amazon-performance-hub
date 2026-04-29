@@ -3,12 +3,22 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { classifyAdsPendingFailure, parseV3PullAmazonArgs } from './v3PullAmazon';
+import {
+  classifyAdsPendingFailure,
+  deriveCoverageSourceResult,
+  parseV3PullAmazonArgs,
+} from './v3PullAmazon';
 import {
   ACTIVE_PENDING_REQUEST_STATUSES,
   classifyPendingRequestAge,
+  classifyPendingRequestAgeByClock,
   parseResumeAmazonArgs,
+  shouldWaitForRetryAfter,
 } from './v3ResumeAmazon';
+import {
+  classifyPendingHealthRows,
+  parsePendingHealthArgs,
+} from './v3CheckAdsPendingHealth';
 
 describe('parseV3PullAmazonArgs', () => {
   it('parses an explicit manual command', () => {
@@ -117,6 +127,10 @@ describe('v3-amazon-data-sync workflow', () => {
     process.cwd(),
     '.github/workflows/v3_ads_pending_resume.yml'
   );
+  const verificationWorkflowPath = path.resolve(
+    process.cwd(),
+    '.github/workflows/v3-ads-loop-verification.yml'
+  );
   const runbookPath = path.resolve(
     process.cwd(),
     'docs/V3_AMAZON_DATA_SYNC_RUNBOOK.md'
@@ -131,6 +145,9 @@ describe('v3-amazon-data-sync workflow', () => {
     expect(workflow).toContain('npm run v3:pull:amazon --');
     expect(workflow).toContain('--sources');
     expect(workflow).toContain('--resume-pending');
+    expect(workflow).toContain("--soft-pending-exit");
+    expect(workflow).toContain("ADS_API_REPORT_MAX_ATTEMPTS: '3'");
+    expect(workflow).toContain("ADS_API_REPORT_POLL_INTERVAL_MS: '1000'");
   });
 
   it('creates a scheduled pending-resume workflow', () => {
@@ -140,7 +157,22 @@ describe('v3-amazon-data-sync workflow', () => {
     expect(workflow).toContain('concurrency:');
     expect(workflow).toContain('cancel-in-progress: false');
     expect(workflow).toContain('npm run v3:resume:amazon --');
-    expect(workflow).toContain('npm run v3:check:ads-freshness --');
+    expect(workflow).toContain('npm run v3:check:ads-pending-health --');
+    expect(workflow).toContain("ADS_API_REPORT_MAX_ATTEMPTS: '3'");
+    expect(workflow).toContain("ADS_API_REPORT_POLL_INTERVAL_MS: '1000'");
+    expect(workflow).toContain('timeout-minutes: 10');
+    expect(workflow).toContain("cron: '7,37 * * * *'");
+  });
+
+  it('creates a scheduled ads loop verification workflow', () => {
+    const workflow = fs.readFileSync(verificationWorkflowPath, 'utf8');
+    expect(workflow).toContain('workflow_dispatch:');
+    expect(workflow).toContain('schedule:');
+    expect(workflow).toContain("cron: '23 7 * * *'");
+    expect(workflow).toContain('timeout-minutes: 10');
+    expect(workflow).toContain('npm run v3:verify:ads-loop --');
+    expect(workflow).toContain('v3_ads_loop_verification.md');
+    expect(workflow).toContain('v3-ads-loop-verification-report');
   });
 
   it('references secrets by name instead of hardcoding values', () => {
@@ -155,7 +187,7 @@ describe('v3-amazon-data-sync workflow', () => {
     expect(runbook).toContain('--diagnose');
     expect(runbook).toContain('--resume-pending');
     expect(runbook).toContain('v3:resume:amazon');
-    expect(runbook).toContain('v3:check:ads-freshness');
+    expect(runbook).toContain('v3:check:ads-pending-health');
     expect(runbook).not.toMatch(/client_secret=/i);
     expect(runbook).not.toMatch(/refresh_token=/i);
   });
@@ -274,5 +306,230 @@ describe('v3ResumeAmazon helpers', () => {
         maxPendingAgeHours: 72,
       })
     ).toBe('active');
+  });
+
+  it('uses created_at as the primary SLA clock when available', () => {
+    expect(
+      classifyPendingRequestAgeByClock({
+        createdAt: '2026-04-24T00:00:00.000Z',
+        updatedAt: '2026-04-28T11:59:00.000Z',
+        nowIso: '2026-04-28T12:00:00.000Z',
+        maxPendingAgeHours: 72,
+      })
+    ).toBe('stale_expired');
+  });
+
+  it('waits for retry_after_at before polling again', () => {
+    expect(
+      shouldWaitForRetryAfter({
+        retryAfterAt: '2026-04-28T13:00:00.000Z',
+        nowIso: '2026-04-28T12:00:00.000Z',
+      })
+    ).toBe(true);
+  });
+});
+
+describe('v3CheckAdsPendingHealth helpers', () => {
+  it('parses completed grace minutes', () => {
+    const args = parsePendingHealthArgs([
+      '--account-id=sourbear',
+      '--marketplace=US',
+      '--max-pending-age-hours=72',
+      '--completed-grace-minutes=45',
+    ]);
+
+    expect(args.completedGraceMinutes).toBe(45);
+  });
+
+  it('classifies no rows as healthy', () => {
+    const summary = classifyPendingHealthRows({
+      rows: [],
+      nowIso: '2026-04-28T12:00:00.000Z',
+      maxPendingAgeHours: 72,
+      completedGraceMinutes: 30,
+    });
+
+    expect(summary.exitCode).toBe(0);
+    expect(summary.activeRows).toHaveLength(0);
+    expect(summary.unhealthyRows).toHaveLength(0);
+  });
+
+  it('classifies active campaign pending within SLA as healthy', () => {
+    const summary = classifyPendingHealthRows({
+      rows: [
+        {
+          id: '1',
+          sourceType: 'ads_api_sp_campaign_daily',
+          reportId: 'r1',
+          status: 'pending_timeout',
+          startDate: '2026-04-21',
+          endDate: '2026-04-21',
+          createdAt: '2026-04-28T10:00:00.000Z',
+          updatedAt: '2026-04-28T11:00:00.000Z',
+          completedAt: null,
+          retryAfterAt: null,
+          notes: null,
+        },
+      ],
+      nowIso: '2026-04-28T12:00:00.000Z',
+      maxPendingAgeHours: 72,
+      completedGraceMinutes: 30,
+    });
+
+    expect(summary.exitCode).toBe(0);
+    expect(summary.activeRows).toHaveLength(1);
+    expect(summary.unhealthyRows).toHaveLength(0);
+  });
+
+  it('classifies active target pending within SLA as healthy', () => {
+    const summary = classifyPendingHealthRows({
+      rows: [
+        {
+          id: '1',
+          sourceType: 'ads_api_sp_target_daily',
+          reportId: 'r2',
+          status: 'polling',
+          startDate: '2026-04-21',
+          endDate: '2026-04-21',
+          createdAt: '2026-04-28T10:00:00.000Z',
+          updatedAt: '2026-04-28T11:00:00.000Z',
+          completedAt: null,
+          retryAfterAt: null,
+          notes: null,
+        },
+      ],
+      nowIso: '2026-04-28T12:00:00.000Z',
+      maxPendingAgeHours: 72,
+      completedGraceMinutes: 30,
+    });
+
+    expect(summary.exitCode).toBe(0);
+    expect(summary.activeRows[0].sourceType).toBe('ads_api_sp_target_daily');
+  });
+
+  it('classifies failed as unhealthy', () => {
+    const summary = classifyPendingHealthRows({
+      rows: [
+        {
+          id: '1',
+          sourceType: 'ads_api_sp_campaign_daily',
+          reportId: 'r3',
+          status: 'failed',
+          startDate: '2026-04-21',
+          endDate: '2026-04-21',
+          createdAt: '2026-04-28T10:00:00.000Z',
+          updatedAt: '2026-04-28T11:00:00.000Z',
+          completedAt: null,
+          retryAfterAt: null,
+          notes: null,
+        },
+      ],
+      nowIso: '2026-04-28T12:00:00.000Z',
+      maxPendingAgeHours: 72,
+      completedGraceMinutes: 30,
+    });
+
+    expect(summary.exitCode).toBe(1);
+    expect(summary.unhealthyRows[0].status).toBe('failed');
+  });
+
+  it('classifies stale_expired as unhealthy', () => {
+    const summary = classifyPendingHealthRows({
+      rows: [
+        {
+          id: '1',
+          sourceType: 'ads_api_sp_campaign_daily',
+          reportId: 'r4',
+          status: 'stale_expired',
+          startDate: '2026-04-21',
+          endDate: '2026-04-21',
+          createdAt: '2026-04-20T10:00:00.000Z',
+          updatedAt: '2026-04-28T11:00:00.000Z',
+          completedAt: null,
+          retryAfterAt: null,
+          notes: null,
+        },
+      ],
+      nowIso: '2026-04-28T12:00:00.000Z',
+      maxPendingAgeHours: 72,
+      completedGraceMinutes: 30,
+    });
+
+    expect(summary.exitCode).toBe(1);
+    expect(summary.unhealthyRows[0].status).toBe('stale_expired');
+  });
+
+  it('classifies completed older than grace and not imported as unhealthy', () => {
+    const summary = classifyPendingHealthRows({
+      rows: [
+        {
+          id: '1',
+          sourceType: 'ads_api_sp_campaign_daily',
+          reportId: 'r5',
+          status: 'completed',
+          startDate: '2026-04-21',
+          endDate: '2026-04-21',
+          createdAt: '2026-04-28T10:00:00.000Z',
+          updatedAt: '2026-04-28T11:00:00.000Z',
+          completedAt: '2026-04-28T11:00:00.000Z',
+          retryAfterAt: null,
+          notes: null,
+        },
+      ],
+      nowIso: '2026-04-28T12:00:00.000Z',
+      maxPendingAgeHours: 72,
+      completedGraceMinutes: 30,
+    });
+
+    expect(summary.exitCode).toBe(1);
+    expect(summary.unhealthyRows[0].status).toBe('completed');
+  });
+});
+
+describe('coverage isolation helpers', () => {
+  it('keeps both campaign and target rows for the same window in the resume SQL', () => {
+    const source = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/cli/v3ResumeAmazon.ts'),
+      'utf8'
+    );
+    expect(source).toContain('distinct on (source_type, start_date, end_date)');
+    expect(source).toContain('order by source_type asc, start_date asc, end_date asc, updated_at desc');
+  });
+
+  it('does not let unsupported Ads coverage warnings force implemented tables to partial', () => {
+    const result = deriveCoverageSourceResult(
+      {
+        source: 'ads',
+        status: 'partial',
+        sourceType: 'ads_api',
+        sourceName: 'ads',
+        syncRunId: 'sync-1',
+        rowsRead: 10,
+        rowsWritten: 10,
+        latestAvailableDate: '2026-04-21',
+        missingRanges: [],
+        blockers: [],
+        warnings: [
+          'SP placement daily automation is not implemented by the current Ads API pullers.',
+        ],
+        notes: [],
+        details: {},
+      },
+      {
+        source: 'ads',
+        sourceType: 'ads_api',
+        sourceName: 'sp_campaign_hourly',
+        tableName: 'sp_campaign_hourly_fact_gold',
+        granularity: 'hourly',
+        periodStartExpr: 'date::timestamptz',
+        periodEndExpr: 'date::timestamptz',
+        expectedDelayHours: 48,
+        hasMarketplace: false,
+        tableStatusDefault: 'success',
+      }
+    );
+
+    expect(result.status).toBe('partial');
+    expect(result.warnings).toEqual([]);
   });
 });
