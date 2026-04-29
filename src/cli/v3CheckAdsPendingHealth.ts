@@ -10,6 +10,7 @@ import {
   DEFAULT_ADS_MAX_PENDING_AGE_HOURS,
   parseResumeAmazonArgs,
   type PendingAgeState,
+  reconcileCompletedPendingRequests,
 } from './v3ResumeAmazon';
 
 export const DEFAULT_COMPLETED_GRACE_MINUTES = 30;
@@ -413,6 +414,7 @@ async function main(): Promise<void> {
   const pool = createPostgresPool(requireDatabaseUrl());
 
   try {
+    await reconcileCompletedPendingRequests(pool, cliArgs);
     const rows = await readPendingRows(pool, cliArgs);
     const summary = classifyPendingHealthRows({
       rows,

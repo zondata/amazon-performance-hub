@@ -7,6 +7,7 @@ import {
   classifyAdsPendingFailure,
   deriveAdsImplementedCoverageResult,
   deriveCoverageSourceResult,
+  extractImportedAdsSourceTypesFromSteps,
   parseV3PullAmazonArgs,
 } from './v3PullAmazon';
 import {
@@ -488,6 +489,29 @@ describe('v3CheckAdsPendingHealth helpers', () => {
 });
 
 describe('coverage isolation helpers', () => {
+  it('extracts imported Ads source types from successful ingest steps only', () => {
+    expect(
+      extractImportedAdsSourceTypesFromSteps([
+        {
+          name: 'adsapi:ingest-sp-campaign-daily',
+          status: 'success',
+          started_at: '2026-04-21T00:00:00.000Z',
+          finished_at: '2026-04-21T00:00:01.000Z',
+          duration_ms: 1000,
+          summary: {},
+        },
+        {
+          name: 'adsapi:ingest-sp-target-daily',
+          status: 'failed',
+          started_at: '2026-04-21T00:00:02.000Z',
+          finished_at: '2026-04-21T00:00:03.000Z',
+          duration_ms: 1000,
+          summary: {},
+        },
+      ])
+    ).toEqual(['ads_api_sp_campaign_daily']);
+  });
+
   it('keeps campaign coverage successful when targeting fails later in the same ads batch', () => {
     const result = deriveAdsImplementedCoverageResult(
       {

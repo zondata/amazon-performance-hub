@@ -7,6 +7,7 @@ import { loadAdsApiEnvForProfileSync } from '../connectors/ads-api/env';
 import { loadSpApiEnv } from '../connectors/sp-api/env';
 import { loadLocalEnvFiles } from '../connectors/sp-api/loadLocalEnv';
 import {
+  DailyBatchGateError,
   runRealAdsDailyBatch,
   runRealRetailDailyBatchWithOptions,
   type DailyBatchGateRequest,
@@ -1150,10 +1151,31 @@ const countStepRows = (steps: DailyBatchStepResult[]): number =>
     return sum;
   }, 0);
 
-const markAdsPendingRequestsImported = async (
+export const extractImportedAdsSourceTypesFromSteps = (
+  steps: DailyBatchStepResult[]
+): string[] => {
+  const imported = new Set<string>();
+  for (const step of steps) {
+    if (step.status !== 'success') continue;
+    if (step.name === 'adsapi:ingest-sp-campaign-daily') {
+      imported.add('ads_api_sp_campaign_daily');
+    }
+    if (step.name === 'adsapi:ingest-sp-target-daily') {
+      imported.add('ads_api_sp_target_daily');
+    }
+  }
+  return [...imported];
+};
+
+const markAdsPendingRequestsImportedForSourceTypes = async (
   pool: Pool,
-  options: CliOptions
+  options: CliOptions,
+  sourceTypes: string[]
 ): Promise<string[]> => {
+  if (sourceTypes.length === 0) {
+    return [];
+  }
+
   const result = await pool.query(
     `
       update public.ads_api_report_requests request
@@ -1173,7 +1195,7 @@ const markAdsPendingRequestsImported = async (
         and request.marketplace = $2
         and request.start_date = $3::date
         and request.end_date = $4::date
-        and request.source_type in ('ads_api_sp_campaign_daily', 'ads_api_sp_target_daily')
+        and request.source_type = any($5::text[])
         and request.status in (
           'created',
           'requested',
@@ -1184,11 +1206,22 @@ const markAdsPendingRequestsImported = async (
         )
       returning request.report_id::text as report_id
     `,
-    [options.accountId, options.marketplace, options.from, options.to]
+    [options.accountId, options.marketplace, options.from, options.to, sourceTypes]
   );
   return result.rows
     .map((row) => (typeof row.report_id === 'string' ? row.report_id : null))
     .filter((value): value is string => value != null);
+};
+
+const markAdsPendingRequestsImported = async (
+  pool: Pool,
+  options: CliOptions
+): Promise<string[]> => {
+  return markAdsPendingRequestsImportedForSourceTypes(
+    pool,
+    options,
+    ['ads_api_sp_campaign_daily', 'ads_api_sp_target_daily']
+  );
 };
 
 const queryCoverageStats = async (
@@ -1775,6 +1808,16 @@ const runAdsSource = async (pool: Pool, options: CliOptions): Promise<{
       timeoutMs: 30 * 60 * 1000,
     });
   } catch (error) {
+    if (error instanceof DailyBatchGateError) {
+      const importedSourceTypes = extractImportedAdsSourceTypesFromSteps(
+        error.steps ?? []
+      );
+      await markAdsPendingRequestsImportedForSourceTypes(
+        pool,
+        options,
+        importedSourceTypes
+      );
+    }
     const pendingFailure = classifyAdsPendingFailure(error, options);
     if (pendingFailure) {
       return {
@@ -1785,7 +1828,11 @@ const runAdsSource = async (pool: Pool, options: CliOptions): Promise<{
     throw error;
   }
   const steps = result.steps as JsonValue;
-  const importedReportIds = await markAdsPendingRequestsImported(pool, options);
+  const importedReportIds = await markAdsPendingRequestsImportedForSourceTypes(
+    pool,
+    options,
+    extractImportedAdsSourceTypesFromSteps(result.steps)
+  );
   if (importedReportIds.length > 0) {
     notes.push(`imported report_ids=${importedReportIds.join(',')}`);
   }
