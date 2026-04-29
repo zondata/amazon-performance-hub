@@ -98,6 +98,7 @@
     "v3:pull:sqp": "ts-node src/cli/v3PullAmazon.ts --preset sqp",
     "v3:resume:amazon": "ts-node src/cli/v3ResumeAmazon.ts",
     "v3:check:ads-freshness": "ts-node src/cli/v3CheckAdsFreshness.ts",
+    "v3:check:ads-pending-health": "ts-node src/cli/v3CheckAdsPendingHealth.ts",
     "schema:snapshot": "node -r dotenv/config ./node_modules/.bin/ts-node scripts/schema_snapshot.ts dotenv_config_path=.env.local",
     "keywords:import": "ts-node scripts/import_keyword_groups_from_csv.ts",
     "product:seed": "ts-node scripts/product_seed.ts",
