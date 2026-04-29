@@ -9,6 +9,18 @@ import { createPostgresPool } from '../ingestion/postgresIngestionJobRepository'
 
 export const DEFAULT_ADS_MAX_PENDING_AGE_HOURS = 72;
 export const DEFAULT_COMPLETED_GRACE_MINUTES = 30;
+export const ADS_PENDING_IMPORT_TARGETS = {
+  ads_api_sp_campaign_daily: {
+    tableName: 'sp_campaign_hourly_fact_gold',
+    importedNote:
+      'Imported into sp_campaign_hourly_fact_gold by the V3 Ads sync batch.',
+  },
+  ads_api_sp_target_daily: {
+    tableName: 'sp_targeting_daily_fact',
+    importedNote:
+      'Imported into sp_targeting_daily_fact by the V3 Ads sync batch.',
+  },
+} as const;
 export const ACTIVE_PENDING_REQUEST_STATUSES = [
   'created',
   'requested',
@@ -43,6 +55,10 @@ type PendingRequestRow = {
   notes: string | null;
 };
 
+export type CompletedPendingRequestRow = PendingRequestRow & {
+  completedAt: string | null;
+};
+
 type ResumeQueueResult = {
   sourceType: string;
   reportId: string;
@@ -55,6 +71,8 @@ type ResumeQueueResult = {
   commandExitCode: number;
   notes: string[];
 };
+
+type AdsPendingImportSourceType = keyof typeof ADS_PENDING_IMPORT_TARGETS;
 
 const REPORT_PATH = path.resolve(
   process.cwd(),
@@ -275,6 +293,134 @@ export const listPendingRequests = async (
   }));
 };
 
+const isAdsPendingImportSourceType = (
+  sourceType: string
+): sourceType is AdsPendingImportSourceType =>
+  sourceType in ADS_PENDING_IMPORT_TARGETS;
+
+export const listCompletedPendingRequests = async (
+  pool: Pool,
+  args: Pick<ResumeArgs, 'accountId' | 'marketplace'>
+): Promise<CompletedPendingRequestRow[]> => {
+  const result = await pool.query(
+    `
+      select
+        id::text as id,
+        source_type::text as source_type,
+        report_id::text as report_id,
+        status::text as status,
+        start_date::text as start_date,
+        end_date::text as end_date,
+        created_at::text as created_at,
+        updated_at::text as updated_at,
+        completed_at::text as completed_at,
+        retry_after_at::text as retry_after_at,
+        last_polled_at::text as last_polled_at,
+        attempt_count,
+        notes
+      from public.ads_api_report_requests
+      where account_id = $1
+        and marketplace = $2
+        and source_type in ('ads_api_sp_campaign_daily', 'ads_api_sp_target_daily')
+        and status = 'completed'
+      order by source_type asc, start_date asc, end_date asc, updated_at desc
+    `,
+    [args.accountId, args.marketplace]
+  );
+
+  return result.rows.map((row) => ({
+    id: String(row.id),
+    sourceType: String(row.source_type),
+    reportId: String(row.report_id),
+    status: String(row.status),
+    startDate: String(row.start_date),
+    endDate: String(row.end_date),
+    createdAt: typeof row.created_at === 'string' ? row.created_at : '',
+    updatedAt: typeof row.updated_at === 'string' ? row.updated_at : '',
+    completedAt:
+      typeof row.completed_at === 'string' ? row.completed_at : null,
+    retryAfterAt:
+      typeof row.retry_after_at === 'string' ? row.retry_after_at : null,
+    lastPolledAt:
+      typeof row.last_polled_at === 'string' ? row.last_polled_at : null,
+    attemptCount: Number.parseInt(String(row.attempt_count ?? 0), 10) || 0,
+    notes: typeof row.notes === 'string' ? row.notes : null,
+  }));
+};
+
+const hasImportedCoverageForCompletedRequest = async (
+  pool: Pool,
+  args: {
+    accountId: string;
+    row: CompletedPendingRequestRow;
+  }
+): Promise<boolean> => {
+  if (!isAdsPendingImportSourceType(args.row.sourceType)) {
+    return false;
+  }
+
+  const tableName = ADS_PENDING_IMPORT_TARGETS[args.row.sourceType].tableName;
+  const result = await pool.query(
+    `
+      select exists (
+        select 1
+        from public.${tableName}
+        where account_id = $1
+          and date >= $2::date
+          and date <= $3::date
+      ) as has_rows
+    `,
+    [args.accountId, args.row.startDate, args.row.endDate]
+  );
+
+  return result.rows[0]?.has_rows === true;
+};
+
+const markCompletedPendingRequestImported = async (
+  pool: Pool,
+  row: CompletedPendingRequestRow
+): Promise<void> => {
+  if (!isAdsPendingImportSourceType(row.sourceType)) {
+    return;
+  }
+
+  await pool.query(
+    `
+      update public.ads_api_report_requests
+      set
+        status = 'imported',
+        status_details = coalesce(status_details, 'imported'),
+        notes = $2,
+        completed_at = coalesce(completed_at, now()),
+        last_polled_at = coalesce(last_polled_at, now())
+      where id = $1::uuid
+    `,
+    [row.id, ADS_PENDING_IMPORT_TARGETS[row.sourceType].importedNote]
+  );
+};
+
+export const reconcileCompletedPendingRequests = async (
+  pool: Pool,
+  args: Pick<ResumeArgs, 'accountId' | 'marketplace'>
+): Promise<string[]> => {
+  const rows = await listCompletedPendingRequests(pool, args);
+  const reconciledReportIds: string[] = [];
+
+  for (const row of rows) {
+    if (!(await hasImportedCoverageForCompletedRequest(pool, {
+      accountId: args.accountId,
+      row,
+    }))) {
+      continue;
+    }
+
+    await markCompletedPendingRequestImported(pool, row);
+    reconciledReportIds.push(row.reportId);
+  }
+
+  return reconciledReportIds;
+};
+
 export const shouldWaitForRetryAfter = (args: {
   retryAfterAt: string | null;
   nowIso: string;
@@ -427,6 +573,7 @@ async function main(): Promise<void> {
   let hadHardFailure = false;
 
   try {
+    await reconcileCompletedPendingRequests(pool, args);
     const pendingRows = await listPendingRequests(pool, args);
     for (const row of pendingRows) {
       const ageState = classifyPendingRequestAgeByClock({

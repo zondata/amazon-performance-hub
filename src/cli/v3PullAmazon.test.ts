@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   classifyAdsPendingFailure,
+  deriveAdsImplementedCoverageResult,
   deriveCoverageSourceResult,
+  extractImportedAdsSourceTypesFromSteps,
   parseV3PullAmazonArgs,
 } from './v3PullAmazon';
 import {
@@ -127,6 +129,10 @@ describe('v3-amazon-data-sync workflow', () => {
     process.cwd(),
     '.github/workflows/v3_ads_pending_resume.yml'
   );
+  const verificationWorkflowPath = path.resolve(
+    process.cwd(),
+    '.github/workflows/v3-ads-loop-verification.yml'
+  );
   const runbookPath = path.resolve(
     process.cwd(),
     'docs/V3_AMAZON_DATA_SYNC_RUNBOOK.md'
@@ -158,6 +164,17 @@ describe('v3-amazon-data-sync workflow', () => {
     expect(workflow).toContain("ADS_API_REPORT_POLL_INTERVAL_MS: '1000'");
     expect(workflow).toContain('timeout-minutes: 10');
     expect(workflow).toContain("cron: '7,37 * * * *'");
+  });
+
+  it('creates a scheduled ads loop verification workflow', () => {
+    const workflow = fs.readFileSync(verificationWorkflowPath, 'utf8');
+    expect(workflow).toContain('workflow_dispatch:');
+    expect(workflow).toContain('schedule:');
+    expect(workflow).toContain("cron: '23 7 * * *'");
+    expect(workflow).toContain('timeout-minutes: 10');
+    expect(workflow).toContain('npm run v3:verify:ads-loop --');
+    expect(workflow).toContain('v3_ads_loop_verification.md');
+    expect(workflow).toContain('v3-ads-loop-verification-report');
   });
 
   it('references secrets by name instead of hardcoding values', () => {
@@ -472,6 +489,134 @@ describe('v3CheckAdsPendingHealth helpers', () => {
 });
 
 describe('coverage isolation helpers', () => {
+  it('extracts imported Ads source types from successful ingest steps only', () => {
+    expect(
+      extractImportedAdsSourceTypesFromSteps([
+        {
+          name: 'adsapi:ingest-sp-campaign-daily',
+          status: 'success',
+          started_at: '2026-04-21T00:00:00.000Z',
+          finished_at: '2026-04-21T00:00:01.000Z',
+          duration_ms: 1000,
+          summary: {},
+        },
+        {
+          name: 'adsapi:ingest-sp-target-daily',
+          status: 'failed',
+          started_at: '2026-04-21T00:00:02.000Z',
+          finished_at: '2026-04-21T00:00:03.000Z',
+          duration_ms: 1000,
+          summary: {},
+        },
+      ])
+    ).toEqual(['ads_api_sp_campaign_daily']);
+  });
+
+  it('keeps campaign coverage successful when targeting fails later in the same ads batch', () => {
+    const result = deriveAdsImplementedCoverageResult(
+      {
+        source: 'ads',
+        status: 'failed',
+        sourceType: 'ads_api',
+        sourceName: 'ads',
+        syncRunId: 'sync-1',
+        rowsRead: 20,
+        rowsWritten: 20,
+        latestAvailableDate: '2026-04-21',
+        missingRanges: [],
+        blockers: ['Target ingest failed'],
+        warnings: [],
+        notes: [],
+        details: {
+          steps: [
+            {
+              name: 'adsapi:ingest-sp-campaign-daily',
+              status: 'success',
+              summary: { upload_id: 'campaign-upload' },
+            },
+            {
+              name: 'adsapi:ingest-sp-target-daily',
+              status: 'failed',
+              summary: {
+                message:
+                  'duplicate key value violates unique constraint "sp_targeting_daily_raw_uq"',
+              },
+            },
+          ],
+        },
+      },
+      {
+        source: 'ads',
+        sourceType: 'ads_api_sp_campaign_daily',
+        sourceName: 'sp_campaign_hourly',
+        tableName: 'sp_campaign_hourly_fact_gold',
+        granularity: 'hourly',
+        periodStartExpr: 'date::timestamptz',
+        periodEndExpr: 'date::timestamptz',
+        expectedDelayHours: 48,
+        hasMarketplace: false,
+        tableStatusDefault: 'success',
+      }
+    );
+
+    expect(result?.status).toBe('success');
+    expect(result?.notes.join(' ')).toContain('ingested successfully');
+    expect(result?.warnings.join(' ')).toContain('overall Ads API batch later failed');
+  });
+
+  it('scopes duplicate targeting ingest failures to the targeting row', () => {
+    const result = deriveAdsImplementedCoverageResult(
+      {
+        source: 'ads',
+        status: 'failed',
+        sourceType: 'ads_api',
+        sourceName: 'ads',
+        syncRunId: 'sync-1',
+        rowsRead: 20,
+        rowsWritten: 20,
+        latestAvailableDate: '2026-04-21',
+        missingRanges: [],
+        blockers: ['Target ingest failed'],
+        warnings: [],
+        notes: ['stderr tail: duplicate key value violates unique constraint'],
+        details: {
+          steps: [
+            {
+              name: 'adsapi:ingest-sp-campaign-daily',
+              status: 'success',
+              summary: { upload_id: 'campaign-upload' },
+            },
+            {
+              name: 'adsapi:ingest-sp-target-daily',
+              status: 'failed',
+              summary: {
+                message:
+                  'duplicate key value violates unique constraint "sp_targeting_daily_raw_uq"',
+                stderr_tail: ['duplicate key value violates unique constraint'],
+              },
+            },
+          ],
+        },
+      },
+      {
+        source: 'ads',
+        sourceType: 'ads_api_sp_target_daily',
+        sourceName: 'sp_targeting_daily',
+        tableName: 'sp_targeting_daily_fact',
+        granularity: 'daily',
+        periodStartExpr: 'date::timestamptz',
+        periodEndExpr: 'date::timestamptz',
+        expectedDelayHours: 48,
+        hasMarketplace: false,
+        tableStatusDefault: 'success',
+      }
+    );
+
+    expect(result?.status).toBe('failed');
+    expect(result?.blockers[0]).toContain('duplicate targeting rows were detected');
+    expect(result?.notes.join(' ')).not.toContain('stderr tail');
+  });
+
   it('keeps both campaign and target rows for the same window in the resume SQL', () => {
     const source = fs.readFileSync(
       path.resolve(process.cwd(), 'src/cli/v3ResumeAmazon.ts'),
