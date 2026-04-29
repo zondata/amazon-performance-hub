@@ -128,6 +128,40 @@ interface SourceRunResult {
   details: JsonObject;
 }
 
+const ADS_IMPLEMENTED_COVERAGE_TABLES = new Set([
+  'sp_campaign_hourly',
+  'sp_targeting_daily',
+]);
+
+const ADS_UNSUPPORTED_COVERAGE_MESSAGES: Record<string, string> = {
+  sp_placement_daily:
+    'SP placement daily automation is not implemented by the current Ads API pullers.',
+  sp_stis_daily:
+    'SP STIS automation is not implemented by the current Ads API pullers.',
+  sp_advertised_product_daily:
+    'SP advertised product automation is not implemented by the current Ads API pullers.',
+  sb_campaign_daily:
+    'SB Ads API puller is not exposed by the current repo scripts.',
+  sb_campaign_placement_daily:
+    'SB Ads API puller is not exposed by the current repo scripts.',
+  sb_keyword_daily:
+    'SB Ads API puller is not exposed by the current repo scripts.',
+  sb_stis_daily:
+    'SB Ads API puller is not exposed by the current repo scripts.',
+  sb_attributed_purchases_daily:
+    'SB Ads API puller is not exposed by the current repo scripts.',
+  sd_campaign_daily:
+    'SD Ads API puller is not exposed by the current repo scripts.',
+  sd_advertised_product_daily:
+    'SD Ads API puller is not exposed by the current repo scripts.',
+  sd_targeting_daily:
+    'SD Ads API puller is not exposed by the current repo scripts.',
+  sd_matched_target_daily:
+    'SD Ads API puller is not exposed by the current repo scripts.',
+  sd_purchased_product_daily:
+    'SD Ads API puller is not exposed by the current repo scripts.',
+};
+
 interface CommandResult {
   command: string;
   args: string[];
@@ -1974,6 +2008,44 @@ const coverageNotes = (sourceResult: SourceRunResult, spec: CoverageSpec): strin
   return `[${spec.sourceName}] ${parts.join(' | ')}`;
 };
 
+export const deriveCoverageSourceResult = (
+  sourceResult: SourceRunResult,
+  spec: CoverageSpec
+): SourceRunResult => {
+  if (sourceResult.source !== 'ads') {
+    return sourceResult;
+  }
+
+  if (ADS_IMPLEMENTED_COVERAGE_TABLES.has(spec.sourceName)) {
+    return {
+      ...sourceResult,
+      warnings: sourceResult.warnings.filter(
+        (warning) => !Object.values(ADS_UNSUPPORTED_COVERAGE_MESSAGES).includes(warning)
+      ),
+    };
+  }
+
+  const unsupportedMessage = ADS_UNSUPPORTED_COVERAGE_MESSAGES[spec.sourceName];
+  if (!unsupportedMessage) {
+    return sourceResult;
+  }
+
+  return {
+    ...sourceResult,
+    status: 'blocked',
+    blockers: [unsupportedMessage],
+    warnings: [],
+    notes: [],
+    latestAvailableDate: null,
+    missingRanges: sourceResult.missingRanges,
+    details: {
+      unsupported: true,
+      source_name: spec.sourceName,
+      reason: unsupportedMessage,
+    },
+  };
+};
+
 const refreshCoverageForSource = async (
   pool: Pool,
   options: CliOptions,
@@ -1985,13 +2057,14 @@ const refreshCoverageForSource = async (
   const specs = COVERAGE_SPECS.filter((spec) => spec.source === sourceResult.source);
 
   for (const spec of specs) {
+    const effectiveSourceResult = deriveCoverageSourceResult(sourceResult, spec);
     const stats = await queryCoverageStats(pool, spec, {
       accountId: options.accountId,
       marketplace: options.marketplace,
       cutoffIso,
     });
     const tableStatus = toCoverageLastStatus(
-      sourceResult.status,
+      effectiveSourceResult.status,
       spec.tableStatusDefault,
       stats.rowCount
     );
@@ -2001,22 +2074,22 @@ const refreshCoverageForSource = async (
       requestedTo: options.to,
       latestDate,
       sourceStatus:
-        spec.tableStatusDefault === 'blocked' && sourceResult.status === 'success'
+        spec.tableStatusDefault === 'blocked' && effectiveSourceResult.status === 'success'
           ? 'blocked'
-          : sourceResult.status,
-      blockers: sourceResult.blockers,
+          : effectiveSourceResult.status,
+      blockers: effectiveSourceResult.blockers,
     });
     const freshnessStatus = deriveFreshnessStatus({
       latestPeriodEnd: stats.latestPeriodEnd,
       expectedDelayHours: spec.expectedDelayHours,
       lastStatus: tableStatus,
     });
-    const notes = coverageNotes(sourceResult, spec);
+    const notes = coverageNotes(effectiveSourceResult, spec);
     const tableDataStatus = deriveDataStatus({
       sourceStatus:
-        spec.tableStatusDefault === 'blocked' && sourceResult.status === 'success'
+        spec.tableStatusDefault === 'blocked' && effectiveSourceResult.status === 'success'
           ? 'blocked'
-          : sourceResult.status,
+          : effectiveSourceResult.status,
       latestDate,
       finality: options.finality,
     });
@@ -2035,14 +2108,16 @@ const refreshCoverageForSource = async (
         tableStatus === 'success' || tableStatus === 'partial'
           ? finishedAt
           : null,
-      lastSyncRunId: sourceResult.syncRunId,
+        lastSyncRunId: effectiveSourceResult.syncRunId,
       lastStatus: tableStatus,
       freshnessStatus,
       expectedDelayHours: spec.expectedDelayHours,
       rowCount: stats.rowCount,
       missingRanges,
-      warningCount: sourceResult.warnings.length,
-      errorCount: sourceResult.blockers.length + (sourceResult.status === 'failed' ? 1 : 0),
+      warningCount: effectiveSourceResult.warnings.length,
+      errorCount:
+        effectiveSourceResult.blockers.length +
+        (effectiveSourceResult.status === 'failed' ? 1 : 0),
       notes,
     });
 
@@ -2059,7 +2134,7 @@ const refreshCoverageForSource = async (
       isFinal: tableDataStatus === 'final',
       finalAfterAt: null,
       finalizedAt: tableDataStatus === 'final' ? finishedAt : null,
-      lastSyncRunId: sourceResult.syncRunId,
+      lastSyncRunId: effectiveSourceResult.syncRunId,
       lastRefreshedAt: finishedAt,
       rowCount: stats.rowCount,
       coverageJson: {
@@ -2069,11 +2144,11 @@ const refreshCoverageForSource = async (
         missing_ranges: missingRanges,
         source_status: tableStatus,
       },
-      warnings: [...sourceResult.warnings, ...sourceResult.blockers],
+      warnings: [...effectiveSourceResult.warnings, ...effectiveSourceResult.blockers],
     });
 
     await recordQualityCheck(pool, {
-      syncRunId: sourceResult.syncRunId,
+      syncRunId: effectiveSourceResult.syncRunId,
       accountId: options.accountId,
       marketplace: options.marketplace,
       tableName: spec.tableName,

@@ -8,6 +8,7 @@ import { loadLocalEnvFiles } from '../connectors/sp-api/loadLocalEnv';
 import { createPostgresPool } from '../ingestion/postgresIngestionJobRepository';
 
 export const DEFAULT_ADS_MAX_PENDING_AGE_HOURS = 72;
+export const DEFAULT_COMPLETED_GRACE_MINUTES = 30;
 export const ACTIVE_PENDING_REQUEST_STATUSES = [
   'created',
   'requested',
@@ -15,6 +16,7 @@ export const ACTIVE_PENDING_REQUEST_STATUSES = [
   'polling',
   'pending_timeout',
 ] as const;
+export type PendingAgeState = 'active' | 'stale_expired';
 
 type ResumeMode = 'manual' | 'scheduled';
 
@@ -28,23 +30,27 @@ type ResumeArgs = {
 
 type PendingRequestRow = {
   id: string;
+  sourceType: string;
   reportId: string;
   status: string;
   startDate: string;
   endDate: string;
   createdAt: string;
   updatedAt: string;
+  retryAfterAt: string | null;
   lastPolledAt: string | null;
   attemptCount: number;
   notes: string | null;
 };
 
 type ResumeQueueResult = {
+  sourceType: string;
   reportId: string;
   startDate: string;
   endDate: string;
   previousStatus: string;
   currentStatus: string;
+  completedAt: string | null;
   action: 'resumed' | 'stale_expired' | 'noop';
   commandExitCode: number;
   notes: string[];
@@ -161,7 +167,7 @@ export const classifyPendingRequestAge = (args: {
   updatedAt: string;
   nowIso: string;
   maxPendingAgeHours: number;
-}): 'active' | 'stale_expired' => {
+}): PendingAgeState => {
   const updatedAtMs = new Date(args.updatedAt).getTime();
   const nowMs = new Date(args.nowIso).getTime();
   if (!Number.isFinite(updatedAtMs) || !Number.isFinite(nowMs)) {
@@ -172,6 +178,30 @@ export const classifyPendingRequestAge = (args: {
     : 'active';
 };
 
+export const classifyPendingRequestAgeByClock = (args: {
+  createdAt: string | null;
+  updatedAt: string | null;
+  nowIso: string;
+  maxPendingAgeHours: number;
+}): PendingAgeState => {
+  const createdAtMs = args.createdAt ? new Date(args.createdAt).getTime() : NaN;
+  if (Number.isFinite(createdAtMs)) {
+    const nowMs = new Date(args.nowIso).getTime();
+    if (!Number.isFinite(nowMs)) {
+      return 'active';
+    }
+    return nowMs - createdAtMs > args.maxPendingAgeHours * 60 * 60 * 1000
+      ? 'stale_expired'
+      : 'active';
+  }
+
+  return classifyPendingRequestAge({
+    updatedAt: args.updatedAt ?? '',
+    nowIso: args.nowIso,
+    maxPendingAgeHours: args.maxPendingAgeHours,
+  });
+};
+
 const requireDatabaseUrl = (): string => {
   const value = readTrimmed(process.env.DATABASE_URL);
   if (!value) {
@@ -180,21 +210,40 @@ const requireDatabaseUrl = (): string => {
   return value;
 };
 
-const listPendingRequests = async (
+const isCompletedPastGrace = (args: {
+  currentStatus: string;
+  completedAt: string | null;
+  nowIso: string;
+  completedGraceMinutes: number;
+}): boolean => {
+  if (args.currentStatus !== 'completed' || !args.completedAt) {
+    return false;
+  }
+  const completedAtMs = new Date(args.completedAt).getTime();
+  const nowMs = new Date(args.nowIso).getTime();
+  if (!Number.isFinite(completedAtMs) || !Number.isFinite(nowMs)) {
+    return false;
+  }
+  return nowMs - completedAtMs > args.completedGraceMinutes * 60 * 1000;
+};
+
+export const listPendingRequests = async (
   pool: Pool,
   args: ResumeArgs
 ): Promise<PendingRequestRow[]> => {
   const result = await pool.query(
     `
       select
-        distinct on (start_date, end_date)
+        distinct on (source_type, start_date, end_date)
         id::text as id,
+        source_type::text as source_type,
         report_id::text as report_id,
         status::text as status,
         start_date::text as start_date,
         end_date::text as end_date,
         created_at::text as created_at,
         updated_at::text as updated_at,
+        retry_after_at::text as retry_after_at,
         last_polled_at::text as last_polled_at,
         attempt_count,
         notes
@@ -203,24 +252,40 @@ const listPendingRequests = async (
         and marketplace = $2
         and source_type in ('ads_api_sp_campaign_daily', 'ads_api_sp_target_daily')
         and status = any($3::text[])
-      order by start_date asc, end_date asc, updated_at desc
+      order by source_type asc, start_date asc, end_date asc, updated_at desc
     `,
     [args.accountId, args.marketplace, [...ACTIVE_PENDING_REQUEST_STATUSES]]
   );
 
   return result.rows.map((row) => ({
     id: String(row.id),
+    sourceType: String(row.source_type),
     reportId: String(row.report_id),
     status: String(row.status),
     startDate: String(row.start_date),
     endDate: String(row.end_date),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
+    retryAfterAt:
+      typeof row.retry_after_at === 'string' ? row.retry_after_at : null,
     lastPolledAt:
       typeof row.last_polled_at === 'string' ? row.last_polled_at : null,
     attemptCount: Number.parseInt(String(row.attempt_count ?? 0), 10) || 0,
     notes: typeof row.notes === 'string' ? row.notes : null,
   }));
+};
+
+export const shouldWaitForRetryAfter = (args: {
+  retryAfterAt: string | null;
+  nowIso: string;
+}): boolean => {
+  if (!args.retryAfterAt) return false;
+  const retryAfterMs = new Date(args.retryAfterAt).getTime();
+  const nowMs = new Date(args.nowIso).getTime();
+  if (!Number.isFinite(retryAfterMs) || !Number.isFinite(nowMs)) {
+    return false;
+  }
+  return retryAfterMs > nowMs;
 };
 
 const markPendingRequestStale = async (
@@ -245,22 +310,27 @@ const markPendingRequestStale = async (
   );
 };
 
-const readCurrentRequestStatus = async (
+const readCurrentRequestState = async (
   pool: Pool,
   row: PendingRequestRow
-): Promise<string> => {
+): Promise<{ status: string; completedAt: string | null }> => {
   const result = await pool.query(
     `
-      select status::text as status
+      select status::text as status, completed_at::text as completed_at
       from public.ads_api_report_requests
       where id = $1::uuid
       limit 1
     `,
     [row.id]
   );
-  return typeof result.rows[0]?.status === 'string'
-    ? result.rows[0].status
-    : row.status;
+  return {
+    status:
+      typeof result.rows[0]?.status === 'string' ? result.rows[0].status : row.status,
+    completedAt:
+      typeof result.rows[0]?.completed_at === 'string'
+        ? result.rows[0].completed_at
+        : null,
+  };
 };
 
 const runResumeCommand = async (
@@ -336,11 +406,11 @@ const writeReport = (args: {
   if (args.rows.length === 0) {
     lines.push('No active Ads pending requests were found.');
   } else {
-    lines.push('| Report ID | Window | Previous status | Current status | Action | Notes |');
-    lines.push('| --- | --- | --- | --- | --- | --- |');
+    lines.push('| Source type | Report ID | Window | Previous status | Current status | Action | Notes |');
+    lines.push('| --- | --- | --- | --- | --- | --- | --- |');
     for (const row of args.rows) {
       lines.push(
-        `| ${row.reportId} | ${row.startDate} -> ${row.endDate} | ${row.previousStatus} | ${row.currentStatus} | ${row.action} | ${row.notes.join(' ; ') || 'none'} |`
+        `| ${row.sourceType} | ${row.reportId} | ${row.startDate} -> ${row.endDate} | ${row.previousStatus} | ${row.currentStatus} | ${row.action} | ${row.notes.join(' ; ') || 'none'} |`
       );
     }
   }
@@ -359,7 +429,8 @@ async function main(): Promise<void> {
   try {
     const pendingRows = await listPendingRequests(pool, args);
     for (const row of pendingRows) {
-      const ageState = classifyPendingRequestAge({
+      const ageState = classifyPendingRequestAgeByClock({
+        createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         nowIso,
         maxPendingAgeHours: args.maxPendingAgeHours,
@@ -368,11 +439,13 @@ async function main(): Promise<void> {
       if (ageState === 'stale_expired') {
         await markPendingRequestStale(pool, row, args.maxPendingAgeHours);
         results.push({
+          sourceType: row.sourceType,
           reportId: row.reportId,
           startDate: row.startDate,
           endDate: row.endDate,
           previousStatus: row.status,
           currentStatus: 'stale_expired',
+          completedAt: null,
           action: 'stale_expired',
           commandExitCode: 0,
           notes: ['Exceeded the pending-report SLA and can now be replaced by a future sync run.'],
@@ -380,8 +453,25 @@ async function main(): Promise<void> {
         continue;
       }
 
+      if (shouldWaitForRetryAfter({ retryAfterAt: row.retryAfterAt, nowIso })) {
+        results.push({
+          sourceType: row.sourceType,
+          reportId: row.reportId,
+          startDate: row.startDate,
+          endDate: row.endDate,
+          previousStatus: row.status,
+          currentStatus: row.status,
+          completedAt: null,
+          action: 'noop',
+          commandExitCode: 0,
+          notes: ['Waiting until retry_after_at before polling again.'],
+        });
+        continue;
+      }
+
       const commandResult = await runResumeCommand(args, row);
-      const currentStatus = await readCurrentRequestStatus(pool, row);
+      const currentState = await readCurrentRequestState(pool, row);
+      const currentStatus = currentState.status;
       const notes: string[] = [];
       if (currentStatus === 'imported') {
         notes.push('Report completed and imported successfully.');
@@ -392,17 +482,28 @@ async function main(): Promise<void> {
       } else if (currentStatus === 'completed') {
         notes.push('Report download completed, but the downstream import did not mark the request as imported.');
       }
-      if (commandResult.exitCode !== 0 && currentStatus !== 'pending_timeout') {
+      if (
+        commandResult.exitCode !== 0 &&
+        !(
+          args.softPendingExit &&
+          (currentStatus === 'pending_timeout' ||
+            currentStatus === 'pending' ||
+            currentStatus === 'polling')
+        ) &&
+        currentStatus !== 'pending_timeout'
+      ) {
         hadHardFailure = true;
         notes.push('Resume command exited non-zero.');
       }
 
       results.push({
+        sourceType: row.sourceType,
         reportId: row.reportId,
         startDate: row.startDate,
         endDate: row.endDate,
         previousStatus: row.status,
         currentStatus,
+        completedAt: currentState.completedAt,
         action: 'resumed',
         commandExitCode: commandResult.exitCode,
         notes,
@@ -420,7 +521,20 @@ async function main(): Promise<void> {
   });
 
   const unresolvedWithoutRecovery = results.some(
-    (row) => row.currentStatus === 'failed' || row.currentStatus === 'completed'
+    (row) => {
+      if (row.currentStatus === 'failed' || row.currentStatus === 'stale_expired') {
+        return true;
+      }
+      if (row.currentStatus !== 'completed') {
+        return false;
+      }
+      return isCompletedPastGrace({
+        currentStatus: row.currentStatus,
+        completedAt: row.completedAt,
+        nowIso,
+        completedGraceMinutes: DEFAULT_COMPLETED_GRACE_MINUTES,
+      });
+    }
   );
 
   if (hadHardFailure || unresolvedWithoutRecovery) {
