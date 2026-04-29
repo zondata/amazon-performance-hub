@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import { headers } from 'next/headers';
 import Script from 'next/script';
 
 import SidebarCollapseToggle from '@/components/SidebarCollapseToggle';
 import SidebarNav from '@/components/SidebarNav';
 import StickyHScrollBar from '@/components/StickyHScrollBar';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
+import { logoutAction } from '@/lib/auth/actions';
+import { isPublicAuthPath } from '@/lib/auth/config';
+import { requireAuthenticatedAppUser } from '@/lib/auth/session';
 import { env } from '@/lib/env';
 import './globals.css';
 
@@ -50,11 +54,32 @@ const themeInitScript = `
   })();
 `;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headerStore = await headers();
+  const pathname = headerStore.get('x-aph-pathname') ?? '/';
+  const publicAuthRoute = isPublicAuthPath(pathname);
+
+  if (publicAuthRoute) {
+    return (
+      <html lang="en" data-sidebar="expanded" data-theme="stripe" suppressHydrationWarning>
+        <body
+          className={`${geistSans.variable} ${geistMono.variable} min-h-screen overflow-x-hidden bg-background text-foreground antialiased`}
+        >
+          <Script id="aph-theme-init" strategy="beforeInteractive">
+            {themeInitScript}
+          </Script>
+          <main className="min-h-screen px-6 py-8">{children}</main>
+        </body>
+      </html>
+    );
+  }
+
+  const user = await requireAuthenticatedAppUser();
+
   return (
     <html lang="en" data-sidebar="expanded" data-theme="stripe" suppressHydrationWarning>
       <body
@@ -101,12 +126,23 @@ export default function RootLayout({
                 </div>
               </div>
               <div className="flex items-center gap-3 text-sm">
-                <div className="rounded-full bg-primary px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-foreground">
+              <div className="rounded-full bg-primary px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-foreground">
                   {env.accountId} · {env.marketplace}
+                </div>
+                <div className="rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted">
+                  {user.email}
                 </div>
                 <div className="rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted">
                   Date range: last 30 days
                 </div>
+                <form action={logoutAction}>
+                  <button
+                    type="submit"
+                    className="rounded-full border border-border bg-surface px-3 py-1 text-xs text-foreground"
+                  >
+                    Logout
+                  </button>
+                </form>
                 <ThemeSwitcher />
               </div>
             </header>
