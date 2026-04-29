@@ -127,6 +127,10 @@ describe('v3-amazon-data-sync workflow', () => {
     process.cwd(),
     '.github/workflows/v3_ads_pending_resume.yml'
   );
+  const verificationWorkflowPath = path.resolve(
+    process.cwd(),
+    '.github/workflows/v3-ads-loop-verification.yml'
+  );
   const runbookPath = path.resolve(
     process.cwd(),
     'docs/V3_AMAZON_DATA_SYNC_RUNBOOK.md'
@@ -158,6 +162,17 @@ describe('v3-amazon-data-sync workflow', () => {
     expect(workflow).toContain("ADS_API_REPORT_POLL_INTERVAL_MS: '1000'");
     expect(workflow).toContain('timeout-minutes: 10');
     expect(workflow).toContain("cron: '7,37 * * * *'");
+  });
+
+  it('creates a scheduled ads loop verification workflow', () => {
+    const workflow = fs.readFileSync(verificationWorkflowPath, 'utf8');
+    expect(workflow).toContain('workflow_dispatch:');
+    expect(workflow).toContain('schedule:');
+    expect(workflow).toContain("cron: '23 7 * * *'");
+    expect(workflow).toContain('timeout-minutes: 10');
+    expect(workflow).toContain('npm run v3:verify:ads-loop --');
+    expect(workflow).toContain('v3_ads_loop_verification.md');
+    expect(workflow).toContain('v3-ads-loop-verification-report');
   });
 
   it('references secrets by name instead of hardcoding values', () => {

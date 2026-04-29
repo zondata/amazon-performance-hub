@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import CopyButton from '@/components/CopyButton';
@@ -288,14 +289,22 @@ export default async function ImportsHealthPage({
               Inserts missing ASINs from sales facts into products.
             </div>
           </div>
-          <form action={seedProducts}>
-            <button
-              type="submit"
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/pipeline-status"
+              className="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-semibold text-foreground"
             >
-              Seed products
-            </button>
-          </form>
+              Open pipeline status
+            </Link>
+            <form action={seedProducts}>
+              <button
+                type="submit"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              >
+                Seed products
+              </button>
+            </form>
+          </div>
         </div>
         {seedStatus === 'ok' ? (
           <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
