@@ -31,9 +31,6 @@ describe('PipelineStatusPage', () => {
           latestReportDay: '2026-04-30',
           dataCompleteness: 'Complete',
           amazonApiState: 'imported',
-          manualRunLabel: 'Run',
-          manualRunEnabled: true,
-          manualRunTitle: 'Manual source run is not wired yet.',
           sourceGroupStatus: 'success',
           latestPeriodEnd: '2026-04-30T23:59:59.000Z',
           lastSuccessfulImportTime: '2026-05-01T08:00:00.000Z',
@@ -56,9 +53,6 @@ describe('PipelineStatusPage', () => {
           latestReportDay: '—',
           dataCompleteness: 'Blocked',
           amazonApiState: '—',
-          manualRunLabel: 'Disabled',
-          manualRunEnabled: false,
-          manualRunTitle: 'Manual source run is not wired yet.',
           sourceGroupStatus: 'not_implemented',
           latestPeriodEnd: null,
           lastSuccessfulImportTime: null,
@@ -76,7 +70,7 @@ describe('PipelineStatusPage', () => {
     });
   });
 
-  it('renders the simplified column set and manual run states', async () => {
+  it('renders the simplified table and top-level manual run controls', async () => {
     const element = await PipelineStatusPage();
     const html = renderToStaticMarkup(element);
 
@@ -86,10 +80,13 @@ describe('PipelineStatusPage', () => {
     expect(html).toContain('Latest report day');
     expect(html).toContain('Data completeness');
     expect(html).toContain('Amazon/API state');
-    expect(html).toContain('Manual run');
-    expect(html).toContain('>Run<');
-    expect(html).toContain('>Disabled<');
-    expect(html).toContain('title="Manual source run is not wired yet."');
+    expect(html).not.toContain('Manual run');
+    expect(html).toContain('>Run Sales<');
+    expect(html).toContain('>Run Ads<');
+    expect(html).toContain('title="Manual workflow dispatch is not wired yet."');
+    expect(html).toContain('aria-label="Run Sales manual sync is not wired yet."');
+    expect(html).toContain('aria-label="Run Ads manual sync is not wired yet."');
+    expect(html).not.toContain('<td class="px-4 py-3 align-top"><button');
     expect(html).not.toContain('Source type');
     expect(html).not.toContain('Target table');
     expect(html).not.toContain('Next action');

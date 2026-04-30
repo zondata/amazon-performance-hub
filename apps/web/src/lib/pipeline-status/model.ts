@@ -73,9 +73,6 @@ export type PipelineStatusRow = {
     | 'pending_timeout'
     | 'stale_expired'
     | '—';
-  manualRunLabel: 'Run' | 'Disabled';
-  manualRunEnabled: boolean;
-  manualRunTitle: string;
   sourceGroupStatus: PipelineSourceGroupStatus;
   latestPeriodEnd: string | null;
   lastSuccessfulImportTime: string | null;
@@ -705,15 +702,6 @@ export const buildPipelineStatusRows = (args: {
         coverage,
         relatedPendingRows: relatedPending,
       }),
-      manualRunLabel:
-        spec.implementationStatus === 'implemented'
-          ? ('Run' as const)
-          : ('Disabled' as const),
-      manualRunEnabled: spec.implementationStatus === 'implemented',
-      manualRunTitle:
-        spec.implementationStatus === 'implemented'
-          ? 'Manual source run is not wired yet.'
-          : 'Manual source run is not wired yet.',
       sourceGroupStatus,
       latestPeriodEnd: coverage?.latestPeriodEnd ?? null,
       lastSuccessfulImportTime: coverage?.lastSuccessfulRunAt ?? null,

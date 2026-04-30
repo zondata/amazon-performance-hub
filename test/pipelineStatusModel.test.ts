@@ -108,7 +108,7 @@ describe('buildPipelineStatusRows', () => {
     expect(rows[0].dataCompleteness).toBe('Incomplete');
   });
 
-  it('maps not implemented to Blocked with disabled manual run', () => {
+  it('maps not implemented to Blocked with no amazon api state', () => {
     const rows = buildRows({
       specs: [
         {
@@ -122,8 +122,6 @@ describe('buildPipelineStatusRows', () => {
 
     expect(rows[0].dataCompleteness).toBe('Blocked');
     expect(rows[0].amazonApiState).toBe('—');
-    expect(rows[0].manualRunLabel).toBe('Disabled');
-    expect(rows[0].manualRunEnabled).toBe(false);
   });
 
   it('prefers active polling pending rows over imported coverage', () => {

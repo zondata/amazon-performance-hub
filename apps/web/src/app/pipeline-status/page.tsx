@@ -65,12 +65,32 @@ export default async function PipelineStatusPage() {
               single source group.
             </p>
           </div>
-          <Link
-            href="/imports-health"
-            className="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-semibold text-foreground"
-          >
-            Open Imports &amp; Health
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled
+              title="Manual workflow dispatch is not wired yet."
+              aria-label="Run Sales manual sync is not wired yet."
+              className="cursor-not-allowed rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-semibold text-muted"
+            >
+              Run Sales
+            </button>
+            <button
+              type="button"
+              disabled
+              title="Manual workflow dispatch is not wired yet."
+              aria-label="Run Ads manual sync is not wired yet."
+              className="cursor-not-allowed rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-semibold text-muted"
+            >
+              Run Ads
+            </button>
+            <Link
+              href="/imports-health"
+              className="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-semibold text-foreground"
+            >
+              Open Imports &amp; Health
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -149,9 +169,6 @@ export default async function PipelineStatusPage() {
                 <th className="sticky top-0 z-10 w-[11rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Amazon/API state
                 </th>
-                <th className="sticky top-0 z-10 w-[9rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
-                  Manual run
-                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -165,7 +182,7 @@ export default async function PipelineStatusPage() {
                   <td className="px-4 py-3 align-top text-muted">
                     <span
                       className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClassName(
-                        row.manualRunEnabled ? 'positive' : 'muted'
+                        row.implementationStatus === 'implemented' ? 'positive' : 'muted'
                       )}`}
                     >
                       {row.implementationLabel}
@@ -190,20 +207,6 @@ export default async function PipelineStatusPage() {
                     >
                       {row.amazonApiState}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 align-top">
-                    <button
-                      type="button"
-                      title={row.manualRunTitle}
-                      disabled={!row.manualRunEnabled}
-                      className={`inline-flex min-w-24 items-center justify-center rounded-lg border px-3 py-2 text-sm font-semibold ${
-                        row.manualRunEnabled
-                          ? 'border-border bg-surface text-foreground'
-                          : 'cursor-not-allowed border-border bg-surface-2 text-muted'
-                      }`}
-                    >
-                      {row.manualRunLabel}
-                    </button>
                   </td>
                 </tr>
               ))}
