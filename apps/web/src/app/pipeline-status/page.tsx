@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { isRedirectError } from 'next/dist/client/components/redirect-error';
 
 import { getPipelineStatus } from '@/lib/pipeline-status/getPipelineStatus';
 import {
@@ -104,6 +105,9 @@ export default async function PipelineStatusPage({
         )}&run_summary=${encodeURIComponent(result.summary)}`
       );
     } catch (error) {
+      if (isRedirectError(error)) {
+        throw error;
+      }
       const message = error instanceof Error ? error.message : 'Manual run failed.';
       revalidatePath('/pipeline-status');
       redirect(
