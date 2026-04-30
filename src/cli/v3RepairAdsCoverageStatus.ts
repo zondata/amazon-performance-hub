@@ -46,12 +46,18 @@ type CoverageSpec = {
   sourceType:
     | 'sp_api_sales_traffic_daily'
     | 'ads_api_sp_campaign_daily'
-    | 'ads_api_sp_target_daily';
-  sourceName: 'sales_traffic' | 'sp_campaign_hourly' | 'sp_targeting_daily';
+    | 'ads_api_sp_target_daily'
+    | 'ads_api_sp_placement_daily';
+  sourceName:
+    | 'sales_traffic'
+    | 'sp_campaign_hourly'
+    | 'sp_targeting_daily'
+    | 'sp_placement_daily';
   tableName:
     | 'amazon_sales_traffic_timeseries'
     | 'sp_campaign_hourly_fact_gold'
-    | 'sp_targeting_daily_fact';
+    | 'sp_targeting_daily_fact'
+    | 'sp_placement_daily_fact';
   granularity: 'hourly' | 'daily';
   periodStartExpr: string;
   periodEndExpr: string;
@@ -108,6 +114,18 @@ const REPAIR_SPECS: CoverageSpec[] = [
     successNote:
       'SP Targeting Daily imported successfully for the latest available period.',
     failedLabel: 'SP Targeting Daily',
+  },
+  {
+    sourceType: 'ads_api_sp_placement_daily',
+    sourceName: 'sp_placement_daily',
+    tableName: 'sp_placement_daily_fact',
+    granularity: 'daily',
+    periodStartExpr: 'date::timestamptz',
+    periodEndExpr: 'date::timestamptz',
+    expectedDelayHours: 48,
+    successNote:
+      'SP Placement Daily imported successfully for the latest available period.',
+    failedLabel: 'SP Placement Daily',
   },
 ];
 

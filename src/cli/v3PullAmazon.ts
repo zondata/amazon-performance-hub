@@ -238,7 +238,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sp_campaign_daily',
     sourceName: 'sp_campaign_hourly',
     tableName: 'sp_campaign_hourly_fact_gold',
     granularity: 'hourly',
@@ -251,7 +251,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sp_target_daily',
     sourceName: 'sp_targeting_daily',
     tableName: 'sp_targeting_daily_fact',
     granularity: 'daily',
@@ -263,7 +263,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sp_placement_daily',
     sourceName: 'sp_placement_daily',
     tableName: 'sp_placement_daily_fact',
     granularity: 'daily',
@@ -275,7 +275,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sp_stis_daily',
     sourceName: 'sp_stis_daily',
     tableName: 'sp_stis_daily_fact',
     granularity: 'daily',
@@ -287,7 +287,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sp_advertised_product_daily',
     sourceName: 'sp_advertised_product_daily',
     tableName: 'sp_advertised_product_daily_fact',
     granularity: 'daily',
@@ -299,7 +299,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sb_campaign_daily',
     sourceName: 'sb_campaign_daily',
     tableName: 'sb_campaign_daily_fact_gold',
     granularity: 'daily',
@@ -311,7 +311,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sb_campaign_placement_daily',
     sourceName: 'sb_campaign_placement_daily',
     tableName: 'sb_campaign_placement_daily_fact',
     granularity: 'daily',
@@ -323,7 +323,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sb_keyword_daily',
     sourceName: 'sb_keyword_daily',
     tableName: 'sb_keyword_daily_fact',
     granularity: 'daily',
@@ -335,7 +335,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sb_stis_daily',
     sourceName: 'sb_stis_daily',
     tableName: 'sb_stis_daily_fact',
     granularity: 'daily',
@@ -347,7 +347,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sb_attributed_purchases_daily',
     sourceName: 'sb_attributed_purchases_daily',
     tableName: 'sb_attributed_purchases_daily_fact',
     granularity: 'daily',
@@ -359,7 +359,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sd_campaign_daily',
     sourceName: 'sd_campaign_daily',
     tableName: 'sd_campaign_daily_fact_gold',
     granularity: 'daily',
@@ -371,7 +371,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sd_advertised_product_daily',
     sourceName: 'sd_advertised_product_daily',
     tableName: 'sd_advertised_product_daily_fact',
     granularity: 'daily',
@@ -383,7 +383,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sd_targeting_daily',
     sourceName: 'sd_targeting_daily',
     tableName: 'sd_targeting_daily_fact',
     granularity: 'daily',
@@ -395,7 +395,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sd_matched_target_daily',
     sourceName: 'sd_matched_target_daily',
     tableName: 'sd_matched_target_daily_fact',
     granularity: 'daily',
@@ -407,7 +407,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'ads',
-    sourceType: 'ads_api',
+    sourceType: 'ads_api_sd_purchased_product_daily',
     sourceName: 'sd_purchased_product_daily',
     tableName: 'sd_purchased_product_daily_fact',
     granularity: 'daily',
