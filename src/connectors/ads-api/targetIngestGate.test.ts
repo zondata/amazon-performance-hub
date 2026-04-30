@@ -149,7 +149,7 @@ describe('target ingest gate', () => {
       loadAdsTargetIngestGateArtifact({
         artifactPath,
       })
-    ).toThrowError('Persisted artifact must contain at least 1 target row.');
+    ).toThrowError('Target artifact must contain at least 1 target row.');
   });
 
   it('fails when target row metadata does not match the artifact', () => {

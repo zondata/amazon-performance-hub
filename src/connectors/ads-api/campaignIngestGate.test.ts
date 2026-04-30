@@ -139,7 +139,7 @@ describe('campaign ingest gate', () => {
       loadAdsCampaignIngestGateArtifact({
         artifactPath,
       })
-    ).toThrowError('Persisted artifact must contain at least 1 campaign row.');
+    ).toThrowError('Campaign artifact must contain at least 1 campaign row.');
   });
 
   it('fails when campaign row metadata does not match the artifact', () => {

@@ -6,11 +6,13 @@ import * as XLSX from 'xlsx';
 import { ingestSpPlacementRaw } from '../../ingest/ingestSpPlacementRaw';
 import { mapUpload } from '../../mapping/db';
 import { ADS_API_PERSISTED_NORMALIZATION_ARTIFACT_PATH } from './adsPersistence';
+import { ADS_API_SP_PLACEMENT_DAILY_NORMALIZED_ARTIFACT_PATH } from './spPlacementDaily';
 import {
   AdsApiPlacementIngestGateError,
   type AdsApiDateRange,
   type AdsApiPersistedNormalizationArtifact,
   type AdsApiPlacementIngestGateResult,
+  type AdsApiSpPlacementDailyNormalizedArtifact,
   type AdsApiSpPlacementDailyNormalizedRow,
 } from './types';
 
@@ -92,24 +94,60 @@ const parsePlacementArtifact = (
   return value as AdsApiPersistedNormalizationArtifact;
 };
 
+const parsePlacementNormalizedArtifact = (
+  value: unknown,
+  filePath: string
+): AdsApiSpPlacementDailyNormalizedArtifact => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    fail('artifact_invalid', `Placement normalized artifact is invalid: ${filePath}`);
+  }
+  const candidate = value as Record<string, unknown>;
+  if (
+    readString(candidate.schemaVersion) !== 'ads-api-sp-placement-daily-normalized/v1' ||
+    readString(candidate.appAccountId) === null ||
+    readString(candidate.appMarketplace) === null ||
+    readString(candidate.adsApiBaseUrl) === null ||
+    readString(candidate.profileId) === null ||
+    !isDateRange(candidate.requestedDateRange) ||
+    readNumber(candidate.rowCount) === null ||
+    !Array.isArray(candidate.normalizedPlacementRows)
+  ) {
+    fail(
+      'artifact_invalid',
+      `Placement normalized artifact is missing required fields: ${filePath}`
+    );
+  }
+  return value as AdsApiSpPlacementDailyNormalizedArtifact;
+};
+
+type PlacementArtifactEnvelope = {
+  appAccountId: string;
+  appMarketplace: string;
+  adsApiBaseUrl: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+};
+
 const validatePlacementRows = (
-  artifact: AdsApiPersistedNormalizationArtifact,
+  artifact: PlacementArtifactEnvelope,
+  placementRowCount: number,
+  placementRows: AdsApiSpPlacementDailyNormalizedRow[],
   filePath: string
 ): AdsApiSpPlacementDailyNormalizedRow[] => {
-  if (artifact.placementRowCount < 1) {
+  if (placementRowCount < 1) {
     fail('invalid_rows', 'Placement artifact must contain at least 1 placement row.');
   }
-  if (artifact.placementRows.length < 1) {
-    fail('invalid_rows', 'Placement artifact placementRows must be non-empty.');
+  if (placementRows.length < 1) {
+    fail('invalid_rows', 'Placement artifact placement rows must be non-empty.');
   }
-  if (artifact.placementRowCount !== artifact.placementRows.length) {
+  if (placementRowCount !== placementRows.length) {
     fail(
       'artifact_invalid',
       `Placement artifact placementRowCount does not match row length: ${filePath}`
     );
   }
 
-  for (const [index, row] of artifact.placementRows.entries()) {
+  for (const [index, row] of placementRows.entries()) {
     const rowNumber = index + 1;
     if (row.appAccountId !== artifact.appAccountId) {
       fail('artifact_mismatch', `Placement row appAccountId mismatch at row ${rowNumber}.`);
@@ -134,7 +172,7 @@ const validatePlacementRows = (
     requireString(row.placementRaw, 'invalid_rows', `Placement row is missing placementRaw at row ${rowNumber}.`, row);
   }
 
-  return [...artifact.placementRows].sort((left, right) => {
+  return [...placementRows].sort((left, right) => {
     if (left.date !== right.date) return left.date.localeCompare(right.date);
     if (left.campaignId !== right.campaignId) {
       return left.campaignId.localeCompare(right.campaignId, 'en', { numeric: true });
@@ -147,16 +185,53 @@ export const loadAdsPlacementIngestGateArtifact = (args: {
   artifactPath?: string;
 } = {}): {
   artifactPath: string;
-  artifact: AdsApiPersistedNormalizationArtifact;
+  artifact: PlacementArtifactEnvelope;
   placementRows: AdsApiSpPlacementDailyNormalizedRow[];
 } => {
   const artifactPath =
-    args.artifactPath ?? ADS_API_PERSISTED_NORMALIZATION_ARTIFACT_PATH;
-  const artifact = parsePlacementArtifact(readJsonFile(artifactPath), artifactPath);
+    args.artifactPath ?? ADS_API_SP_PLACEMENT_DAILY_NORMALIZED_ARTIFACT_PATH;
+  const value = readJsonFile(artifactPath);
+  const schemaVersion =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? readString((value as Record<string, unknown>).schemaVersion)
+      : null;
+
+  if (schemaVersion === 'ads-api-sp-daily-persisted/v1') {
+    const artifact = parsePlacementArtifact(value, artifactPath);
+    return {
+      artifactPath,
+      artifact: {
+        appAccountId: artifact.appAccountId,
+        appMarketplace: artifact.appMarketplace,
+        adsApiBaseUrl: artifact.adsApiBaseUrl,
+        profileId: artifact.profileId,
+        requestedDateRange: artifact.requestedDateRange,
+      },
+      placementRows: validatePlacementRows(
+        artifact,
+        artifact.placementRowCount,
+        artifact.placementRows,
+        artifactPath
+      ),
+    };
+  }
+
+  const artifact = parsePlacementNormalizedArtifact(value, artifactPath);
   return {
     artifactPath,
-    artifact,
-    placementRows: validatePlacementRows(artifact, artifactPath),
+    artifact: {
+      appAccountId: artifact.appAccountId,
+      appMarketplace: artifact.appMarketplace,
+      adsApiBaseUrl: artifact.adsApiBaseUrl,
+      profileId: artifact.profileId,
+      requestedDateRange: artifact.requestedDateRange,
+    },
+    placementRows: validatePlacementRows(
+      artifact,
+      artifact.rowCount,
+      artifact.normalizedPlacementRows,
+      artifactPath
+    ),
   };
 };
 

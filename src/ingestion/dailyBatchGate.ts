@@ -296,6 +296,15 @@ const buildFailedCommandStep = (
   },
 });
 
+const buildSkippedCommandStep = (
+  name: string,
+  summary: JsonObject
+): DailyBatchStepResult => ({
+  name,
+  status: 'skipped',
+  summary,
+});
+
 const runCommand = async (
   command: string,
   args: string[],
@@ -631,12 +640,54 @@ export const runRealAdsDailyBatch = async (
     }
   };
 
+  const runOptionalStep = async (
+    name: string,
+    scriptName: string,
+    args: string[] = [],
+    extra: (result: CommandResult) => JsonObject = () => ({})
+  ): Promise<
+    | { ok: true; result: CommandResult }
+    | { ok: false; error: DailyBatchGateError }
+  > => {
+    try {
+      const result = await runStep(name, scriptName, args, extra);
+      return { ok: true, result };
+    } catch (error) {
+      if (error instanceof DailyBatchGateError) {
+        return { ok: false, error };
+      }
+      throw error;
+    }
+  };
+
+  const isPendingStepError = (error: DailyBatchGateError): boolean => {
+    const stdoutTail = Array.isArray(error.metadata?.stdout_tail)
+      ? error.metadata.stdout_tail.filter((value): value is string => typeof value === 'string')
+      : [];
+    const stderrTail = Array.isArray(error.metadata?.stderr_tail)
+      ? error.metadata.stderr_tail.filter((value): value is string => typeof value === 'string')
+      : [];
+    const combined = [error.message, ...stdoutTail, ...stderrTail].join('\n');
+    return combined.includes('pending_timeout') || combined.includes('remained pending');
+  };
+
+  const extractReportId = (error: DailyBatchGateError): string | null => {
+    const stdoutTail = Array.isArray(error.metadata?.stdout_tail)
+      ? error.metadata.stdout_tail.filter((value): value is string => typeof value === 'string')
+      : [];
+    const stderrTail = Array.isArray(error.metadata?.stderr_tail)
+      ? error.metadata.stderr_tail.filter((value): value is string => typeof value === 'string')
+      : [];
+    const combined = [error.message, ...stdoutTail, ...stderrTail].join('\n');
+    return combined.match(/report_id=([0-9a-fA-F-]{8,})/)?.[1] ?? null;
+  };
+
   try {
     await runStep('adsapi:sync-profiles', 'adsapi:sync-profiles', [], (result) => ({
       selected_profile_id: parseLineValue(result.stdout, 'Selected profile id'),
       artifact_path: parseLineValue(result.stdout, 'Artifact path'),
     }));
-    const campaignPull = await runStep(
+    const campaignPull = await runOptionalStep(
       'adsapi:pull-sp-campaign-daily',
       'adsapi:pull-sp-campaign-daily',
       [
@@ -654,7 +705,7 @@ export const runRealAdsDailyBatch = async (
         ),
       })
     );
-    const targetPull = await runStep(
+    const targetPull = await runOptionalStep(
       'adsapi:pull-sp-target-daily',
       'adsapi:pull-sp-target-daily',
       [
@@ -672,7 +723,7 @@ export const runRealAdsDailyBatch = async (
         ),
       })
     );
-    const placementPull = await runStep(
+    const placementPull = await runOptionalStep(
       'adsapi:pull-sp-placement-daily',
       'adsapi:pull-sp-placement-daily',
       [
@@ -690,79 +741,226 @@ export const runRealAdsDailyBatch = async (
         ),
       })
     );
-    const persist = await runStep(
-      'adsapi:persist-sp-daily',
-      'adsapi:persist-sp-daily',
-      [],
-      (result) => ({
-        campaign_row_count: parseNumberLine(result.stdout, 'Campaign row count'),
-        target_row_count: parseNumberLine(result.stdout, 'Target row count'),
-        normalization_artifact_path: parseLineValue(
-          result.stdout,
-          'Normalization artifact path'
+    const allPullsReady =
+      campaignPull.ok && targetPull.ok && placementPull.ok;
+
+    const persist = allPullsReady
+      ? await runOptionalStep(
+          'adsapi:persist-sp-daily',
+          'adsapi:persist-sp-daily',
+          [],
+          (result) => ({
+            campaign_row_count: parseNumberLine(result.stdout, 'Campaign row count'),
+            target_row_count: parseNumberLine(result.stdout, 'Target row count'),
+            placement_row_count: parseNumberLine(result.stdout, 'Placement row count'),
+            normalization_artifact_path: parseLineValue(
+              result.stdout,
+              'Normalization artifact path'
+            ),
+          })
+        )
+      : (steps.push(
+          buildSkippedCommandStep('adsapi:persist-sp-daily', {
+            reason: 'waiting_for_all_reports',
+            message:
+              'Shared SP persistence skipped because not all required SP reports are ready yet.',
+          })
         ),
-      })
-    );
-    const campaignIngest = await runStep(
-      'adsapi:ingest-sp-campaign-daily',
-      'adsapi:ingest-sp-campaign-daily',
-      [],
-      (result) => ({
-        campaign_row_count: parseNumberLine(result.stdout, 'Campaign row count'),
-        upload_id: parseLineValue(result.stdout, 'Upload id'),
-      })
-    );
-    const targetIngest = await runStep(
-      'adsapi:ingest-sp-target-daily',
-      'adsapi:ingest-sp-target-daily',
-      [],
-      (result) => ({
-        target_row_count: parseNumberLine(result.stdout, 'Target row count'),
-        upload_id: parseLineValue(result.stdout, 'Upload id'),
-      })
-    );
-    const placementIngest = await runStep(
-      'adsapi:ingest-sp-placement-daily',
-      'adsapi:ingest-sp-placement-daily',
-      [],
-      (result) => ({
-        placement_row_count: parseNumberLine(result.stdout, 'Placement row count'),
-        upload_id: parseLineValue(result.stdout, 'Upload id'),
-      })
-    );
+        null);
+
+    const campaignArtifactPath =
+      campaignPull.ok
+        ? parseLineValue(campaignPull.result.stdout, 'Normalized artifact path')
+        : null;
+    const targetArtifactPath =
+      targetPull.ok
+        ? parseLineValue(targetPull.result.stdout, 'Normalized artifact path')
+        : null;
+    const placementArtifactPath =
+      placementPull.ok
+        ? parseLineValue(placementPull.result.stdout, 'Normalized artifact path')
+        : null;
+
+    const campaignIngest = campaignPull.ok
+      ? await runOptionalStep(
+          'adsapi:ingest-sp-campaign-daily',
+          'adsapi:ingest-sp-campaign-daily',
+          campaignArtifactPath ? ['--artifact-path', campaignArtifactPath] : [],
+          (result) => ({
+            campaign_row_count: parseNumberLine(result.stdout, 'Campaign row count'),
+            upload_id: parseLineValue(result.stdout, 'Upload id'),
+          })
+        )
+      : (steps.push(
+          buildSkippedCommandStep('adsapi:ingest-sp-campaign-daily', {
+            reason: 'upstream_pull_not_ready',
+            message:
+              'Campaign ingest skipped because the SP campaign report is not ready yet.',
+          })
+        ),
+        null);
+    const targetIngest = targetPull.ok
+      ? await runOptionalStep(
+          'adsapi:ingest-sp-target-daily',
+          'adsapi:ingest-sp-target-daily',
+          targetArtifactPath ? ['--artifact-path', targetArtifactPath] : [],
+          (result) => ({
+            target_row_count: parseNumberLine(result.stdout, 'Target row count'),
+            upload_id: parseLineValue(result.stdout, 'Upload id'),
+          })
+        )
+      : (steps.push(
+          buildSkippedCommandStep('adsapi:ingest-sp-target-daily', {
+            reason: 'upstream_pull_not_ready',
+            message:
+              'Target ingest skipped because the SP target report is not ready yet.',
+          })
+        ),
+        null);
+    const placementIngest = placementPull.ok
+      ? await runOptionalStep(
+          'adsapi:ingest-sp-placement-daily',
+          'adsapi:ingest-sp-placement-daily',
+          placementArtifactPath ? ['--artifact-path', placementArtifactPath] : [],
+          (result) => ({
+            placement_row_count: parseNumberLine(result.stdout, 'Placement row count'),
+            upload_id: parseLineValue(result.stdout, 'Upload id'),
+          })
+        )
+      : (steps.push(
+          buildSkippedCommandStep('adsapi:ingest-sp-placement-daily', {
+            reason: 'upstream_pull_not_ready',
+            message:
+              'Placement ingest skipped because the SP placement report is not ready yet.',
+          })
+        ),
+        null);
 
     const campaignRowCount =
-      parseNumberLine(campaignIngest.stdout, 'Campaign row count') ??
-      parseNumberLine(persist.stdout, 'Campaign row count') ??
-      parseNumberLine(campaignPull.stdout, 'Row count') ??
+      (campaignIngest && campaignIngest.ok
+        ? parseNumberLine(campaignIngest.result.stdout, 'Campaign row count')
+        : null) ??
+      (persist && persist.ok
+        ? parseNumberLine(persist.result.stdout, 'Campaign row count')
+        : null) ??
+      (campaignPull.ok
+        ? parseNumberLine(campaignPull.result.stdout, 'Row count')
+        : null) ??
       0;
     const targetRowCount =
-      parseNumberLine(targetIngest.stdout, 'Target row count') ??
-      parseNumberLine(persist.stdout, 'Target row count') ??
-      parseNumberLine(targetPull.stdout, 'Row count') ??
+      (targetIngest && targetIngest.ok
+        ? parseNumberLine(targetIngest.result.stdout, 'Target row count')
+        : null) ??
+      (persist && persist.ok
+        ? parseNumberLine(persist.result.stdout, 'Target row count')
+        : null) ??
+      (targetPull.ok
+        ? parseNumberLine(targetPull.result.stdout, 'Row count')
+        : null) ??
       0;
     const placementRowCount =
-      parseNumberLine(placementIngest.stdout, 'Placement row count') ??
-      parseNumberLine(placementPull.stdout, 'Row count') ??
+      (placementIngest && placementIngest.ok
+        ? parseNumberLine(placementIngest.result.stdout, 'Placement row count')
+        : null) ??
+      (persist && persist.ok
+        ? parseNumberLine(persist.result.stdout, 'Placement row count')
+        : null) ??
+      (placementPull.ok
+        ? parseNumberLine(placementPull.result.stdout, 'Row count')
+        : null) ??
       0;
+
+    const pullOutcomes = [
+      {
+        sourceType: 'ads_api_sp_campaign_daily',
+        label: 'SP campaign daily',
+        outcome: campaignPull,
+      },
+      {
+        sourceType: 'ads_api_sp_target_daily',
+        label: 'SP target daily',
+        outcome: targetPull,
+      },
+      {
+        sourceType: 'ads_api_sp_placement_daily',
+        label: 'SP placement daily',
+        outcome: placementPull,
+      },
+    ];
+    const pendingSources = pullOutcomes
+      .filter(
+        (
+          entry
+        ): entry is {
+          sourceType: string;
+          label: string;
+          outcome: { ok: false; error: DailyBatchGateError };
+        } => !entry.outcome.ok && isPendingStepError(entry.outcome.error)
+      )
+      .map((entry) => ({
+        source_type: entry.sourceType,
+        label: entry.label,
+        report_id: extractReportId(entry.outcome.error),
+      }));
+    const failedSources = pullOutcomes
+      .filter(
+        (
+          entry
+        ): entry is {
+          sourceType: string;
+          label: string;
+          outcome: { ok: false; error: DailyBatchGateError };
+        } => !entry.outcome.ok && !isPendingStepError(entry.outcome.error)
+      )
+      .map((entry) => ({
+        source_type: entry.sourceType,
+        label: entry.label,
+        message: entry.outcome.error.message,
+      }));
+
     const metadata: JsonObject = {
       source_group: 'ads',
       requested_range: {
         start_date: request.startDate,
         end_date: request.endDate,
       },
-      profile_id: parseLineValue(campaignPull.stdout, 'Validated profile id'),
+      profile_id:
+        (campaignPull.ok
+          ? parseLineValue(campaignPull.result.stdout, 'Validated profile id')
+          : null) ??
+        (targetPull.ok
+          ? parseLineValue(targetPull.result.stdout, 'Validated profile id')
+          : null) ??
+        (placementPull.ok
+          ? parseLineValue(placementPull.result.stdout, 'Validated profile id')
+          : null),
       campaign_row_count: campaignRowCount,
       target_row_count: targetRowCount,
       placement_row_count: placementRowCount,
-      campaign_upload_id: parseLineValue(campaignIngest.stdout, 'Upload id'),
-      target_upload_id: parseLineValue(targetIngest.stdout, 'Upload id'),
-      placement_upload_id: parseLineValue(placementIngest.stdout, 'Upload id'),
+      campaign_upload_id:
+        campaignIngest && campaignIngest.ok
+          ? parseLineValue(campaignIngest.result.stdout, 'Upload id')
+          : null,
+      target_upload_id:
+        targetIngest && targetIngest.ok
+          ? parseLineValue(targetIngest.result.stdout, 'Upload id')
+          : null,
+      placement_upload_id:
+        placementIngest && placementIngest.ok
+          ? parseLineValue(placementIngest.result.stdout, 'Upload id')
+          : null,
+      pending_sources: pendingSources,
+      failed_sources: failedSources,
+      persist_status:
+        persist === null ? 'skipped' : persist.ok ? 'success' : 'failed',
       steps,
     };
 
     return {
-      rowCount: campaignRowCount + targetRowCount + placementRowCount,
+      rowCount:
+        (campaignIngest && campaignIngest.ok ? campaignRowCount : 0) +
+        (targetIngest && targetIngest.ok ? targetRowCount : 0) +
+        (placementIngest && placementIngest.ok ? placementRowCount : 0),
       checksum: jsonChecksum(metadata),
       metadata,
       steps,

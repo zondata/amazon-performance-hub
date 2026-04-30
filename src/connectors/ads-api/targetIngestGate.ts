@@ -6,10 +6,12 @@ import * as XLSX from 'xlsx';
 import { ingestSpTargetingRaw } from '../../ingest/ingestSpTargetingRaw';
 import { mapUpload } from '../../mapping/db';
 import { ADS_API_PERSISTED_NORMALIZATION_ARTIFACT_PATH } from './adsPersistence';
+import { ADS_API_SP_TARGET_DAILY_NORMALIZED_ARTIFACT_PATH } from './spTargetDaily';
 import {
   AdsApiTargetIngestGateError,
   type AdsApiDateRange,
   type AdsApiPersistedNormalizationArtifact,
+  type AdsApiSpTargetDailyNormalizedArtifact,
   type AdsApiSpTargetDailyNormalizedRow,
   type AdsApiTargetIngestGateResult,
   type AdsApiTargetIngestGateSinkSummary,
@@ -112,28 +114,66 @@ const parsePersistedNormalizationArtifact = (
   return value as AdsApiPersistedNormalizationArtifact;
 };
 
-const validateTargetRows = (
-  artifact: AdsApiPersistedNormalizationArtifact,
+const parseTargetNormalizedArtifact = (
+  value: unknown,
   filePath: string
-): AdsApiSpTargetDailyNormalizedRow[] => {
-  if (artifact.targetRowCount < 1) {
-    fail('invalid_rows', 'Persisted artifact must contain at least 1 target row.');
+): AdsApiSpTargetDailyNormalizedArtifact => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    fail('artifact_invalid', `Target normalized artifact is invalid: ${filePath}`);
   }
 
-  if (artifact.targetRows.length < 1) {
-    fail('invalid_rows', 'Persisted artifact targetRows must be non-empty.');
-  }
-
-  if (artifact.targetRowCount !== artifact.targetRows.length) {
+  const candidate = value as Record<string, unknown>;
+  if (
+    readString(candidate.schemaVersion) !== 'ads-api-sp-target-daily-normalized/v1' ||
+    readString(candidate.appAccountId) === null ||
+    readString(candidate.appMarketplace) === null ||
+    readString(candidate.adsApiBaseUrl) === null ||
+    readString(candidate.profileId) === null ||
+    !isDateRange(candidate.requestedDateRange) ||
+    readNumber(candidate.rowCount) === null ||
+    !Array.isArray(candidate.normalizedTargetRows)
+  ) {
     fail(
       'artifact_invalid',
-      `Persisted artifact targetRowCount does not match targetRows length: ${filePath}`
+      `Target normalized artifact is missing required fields: ${filePath}`
+    );
+  }
+
+  return value as AdsApiSpTargetDailyNormalizedArtifact;
+};
+
+type TargetArtifactEnvelope = {
+  appAccountId: string;
+  appMarketplace: string;
+  adsApiBaseUrl: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+};
+
+const validateTargetRows = (
+  artifact: TargetArtifactEnvelope,
+  targetRowCount: number,
+  targetRows: AdsApiSpTargetDailyNormalizedRow[],
+  filePath: string
+): AdsApiSpTargetDailyNormalizedRow[] => {
+  if (targetRowCount < 1) {
+    fail('invalid_rows', 'Target artifact must contain at least 1 target row.');
+  }
+
+  if (targetRows.length < 1) {
+    fail('invalid_rows', 'Target artifact rows must be non-empty.');
+  }
+
+  if (targetRowCount !== targetRows.length) {
+    fail(
+      'artifact_invalid',
+      `Target artifact rowCount does not match row length: ${filePath}`
     );
   }
 
   const { appAccountId, appMarketplace, profileId, requestedDateRange } = artifact;
 
-  for (const [index, row] of artifact.targetRows.entries()) {
+  for (const [index, row] of targetRows.entries()) {
     const rowNumber = index + 1;
 
     if (row.appAccountId !== appAccountId) {
@@ -196,7 +236,7 @@ const validateTargetRows = (
     );
   }
 
-  return [...artifact.targetRows].sort((left, right) => {
+  return [...targetRows].sort((left, right) => {
     if (left.date !== right.date) {
       return left.date.localeCompare(right.date);
     }
@@ -208,20 +248,54 @@ export const loadAdsTargetIngestGateArtifact = (args: {
   artifactPath?: string;
 } = {}): {
   artifactPath: string;
-  artifact: AdsApiPersistedNormalizationArtifact;
+  artifact: TargetArtifactEnvelope;
   targetRows: AdsApiSpTargetDailyNormalizedRow[];
 } => {
   const artifactPath =
-    args.artifactPath ?? ADS_API_PERSISTED_NORMALIZATION_ARTIFACT_PATH;
-  const artifact = parsePersistedNormalizationArtifact(
-    readJsonFile(artifactPath),
-    artifactPath
-  );
+    args.artifactPath ?? ADS_API_SP_TARGET_DAILY_NORMALIZED_ARTIFACT_PATH;
+  const value = readJsonFile(artifactPath);
+  const schemaVersion =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? readString((value as Record<string, unknown>).schemaVersion)
+      : null;
+
+  if (schemaVersion === 'ads-api-sp-daily-persisted/v1') {
+    const artifact = parsePersistedNormalizationArtifact(value, artifactPath);
+    return {
+      artifactPath,
+      artifact: {
+        appAccountId: artifact.appAccountId,
+        appMarketplace: artifact.appMarketplace,
+        adsApiBaseUrl: artifact.adsApiBaseUrl,
+        profileId: artifact.profileId,
+        requestedDateRange: artifact.requestedDateRange,
+      },
+      targetRows: validateTargetRows(
+        artifact,
+        artifact.targetRowCount,
+        artifact.targetRows,
+        artifactPath
+      ),
+    };
+  }
+
+  const artifact = parseTargetNormalizedArtifact(value, artifactPath);
 
   return {
     artifactPath,
-    artifact,
-    targetRows: validateTargetRows(artifact, artifactPath),
+    artifact: {
+      appAccountId: artifact.appAccountId,
+      appMarketplace: artifact.appMarketplace,
+      adsApiBaseUrl: artifact.adsApiBaseUrl,
+      profileId: artifact.profileId,
+      requestedDateRange: artifact.requestedDateRange,
+    },
+    targetRows: validateTargetRows(
+      artifact,
+      artifact.rowCount,
+      artifact.normalizedTargetRows,
+      artifactPath
+    ),
   };
 };
 

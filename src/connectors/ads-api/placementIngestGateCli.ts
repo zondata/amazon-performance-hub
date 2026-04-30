@@ -17,9 +17,23 @@ export const buildPlacementIngestGateSuccessLines = (
   `Upload id: ${result.sinkResult.uploadId}`,
 ];
 
+const parseArgs = (argv: string[]): { artifactPath?: string } => {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === '--artifact-path') {
+      return { artifactPath: argv[index + 1] ?? undefined };
+    }
+    if (arg.startsWith('--artifact-path=')) {
+      return { artifactPath: arg.slice('--artifact-path='.length) };
+    }
+  }
+
+  return {};
+};
+
 async function main(): Promise<void> {
   try {
-    const result = await runAdsApiPlacementIngestGate({});
+    const result = await runAdsApiPlacementIngestGate(parseArgs(process.argv.slice(2)));
     for (const line of buildPlacementIngestGateSuccessLines(result)) {
       console.log(line);
     }

@@ -1172,6 +1172,9 @@ export const extractImportedAdsSourceTypesFromSteps = (
     if (step.name === 'adsapi:ingest-sp-target-daily') {
       imported.add('ads_api_sp_target_daily');
     }
+    if (step.name === 'adsapi:ingest-sp-placement-daily') {
+      imported.add('ads_api_sp_placement_daily');
+    }
   }
   return [...imported];
 };
@@ -1196,6 +1199,8 @@ const markAdsPendingRequestsImportedForSourceTypes = async (
             then 'Imported into sp_campaign_hourly_fact_gold by the V3 Ads sync batch.'
           when request.source_type = 'ads_api_sp_target_daily'
             then 'Imported into sp_targeting_daily_fact by the V3 Ads sync batch.'
+          when request.source_type = 'ads_api_sp_placement_daily'
+            then 'Imported into sp_placement_daily_fact by the V3 Ads sync batch.'
           else request.notes
         end,
         completed_at = coalesce(request.completed_at, now()),
@@ -1229,8 +1234,112 @@ const markAdsPendingRequestsImported = async (
   return markAdsPendingRequestsImportedForSourceTypes(
     pool,
     options,
-    ['ads_api_sp_campaign_daily', 'ads_api_sp_target_daily']
+    [
+      'ads_api_sp_campaign_daily',
+      'ads_api_sp_target_daily',
+      'ads_api_sp_placement_daily',
+    ]
   );
+};
+
+const summarizeAdsBatchResult = (args: {
+  result: Awaited<ReturnType<typeof runRealAdsDailyBatch>>;
+  options: CliOptions;
+  warnings: string[];
+  notes: string[];
+  blockers: string[];
+}): {
+  status: SourceResultStatus;
+  rowsRead: number | null;
+  rowsWritten: number | null;
+  latestAvailableDate: string | null;
+  missingRanges: string[];
+  blockers: string[];
+  warnings: string[];
+  notes: string[];
+  details: JsonObject;
+} => {
+  const metadata =
+    typeof args.result.metadata === 'object' && args.result.metadata !== null
+      ? args.result.metadata
+      : {};
+  const isSummaryObject = (value: unknown): value is JsonObject =>
+    !!value && typeof value === 'object' && !Array.isArray(value);
+  const pendingSources = Array.isArray(metadata.pending_sources)
+    ? metadata.pending_sources.filter(isSummaryObject)
+    : [];
+  const failedSources = Array.isArray(metadata.failed_sources)
+    ? metadata.failed_sources.filter(isSummaryObject)
+    : [];
+  const rowsWritten =
+    typeof args.result.rowCount === 'number'
+      ? args.result.rowCount
+      : countStepRows(args.result.steps);
+
+  if (pendingSources.length > 0) {
+    for (const pending of pendingSources) {
+      const label = typeof pending.label === 'string' ? pending.label : 'SP Ads report';
+      const reportId =
+        typeof pending.report_id === 'string' ? pending.report_id : null;
+      args.blockers.push(
+        reportId
+          ? `Amazon Ads ${label} report is still pending in Amazon. report_id=${reportId}`
+          : `Amazon Ads ${label} report is still pending in Amazon.`
+      );
+    }
+    args.notes.push(
+      args.options.mode === 'scheduled' || args.options.softPendingExit
+        ? 'Amazon still has one or more Ads reports pending. Let the next scheduled run poll the saved report ids, or rerun manually with --resume-pending.'
+        : 'Rerun the same request with --resume-pending to continue polling saved report ids instead of creating duplicate reports.'
+    );
+  }
+
+  if (failedSources.length > 0) {
+    for (const failure of failedSources) {
+      const label = typeof failure.label === 'string' ? failure.label : 'SP Ads report';
+      const message =
+        typeof failure.message === 'string' ? failure.message : 'unknown execution error';
+      args.blockers.push(`${label} execution failed: ${message}`);
+    }
+  }
+
+  let status: SourceResultStatus;
+  if (failedSources.length > 0) {
+    status = rowsWritten > 0 ? 'partial' : 'failed';
+  } else if (pendingSources.length > 0) {
+    status =
+      rowsWritten > 0
+        ? 'partial'
+        : args.options.mode === 'scheduled' || args.options.softPendingExit
+        ? 'pending'
+        : 'blocked';
+  } else {
+    status = args.warnings.length > 0 ? 'partial' : 'success';
+  }
+
+  return {
+    status,
+    rowsRead: countStepRows(args.result.steps),
+    rowsWritten,
+    latestAvailableDate:
+      status === 'failed' || status === 'blocked' || status === 'pending'
+        ? rowsWritten > 0
+          ? args.options.to
+          : null
+        : args.options.to,
+    missingRanges:
+      pendingSources.length > 0 || failedSources.length > 0
+        ? [`${args.options.from} -> ${args.options.to}`]
+        : [],
+    blockers: args.blockers,
+    warnings: args.warnings,
+    notes: args.notes,
+    details: {
+      row_count: args.result.rowCount,
+      steps: args.result.steps as JsonValue,
+      metadata: args.result.metadata,
+    },
+  };
 };
 
 const queryCoverageStats = async (
@@ -1845,21 +1954,13 @@ const runAdsSource = async (pool: Pool, options: CliOptions): Promise<{
     notes.push(`imported report_ids=${importedReportIds.join(',')}`);
   }
 
-  return {
-    status: warnings.length > 0 ? 'partial' : 'success',
-    rowsRead: countStepRows(result.steps),
-    rowsWritten: typeof result.rowCount === 'number' ? result.rowCount : countStepRows(result.steps),
-    latestAvailableDate: options.to,
-    missingRanges: [],
-    blockers,
+  return summarizeAdsBatchResult({
+    result,
+    options,
     warnings,
     notes,
-    details: {
-      row_count: result.rowCount,
-      steps,
-      metadata: result.metadata,
-    },
-  };
+    blockers,
+  });
 };
 
 export const classifyAdsPendingFailure = (
