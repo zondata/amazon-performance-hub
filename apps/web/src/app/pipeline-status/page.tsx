@@ -2,9 +2,6 @@ import Link from 'next/link';
 
 import { getPipelineStatus } from '@/lib/pipeline-status/getPipelineStatus';
 
-const formatValue = (value: string | null) => value ?? '—';
-const PREVIEW_LIMIT = 120;
-
 const badgeClassName = (
   tone: 'positive' | 'muted' | 'warning' | 'danger' | 'neutral'
 ) => {
@@ -23,31 +20,24 @@ const badgeClassName = (
   return 'border-border bg-surface text-foreground';
 };
 
-const previewText = (value: string | null, limit = PREVIEW_LIMIT) => {
-  if (!value) {
-    return '—';
-  }
-
-  const normalized = value.replace(/\s+/g, ' ').trim();
-  if (normalized.length <= limit) {
-    return normalized;
-  }
-
-  return `${normalized.slice(0, limit - 1)}…`;
-};
-
 const statusTone = (status: string) => {
-  if (status === 'success') return 'positive';
-  if (status === 'partial_success') return 'warning';
-  if (status === 'warning') return 'warning';
-  if (status === 'failed') return 'danger';
-  if (status === 'blocked' || status === 'not_implemented' || status === 'no_coverage') {
-    return 'muted';
+  if (status === 'Complete' || status === 'imported' || status === 'completed') return 'positive';
+  if (
+    status === 'Expected Delay' ||
+    status === 'pending' ||
+    status === 'polling' ||
+    status === 'requested' ||
+    status === 'created'
+  ) {
+    return 'warning';
   }
+  if (status === 'Incomplete' || status === 'pending_timeout' || status === 'stale_expired') {
+    return 'warning';
+  }
+  if (status === 'failed' || status === 'Blocked') return 'danger';
+  if (status === 'No Data' || status === '—' || status === 'Not implemented') return 'muted';
   return 'neutral';
 };
-
-const statusLabel = (status: string) => status.replace(/_/g, ' ');
 
 export default async function PipelineStatusPage() {
   const { rows, batchSummary } = await getPipelineStatus();
@@ -71,8 +61,8 @@ export default async function PipelineStatusPage() {
               Pipeline Status
             </h1>
             <p className="mt-2 max-w-3xl text-sm text-muted">
-              Each row below reflects its own source group. Batch-level failures are shown
-              separately and do not overwrite successful source-group rows.
+              Each row below reflects the current implementation and coverage state for a
+              single source group.
             </p>
           </div>
           <Link
@@ -92,20 +82,10 @@ export default async function PipelineStatusPage() {
                 statusTone(batchSummary.status)
               )}`}
             >
-              Ads batch {statusLabel(batchSummary.status)}
+              Ads batch {batchSummary.status.replace(/_/g, ' ')}
             </span>
             <p className="max-w-4xl text-sm text-foreground">{batchSummary.summary}</p>
           </div>
-          {batchSummary.technicalDetails ? (
-            <details className="mt-3">
-              <summary className="cursor-pointer text-sm text-muted">
-                Show technical details
-              </summary>
-              <pre className="mt-2 max-h-48 overflow-auto rounded-lg border border-border bg-surface px-3 py-2 text-xs whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                {batchSummary.technicalDetails}
-              </pre>
-            </details>
-          ) : null}
         </section>
       ) : null}
 
@@ -148,50 +128,29 @@ export default async function PipelineStatusPage() {
           data-aph-hscroll-axis="x"
           className="max-h-[70vh] overflow-auto rounded-xl border border-border"
         >
-          <table className="w-full min-w-[1420px] table-fixed text-left text-sm">
+          <table className="w-full min-w-[980px] table-fixed text-left text-sm">
             <thead className="text-xs uppercase tracking-wider text-muted">
               <tr>
-                <th className="sticky top-0 z-10 w-[13rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
+                <th className="sticky top-0 z-10 w-[15rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Source group
                 </th>
-                <th className="sticky top-0 z-10 w-[15rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
-                  Source type
-                </th>
-                <th className="sticky top-0 z-10 w-[14rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
-                  Target table
-                </th>
-                <th className="sticky top-0 z-10 w-[9rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
+                <th className="sticky top-0 z-10 w-[10rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Implementation
                 </th>
-                <th className="sticky top-0 z-10 w-[9rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
-                  Row status
+                <th className="sticky top-0 z-10 w-[10rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
+                  Earliest report day
                 </th>
                 <th className="sticky top-0 z-10 w-[10rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Latest report day
                 </th>
-                <th className="sticky top-0 z-10 w-[12rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
-                  Imported at
+                <th className="sticky top-0 z-10 w-[11rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
+                  Data completeness
                 </th>
-                <th className="sticky top-0 z-10 w-[10rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
-                  Coverage status
+                <th className="sticky top-0 z-10 w-[11rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
+                  Amazon/API state
                 </th>
-                <th className="sticky top-0 z-10 w-[7rem] border-b border-border bg-surface px-4 py-3 text-center shadow-sm">
-                  Active pending
-                </th>
-                <th className="sticky top-0 z-10 w-[8rem] border-b border-border bg-surface px-4 py-3 text-center shadow-sm">
-                  Oldest age
-                </th>
-                <th className="sticky top-0 z-10 w-[7rem] border-b border-border bg-surface px-4 py-3 text-center shadow-sm">
-                  Failed/stale
-                </th>
-                <th className="sticky top-0 z-10 w-[12rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
-                  retry_after_at
-                </th>
-                <th className="sticky top-0 z-10 w-[18rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
-                  Next action
-                </th>
-                <th className="sticky top-0 z-10 w-[24rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
-                  Notes
+                <th className="sticky top-0 z-10 w-[9rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
+                  Manual run
                 </th>
               </tr>
             </thead>
@@ -199,110 +158,52 @@ export default async function PipelineStatusPage() {
               {rows.map((row) => (
                 <tr key={`${row.sourceType}:${row.targetTable}`}>
                   <td className="px-4 py-3 align-top font-medium text-foreground">
-                    <div className="max-w-[13rem] whitespace-normal break-words">
+                    <div className="max-w-[15rem] whitespace-normal break-words">
                       {row.sourceGroup}
                     </div>
                   </td>
                   <td className="px-4 py-3 align-top text-muted">
-                    <div className="max-w-[15rem] break-all" title={row.sourceType}>
-                      {row.sourceType}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 align-top text-muted">
-                    <div
-                      className="max-w-[14rem] overflow-hidden text-ellipsis whitespace-nowrap"
-                      title={row.targetTable}
+                    <span
+                      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClassName(
+                        row.manualRunEnabled ? 'positive' : 'muted'
+                      )}`}
                     >
-                      {row.targetTable}
-                    </div>
+                      {row.implementationLabel}
+                    </span>
                   </td>
+                  <td className="px-4 py-3 align-top text-muted">{row.earliestReportDay}</td>
+                  <td className="px-4 py-3 align-top text-muted">{row.latestReportDay}</td>
                   <td className="px-4 py-3 align-top text-muted">
                     <span
                       className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClassName(
-                        row.implementationStatus === 'implemented' ? 'positive' : 'muted'
+                        statusTone(row.dataCompleteness)
                       )}`}
                     >
-                      {statusLabel(row.implementationStatus)}
+                      {row.dataCompleteness}
                     </span>
                   </td>
                   <td className="px-4 py-3 align-top text-muted">
                     <span
                       className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClassName(
-                        statusTone(row.sourceGroupStatus)
+                        statusTone(row.amazonApiState)
                       )}`}
                     >
-                      {statusLabel(row.sourceGroupStatus)}
+                      {row.amazonApiState}
                     </span>
                   </td>
-                  <td className="px-4 py-3 align-top text-muted">
-                    <div className="max-w-[10rem] break-words">
-                      {formatValue(row.latestPeriodEnd)}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 align-top text-muted">
-                    <div className="max-w-[12rem] break-words">
-                      {formatValue(row.lastSuccessfulImportTime)}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 align-top text-muted">
-                    <span
-                      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClassName(
-                        statusTone(row.sourceGroupStatus)
-                      )}`}
+                  <td className="px-4 py-3 align-top">
+                    <button
+                      type="button"
+                      title={row.manualRunTitle}
+                      disabled={!row.manualRunEnabled}
+                      className={`inline-flex min-w-24 items-center justify-center rounded-lg border px-3 py-2 text-sm font-semibold ${
+                        row.manualRunEnabled
+                          ? 'border-border bg-surface text-foreground'
+                          : 'cursor-not-allowed border-border bg-surface-2 text-muted'
+                      }`}
                     >
-                      {row.currentCoverageStatus}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-center align-top text-muted">
-                    <span
-                      className={`inline-flex min-w-10 justify-center rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClassName(
-                        row.activePendingCount > 0 ? 'warning' : 'muted'
-                      )}`}
-                    >
-                      {row.activePendingCount}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-center align-top text-muted">
-                    <div className="mx-auto max-w-[8rem] break-words">{row.oldestPendingAge}</div>
-                  </td>
-                  <td className="px-4 py-3 text-center align-top text-muted">
-                    <span
-                      className={`inline-flex min-w-10 justify-center rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClassName(
-                        row.failedOrStaleCount > 0 ? 'danger' : 'muted'
-                      )}`}
-                    >
-                      {row.failedOrStaleCount}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 align-top text-muted">
-                    <div className="max-w-[12rem] break-words">
-                      {formatValue(row.retryAfterAt)}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 align-top text-muted">
-                    <div
-                      className="max-h-12 max-w-[18rem] overflow-hidden whitespace-normal break-words [overflow-wrap:anywhere]"
-                      title={row.nextAction}
-                    >
-                      {previewText(row.nextAction)}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 align-top text-muted">
-                    <div className="max-w-[24rem]">
-                      <div className="max-h-12 overflow-hidden whitespace-normal break-words [overflow-wrap:anywhere]">
-                        {previewText(row.friendlySummary)}
-                      </div>
-                      {row.technicalDetails ? (
-                        <details className="mt-2">
-                          <summary className="cursor-pointer text-xs text-muted">
-                            Show technical details
-                          </summary>
-                          <pre className="mt-2 max-h-48 overflow-auto rounded-lg border border-border bg-surface px-3 py-2 text-xs whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                            {row.technicalDetails}
-                          </pre>
-                        </details>
-                      ) : null}
-                    </div>
+                      {row.manualRunLabel}
+                    </button>
                   </td>
                 </tr>
               ))}

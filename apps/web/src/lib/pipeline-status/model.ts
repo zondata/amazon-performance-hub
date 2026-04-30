@@ -28,6 +28,7 @@ export type PipelineCoverageRow = {
   sourceType: string;
   lastStatus: string;
   freshnessStatus: string;
+  oldestPeriodStart: string | null;
   latestPeriodEnd: string | null;
   lastSuccessfulRunAt: string | null;
   lastSyncRunId: string | null;
@@ -57,6 +58,24 @@ export type PipelineStatusRow = {
   sourceType: string;
   targetTable: string;
   implementationStatus: PipelineImplementationStatus;
+  implementationLabel: 'Implemented' | 'Not implemented';
+  earliestReportDay: string;
+  latestReportDay: string;
+  dataCompleteness: 'Complete' | 'Expected Delay' | 'Incomplete' | 'No Data' | 'Blocked';
+  amazonApiState:
+    | 'created'
+    | 'requested'
+    | 'pending'
+    | 'polling'
+    | 'completed'
+    | 'imported'
+    | 'failed'
+    | 'pending_timeout'
+    | 'stale_expired'
+    | '—';
+  manualRunLabel: 'Run' | 'Disabled';
+  manualRunEnabled: boolean;
+  manualRunTitle: string;
   sourceGroupStatus: PipelineSourceGroupStatus;
   latestPeriodEnd: string | null;
   lastSuccessfulImportTime: string | null;
@@ -206,6 +225,111 @@ const ACTIVE_PENDING_STATUSES = new Set([
 ]);
 
 const UNHEALTHY_PENDING_STATUSES = new Set(['failed', 'stale_expired']);
+
+const AMAZON_API_STATE_PRIORITY: Record<string, number> = {
+  polling: 0,
+  pending: 1,
+  requested: 2,
+  created: 3,
+  pending_timeout: 4,
+  failed: 5,
+  stale_expired: 6,
+  completed: 7,
+  imported: 8,
+};
+
+export const formatDateOnly = (value: string | null): string => {
+  if (!value) return '—';
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (match) {
+    return match[1];
+  }
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) {
+    return '—';
+  }
+  return parsed.toISOString().slice(0, 10);
+};
+
+export const deriveDataCompleteness = (args: {
+  implementationStatus: PipelineImplementationStatus;
+  coverage?: PipelineCoverageRow;
+}): PipelineStatusRow['dataCompleteness'] => {
+  if (args.implementationStatus !== 'implemented') {
+    return 'Blocked';
+  }
+
+  const coverage = args.coverage;
+  if (!coverage) {
+    return 'No Data';
+  }
+  if (coverage.lastStatus === 'failed' || coverage.lastStatus === 'blocked') {
+    return 'Blocked';
+  }
+  if (coverage.lastStatus === 'no_data') {
+    return 'No Data';
+  }
+  if (coverage.freshnessStatus === 'fresh') {
+    return 'Complete';
+  }
+  if (coverage.freshnessStatus === 'delayed_expected') {
+    return 'Expected Delay';
+  }
+  if (coverage.freshnessStatus === 'stale') {
+    return 'Incomplete';
+  }
+  if (coverage.lastStatus === 'success' && coverage.freshnessStatus === 'unknown') {
+    return 'Complete';
+  }
+  return 'Incomplete';
+};
+
+export const deriveAmazonApiState = (args: {
+  implementationStatus: PipelineImplementationStatus;
+  coverage?: PipelineCoverageRow;
+  relatedPendingRows: PipelinePendingRow[];
+}): PipelineStatusRow['amazonApiState'] => {
+  if (args.implementationStatus !== 'implemented') {
+    return '—';
+  }
+
+  if (args.relatedPendingRows.length > 0) {
+    const prioritized = [...args.relatedPendingRows].sort((left, right) => {
+      const leftPriority = AMAZON_API_STATE_PRIORITY[left.status] ?? Number.POSITIVE_INFINITY;
+      const rightPriority = AMAZON_API_STATE_PRIORITY[right.status] ?? Number.POSITIVE_INFINITY;
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+
+      const leftMs = left.createdAt ? new Date(left.createdAt).getTime() : Number.NEGATIVE_INFINITY;
+      const rightMs = right.createdAt ? new Date(right.createdAt).getTime() : Number.NEGATIVE_INFINITY;
+      return rightMs - leftMs;
+    });
+
+    const selected = prioritized[0]?.status;
+    if (
+      selected === 'polling' ||
+      selected === 'pending' ||
+      selected === 'requested' ||
+      selected === 'created' ||
+      selected === 'pending_timeout' ||
+      selected === 'failed' ||
+      selected === 'stale_expired' ||
+      selected === 'completed' ||
+      selected === 'imported'
+    ) {
+      return selected;
+    }
+  }
+
+  if (args.coverage?.lastStatus === 'success') {
+    return 'imported';
+  }
+  if (args.coverage?.lastStatus === 'failed' || args.coverage?.lastStatus === 'blocked') {
+    return 'failed';
+  }
+  return '—';
+};
 
 const formatPendingAgeHours = (createdAt: string | null, nowIso: string): string => {
   if (!createdAt) return '—';
@@ -566,6 +690,30 @@ export const buildPipelineStatusRows = (args: {
       sourceType: spec.sourceType,
       targetTable: spec.targetTable,
       implementationStatus: spec.implementationStatus,
+      implementationLabel:
+        spec.implementationStatus === 'implemented'
+          ? ('Implemented' as const)
+          : ('Not implemented' as const),
+      earliestReportDay: formatDateOnly(coverage?.oldestPeriodStart ?? null),
+      latestReportDay: formatDateOnly(coverage?.latestPeriodEnd ?? null),
+      dataCompleteness: deriveDataCompleteness({
+        implementationStatus: spec.implementationStatus,
+        coverage,
+      }),
+      amazonApiState: deriveAmazonApiState({
+        implementationStatus: spec.implementationStatus,
+        coverage,
+        relatedPendingRows: relatedPending,
+      }),
+      manualRunLabel:
+        spec.implementationStatus === 'implemented'
+          ? ('Run' as const)
+          : ('Disabled' as const),
+      manualRunEnabled: spec.implementationStatus === 'implemented',
+      manualRunTitle:
+        spec.implementationStatus === 'implemented'
+          ? 'Manual source run is not wired yet.'
+          : 'Manual source run is not wired yet.',
       sourceGroupStatus,
       latestPeriodEnd: coverage?.latestPeriodEnd ?? null,
       lastSuccessfulImportTime: coverage?.lastSuccessfulRunAt ?? null,

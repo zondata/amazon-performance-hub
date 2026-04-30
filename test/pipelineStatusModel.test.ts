@@ -2,90 +2,26 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildPipelineStatusRows,
+  type PipelineCoverageRow,
+  type PipelinePendingRow,
   type PipelineStatusSpec,
 } from '../apps/web/src/lib/pipeline-status/model';
 
+const buildRows = (args: {
+  specs: PipelineStatusSpec[];
+  coverageRows?: PipelineCoverageRow[];
+  pendingRows?: PipelinePendingRow[];
+}) =>
+  buildPipelineStatusRows({
+    specs: args.specs,
+    coverageRows: args.coverageRows ?? [],
+    pendingRows: args.pendingRows ?? [],
+    nowIso: '2026-05-01T12:00:00.000Z',
+  }).rows;
+
 describe('buildPipelineStatusRows', () => {
-  it('marks unsupported sources as not implemented instead of failed', () => {
-    const specs: PipelineStatusSpec[] = [
-      {
-        sourceGroup: 'SP placement daily',
-        sourceType: 'ads_api_sp_placement_daily',
-        targetTable: 'sp_placement_daily_fact',
-        implementationStatus: 'not_implemented',
-      },
-    ];
-
-    const rows = buildPipelineStatusRows({
-      specs,
-      coverageRows: [],
-      pendingRows: [],
-      nowIso: '2026-04-29T12:00:00.000Z',
-    }).rows;
-
-    expect(rows[0].implementationStatus).toBe('not_implemented');
-    expect(rows[0].currentCoverageStatus).toBe('not implemented');
-    expect(rows[0].nextAction).toContain('automation');
-  });
-
-  it('surfaces active pending counts and retry_after_at for implemented sources', () => {
-    const specs: PipelineStatusSpec[] = [
-      {
-        sourceGroup: 'SP target daily',
-        sourceType: 'ads_api_sp_target_daily',
-        targetTable: 'sp_targeting_daily_fact',
-        implementationStatus: 'implemented',
-        pendingSourceType: 'ads_api_sp_target_daily',
-      },
-    ];
-
-    const rows = buildPipelineStatusRows({
-      specs,
-      coverageRows: [
-        {
-          sourceType: 'ads_api_sp_target_daily',
-          tableName: 'sp_targeting_daily_fact',
-          lastStatus: 'success',
-          freshnessStatus: 'fresh',
-          latestPeriodEnd: '2026-04-28T23:59:59.000Z',
-          lastSuccessfulRunAt: '2026-04-29T11:00:00.000Z',
-          lastSyncRunId: 'sync-1',
-          notes: null,
-        },
-      ],
-      pendingRows: [
-        {
-          sourceType: 'ads_api_sp_target_daily',
-          status: 'pending',
-          createdAt: '2026-04-29T09:00:00.000Z',
-          retryAfterAt: '2026-04-29T12:15:00.000Z',
-        },
-      ],
-      syncRunsById: new Map([
-        [
-          'sync-1',
-          {
-            syncRunId: 'sync-1',
-            status: 'succeeded',
-            dataStatus: 'live',
-            finishedAt: '2026-04-29T11:00:00.000Z',
-            errorCode: null,
-            errorMessage: null,
-            resultJson: {},
-            rawJson: {},
-          },
-        ],
-      ]),
-      nowIso: '2026-04-29T12:00:00.000Z',
-    }).rows;
-
-    expect(rows[0].activePendingCount).toBe(1);
-    expect(rows[0].retryAfterAt).toBe('2026-04-29T12:15:00.000Z');
-    expect(rows[0].nextAction).toContain('retry_after_at');
-  });
-
-  it('keeps campaign status successful when targeting failed later in the same ads batch', () => {
-    const pageData = buildPipelineStatusRows({
+  it('maps implemented fresh success to Complete and imported', () => {
+    const rows = buildRows({
       specs: [
         {
           sourceGroup: 'SP campaign daily',
@@ -94,13 +30,6 @@ describe('buildPipelineStatusRows', () => {
           implementationStatus: 'implemented',
           pendingSourceType: 'ads_api_sp_campaign_daily',
         },
-        {
-          sourceGroup: 'SP target daily',
-          sourceType: 'ads_api_sp_target_daily',
-          targetTable: 'sp_targeting_daily_fact',
-          implementationStatus: 'implemented',
-          pendingSourceType: 'ads_api_sp_target_daily',
-        },
       ],
       coverageRows: [
         {
@@ -108,98 +37,21 @@ describe('buildPipelineStatusRows', () => {
           tableName: 'sp_campaign_hourly_fact_gold',
           lastStatus: 'success',
           freshnessStatus: 'fresh',
-          latestPeriodEnd: '2026-04-28T23:59:59.000Z',
-          lastSuccessfulRunAt: '2026-04-29T11:00:00.000Z',
-          lastSyncRunId: 'ads-run-1',
-          notes:
-            'SP Campaign Daily ingested successfully for the latest available period. | SP Campaign Daily ingested successfully, but the overall Ads API batch later failed at SP Targeting Daily ingest.',
-        },
-        {
-          sourceType: 'ads_api_sp_target_daily',
-          tableName: 'sp_targeting_daily_fact',
-          lastStatus: 'failed',
-          freshnessStatus: 'blocked',
-          latestPeriodEnd: '2026-04-25T23:59:59.000Z',
-          lastSuccessfulRunAt: '2026-04-26T11:00:00.000Z',
-          lastSyncRunId: 'ads-run-1',
-          notes:
-            'SP Targeting Daily failed because duplicate targeting rows were detected during ingest. | Campaign data already loaded remains usable. Fix the targeting ingest dedupe behavior, then rerun the Ads API refresh.',
+          oldestPeriodStart: '2026-04-01T00:00:00.000Z',
+          latestPeriodEnd: '2026-04-30T23:59:59.000Z',
+          lastSuccessfulRunAt: '2026-05-01T08:00:00.000Z',
+          lastSyncRunId: null,
+          notes: null,
         },
       ],
-      pendingRows: [],
-      syncRunsById: new Map([
-        [
-          'ads-run-1',
-          {
-            syncRunId: 'ads-run-1',
-            status: 'failed',
-            dataStatus: 'failed',
-            finishedAt: '2026-04-29T11:05:00.000Z',
-            errorCode: 'source_failed',
-            errorMessage: 'Target ingest failed',
-            resultJson: {
-              source_details: {
-                steps: [
-                  {
-                    name: 'adsapi:ingest-sp-campaign-daily',
-                    status: 'success',
-                    summary: { upload_id: 'campaign-upload' },
-                  },
-                  {
-                    name: 'adsapi:ingest-sp-target-daily',
-                    status: 'failed',
-                    summary: {
-                      code: 'source_failed',
-                      message:
-                        'duplicate key value violates unique constraint "sp_targeting_daily_raw_uq"',
-                      stderr_tail: ['duplicate key value violates unique constraint'],
-                    },
-                  },
-                ],
-              },
-            },
-            rawJson: {},
-          },
-        ],
-      ]),
-      batchRun: {
-        syncRunId: 'ads-run-1',
-        status: 'failed',
-        dataStatus: 'failed',
-        finishedAt: '2026-04-29T11:05:00.000Z',
-        errorCode: 'source_failed',
-        errorMessage: 'Target ingest failed',
-        resultJson: {
-          source_details: {
-            steps: [
-              {
-                name: 'adsapi:ingest-sp-target-daily',
-                status: 'failed',
-                summary: { message: 'duplicate key value violates unique constraint' },
-              },
-            ],
-          },
-        },
-        rawJson: {},
-      },
-      nowIso: '2026-04-29T12:00:00.000Z',
     });
 
-    const [campaignRow, targetRow] = pageData.rows;
-    expect(campaignRow.sourceGroupStatus).toBe('success');
-    expect(campaignRow.lastSuccessfulImportTime).toBe('2026-04-29T11:00:00.000Z');
-    expect(campaignRow.currentCoverageStatus).toBe('updated');
-    expect(campaignRow.friendlySummary).toContain('ingested successfully');
-    expect(campaignRow.friendlySummary).not.toContain('stderr tail');
-
-    expect(targetRow.sourceGroupStatus).toBe('failed');
-    expect(targetRow.friendlySummary).toContain('duplicate targeting rows');
-    expect(targetRow.technicalDetails).toContain('sp_targeting_daily_raw_uq');
-    expect(pageData.batchSummary?.status).toBe('failed');
+    expect(rows[0].dataCompleteness).toBe('Complete');
+    expect(rows[0].amazonApiState).toBe('imported');
   });
 
-  it('shows a friendly stale-success coverage label', () => {
-    const rows = buildPipelineStatusRows({
+  it('maps delayed expected success to Expected Delay', () => {
+    const rows = buildRows({
       specs: [
         {
           sourceGroup: 'SP target daily',
@@ -214,20 +66,174 @@ describe('buildPipelineStatusRows', () => {
           sourceType: 'ads_api_sp_target_daily',
           tableName: 'sp_targeting_daily_fact',
           lastStatus: 'success',
-          freshnessStatus: 'stale',
-          latestPeriodEnd: '2026-04-21T00:00:00.000Z',
-          lastSuccessfulRunAt: '2026-04-29T14:40:49.568Z',
+          freshnessStatus: 'delayed_expected',
+          oldestPeriodStart: '2026-04-01',
+          latestPeriodEnd: '2026-04-29',
+          lastSuccessfulRunAt: '2026-05-01T08:00:00.000Z',
           lastSyncRunId: null,
-          notes: 'SP Targeting Daily imported successfully for the latest available period.',
+          notes: null,
         },
       ],
-      pendingRows: [],
-      nowIso: '2026-04-30T12:00:00.000Z',
-    }).rows;
+    });
 
-    expect(rows[0].sourceGroupStatus).toBe('warning');
-    expect(rows[0].currentCoverageStatus).toBe(
-      'Successful import, data is stale'
-    );
+    expect(rows[0].dataCompleteness).toBe('Expected Delay');
+  });
+
+  it('maps stale success to Incomplete', () => {
+    const rows = buildRows({
+      specs: [
+        {
+          sourceGroup: 'SP placement daily',
+          sourceType: 'ads_api_sp_placement_daily',
+          targetTable: 'sp_placement_daily_fact',
+          implementationStatus: 'implemented',
+          pendingSourceType: 'ads_api_sp_placement_daily',
+        },
+      ],
+      coverageRows: [
+        {
+          sourceType: 'ads_api_sp_placement_daily',
+          tableName: 'sp_placement_daily_fact',
+          lastStatus: 'success',
+          freshnessStatus: 'stale',
+          oldestPeriodStart: '2026-04-01',
+          latestPeriodEnd: '2026-04-21',
+          lastSuccessfulRunAt: '2026-05-01T08:00:00.000Z',
+          lastSyncRunId: null,
+          notes: null,
+        },
+      ],
+    });
+
+    expect(rows[0].dataCompleteness).toBe('Incomplete');
+  });
+
+  it('maps not implemented to Blocked with disabled manual run', () => {
+    const rows = buildRows({
+      specs: [
+        {
+          sourceGroup: 'SB campaign daily',
+          sourceType: 'ads_api_sb_campaign_daily',
+          targetTable: 'sb_campaign_daily_fact_gold',
+          implementationStatus: 'not_implemented',
+        },
+      ],
+    });
+
+    expect(rows[0].dataCompleteness).toBe('Blocked');
+    expect(rows[0].amazonApiState).toBe('—');
+    expect(rows[0].manualRunLabel).toBe('Disabled');
+    expect(rows[0].manualRunEnabled).toBe(false);
+  });
+
+  it('prefers active polling pending rows over imported coverage', () => {
+    const rows = buildRows({
+      specs: [
+        {
+          sourceGroup: 'SP search term daily',
+          sourceType: 'ads_api_sp_search_term_daily',
+          targetTable: 'sp_search_term_daily_fact',
+          implementationStatus: 'implemented',
+          pendingSourceType: 'ads_api_sp_search_term_daily',
+        },
+      ],
+      coverageRows: [
+        {
+          sourceType: 'ads_api_sp_search_term_daily',
+          tableName: 'sp_search_term_daily_fact',
+          lastStatus: 'success',
+          freshnessStatus: 'fresh',
+          oldestPeriodStart: '2026-04-01',
+          latestPeriodEnd: '2026-04-30',
+          lastSuccessfulRunAt: '2026-05-01T08:00:00.000Z',
+          lastSyncRunId: null,
+          notes: null,
+        },
+      ],
+      pendingRows: [
+        {
+          sourceType: 'ads_api_sp_search_term_daily',
+          status: 'completed',
+          createdAt: '2026-05-01T08:00:00.000Z',
+          retryAfterAt: null,
+        },
+        {
+          sourceType: 'ads_api_sp_search_term_daily',
+          status: 'polling',
+          createdAt: '2026-05-01T09:00:00.000Z',
+          retryAfterAt: null,
+        },
+      ],
+    });
+
+    expect(rows[0].amazonApiState).toBe('polling');
+  });
+
+  it('shows failed when pending rows fail', () => {
+    const rows = buildRows({
+      specs: [
+        {
+          sourceGroup: 'SP advertised product daily',
+          sourceType: 'ads_api_sp_advertised_product_daily',
+          targetTable: 'sp_advertised_product_daily_fact',
+          implementationStatus: 'implemented',
+          pendingSourceType: 'ads_api_sp_advertised_product_daily',
+        },
+      ],
+      pendingRows: [
+        {
+          sourceType: 'ads_api_sp_advertised_product_daily',
+          status: 'failed',
+          createdAt: '2026-05-01T09:00:00.000Z',
+          retryAfterAt: null,
+        },
+      ],
+    });
+
+    expect(rows[0].amazonApiState).toBe('failed');
+  });
+
+  it('shows No Data when coverage is missing', () => {
+    const rows = buildRows({
+      specs: [
+        {
+          sourceGroup: 'SQP',
+          sourceType: 'sp_api_sqp_weekly',
+          targetTable: 'sqp_weekly_latest',
+          implementationStatus: 'implemented',
+        },
+      ],
+    });
+
+    expect(rows[0].dataCompleteness).toBe('No Data');
+  });
+
+  it('maps oldest_period_start to earliestReportDay as YYYY-MM-DD', () => {
+    const rows = buildRows({
+      specs: [
+        {
+          sourceGroup: 'Sales & Traffic',
+          sourceType: 'sp_api_sales_traffic_daily',
+          targetTable: 'amazon_sales_traffic_timeseries',
+          implementationStatus: 'implemented',
+        },
+      ],
+      coverageRows: [
+        {
+          sourceType: 'sp_api_sales_traffic_daily',
+          tableName: 'amazon_sales_traffic_timeseries',
+          lastStatus: 'success',
+          freshnessStatus: 'fresh',
+          oldestPeriodStart: '2026-04-03T14:15:16.000Z',
+          latestPeriodEnd: '2026-04-30T23:59:59.000Z',
+          lastSuccessfulRunAt: '2026-05-01T08:00:00.000Z',
+          lastSyncRunId: null,
+          notes: null,
+        },
+      ],
+    });
+
+    expect(rows[0].earliestReportDay).toBe('2026-04-03');
+    expect(rows[0].latestReportDay).toBe('2026-04-30');
   });
 });
