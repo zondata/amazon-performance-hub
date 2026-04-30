@@ -12,6 +12,7 @@ export type SpTargetingIngestResult = {
   coverageEnd?: string | null;
   rowCount?: number;
   duplicateIdenticalRowCount?: number;
+  duplicateAggregatedRowCount?: number;
 };
 
 type ExistingTargetingUploadRow = {
@@ -107,11 +108,72 @@ const serializeTargetingComparable = (row: SpTargetingInsertRow): string =>
     exported_at: row.exported_at,
   });
 
+const sumNullableNumber = (left: number | null, right: number | null): number | null => {
+  if (left === null && right === null) return null;
+  return (left ?? 0) + (right ?? 0);
+};
+
+const safeDivide = (numerator: number | null, denominator: number | null): number | null => {
+  if (numerator === null || denominator === null || denominator === 0) return null;
+  return numerator / denominator;
+};
+
+const weightedAverageNullable = (
+  leftValue: number | null,
+  leftWeight: number | null,
+  rightValue: number | null,
+  rightWeight: number | null
+): number | null => {
+  const totalWeight = (leftWeight ?? 0) + (rightWeight ?? 0);
+  if (totalWeight <= 0) return null;
+  const leftContribution = leftValue === null || !leftWeight ? 0 : leftValue * leftWeight;
+  const rightContribution = rightValue === null || !rightWeight ? 0 : rightValue * rightWeight;
+  return (leftContribution + rightContribution) / totalWeight;
+};
+
+const aggregateTargetingRows = (
+  left: SpTargetingInsertRow,
+  right: SpTargetingInsertRow
+): SpTargetingInsertRow => {
+  const impressions = sumNullableNumber(left.impressions, right.impressions);
+  const clicks = sumNullableNumber(left.clicks, right.clicks);
+  const spend = sumNullableNumber(left.spend, right.spend);
+  const sales = sumNullableNumber(left.sales, right.sales);
+  const orders = sumNullableNumber(left.orders, right.orders);
+  const units = sumNullableNumber(left.units, right.units);
+
+  return {
+    ...left,
+    impressions,
+    clicks,
+    spend,
+    sales,
+    orders,
+    units,
+    cpc: safeDivide(spend, clicks),
+    ctr: safeDivide(clicks, impressions),
+    acos: safeDivide(spend, sales),
+    roas: safeDivide(sales, spend),
+    conversion_rate: safeDivide(orders, clicks),
+    top_of_search_impression_share: weightedAverageNullable(
+      left.top_of_search_impression_share,
+      left.impressions,
+      right.top_of_search_impression_share,
+      right.impressions
+    ),
+  };
+};
+
 const dedupeTargetingRows = (
   rows: SpTargetingInsertRow[]
-): { rows: SpTargetingInsertRow[]; duplicateIdenticalRowCount: number } => {
+): {
+  rows: SpTargetingInsertRow[];
+  duplicateIdenticalRowCount: number;
+  duplicateAggregatedRowCount: number;
+} => {
   const deduped = new Map<string, SpTargetingInsertRow>();
   let duplicateIdenticalRowCount = 0;
+  let duplicateAggregatedRowCount = 0;
 
   for (const row of rows) {
     const key = buildTargetingDuplicateKey(row);
@@ -125,15 +187,14 @@ const dedupeTargetingRows = (
       duplicateIdenticalRowCount += 1;
       continue;
     }
-
-    throw new Error(
-      `Duplicate targeting rows with conflicting metrics were detected during ingest. Sample key: ${summarizeTargetingKey(row)}`
-    );
+    duplicateAggregatedRowCount += 1;
+    deduped.set(key, aggregateTargetingRows(existing, row));
   }
 
   return {
     rows: [...deduped.values()],
     duplicateIdenticalRowCount,
+    duplicateAggregatedRowCount,
   };
 };
 
@@ -311,6 +372,7 @@ export async function ingestSpTargetingRaw(
   const {
     rows: dedupedRowsToInsert,
     duplicateIdenticalRowCount,
+    duplicateAggregatedRowCount,
   } = dedupeTargetingRows(rowsToInsert);
 
   for (const chunk of chunkArray(dedupedRowsToInsert, 500)) {
@@ -330,5 +392,6 @@ export async function ingestSpTargetingRaw(
     coverageEnd,
     rowCount: dedupedRowsToInsert.length,
     duplicateIdenticalRowCount,
+    duplicateAggregatedRowCount,
   };
 }
