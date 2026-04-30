@@ -4,8 +4,10 @@ import { redirect } from 'next/navigation';
 
 import { getPipelineStatus } from '@/lib/pipeline-status/getPipelineStatus';
 import {
+  hasGitHubDispatchConfig,
   runPipelineManualSource,
   supportsPipelineManualRun,
+  supportsAnyPipelineManualRun,
 } from '@/lib/pipeline-status/manualRun';
 
 const formatValue = (value: string | null) => value ?? '—';
@@ -113,6 +115,8 @@ export default async function PipelineStatusPage({
   };
 
   const { rows, batchSummary } = await getPipelineStatus();
+  const manualRunEnabled = supportsAnyPipelineManualRun();
+  const githubDispatchEnabled = hasGitHubDispatchConfig();
   const totalSources = rows.length;
   const implementedSources = rows.filter(
     (row) => row.implementationStatus === 'implemented'
@@ -376,13 +380,19 @@ export default async function PipelineStatusPage({
                         <button
                           type="submit"
                           className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={!process.env.ENABLE_BULKGEN_SPAWN || undefined}
+                          disabled={!manualRunEnabled || undefined}
                         >
                           {row.activePendingCount > 0 ? 'Resume run' : 'Run now'}
                         </button>
-                        {!process.env.ENABLE_BULKGEN_SPAWN ? (
-                          <div className="mt-1 text-xs text-muted">Spawn disabled</div>
-                        ) : null}
+                        {!manualRunEnabled ? (
+                          <div className="mt-1 text-xs text-muted">
+                            Configure GitHub dispatch or local spawn
+                          </div>
+                        ) : githubDispatchEnabled ? (
+                          <div className="mt-1 text-xs text-muted">Runs via GitHub Actions</div>
+                        ) : (
+                          <div className="mt-1 text-xs text-muted">Runs on this host</div>
+                        )}
                       </form>
                     ) : (
                       '—'

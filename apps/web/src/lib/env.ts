@@ -29,4 +29,13 @@ export const env = {
   bulkgenTemplateSpCreate: process.env.BULKGEN_TEMPLATE_SP_CREATE,
   bulkgenTemplateBucket: process.env.BULKGEN_TEMPLATE_BUCKET?.trim() || 'bulkgen-templates',
   enableBulkgenSpawn: process.env.ENABLE_BULKGEN_SPAWN === '1',
+  githubActionsDispatchToken: process.env.GITHUB_ACTIONS_DISPATCH_TOKEN?.trim(),
+  githubActionsRepoOwner: process.env.GITHUB_ACTIONS_REPO_OWNER?.trim(),
+  githubActionsRepoName: process.env.GITHUB_ACTIONS_REPO_NAME?.trim(),
+  githubActionsWorkflowFile:
+    process.env.GITHUB_ACTIONS_WORKFLOW_FILE?.trim() || 'v3-amazon-data-sync.yml',
+  githubActionsWorkflowRef:
+    process.env.GITHUB_ACTIONS_WORKFLOW_REF?.trim() ||
+    process.env.VERCEL_GIT_COMMIT_REF?.trim() ||
+    'main',
 };

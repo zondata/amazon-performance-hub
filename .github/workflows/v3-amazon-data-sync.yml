@@ -30,6 +30,11 @@ on:
         required: false
         default: all
         type: string
+      source_type:
+        description: Single source-group type override
+        required: false
+        default: ''
+        type: string
       mode:
         description: Sync mode
         required: false
@@ -42,6 +47,11 @@ on:
         type: string
       dry_run:
         description: Skip external pulls
+        required: false
+        default: false
+        type: boolean
+      resume_pending:
+        description: Resume an existing saved pending request
         required: false
         default: false
         type: boolean
@@ -115,6 +125,7 @@ jobs:
           fi
 
       - name: Resume pending Ads reports
+        if: github.event_name != 'workflow_dispatch' || inputs.source_type == ''
         run: >
           npm run v3:resume:amazon --
           --account-id "${APP_ACCOUNT_ID}"
@@ -123,6 +134,7 @@ jobs:
           --soft-pending-exit
 
       - name: Run V3 sync
+        if: github.event_name != 'workflow_dispatch' || inputs.source_type == ''
         run: >
           npm run v3:pull:amazon --
           --account-id "${APP_ACCOUNT_ID}"
@@ -135,6 +147,53 @@ jobs:
           ${{ github.event_name == 'workflow_dispatch' && inputs.from_date != '' && format('--from {0}', inputs.from_date) || '' }}
           ${{ github.event_name == 'workflow_dispatch' && inputs.to_date != '' && format('--to {0}', inputs.to_date) || '' }}
           ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Run manual source group
+        if: github.event_name == 'workflow_dispatch' && inputs.source_type != ''
+        env:
+          MANUAL_SOURCE_TYPE: ${{ inputs.source_type }}
+          FROM_DATE: ${{ inputs.from_date }}
+          TO_DATE: ${{ inputs.to_date }}
+          RUN_MODE: ${{ inputs.mode }}
+          RESUME_PENDING: ${{ inputs.resume_pending }}
+        run: |
+          if [ -z "$FROM_DATE" ] || [ -z "$TO_DATE" ]; then
+            echo "from_date and to_date are required when source_type is set"
+            exit 1
+          fi
+
+          resume_args=()
+          if [ "$RESUME_PENDING" = "true" ]; then
+            resume_args+=(--resume-pending)
+          fi
+
+          case "$MANUAL_SOURCE_TYPE" in
+            ads_api_sp_campaign_daily)
+              npm run adsapi:pull-sp-campaign-daily -- --start-date "$FROM_DATE" --end-date "$TO_DATE" "${resume_args[@]}"
+              ;;
+            ads_api_sp_target_daily)
+              npm run adsapi:pull-sp-target-daily -- --start-date "$FROM_DATE" --end-date "$TO_DATE" "${resume_args[@]}"
+              ;;
+            ads_api_sp_placement_daily)
+              npm run adsapi:pull-sp-placement-daily -- --start-date "$FROM_DATE" --end-date "$TO_DATE" "${resume_args[@]}"
+              ;;
+            ads_api_sp_advertised_product_daily)
+              npm run adsapi:pull-sp-advertised-product-daily -- --start-date "$FROM_DATE" --end-date "$TO_DATE" "${resume_args[@]}"
+              ;;
+            ads_api_sp_search_term_daily)
+              npm run adsapi:pull-sp-search-term-daily -- --start-date "$FROM_DATE" --end-date "$TO_DATE" "${resume_args[@]}"
+              ;;
+            sp_api_sales_traffic_daily)
+              npm run v3:pull:amazon -- --account-id "${APP_ACCOUNT_ID}" --marketplace "${APP_MARKETPLACE}" --sources sales --from "$FROM_DATE" --to "$TO_DATE" --mode "${RUN_MODE:-manual}" --resume-pending
+              ;;
+            sp_api_sqp_weekly)
+              npm run v3:pull:amazon -- --account-id "${APP_ACCOUNT_ID}" --marketplace "${APP_MARKETPLACE}" --sources sqp --from "$FROM_DATE" --to "$TO_DATE" --mode "${RUN_MODE:-manual}" --resume-pending
+              ;;
+            *)
+              echo "Unsupported manual source_type: $MANUAL_SOURCE_TYPE"
+              exit 1
+              ;;
+          esac
 
       - name: Upload out artifacts
         if: always()
