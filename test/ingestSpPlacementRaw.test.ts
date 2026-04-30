@@ -27,7 +27,13 @@ function createQuery(table: string) {
       if (table === "uploads") return Promise.resolve({ data: existingUpload, error: null });
       return Promise.resolve({ data: null, error: null });
     },
-    upsert: () => Promise.resolve({ error: null }),
+    upsert: (payload: unknown) => {
+      if (table === "sp_placement_daily_raw") {
+        const rows = Array.isArray(payload) ? payload : [payload];
+        insertedRawRows.push(...(rows as Array<Record<string, unknown>>));
+      }
+      return Promise.resolve({ error: null });
+    },
     insert: (payload: unknown) => {
       if (table === "sp_placement_daily_raw") {
         const rows = Array.isArray(payload) ? payload : [payload];

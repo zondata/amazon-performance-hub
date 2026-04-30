@@ -29,7 +29,7 @@ export const getPipelineStatus = async (): Promise<PipelineStatusPageData> => {
     supabaseAdmin
       .from('data_coverage_status')
       .select(
-        'source_type,table_name,last_status,freshness_status,latest_period_end,last_successful_run_at,last_sync_run_id,notes'
+        'source_type,table_name,last_status,freshness_status,oldest_period_start,latest_period_end,last_successful_run_at,last_sync_run_id,notes'
       )
       .eq('account_id', env.accountId)
       .eq('marketplace', env.marketplace)
@@ -69,6 +69,8 @@ export const getPipelineStatus = async (): Promise<PipelineStatusPageData> => {
     tableName: String(row.table_name),
     lastStatus: String(row.last_status),
     freshnessStatus: String(row.freshness_status),
+    oldestPeriodStart:
+      typeof row.oldest_period_start === 'string' ? row.oldest_period_start : null,
     latestPeriodEnd:
       typeof row.latest_period_end === 'string' ? row.latest_period_end : null,
     lastSuccessfulRunAt:
