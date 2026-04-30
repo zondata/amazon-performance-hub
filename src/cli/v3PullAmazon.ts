@@ -131,7 +131,8 @@ interface SourceRunResult {
 
 type AdsCoverageSourceKey =
   | 'sp_campaign_hourly'
-  | 'sp_targeting_daily';
+  | 'sp_targeting_daily'
+  | 'sp_placement_daily';
 
 type AdsCoverageDescriptor = {
   sourceName: AdsCoverageSourceKey;
@@ -143,6 +144,7 @@ type AdsCoverageDescriptor = {
 const ADS_IMPLEMENTED_COVERAGE_TABLES = new Set([
   'sp_campaign_hourly',
   'sp_targeting_daily',
+  'sp_placement_daily',
 ]);
 
 const ADS_COVERAGE_DESCRIPTORS: Record<AdsCoverageSourceKey, AdsCoverageDescriptor> = {
@@ -166,11 +168,18 @@ const ADS_COVERAGE_DESCRIPTORS: Record<AdsCoverageSourceKey, AdsCoverageDescript
       'adsapi:ingest-sp-target-daily',
     ],
   },
+  sp_placement_daily: {
+    sourceName: 'sp_placement_daily',
+    label: 'SP Placement Daily',
+    successStep: 'adsapi:ingest-sp-placement-daily',
+    relevantSteps: [
+      'adsapi:pull-sp-placement-daily',
+      'adsapi:ingest-sp-placement-daily',
+    ],
+  },
 };
 
 const ADS_UNSUPPORTED_COVERAGE_MESSAGES: Record<string, string> = {
-  sp_placement_daily:
-    'SP placement daily automation is not implemented by the current Ads API pullers.',
   sp_stis_daily:
     'SP STIS automation is not implemented by the current Ads API pullers.',
   sp_advertised_product_daily:
@@ -262,7 +271,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
     periodEndExpr: 'date::timestamptz',
     expectedDelayHours: 48,
     hasMarketplace: false,
-    tableStatusDefault: 'blocked',
+    tableStatusDefault: 'success',
   },
   {
     source: 'ads',
@@ -1770,7 +1779,6 @@ const runAdsSource = async (pool: Pool, options: CliOptions): Promise<{
   }
 
   const unsupportedTables = [
-    'SP placement daily automation is not implemented by the current Ads API pullers.',
     'SP STIS automation is not implemented by the current Ads API pullers.',
     'SP advertised product automation is not implemented by the current Ads API pullers.',
     'SB Ads API puller is not exposed by the current repo scripts.',

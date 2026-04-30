@@ -106,7 +106,8 @@ export const PIPELINE_STATUS_SPECS: PipelineStatusSpec[] = [
     sourceGroup: 'SP placement daily',
     sourceType: 'ads_api_sp_placement_daily',
     targetTable: 'sp_placement_daily_fact',
-    implementationStatus: 'not_implemented',
+    implementationStatus: 'implemented',
+    pendingSourceType: 'ads_api_sp_placement_daily',
   },
   {
     sourceGroup: 'SP STIS daily',

@@ -20,6 +20,7 @@ export const buildAdsPersistenceSuccessLines = (args: {
   `Date range: ${args.dateRange.startDate} -> ${args.dateRange.endDate}`,
   `Campaign row count: ${args.persistedArtifact.campaignRowCount}`,
   `Target row count: ${args.persistedArtifact.targetRowCount}`,
+  `Placement row count: ${args.persistedArtifact.placementRowCount}`,
   `Landing artifact path: ${args.landingArtifactPath}`,
   `Normalization artifact path: ${args.normalizationArtifactPath}`,
 ];

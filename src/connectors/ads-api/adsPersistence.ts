@@ -6,6 +6,10 @@ import {
   ADS_API_SP_CAMPAIGN_DAILY_RAW_ARTIFACT_PATH,
 } from './spCampaignDaily';
 import {
+  ADS_API_SP_PLACEMENT_DAILY_NORMALIZED_ARTIFACT_PATH,
+  ADS_API_SP_PLACEMENT_DAILY_RAW_ARTIFACT_PATH,
+} from './spPlacementDaily';
+import {
   ADS_API_SP_TARGET_DAILY_NORMALIZED_ARTIFACT_PATH,
   ADS_API_SP_TARGET_DAILY_RAW_ARTIFACT_PATH,
 } from './spTargetDaily';
@@ -19,6 +23,9 @@ import {
   type AdsApiSpCampaignDailyNormalizedRow,
   type AdsApiSpCampaignDailyRawArtifact,
   type AdsApiSpDailySummaryRow,
+  type AdsApiSpPlacementDailyNormalizedArtifact,
+  type AdsApiSpPlacementDailyNormalizedRow,
+  type AdsApiSpPlacementDailyRawArtifact,
   type AdsApiSpTargetDailyNormalizedArtifact,
   type AdsApiSpTargetDailyNormalizedRow,
   type AdsApiSpTargetDailyRawArtifact,
@@ -39,6 +46,8 @@ export const DEFAULT_ADS_PERSISTENCE_SOURCES: AdsApiPersistenceSources = {
   campaignNormalizedArtifactPath: ADS_API_SP_CAMPAIGN_DAILY_NORMALIZED_ARTIFACT_PATH,
   targetRawArtifactPath: ADS_API_SP_TARGET_DAILY_RAW_ARTIFACT_PATH,
   targetNormalizedArtifactPath: ADS_API_SP_TARGET_DAILY_NORMALIZED_ARTIFACT_PATH,
+  placementRawArtifactPath: ADS_API_SP_PLACEMENT_DAILY_RAW_ARTIFACT_PATH,
+  placementNormalizedArtifactPath: ADS_API_SP_PLACEMENT_DAILY_NORMALIZED_ARTIFACT_PATH,
 };
 
 type SharedMetadata = {
@@ -206,6 +215,62 @@ const parseTargetNormalizedArtifact = (
   return value as AdsApiSpTargetDailyNormalizedArtifact;
 };
 
+const parsePlacementRawArtifact = (
+  value: unknown,
+  filePath: string
+): AdsApiSpPlacementDailyRawArtifact => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    fail('artifact_invalid', `Placement raw artifact is invalid: ${filePath}`);
+  }
+
+  const candidate = value as Record<string, unknown>;
+  if (
+    readString(candidate.schemaVersion) !== 'ads-api-sp-placement-daily-raw/v1' ||
+    readString(candidate.appAccountId) === null ||
+    readString(candidate.appMarketplace) === null ||
+    readString(candidate.adsApiBaseUrl) === null ||
+    readString(candidate.profileId) === null ||
+    !isDateRange(candidate.requestedDateRange) ||
+    !candidate.reportMetadata ||
+    !candidate.rawRowsPayload ||
+    typeof candidate.rawRowsPayload !== 'object' ||
+    Array.isArray(candidate.rawRowsPayload) ||
+    !Array.isArray((candidate.rawRowsPayload as Record<string, unknown>).rows)
+  ) {
+    fail('artifact_invalid', `Placement raw artifact is missing required fields: ${filePath}`);
+  }
+
+  return value as AdsApiSpPlacementDailyRawArtifact;
+};
+
+const parsePlacementNormalizedArtifact = (
+  value: unknown,
+  filePath: string
+): AdsApiSpPlacementDailyNormalizedArtifact => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    fail('artifact_invalid', `Placement normalized artifact is invalid: ${filePath}`);
+  }
+
+  const candidate = value as Record<string, unknown>;
+  if (
+    readString(candidate.schemaVersion) !== 'ads-api-sp-placement-daily-normalized/v1' ||
+    readString(candidate.appAccountId) === null ||
+    readString(candidate.appMarketplace) === null ||
+    readString(candidate.adsApiBaseUrl) === null ||
+    readString(candidate.profileId) === null ||
+    !isDateRange(candidate.requestedDateRange) ||
+    readNumber(candidate.rowCount) === null ||
+    !Array.isArray(candidate.normalizedPlacementRows)
+  ) {
+    fail(
+      'artifact_invalid',
+      `Placement normalized artifact is missing required fields: ${filePath}`
+    );
+  }
+
+  return value as AdsApiSpPlacementDailyNormalizedArtifact;
+};
+
 const sameDateRange = (left: AdsApiDateRange, right: AdsApiDateRange): boolean =>
   left.startDate === right.startDate && left.endDate === right.endDate;
 
@@ -284,9 +349,25 @@ const sortTargetRows = (
     });
   });
 
+const sortPlacementRows = (
+  rows: AdsApiSpPlacementDailyNormalizedRow[]
+): AdsApiSpPlacementDailyNormalizedRow[] =>
+  [...rows].sort((left, right) => {
+    if (left.date !== right.date) {
+      return left.date.localeCompare(right.date);
+    }
+    if (left.campaignId !== right.campaignId) {
+      return left.campaignId.localeCompare(right.campaignId, 'en', {
+        numeric: true,
+      });
+    }
+    return left.placementRaw.localeCompare(right.placementRaw, 'en');
+  });
+
 export const buildAdsPersistenceDailySummary = (args: {
   campaignRows: AdsApiSpCampaignDailyNormalizedRow[];
   targetRows: AdsApiSpTargetDailyNormalizedRow[];
+  placementRows: AdsApiSpPlacementDailyNormalizedRow[];
 }): AdsApiSpDailySummaryRow[] => {
   const summaryByDate = new Map<string, AdsApiSpDailySummaryRow>();
 
@@ -300,6 +381,7 @@ export const buildAdsPersistenceDailySummary = (args: {
       date,
       campaignRowCount: 0,
       targetRowCount: 0,
+      placementRowCount: 0,
       campaignImpressions: 0,
       campaignClicks: 0,
       campaignCost: 0,
@@ -310,6 +392,11 @@ export const buildAdsPersistenceDailySummary = (args: {
       targetCost: 0,
       targetAttributedSales14d: 0,
       targetAttributedConversions14d: 0,
+      placementImpressions: 0,
+      placementClicks: 0,
+      placementCost: 0,
+      placementAttributedSales14d: 0,
+      placementAttributedConversions14d: 0,
     };
     summaryByDate.set(date, created);
     return created;
@@ -333,6 +420,16 @@ export const buildAdsPersistenceDailySummary = (args: {
     summary.targetCost += row.cost;
     summary.targetAttributedSales14d += row.attributedSales14d;
     summary.targetAttributedConversions14d += row.attributedConversions14d;
+  }
+
+  for (const row of args.placementRows) {
+    const summary = ensure(row.date);
+    summary.placementRowCount += 1;
+    summary.placementImpressions += row.impressions;
+    summary.placementClicks += row.clicks;
+    summary.placementCost += row.cost;
+    summary.placementAttributedSales14d += row.attributedSales14d;
+    summary.placementAttributedConversions14d += row.attributedConversions14d;
   }
 
   return [...summaryByDate.values()].sort((left, right) =>
@@ -364,11 +461,25 @@ export const loadAdsPersistenceInputs = (args: {
     readJsonFile(sources.targetNormalizedArtifactPath),
     sources.targetNormalizedArtifactPath
   );
+  const placementRaw = parsePlacementRawArtifact(
+    readJsonFile(sources.placementRawArtifactPath),
+    sources.placementRawArtifactPath
+  );
+  const placementNormalized = parsePlacementNormalizedArtifact(
+    readJsonFile(sources.placementNormalizedArtifactPath),
+    sources.placementNormalizedArtifactPath
+  );
 
   const expectedMetadata = toSharedMetadata(campaignRaw);
   assertSharedMetadata('Campaign normalized artifact', expectedMetadata, campaignNormalized);
   assertSharedMetadata('Target raw artifact', expectedMetadata, targetRaw);
   assertSharedMetadata('Target normalized artifact', expectedMetadata, targetNormalized);
+  assertSharedMetadata('Placement raw artifact', expectedMetadata, placementRaw);
+  assertSharedMetadata(
+    'Placement normalized artifact',
+    expectedMetadata,
+    placementNormalized
+  );
 
   if (campaignNormalized.rowCount < 1) {
     fail(
@@ -384,6 +495,13 @@ export const loadAdsPersistenceInputs = (args: {
     );
   }
 
+  if (placementNormalized.rowCount < 1) {
+    fail(
+      'invalid_rows',
+      'Placement normalized artifact must contain at least 1 row.'
+    );
+  }
+
   return {
     sources,
     sharedMetadata: expectedMetadata,
@@ -391,6 +509,8 @@ export const loadAdsPersistenceInputs = (args: {
     campaignNormalized,
     targetRaw,
     targetNormalized,
+    placementRaw,
+    placementNormalized,
   };
 };
 
@@ -399,6 +519,7 @@ export const buildAdsPersistedLandingArtifact = (args: {
   sources: AdsApiPersistenceSources;
   campaignRaw: AdsApiSpCampaignDailyRawArtifact;
   targetRaw: AdsApiSpTargetDailyRawArtifact;
+  placementRaw: AdsApiSpPlacementDailyRawArtifact;
 }): AdsApiPersistedLandingArtifact => ({
   schemaVersion: 'ads-api-sp-daily-landed/v1',
   generatedAt: args.generatedAt ?? new Date().toISOString(),
@@ -410,17 +531,22 @@ export const buildAdsPersistedLandingArtifact = (args: {
   sources: args.sources,
   campaignRaw: args.campaignRaw,
   targetRaw: args.targetRaw,
+  placementRaw: args.placementRaw,
 });
 
 export const buildAdsPersistedNormalizationArtifact = (args: {
   generatedAt?: string;
   campaignNormalized: AdsApiSpCampaignDailyNormalizedArtifact;
   targetNormalized: AdsApiSpTargetDailyNormalizedArtifact;
+  placementNormalized: AdsApiSpPlacementDailyNormalizedArtifact;
 }): AdsApiPersistedNormalizationArtifact => {
   const campaignRows = sortCampaignRows(
     args.campaignNormalized.normalizedCampaignRows
   );
   const targetRows = sortTargetRows(args.targetNormalized.normalizedTargetRows);
+  const placementRows = sortPlacementRows(
+    args.placementNormalized.normalizedPlacementRows
+  );
 
   return {
     schemaVersion: 'ads-api-sp-daily-persisted/v1',
@@ -432,11 +558,14 @@ export const buildAdsPersistedNormalizationArtifact = (args: {
     requestedDateRange: args.campaignNormalized.requestedDateRange,
     campaignRowCount: campaignRows.length,
     targetRowCount: targetRows.length,
+    placementRowCount: placementRows.length,
     campaignRows,
     targetRows,
+    placementRows,
     dailySummary: buildAdsPersistenceDailySummary({
       campaignRows,
       targetRows,
+      placementRows,
     }),
   };
 };
@@ -486,12 +615,14 @@ export const runAdsPersistence = (args: {
     sources: inputs.sources,
     campaignRaw: inputs.campaignRaw,
     targetRaw: inputs.targetRaw,
+    placementRaw: inputs.placementRaw,
   });
 
   const persistedArtifact = buildAdsPersistedNormalizationArtifact({
     generatedAt: args.generatedAt,
     campaignNormalized: inputs.campaignNormalized,
     targetNormalized: inputs.targetNormalized,
+    placementNormalized: inputs.placementNormalized,
   });
 
   const paths = writeAdsPersistenceArtifacts({

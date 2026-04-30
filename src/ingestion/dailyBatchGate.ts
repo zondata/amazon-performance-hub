@@ -672,6 +672,24 @@ export const runRealAdsDailyBatch = async (
         ),
       })
     );
+    const placementPull = await runStep(
+      'adsapi:pull-sp-placement-daily',
+      'adsapi:pull-sp-placement-daily',
+      [
+        '--start-date',
+        request.startDate,
+        '--end-date',
+        request.endDate,
+        ...(request.resumePending ? ['--resume-pending'] : []),
+      ],
+      (result) => ({
+        row_count: parseNumberLine(result.stdout, 'Row count'),
+        normalized_artifact_path: parseLineValue(
+          result.stdout,
+          'Normalized artifact path'
+        ),
+      })
+    );
     const persist = await runStep(
       'adsapi:persist-sp-daily',
       'adsapi:persist-sp-daily',
@@ -703,6 +721,15 @@ export const runRealAdsDailyBatch = async (
         upload_id: parseLineValue(result.stdout, 'Upload id'),
       })
     );
+    const placementIngest = await runStep(
+      'adsapi:ingest-sp-placement-daily',
+      'adsapi:ingest-sp-placement-daily',
+      [],
+      (result) => ({
+        placement_row_count: parseNumberLine(result.stdout, 'Placement row count'),
+        upload_id: parseLineValue(result.stdout, 'Upload id'),
+      })
+    );
 
     const campaignRowCount =
       parseNumberLine(campaignIngest.stdout, 'Campaign row count') ??
@@ -714,6 +741,10 @@ export const runRealAdsDailyBatch = async (
       parseNumberLine(persist.stdout, 'Target row count') ??
       parseNumberLine(targetPull.stdout, 'Row count') ??
       0;
+    const placementRowCount =
+      parseNumberLine(placementIngest.stdout, 'Placement row count') ??
+      parseNumberLine(placementPull.stdout, 'Row count') ??
+      0;
     const metadata: JsonObject = {
       source_group: 'ads',
       requested_range: {
@@ -723,13 +754,15 @@ export const runRealAdsDailyBatch = async (
       profile_id: parseLineValue(campaignPull.stdout, 'Validated profile id'),
       campaign_row_count: campaignRowCount,
       target_row_count: targetRowCount,
+      placement_row_count: placementRowCount,
       campaign_upload_id: parseLineValue(campaignIngest.stdout, 'Upload id'),
       target_upload_id: parseLineValue(targetIngest.stdout, 'Upload id'),
+      placement_upload_id: parseLineValue(placementIngest.stdout, 'Upload id'),
       steps,
     };
 
     return {
-      rowCount: campaignRowCount + targetRowCount,
+      rowCount: campaignRowCount + targetRowCount + placementRowCount,
       checksum: jsonChecksum(metadata),
       metadata,
       steps,

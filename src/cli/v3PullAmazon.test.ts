@@ -640,7 +640,7 @@ describe('coverage isolation helpers', () => {
         missingRanges: [],
         blockers: [],
         warnings: [
-          'SP placement daily automation is not implemented by the current Ads API pullers.',
+          'SP STIS automation is not implemented by the current Ads API pullers.',
         ],
         notes: [],
         details: {},

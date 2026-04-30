@@ -425,17 +425,135 @@ export class AdsApiSpTargetDailyError extends Error {
   }
 }
 
+export type AdsApiSpPlacementDailyCreateRequest = {
+  name: string;
+  startDate: string;
+  endDate: string;
+  configuration: {
+    adProduct: 'SPONSORED_PRODUCTS';
+    groupBy: ['campaign', 'campaignPlacement'];
+    columns: string[];
+    reportTypeId: 'spCampaigns';
+    timeUnit: 'DAILY';
+    format: 'GZIP_JSON';
+  };
+};
+
+export type AdsApiSpPlacementDailyReportMetadata = {
+  reportId: string;
+  status: string | null;
+  statusDetails: string | null;
+  location: string | null;
+  fileSize: number | null;
+};
+
+export type AdsApiSpPlacementDailyRawPayload = {
+  format: 'json' | 'csv';
+  rows: Array<Record<string, unknown>>;
+};
+
+export type AdsApiSpPlacementDailyRawArtifact = {
+  schemaVersion: 'ads-api-sp-placement-daily-raw/v1';
+  generatedAt: string;
+  appAccountId: string;
+  appMarketplace: string;
+  adsApiBaseUrl: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  reportMetadata: Omit<AdsApiSpPlacementDailyReportMetadata, 'location'> & {
+    downloadUrlPresent: boolean;
+  };
+  rawRowsPayload: AdsApiSpPlacementDailyRawPayload;
+};
+
+export type AdsApiSpPlacementDailyNormalizedRow = {
+  appAccountId: string;
+  appMarketplace: string;
+  profileId: string;
+  campaignId: string;
+  campaignName: string;
+  campaignBiddingStrategy: string | null;
+  placementClassification: string;
+  placementRaw: string;
+  placementCode: 'OA' | 'PP' | 'ROS' | 'TOS' | 'UNKNOWN';
+  date: string;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  attributedSales14d: number;
+  attributedConversions14d: number;
+  attributedUnitsOrdered14d: number;
+  costPerClick: number | null;
+  clickThroughRate: number | null;
+  currencyCode: string | null;
+};
+
+export type AdsApiSpPlacementDailyNormalizedArtifact = {
+  schemaVersion: 'ads-api-sp-placement-daily-normalized/v1';
+  generatedAt: string;
+  appAccountId: string;
+  appMarketplace: string;
+  adsApiBaseUrl: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  rowCount: number;
+  normalizedPlacementRows: AdsApiSpPlacementDailyNormalizedRow[];
+};
+
+export class AdsApiSpPlacementDailyError extends Error {
+  readonly code:
+    | 'invalid_date'
+    | 'profile_sync_artifact_missing'
+    | 'profile_sync_artifact_invalid'
+    | 'profile_sync_artifact_mismatch'
+    | 'transport_error'
+    | 'report_request_failed'
+    | 'invalid_response'
+    | 'report_timeout'
+    | 'pending_timeout'
+    | 'report_failed'
+    | 'download_failed';
+  readonly status?: number;
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'invalid_date'
+      | 'profile_sync_artifact_missing'
+      | 'profile_sync_artifact_invalid'
+      | 'profile_sync_artifact_mismatch'
+      | 'transport_error'
+      | 'report_request_failed'
+      | 'invalid_response'
+      | 'report_timeout'
+      | 'pending_timeout'
+      | 'report_failed'
+      | 'download_failed',
+    message: string,
+    options: { status?: number; details?: unknown } = {}
+  ) {
+    super(message);
+    this.name = 'AdsApiSpPlacementDailyError';
+    this.code = code;
+    this.status = options.status;
+    this.details = options.details;
+  }
+}
+
 export type AdsApiPersistenceSources = {
   campaignRawArtifactPath: string;
   campaignNormalizedArtifactPath: string;
   targetRawArtifactPath: string;
   targetNormalizedArtifactPath: string;
+  placementRawArtifactPath: string;
+  placementNormalizedArtifactPath: string;
 };
 
 export type AdsApiSpDailySummaryRow = {
   date: string;
   campaignRowCount: number;
   targetRowCount: number;
+  placementRowCount: number;
   campaignImpressions: number;
   campaignClicks: number;
   campaignCost: number;
@@ -446,6 +564,11 @@ export type AdsApiSpDailySummaryRow = {
   targetCost: number;
   targetAttributedSales14d: number;
   targetAttributedConversions14d: number;
+  placementImpressions: number;
+  placementClicks: number;
+  placementCost: number;
+  placementAttributedSales14d: number;
+  placementAttributedConversions14d: number;
 };
 
 export type AdsApiPersistedLandingArtifact = {
@@ -459,6 +582,7 @@ export type AdsApiPersistedLandingArtifact = {
   sources: AdsApiPersistenceSources;
   campaignRaw: AdsApiSpCampaignDailyRawArtifact;
   targetRaw: AdsApiSpTargetDailyRawArtifact;
+  placementRaw: AdsApiSpPlacementDailyRawArtifact;
 };
 
 export type AdsApiPersistedNormalizationArtifact = {
@@ -471,8 +595,10 @@ export type AdsApiPersistedNormalizationArtifact = {
   requestedDateRange: AdsApiDateRange;
   campaignRowCount: number;
   targetRowCount: number;
+  placementRowCount: number;
   campaignRows: AdsApiSpCampaignDailyNormalizedRow[];
   targetRows: AdsApiSpTargetDailyNormalizedRow[];
+  placementRows: AdsApiSpPlacementDailyNormalizedRow[];
   dailySummary: AdsApiSpDailySummaryRow[];
 };
 
@@ -589,6 +715,53 @@ export class AdsApiTargetIngestGateError extends Error {
   ) {
     super(message);
     this.name = 'AdsApiTargetIngestGateError';
+    this.code = code;
+    this.details = options.details;
+  }
+}
+
+export type AdsApiPlacementIngestGateSinkSummary = {
+  ingestStatus: 'ok' | 'already ingested';
+  mapStatus: 'ok' | 'missing_snapshot';
+  uploadId: string;
+  rawRowCount: number | null;
+  factRows: number;
+  issueRows: number;
+  coverageStart: string | null;
+  coverageEnd: string | null;
+  tempXlsxPath: string;
+};
+
+export type AdsApiPlacementIngestGateResult = {
+  appAccountId: string;
+  appMarketplace: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  placementRowCount: number;
+  sinkResult: AdsApiPlacementIngestGateSinkSummary;
+};
+
+export class AdsApiPlacementIngestGateError extends Error {
+  readonly code:
+    | 'artifact_missing'
+    | 'artifact_invalid'
+    | 'artifact_mismatch'
+    | 'invalid_rows'
+    | 'sink_failed';
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'artifact_missing'
+      | 'artifact_invalid'
+      | 'artifact_mismatch'
+      | 'invalid_rows'
+      | 'sink_failed',
+    message: string,
+    options: { details?: unknown } = {}
+  ) {
+    super(message);
+    this.name = 'AdsApiPlacementIngestGateError';
     this.code = code;
     this.details = options.details;
   }

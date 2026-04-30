@@ -31,10 +31,14 @@ const IMPLEMENTED_LOOP_SOURCES = [
     tableName: 'sp_targeting_daily_fact',
     label: 'SP target daily',
   },
+  {
+    sourceType: 'ads_api_sp_placement_daily',
+    tableName: 'sp_placement_daily_fact',
+    label: 'SP placement daily',
+  },
 ] as const;
 
 const WARN_ONLY_NOT_IMPLEMENTED = [
-  'SP placement daily',
   'SP STIS daily',
   'SP advertised product daily',
   'SB campaign daily',

@@ -25,8 +25,10 @@ describe('Ads persistence CLI output', () => {
         },
         campaignRowCount: 734,
         targetRowCount: 545,
+        placementRowCount: 82,
         campaignRows: [],
         targetRows: [],
+        placementRows: [],
         dailySummary: [],
       },
       landingArtifactPath: '/repo/out/ads-api-persisted/raw/ads-sp-daily.landed.json',
@@ -42,6 +44,7 @@ describe('Ads persistence CLI output', () => {
       'Date range: 2026-04-10 -> 2026-04-16',
       'Campaign row count: 734',
       'Target row count: 545',
+      'Placement row count: 82',
       'Landing artifact path: /repo/out/ads-api-persisted/raw/ads-sp-daily.landed.json',
       'Normalization artifact path: /repo/out/ads-api-persisted/normalized/ads-sp-daily.persisted.json',
     ]);

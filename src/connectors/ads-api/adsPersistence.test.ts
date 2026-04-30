@@ -32,6 +32,8 @@ const writeArtifacts = (overrides: {
   campaignNormalized?: Record<string, unknown>;
   targetRaw?: Record<string, unknown>;
   targetNormalized?: Record<string, unknown>;
+  placementRaw?: Record<string, unknown>;
+  placementNormalized?: Record<string, unknown>;
 } = {}) => {
   const dir = makeTempDir();
   const paths = {
@@ -42,6 +44,11 @@ const writeArtifacts = (overrides: {
     ),
     targetRawArtifactPath: path.join(dir, 'sp-target-daily.raw.json'),
     targetNormalizedArtifactPath: path.join(dir, 'sp-target-daily.normalized.json'),
+    placementRawArtifactPath: path.join(dir, 'sp-placement-daily.raw.json'),
+    placementNormalizedArtifactPath: path.join(
+      dir,
+      'sp-placement-daily.normalized.json'
+    ),
   };
 
   const shared = {
@@ -211,6 +218,90 @@ const writeArtifacts = (overrides: {
     )
   );
 
+  fs.writeFileSync(
+    paths.placementRawArtifactPath,
+    JSON.stringify(
+      {
+        schemaVersion: 'ads-api-sp-placement-daily-raw/v1',
+        generatedAt: '2026-04-17T00:00:00.000Z',
+        ...shared,
+        reportMetadata: {
+          reportId: 'placement-report',
+          status: 'COMPLETED',
+          statusDetails: null,
+          fileSize: 789,
+          downloadUrlPresent: true,
+        },
+        rawRowsPayload: {
+          format: 'json',
+          rows: [{ campaignId: '1', placementClassification: 'TOP_OF_SEARCH' }],
+        },
+        ...overrides.placementRaw,
+      },
+      null,
+      2
+    )
+  );
+
+  fs.writeFileSync(
+    paths.placementNormalizedArtifactPath,
+    JSON.stringify(
+      {
+        schemaVersion: 'ads-api-sp-placement-daily-normalized/v1',
+        generatedAt: '2026-04-17T00:00:00.000Z',
+        ...shared,
+        rowCount: 2,
+        normalizedPlacementRows: [
+          {
+            appAccountId: 'sourbear',
+            appMarketplace: 'US',
+            profileId: '3362351578582214',
+            campaignId: '20',
+            campaignName: 'Campaign B',
+            campaignBiddingStrategy: 'dynamic bids - up and down',
+            placementClassification: 'TOP_OF_SEARCH',
+            placementRaw: 'Top of search (first page)',
+            placementCode: 'TOS',
+            date: '2026-04-11',
+            impressions: 6,
+            clicks: 1,
+            cost: 1.5,
+            attributedSales14d: 4.5,
+            attributedConversions14d: 1,
+            attributedUnitsOrdered14d: 1,
+            costPerClick: 1.5,
+            clickThroughRate: 0.1,
+            currencyCode: 'USD',
+          },
+          {
+            appAccountId: 'sourbear',
+            appMarketplace: 'US',
+            profileId: '3362351578582214',
+            campaignId: '10',
+            campaignName: 'Campaign A',
+            campaignBiddingStrategy: 'dynamic bids - down only',
+            placementClassification: 'PRODUCT_PAGES',
+            placementRaw: 'Product pages',
+            placementCode: 'PP',
+            date: '2026-04-10',
+            impressions: 5,
+            clicks: 1,
+            cost: 0.5,
+            attributedSales14d: 1.5,
+            attributedConversions14d: 1,
+            attributedUnitsOrdered14d: 1,
+            costPerClick: 0.5,
+            clickThroughRate: 0.2,
+            currencyCode: 'USD',
+          },
+        ],
+        ...overrides.placementNormalized,
+      },
+      null,
+      2
+    )
+  );
+
   return paths;
 };
 
@@ -333,12 +424,57 @@ describe('Ads persistence boundary', () => {
             currencyCode: 'USD',
           },
         ],
+        placementRows: [
+          {
+            appAccountId: 'sourbear',
+            appMarketplace: 'US',
+            profileId: '1',
+            campaignId: '2',
+            campaignName: 'Campaign B',
+            campaignBiddingStrategy: 'dynamic bids - up and down',
+            placementClassification: 'TOP_OF_SEARCH',
+            placementRaw: 'Top of search (first page)',
+            placementCode: 'TOS',
+            date: '2026-04-11',
+            impressions: 6,
+            clicks: 1,
+            cost: 1.5,
+            attributedSales14d: 4.5,
+            attributedConversions14d: 1,
+            attributedUnitsOrdered14d: 1,
+            costPerClick: 1.5,
+            clickThroughRate: 0.1,
+            currencyCode: 'USD',
+          },
+          {
+            appAccountId: 'sourbear',
+            appMarketplace: 'US',
+            profileId: '1',
+            campaignId: '1',
+            campaignName: 'Campaign A',
+            campaignBiddingStrategy: 'dynamic bids - down only',
+            placementClassification: 'PRODUCT_PAGES',
+            placementRaw: 'Product pages',
+            placementCode: 'PP',
+            date: '2026-04-10',
+            impressions: 5,
+            clicks: 1,
+            cost: 0.5,
+            attributedSales14d: 1.5,
+            attributedConversions14d: 1,
+            attributedUnitsOrdered14d: 1,
+            costPerClick: 0.5,
+            clickThroughRate: 0.2,
+            currencyCode: 'USD',
+          },
+        ],
       })
     ).toEqual([
       {
         date: '2026-04-10',
         campaignRowCount: 1,
         targetRowCount: 1,
+        placementRowCount: 1,
         campaignImpressions: 10,
         campaignClicks: 1,
         campaignCost: 2.5,
@@ -349,11 +485,17 @@ describe('Ads persistence boundary', () => {
         targetCost: 1.2,
         targetAttributedSales14d: 2.3,
         targetAttributedConversions14d: 1,
+        placementImpressions: 5,
+        placementClicks: 1,
+        placementCost: 0.5,
+        placementAttributedSales14d: 1.5,
+        placementAttributedConversions14d: 1,
       },
       {
         date: '2026-04-11',
         campaignRowCount: 1,
         targetRowCount: 1,
+        placementRowCount: 1,
         campaignImpressions: 20,
         campaignClicks: 2,
         campaignCost: 4.5,
@@ -364,6 +506,11 @@ describe('Ads persistence boundary', () => {
         targetCost: 3.4,
         targetAttributedSales14d: 6.7,
         targetAttributedConversions14d: 1,
+        placementImpressions: 6,
+        placementClicks: 1,
+        placementCost: 1.5,
+        placementAttributedSales14d: 4.5,
+        placementAttributedConversions14d: 1,
       },
     ]);
   });
@@ -385,8 +532,10 @@ describe('Ads persistence boundary', () => {
     expect(result.sharedMetadata.appAccountId).toBe('sourbear');
     expect(result.persistedArtifact.campaignRowCount).toBe(2);
     expect(result.persistedArtifact.targetRowCount).toBe(2);
+    expect(result.persistedArtifact.placementRowCount).toBe(2);
     expect(result.persistedArtifact.campaignRows[0]?.date).toBe('2026-04-10');
     expect(result.persistedArtifact.targetRows[0]?.targetId).toBe('1000');
+    expect(result.persistedArtifact.placementRows[0]?.placementCode).toBe('PP');
     expect(fs.existsSync(result.landingArtifactPath)).toBe(true);
     expect(fs.existsSync(result.normalizationArtifactPath)).toBe(true);
   });
