@@ -18,6 +18,7 @@ export const PENDING_HEALTH_SOURCE_TYPES = [
   'ads_api_sp_campaign_daily',
   'ads_api_sp_target_daily',
   'ads_api_sp_placement_daily',
+  'ads_api_sp_advertised_product_daily',
 ] as const;
 export const UNHEALTHY_PENDING_REQUEST_STATUSES = [
   'failed',

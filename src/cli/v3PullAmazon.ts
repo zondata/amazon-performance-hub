@@ -132,7 +132,8 @@ interface SourceRunResult {
 type AdsCoverageSourceKey =
   | 'sp_campaign_hourly'
   | 'sp_targeting_daily'
-  | 'sp_placement_daily';
+  | 'sp_placement_daily'
+  | 'sp_advertised_product_daily';
 
 type AdsCoverageDescriptor = {
   sourceName: AdsCoverageSourceKey;
@@ -145,6 +146,7 @@ const ADS_IMPLEMENTED_COVERAGE_TABLES = new Set([
   'sp_campaign_hourly',
   'sp_targeting_daily',
   'sp_placement_daily',
+  'sp_advertised_product_daily',
 ]);
 
 const ADS_COVERAGE_DESCRIPTORS: Record<AdsCoverageSourceKey, AdsCoverageDescriptor> = {
@@ -177,13 +179,20 @@ const ADS_COVERAGE_DESCRIPTORS: Record<AdsCoverageSourceKey, AdsCoverageDescript
       'adsapi:ingest-sp-placement-daily',
     ],
   },
+  sp_advertised_product_daily: {
+    sourceName: 'sp_advertised_product_daily',
+    label: 'SP Advertised Product Daily',
+    successStep: 'adsapi:ingest-sp-advertised-product-daily',
+    relevantSteps: [
+      'adsapi:pull-sp-advertised-product-daily',
+      'adsapi:ingest-sp-advertised-product-daily',
+    ],
+  },
 };
 
 const ADS_UNSUPPORTED_COVERAGE_MESSAGES: Record<string, string> = {
   sp_stis_daily:
     'SP STIS automation is not implemented by the current Ads API pullers.',
-  sp_advertised_product_daily:
-    'SP advertised product automation is not implemented by the current Ads API pullers.',
   sb_campaign_daily:
     'SB Ads API puller is not exposed by the current repo scripts.',
   sb_campaign_placement_daily:
@@ -295,7 +304,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
     periodEndExpr: 'date::timestamptz',
     expectedDelayHours: 72,
     hasMarketplace: false,
-    tableStatusDefault: 'blocked',
+    tableStatusDefault: 'success',
   },
   {
     source: 'ads',
@@ -598,6 +607,14 @@ const stepLabel = (name: string): string => {
       return 'SP Campaign Daily ingest';
     case 'adsapi:ingest-sp-target-daily':
       return 'SP Targeting Daily ingest';
+    case 'adsapi:pull-sp-placement-daily':
+      return 'SP Placement Daily pull';
+    case 'adsapi:ingest-sp-placement-daily':
+      return 'SP Placement Daily ingest';
+    case 'adsapi:pull-sp-advertised-product-daily':
+      return 'SP Advertised Product Daily pull';
+    case 'adsapi:ingest-sp-advertised-product-daily':
+      return 'SP Advertised Product Daily ingest';
     default:
       return name;
   }
@@ -1174,6 +1191,9 @@ export const extractImportedAdsSourceTypesFromSteps = (
     }
     if (step.name === 'adsapi:ingest-sp-placement-daily') {
       imported.add('ads_api_sp_placement_daily');
+    }
+    if (step.name === 'adsapi:ingest-sp-advertised-product-daily') {
+      imported.add('ads_api_sp_advertised_product_daily');
     }
   }
   return [...imported];
@@ -1889,7 +1909,6 @@ const runAdsSource = async (pool: Pool, options: CliOptions): Promise<{
 
   const unsupportedTables = [
     'SP STIS automation is not implemented by the current Ads API pullers.',
-    'SP advertised product automation is not implemented by the current Ads API pullers.',
     'SB Ads API puller is not exposed by the current repo scripts.',
     'SD Ads API puller is not exposed by the current repo scripts.',
   ];

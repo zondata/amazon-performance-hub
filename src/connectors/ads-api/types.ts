@@ -500,6 +500,121 @@ export type AdsApiSpPlacementDailyNormalizedArtifact = {
   normalizedPlacementRows: AdsApiSpPlacementDailyNormalizedRow[];
 };
 
+export type AdsApiSpAdvertisedProductDailyCreateRequest = {
+  name: string;
+  startDate: string;
+  endDate: string;
+  configuration: {
+    adProduct: 'SPONSORED_PRODUCTS';
+    groupBy: ['advertiser'];
+    columns: string[];
+    reportTypeId: 'spAdvertisedProduct';
+    timeUnit: 'DAILY';
+    format: 'GZIP_JSON';
+  };
+};
+
+export type AdsApiSpAdvertisedProductDailyReportMetadata = {
+  reportId: string;
+  status: string | null;
+  statusDetails: string | null;
+  location: string | null;
+  fileSize: number | null;
+};
+
+export type AdsApiSpAdvertisedProductDailyRawPayload = {
+  format: 'json' | 'csv';
+  rows: Array<Record<string, unknown>>;
+};
+
+export type AdsApiSpAdvertisedProductDailyRawArtifact = {
+  schemaVersion: 'ads-api-sp-advertised-product-daily-raw/v1';
+  generatedAt: string;
+  appAccountId: string;
+  appMarketplace: string;
+  adsApiBaseUrl: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  reportMetadata: Omit<AdsApiSpAdvertisedProductDailyReportMetadata, 'location'> & {
+    downloadUrlPresent: boolean;
+  };
+  rawRowsPayload: AdsApiSpAdvertisedProductDailyRawPayload;
+};
+
+export type AdsApiSpAdvertisedProductDailyNormalizedRow = {
+  appAccountId: string;
+  appMarketplace: string;
+  profileId: string;
+  campaignId: string;
+  campaignName: string;
+  adGroupId: string | null;
+  adGroupName: string | null;
+  advertisedAsin: string;
+  advertisedSku: string | null;
+  date: string;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  attributedSales14d: number;
+  attributedConversions14d: number;
+  attributedUnitsOrdered14d: number;
+  currencyCode: string | null;
+};
+
+export type AdsApiSpAdvertisedProductDailyNormalizedArtifact = {
+  schemaVersion: 'ads-api-sp-advertised-product-daily-normalized/v1';
+  generatedAt: string;
+  appAccountId: string;
+  appMarketplace: string;
+  adsApiBaseUrl: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  rowCount: number;
+  normalizedAdvertisedProductRows: AdsApiSpAdvertisedProductDailyNormalizedRow[];
+};
+
+export class AdsApiSpAdvertisedProductDailyError extends Error {
+  readonly code:
+    | 'invalid_date'
+    | 'profile_sync_artifact_missing'
+    | 'profile_sync_artifact_invalid'
+    | 'profile_sync_artifact_mismatch'
+    | 'pending_report_not_found'
+    | 'transport_error'
+    | 'report_request_failed'
+    | 'invalid_response'
+    | 'report_timeout'
+    | 'pending_timeout'
+    | 'report_failed'
+    | 'download_failed';
+  readonly status?: number;
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'invalid_date'
+      | 'profile_sync_artifact_missing'
+      | 'profile_sync_artifact_invalid'
+      | 'profile_sync_artifact_mismatch'
+      | 'pending_report_not_found'
+      | 'transport_error'
+      | 'report_request_failed'
+      | 'invalid_response'
+      | 'report_timeout'
+      | 'pending_timeout'
+      | 'report_failed'
+      | 'download_failed',
+    message: string,
+    options: { status?: number; details?: unknown } = {}
+  ) {
+    super(message);
+    this.name = 'AdsApiSpAdvertisedProductDailyError';
+    this.code = code;
+    this.status = options.status;
+    this.details = options.details;
+  }
+}
+
 export class AdsApiSpPlacementDailyError extends Error {
   readonly code:
     | 'invalid_date'
@@ -762,6 +877,53 @@ export class AdsApiPlacementIngestGateError extends Error {
   ) {
     super(message);
     this.name = 'AdsApiPlacementIngestGateError';
+    this.code = code;
+    this.details = options.details;
+  }
+}
+
+export type AdsApiAdvertisedProductIngestGateSinkSummary = {
+  ingestStatus: 'ok' | 'already ingested';
+  mapStatus: 'not_required';
+  uploadId: string;
+  rowCount: number | null;
+  factRows: number;
+  issueRows: number;
+  coverageStart: string | null;
+  coverageEnd: string | null;
+  tempXlsxPath: string;
+};
+
+export type AdsApiAdvertisedProductIngestGateResult = {
+  appAccountId: string;
+  appMarketplace: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  advertisedProductRowCount: number;
+  sinkResult: AdsApiAdvertisedProductIngestGateSinkSummary;
+};
+
+export class AdsApiAdvertisedProductIngestGateError extends Error {
+  readonly code:
+    | 'artifact_missing'
+    | 'artifact_invalid'
+    | 'artifact_mismatch'
+    | 'invalid_rows'
+    | 'sink_failed';
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'artifact_missing'
+      | 'artifact_invalid'
+      | 'artifact_mismatch'
+      | 'invalid_rows'
+      | 'sink_failed',
+    message: string,
+    options: { details?: unknown } = {}
+  ) {
+    super(message);
+    this.name = 'AdsApiAdvertisedProductIngestGateError';
     this.code = code;
     this.details = options.details;
   }

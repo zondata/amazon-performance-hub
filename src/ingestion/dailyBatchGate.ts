@@ -741,6 +741,24 @@ export const runRealAdsDailyBatch = async (
         ),
       })
     );
+    const advertisedProductPull = await runOptionalStep(
+      'adsapi:pull-sp-advertised-product-daily',
+      'adsapi:pull-sp-advertised-product-daily',
+      [
+        '--start-date',
+        request.startDate,
+        '--end-date',
+        request.endDate,
+        ...(request.resumePending ? ['--resume-pending'] : []),
+      ],
+      (result) => ({
+        row_count: parseNumberLine(result.stdout, 'Row count'),
+        normalized_artifact_path: parseLineValue(
+          result.stdout,
+          'Normalized artifact path'
+        ),
+      })
+    );
     const allPullsReady =
       campaignPull.ok && targetPull.ok && placementPull.ok;
 
@@ -779,6 +797,13 @@ export const runRealAdsDailyBatch = async (
     const placementArtifactPath =
       placementPull.ok
         ? parseLineValue(placementPull.result.stdout, 'Normalized artifact path')
+        : null;
+    const advertisedProductArtifactPath =
+      advertisedProductPull.ok
+        ? parseLineValue(
+            advertisedProductPull.result.stdout,
+            'Normalized artifact path'
+          )
         : null;
 
     const campaignIngest = campaignPull.ok
@@ -835,6 +860,29 @@ export const runRealAdsDailyBatch = async (
           })
         ),
         null);
+    const advertisedProductIngest = advertisedProductPull.ok
+      ? await runOptionalStep(
+          'adsapi:ingest-sp-advertised-product-daily',
+          'adsapi:ingest-sp-advertised-product-daily',
+          advertisedProductArtifactPath
+            ? ['--artifact-path', advertisedProductArtifactPath]
+            : [],
+          (result) => ({
+            advertised_product_row_count: parseNumberLine(
+              result.stdout,
+              'Advertised product row count'
+            ),
+            upload_id: parseLineValue(result.stdout, 'Upload id'),
+          })
+        )
+      : (steps.push(
+          buildSkippedCommandStep('adsapi:ingest-sp-advertised-product-daily', {
+            reason: 'upstream_pull_not_ready',
+            message:
+              'Advertised product ingest skipped because the SP advertised product report is not ready yet.',
+          })
+        ),
+        null);
 
     const campaignRowCount =
       (campaignIngest && campaignIngest.ok
@@ -869,6 +917,17 @@ export const runRealAdsDailyBatch = async (
         ? parseNumberLine(placementPull.result.stdout, 'Row count')
         : null) ??
       0;
+    const advertisedProductRowCount =
+      (advertisedProductIngest && advertisedProductIngest.ok
+        ? parseNumberLine(
+            advertisedProductIngest.result.stdout,
+            'Advertised product row count'
+          )
+        : null) ??
+      (advertisedProductPull.ok
+        ? parseNumberLine(advertisedProductPull.result.stdout, 'Row count')
+        : null) ??
+      0;
 
     const pullOutcomes = [
       {
@@ -885,6 +944,11 @@ export const runRealAdsDailyBatch = async (
         sourceType: 'ads_api_sp_placement_daily',
         label: 'SP placement daily',
         outcome: placementPull,
+      },
+      {
+        sourceType: 'ads_api_sp_advertised_product_daily',
+        label: 'SP advertised product daily',
+        outcome: advertisedProductPull,
       },
     ];
     const pendingSources = pullOutcomes
@@ -933,10 +997,17 @@ export const runRealAdsDailyBatch = async (
           : null) ??
         (placementPull.ok
           ? parseLineValue(placementPull.result.stdout, 'Validated profile id')
+          : null) ??
+        (advertisedProductPull.ok
+          ? parseLineValue(
+              advertisedProductPull.result.stdout,
+              'Validated profile id'
+            )
           : null),
       campaign_row_count: campaignRowCount,
       target_row_count: targetRowCount,
       placement_row_count: placementRowCount,
+      advertised_product_row_count: advertisedProductRowCount,
       campaign_upload_id:
         campaignIngest && campaignIngest.ok
           ? parseLineValue(campaignIngest.result.stdout, 'Upload id')
@@ -949,6 +1020,10 @@ export const runRealAdsDailyBatch = async (
         placementIngest && placementIngest.ok
           ? parseLineValue(placementIngest.result.stdout, 'Upload id')
           : null,
+      advertised_product_upload_id:
+        advertisedProductIngest && advertisedProductIngest.ok
+          ? parseLineValue(advertisedProductIngest.result.stdout, 'Upload id')
+          : null,
       pending_sources: pendingSources,
       failed_sources: failedSources,
       persist_status:
@@ -960,7 +1035,10 @@ export const runRealAdsDailyBatch = async (
       rowCount:
         (campaignIngest && campaignIngest.ok ? campaignRowCount : 0) +
         (targetIngest && targetIngest.ok ? targetRowCount : 0) +
-        (placementIngest && placementIngest.ok ? placementRowCount : 0),
+        (placementIngest && placementIngest.ok ? placementRowCount : 0) +
+        (advertisedProductIngest && advertisedProductIngest.ok
+          ? advertisedProductRowCount
+          : 0),
       checksum: jsonChecksum(metadata),
       metadata,
       steps,

@@ -115,6 +115,15 @@ describe('evaluateAdsLoopVerification', () => {
           lastSuccessfulRunAt: '2026-04-29T11:10:00.000Z',
           notes: null,
         },
+        {
+          sourceType: 'ads_api_sp_advertised_product_daily',
+          tableName: 'sp_advertised_product_daily_fact',
+          lastStatus: 'success',
+          freshnessStatus: 'fresh',
+          latestPeriodEnd: '2026-04-28T23:59:59.000Z',
+          lastSuccessfulRunAt: '2026-04-29T11:05:00.000Z',
+          notes: null,
+        },
       ],
     });
 
