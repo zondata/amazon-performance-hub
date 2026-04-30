@@ -87,6 +87,7 @@ export const PIPELINE_STATUS_SPECS: PipelineStatusSpec[] = [
     sourceType: 'sp_api_sales_traffic_daily',
     targetTable: 'amazon_sales_traffic_timeseries',
     implementationStatus: 'implemented',
+    pendingSourceType: 'sp_api_sales_traffic_daily',
   },
   {
     sourceGroup: 'SP campaign daily',

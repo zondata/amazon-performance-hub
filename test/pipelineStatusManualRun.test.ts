@@ -27,6 +27,15 @@ describe('pipeline status manual run helpers', () => {
     ).toBe('pending');
   });
 
+  it('treats retail pipeline summaries with blocked pending state as pending', () => {
+    expect(
+      classifyManualRunFailure(
+        'V3 Amazon data pull summary\nsource=sales | status=blocked | blockers=Amazon SP-API Sales & Traffic report is still pending in Amazon. report_id=retail-report-123',
+        ''
+      )
+    ).toBe('pending');
+  });
+
   it('prefers a meaningful summary line from command output', () => {
     expect(
       summarizeManualRunOutput(

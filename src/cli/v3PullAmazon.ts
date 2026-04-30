@@ -226,6 +226,25 @@ const ADS_UNSUPPORTED_COVERAGE_MESSAGES: Record<string, string> = {
     'SD Ads API puller is not exposed by the current repo scripts.',
 };
 
+const RETAIL_PENDING_SOURCE_TYPE = 'sp_api_sales_traffic_daily';
+const RETAIL_PENDING_REPORT_TYPE_ID = 'GET_SALES_AND_TRAFFIC_REPORT';
+const RETAIL_PENDING_PROFILE_HASH = 'sp_api_sales_traffic_daily';
+const RETAIL_PENDING_PROFILE_MASKED = 'sp-api';
+const RETAIL_PENDING_AD_PRODUCT = 'SP_API';
+const RETAIL_PENDING_TARGET_TABLE = 'amazon_sales_traffic_timeseries';
+const RETAIL_ACTIVE_PENDING_STATUSES = [
+  'created',
+  'requested',
+  'pending',
+  'polling',
+  'pending_timeout',
+] as const;
+
+type RetailPendingRequestRow = {
+  reportId: string;
+  status: string;
+};
+
 interface CommandResult {
   command: string;
   args: string[];
@@ -1866,7 +1885,198 @@ const discoverSqpAsins = async (pool: Pool, options: CliOptions): Promise<string
     .filter((asin): asin is string => Boolean(asin));
 };
 
-const runSalesSource = async (options: CliOptions): Promise<{
+const findReusableRetailPendingRequest = async (
+  pool: Pool,
+  options: CliOptions
+): Promise<RetailPendingRequestRow | null> => {
+  const result = await pool.query(
+    `
+      select
+        report_id::text as report_id,
+        status::text as status
+      from public.ads_api_report_requests
+      where account_id = $1
+        and marketplace = $2
+        and profile_id_hash = $3
+        and report_type_id = $4
+        and source_type = $5
+        and start_date = $6::date
+        and end_date = $7::date
+        and status = any($8::text[])
+      order by updated_at desc
+      limit 1
+    `,
+    [
+      options.accountId,
+      options.marketplace,
+      RETAIL_PENDING_PROFILE_HASH,
+      RETAIL_PENDING_REPORT_TYPE_ID,
+      RETAIL_PENDING_SOURCE_TYPE,
+      options.from,
+      options.to,
+      [...RETAIL_ACTIVE_PENDING_STATUSES],
+    ]
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    reportId: String(row.report_id),
+    status: String(row.status),
+  };
+};
+
+const upsertRetailPendingRequest = async (args: {
+  pool: Pool;
+  options: CliOptions;
+  reportId: string;
+  status: 'requested' | 'completed' | 'failed' | 'pending_timeout' | 'imported';
+  statusDetails: string | null;
+  lastResponseJson?: JsonObject;
+  notes?: string | null;
+  lastPolledAt?: string | null;
+  completedAt?: string | null;
+  failedAt?: string | null;
+}): Promise<void> => {
+  await args.pool.query(
+    `
+      insert into public.ads_api_report_requests (
+        account_id,
+        marketplace,
+        profile_id_hash,
+        profile_id_masked,
+        ad_product,
+        report_type_id,
+        source_type,
+        target_table,
+        start_date,
+        end_date,
+        report_id,
+        status,
+        status_details,
+        request_payload_json,
+        last_response_json,
+        diagnostic_path,
+        last_polled_at,
+        completed_at,
+        failed_at,
+        retry_after_at,
+        attempt_count,
+        notes
+      )
+      values (
+        $1, $2, $3, $4, $5, $6, $7, $8,
+        $9::date, $10::date, $11, $12, $13,
+        $14::jsonb, $15::jsonb, null, $16::timestamptz,
+        $17::timestamptz, $18::timestamptz, null, 0, $19
+      )
+      on conflict (account_id, marketplace, profile_id_hash, report_type_id, start_date, end_date, source_type)
+      do update set
+        report_id = excluded.report_id,
+        status = excluded.status,
+        status_details = excluded.status_details,
+        request_payload_json = excluded.request_payload_json,
+        last_response_json = excluded.last_response_json,
+        last_polled_at = excluded.last_polled_at,
+        completed_at = excluded.completed_at,
+        failed_at = excluded.failed_at,
+        notes = excluded.notes
+    `,
+    [
+      args.options.accountId,
+      args.options.marketplace,
+      RETAIL_PENDING_PROFILE_HASH,
+      RETAIL_PENDING_PROFILE_MASKED,
+      RETAIL_PENDING_AD_PRODUCT,
+      RETAIL_PENDING_REPORT_TYPE_ID,
+      RETAIL_PENDING_SOURCE_TYPE,
+      RETAIL_PENDING_TARGET_TABLE,
+      args.options.from,
+      args.options.to,
+      args.reportId,
+      args.status,
+      args.statusDetails,
+      JSON.stringify({
+        report_type: RETAIL_PENDING_REPORT_TYPE_ID,
+        start_date: args.options.from,
+        end_date: args.options.to,
+      }),
+      JSON.stringify(args.lastResponseJson ?? {}),
+      args.lastPolledAt,
+      args.completedAt,
+      args.failedAt,
+      args.notes ?? null,
+    ]
+  );
+};
+
+export const classifyRetailPendingFailure = (
+  error: unknown,
+  options: CliOptions
+): {
+  status: SourceResultStatus;
+  rowsRead: number | null;
+  rowsWritten: number | null;
+  latestAvailableDate: string | null;
+  missingRanges: string[];
+  blockers: string[];
+  warnings: string[];
+  notes: string[];
+  details: JsonObject;
+} | null => {
+  if (!error || typeof error !== 'object') return null;
+  const pendingError = error as {
+    code?: unknown;
+    message?: unknown;
+    metadata?: unknown;
+    steps?: unknown;
+  };
+  if (pendingError.code !== 'retail_report_pending') return null;
+
+  const details =
+    typeof pendingError.metadata === 'object' && pendingError.metadata !== null
+      ? (pendingError.metadata as Record<string, unknown>)
+      : {};
+  const reportId =
+    typeof details.report_id === 'string' && details.report_id.trim()
+      ? details.report_id.trim()
+      : null;
+  const processingStatus =
+    typeof details.processing_status === 'string' && details.processing_status.trim()
+      ? details.processing_status.trim()
+      : null;
+  const nextAction =
+    options.mode === 'scheduled' || options.softPendingExit
+      ? 'Amazon still has the Sales & Traffic report pending. Let the next scheduled run poll the saved report id again.'
+      : 'Amazon still has the Sales & Traffic report pending. Rerun this source later and it will reuse the saved report id.';
+
+  return {
+    status: options.mode === 'scheduled' || options.softPendingExit ? 'pending' : 'blocked',
+    rowsRead: 0,
+    rowsWritten: 0,
+    latestAvailableDate: null,
+    missingRanges: [`${options.from} -> ${options.to}`],
+    blockers: [
+      reportId
+        ? `Amazon SP-API Sales & Traffic report is still pending in Amazon. report_id=${reportId}`
+        : 'Amazon SP-API Sales & Traffic report is still pending in Amazon.',
+    ],
+    warnings: [],
+    notes: [nextAction],
+    details: {
+      error_code: 'retail_report_pending',
+      error_message:
+        typeof pendingError.message === 'string'
+          ? pendingError.message
+          : 'Retail Sales & Traffic report is still pending.',
+      report_id: reportId,
+      processing_status: processingStatus,
+      error_steps: (pendingError.steps ?? []) as JsonValue,
+    },
+  };
+};
+
+const runSalesSource = async (pool: Pool, options: CliOptions): Promise<{
   status: SourceResultStatus;
   rowsRead: number | null;
   rowsWritten: number | null;
@@ -1882,6 +2092,7 @@ const runSalesSource = async (options: CliOptions): Promise<{
     marketplace: options.marketplace,
     startDate: options.from,
     endDate: options.to,
+    resumePending: options.resumePending,
   };
 
   if (options.dryRun) {
@@ -1901,7 +2112,90 @@ const runSalesSource = async (options: CliOptions): Promise<{
     };
   }
 
-  const result = await runRealRetailDailyBatchWithOptions(request, {});
+  const reusablePending = await findReusableRetailPendingRequest(pool, options);
+  let result;
+  try {
+    result = await runRealRetailDailyBatchWithOptions(request, {
+      retailReportId: reusablePending?.reportId ?? null,
+      resumePendingReport: Boolean(reusablePending),
+      pendingCallbacks: {
+        onRequested: async ({ reportId }) => {
+          await upsertRetailPendingRequest({
+            pool,
+            options,
+            reportId,
+            status: 'requested',
+            statusDetails: null,
+            notes: 'Retail Sales & Traffic report request was created and saved for later polling.',
+          });
+        },
+        onPending: async ({ reportId, processingStatus, reportDocumentId }) => {
+          await upsertRetailPendingRequest({
+            pool,
+            options,
+            reportId,
+            status: 'pending_timeout',
+            statusDetails: processingStatus,
+            lastResponseJson: {
+              processing_status: processingStatus,
+              report_document_id: reportDocumentId,
+            },
+            lastPolledAt: new Date().toISOString(),
+            notes: 'Amazon still has the Sales & Traffic report pending.',
+          });
+        },
+        onCompleted: async ({ reportId, reportDocumentId }) => {
+          await upsertRetailPendingRequest({
+            pool,
+            options,
+            reportId,
+            status: 'completed',
+            statusDetails: 'DONE',
+            lastResponseJson: {
+              processing_status: 'DONE',
+              report_document_id: reportDocumentId,
+            },
+            lastPolledAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+            notes: 'Amazon finished the Sales & Traffic report and downstream processing is continuing.',
+          });
+        },
+        onFailed: async ({ reportId, processingStatus }) => {
+          await upsertRetailPendingRequest({
+            pool,
+            options,
+            reportId,
+            status: 'failed',
+            statusDetails: processingStatus,
+            lastResponseJson: {
+              processing_status: processingStatus,
+            },
+            lastPolledAt: new Date().toISOString(),
+            failedAt: new Date().toISOString(),
+            notes: 'Amazon returned a terminal failure status for the Sales & Traffic report.',
+          });
+        },
+      },
+    });
+  } catch (error) {
+    const pendingFailure = classifyRetailPendingFailure(error, options);
+    if (pendingFailure) {
+      return pendingFailure;
+    }
+    throw error;
+  }
+  if (typeof result.metadata.report_id === 'string' && result.metadata.report_id.trim()) {
+    await upsertRetailPendingRequest({
+      pool,
+      options,
+      reportId: result.metadata.report_id.trim(),
+      status: 'imported',
+      statusDetails: 'DONE',
+      completedAt: new Date().toISOString(),
+      lastPolledAt: new Date().toISOString(),
+      notes: 'Imported into amazon_sales_traffic_timeseries by the V3 retail sync batch.',
+    });
+  }
   const steps = result.steps as JsonValue;
   return {
     status: 'success',
@@ -2316,7 +2610,7 @@ const runSettingsSource = async (pool: Pool, options: CliOptions): Promise<{
 
 const executeSource = async (pool: Pool, options: CliOptions, source: PullSource): Promise<Omit<SourceRunResult, 'source' | 'sourceType' | 'sourceName' | 'syncRunId'>> => {
   if (source === 'sales') {
-    return runSalesSource(options);
+    return runSalesSource(pool, options);
   }
   if (source === 'ads') {
     return runAdsSource(pool, options);

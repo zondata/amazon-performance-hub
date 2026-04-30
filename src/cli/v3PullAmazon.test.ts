@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   classifyAdsPendingFailure,
+  classifyRetailPendingFailure,
   deriveAdsImplementedCoverageResult,
   deriveCoverageSourceResult,
   extractImportedAdsSourceTypesFromSteps,
@@ -262,6 +263,51 @@ describe('classifyAdsPendingFailure', () => {
     const result = classifyAdsPendingFailure(error, args);
 
     expect(result?.status).toBe('pending');
+  });
+});
+
+describe('classifyRetailPendingFailure', () => {
+  const buildBaseArgs = (mode: 'manual' | 'scheduled') =>
+    parseV3PullAmazonArgs([
+      '--account-id=sourbear',
+      '--marketplace=US',
+      '--from=2026-04-21',
+      '--to=2026-04-21',
+      '--sources=sales',
+      `--mode=${mode}`,
+    ]);
+
+  it('keeps manual retail runs blocked but recoverable when Amazon is still processing', () => {
+    const error = Object.assign(new Error('retail pending'), {
+      code: 'retail_report_pending',
+      metadata: {
+        report_id: 'retail-report-123',
+        processing_status: 'IN_PROGRESS',
+      },
+      steps: [],
+    });
+
+    const result = classifyRetailPendingFailure(error, buildBaseArgs('manual'));
+
+    expect(result?.status).toBe('blocked');
+    expect(result?.blockers[0]).toContain('retail-report-123');
+    expect(result?.notes.join(' ')).toContain('reuse the saved report id');
+  });
+
+  it('treats scheduled retail runs as pending instead of a hard failure', () => {
+    const error = Object.assign(new Error('retail pending'), {
+      code: 'retail_report_pending',
+      metadata: {
+        report_id: 'retail-report-123',
+        processing_status: 'IN_PROGRESS',
+      },
+      steps: [],
+    });
+
+    const result = classifyRetailPendingFailure(error, buildBaseArgs('scheduled'));
+
+    expect(result?.status).toBe('pending');
+    expect(result?.details.processing_status).toBe('IN_PROGRESS');
   });
 });
 

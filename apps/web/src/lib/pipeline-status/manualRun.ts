@@ -210,7 +210,7 @@ export const summarizeManualRunOutput = (stdout: string, stderr: string): string
 
 export const classifyManualRunFailure = (stdout: string, stderr: string): 'pending' | 'error' => {
   const combined = `${stdout}\n${stderr}`;
-  return /pending_timeout|remained pending|retry_after_at|still active in Amazon/i.test(combined)
+  return /pending_timeout|remained pending|retry_after_at|still active in Amazon|still pending in Amazon|status=pending|status=blocked/i.test(combined)
     ? 'pending'
     : 'error';
 };
