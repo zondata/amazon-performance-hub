@@ -1,6 +1,12 @@
+import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 import { getPipelineStatus } from '@/lib/pipeline-status/getPipelineStatus';
+import {
+  runPipelineManualSource,
+  supportsPipelineManualRun,
+} from '@/lib/pipeline-status/manualRun';
 
 const formatValue = (value: string | null) => value ?? '—';
 const PREVIEW_LIMIT = 120;
@@ -49,7 +55,63 @@ const statusTone = (status: string) => {
 
 const statusLabel = (status: string) => status.replace(/_/g, ' ');
 
-export default async function PipelineStatusPage() {
+type PipelineStatusPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+const paramValue = (
+  params: Record<string, string | string[] | undefined> | undefined,
+  key: string
+) => {
+  const value = params?.[key];
+  if (!value) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+};
+
+export default async function PipelineStatusPage({
+  searchParams,
+}: PipelineStatusPageProps) {
+  const params = searchParams ? await searchParams : undefined;
+  const runStatus = paramValue(params, 'run_status');
+  const runSource = paramValue(params, 'run_source');
+  const runWindow = paramValue(params, 'run_window');
+  const runSummary = paramValue(params, 'run_summary');
+
+  const runSourceGroup = async (formData: FormData) => {
+    'use server';
+
+    const sourceType = String(formData.get('source_type') ?? '').trim();
+    if (!supportsPipelineManualRun(sourceType)) {
+      redirect(
+        `/pipeline-status?run_status=error&run_source=${encodeURIComponent(
+          sourceType || 'unknown'
+        )}&run_summary=${encodeURIComponent(
+          'Manual run is not supported for this source group.'
+        )}`
+      );
+    }
+
+    try {
+      const result = await runPipelineManualSource(sourceType);
+      revalidatePath('/pipeline-status');
+      redirect(
+        `/pipeline-status?run_status=${encodeURIComponent(
+          result.status
+        )}&run_source=${encodeURIComponent(result.sourceLabel)}&run_window=${encodeURIComponent(
+          `${result.window.from} -> ${result.window.to}`
+        )}&run_summary=${encodeURIComponent(result.summary)}`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Manual run failed.';
+      revalidatePath('/pipeline-status');
+      redirect(
+        `/pipeline-status?run_status=error&run_source=${encodeURIComponent(
+          sourceType
+        )}&run_summary=${encodeURIComponent(message)}`
+      );
+    }
+  };
+
   const { rows, batchSummary } = await getPipelineStatus();
   const totalSources = rows.length;
   const implementedSources = rows.filter(
@@ -83,6 +145,31 @@ export default async function PipelineStatusPage() {
           </Link>
         </div>
       </section>
+
+      {runStatus ? (
+        <section
+          className={`rounded-2xl border p-4 shadow-sm ${
+            runStatus === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : runStatus === 'pending'
+                ? 'border-amber-200 bg-amber-50 text-amber-900'
+                : 'border-rose-200 bg-rose-50 text-rose-900'
+          }`}
+        >
+          <div className="text-sm font-semibold">
+            {runStatus === 'success'
+              ? 'Manual run started successfully'
+              : runStatus === 'pending'
+                ? 'Manual run resumed and is still pending'
+                : 'Manual run failed'}
+          </div>
+          <div className="mt-1 text-sm">
+            {runSource || 'Source group'}
+            {runWindow ? ` • ${runWindow}` : ''}
+          </div>
+          {runSummary ? <div className="mt-2 text-sm">{runSummary}</div> : null}
+        </section>
+      ) : null}
 
       {batchSummary ? (
         <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
@@ -187,6 +274,9 @@ export default async function PipelineStatusPage() {
                 <th className="sticky top-0 z-10 w-[12rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   retry_after_at
                 </th>
+                <th className="sticky top-0 z-10 w-[10rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
+                  Manual run
+                </th>
                 <th className="sticky top-0 z-10 w-[18rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Next action
                 </th>
@@ -278,6 +368,25 @@ export default async function PipelineStatusPage() {
                     <div className="max-w-[12rem] break-words">
                       {formatValue(row.retryAfterAt)}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 align-top text-muted">
+                    {supportsPipelineManualRun(row.sourceType) ? (
+                      <form action={runSourceGroup}>
+                        <input type="hidden" name="source_type" value={row.sourceType} />
+                        <button
+                          type="submit"
+                          className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={!process.env.ENABLE_BULKGEN_SPAWN || undefined}
+                        >
+                          {row.activePendingCount > 0 ? 'Resume run' : 'Run now'}
+                        </button>
+                        {!process.env.ENABLE_BULKGEN_SPAWN ? (
+                          <div className="mt-1 text-xs text-muted">Spawn disabled</div>
+                        ) : null}
+                      </form>
+                    ) : (
+                      '—'
+                    )}
                   </td>
                   <td className="px-4 py-3 align-top text-muted">
                     <div
