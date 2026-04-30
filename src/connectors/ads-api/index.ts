@@ -112,6 +112,30 @@ export {
   writeSpPlacementDailyArtifacts,
 } from './spPlacementDaily';
 export {
+  ADS_API_SP_SEARCH_TERM_DAILY_DIAGNOSTIC_ARTIFACT_PATH,
+  ADS_API_SP_SEARCH_TERM_DAILY_NORMALIZED_ARTIFACT_PATH,
+  ADS_API_SP_SEARCH_TERM_DAILY_RAW_ARTIFACT_PATH,
+  DEFAULT_SP_SEARCH_TERM_DAILY_MAX_ATTEMPTS,
+  DEFAULT_SP_SEARCH_TERM_DAILY_POLL_INTERVAL_MS,
+  MAX_SP_SEARCH_TERM_DAILY_WINDOW_DAYS,
+  POLLABLE_SP_SEARCH_TERM_DAILY_STATUSES,
+  TERMINAL_SP_SEARCH_TERM_DAILY_FAILURE_STATUSES,
+  TERMINAL_SP_SEARCH_TERM_DAILY_SUCCESS_STATUSES,
+  buildSpSearchTermDailyCreateRequest,
+  buildSpSearchTermDailyCreateRequestBody,
+  buildSpSearchTermDailyNormalizedArtifact,
+  buildSpSearchTermDailyRawArtifact,
+  downloadSpSearchTermDailyReport,
+  normalizeSpSearchTermDailyRows,
+  parseSpSearchTermDailyDownloadedRows,
+  parseSpSearchTermDailyReportMetadata,
+  requestSpSearchTermDailyReport,
+  runSpSearchTermDailyPull,
+  type SpSearchTermDailyPendingRequestStore,
+  validateProfileSyncArtifactForSpSearchTermDaily,
+  writeSpSearchTermDailyArtifacts,
+} from './spSearchTermDaily';
+export {
   ADS_API_SP_ADVERTISED_PRODUCT_DAILY_DIAGNOSTIC_ARTIFACT_PATH,
   ADS_API_SP_ADVERTISED_PRODUCT_DAILY_NORMALIZED_ARTIFACT_PATH,
   ADS_API_SP_ADVERTISED_PRODUCT_DAILY_RAW_ARTIFACT_PATH,
@@ -168,6 +192,13 @@ export {
   writePlacementIngestGateWorkbook,
 } from './placementIngestGate';
 export {
+  ADS_API_SP_SEARCH_TERM_INGEST_GATE_TEMP_CSV_PATH,
+  buildSearchTermIngestGateCsv,
+  loadAdsSearchTermIngestGateArtifact,
+  runAdsApiSearchTermIngestGate,
+  writeSearchTermIngestGateCsv,
+} from './searchTermIngestGate';
+export {
   ADS_API_SP_ADVERTISED_PRODUCT_INGEST_GATE_TEMP_XLSX_PATH,
   buildAdvertisedProductIngestGateWorkbook,
   loadAdsAdvertisedProductIngestGateArtifact,
@@ -176,6 +207,7 @@ export {
 } from './advertisedProductIngestGate';
 export { loadLocalEnvFiles } from './loadLocalEnv';
 export {
+  AdsApiSearchTermIngestGateError,
   AdsApiAdvertisedProductIngestGateError,
   AdsApiCampaignIngestGateError,
   AdsApiAuthError,
@@ -185,6 +217,7 @@ export {
   AdsApiSpCampaignDailyError,
   AdsApiSpAdvertisedProductDailyError,
   AdsApiSpPlacementDailyError,
+  AdsApiSpSearchTermDailyError,
   AdsApiSpTargetDailyError,
   AdsApiTargetIngestGateError,
   AdsApiProfilesError,
@@ -216,6 +249,12 @@ export {
   type AdsApiSpCampaignDailyRawArtifact,
   type AdsApiSpCampaignDailyRawPayload,
   type AdsApiSpCampaignDailyReportMetadata,
+  type AdsApiSpSearchTermDailyCreateRequest,
+  type AdsApiSpSearchTermDailyNormalizedArtifact,
+  type AdsApiSpSearchTermDailyNormalizedRow,
+  type AdsApiSpSearchTermDailyRawArtifact,
+  type AdsApiSpSearchTermDailyRawPayload,
+  type AdsApiSpSearchTermDailyReportMetadata,
   type AdsApiSpAdvertisedProductDailyCreateRequest,
   type AdsApiSpAdvertisedProductDailyNormalizedArtifact,
   type AdsApiSpAdvertisedProductDailyNormalizedRow,
@@ -236,6 +275,8 @@ export {
   type AdsApiSpTargetDailyRawPayload,
   type AdsApiSpTargetDailyReportMetadata,
   type AdsApiTokenResponsePayload,
+  type AdsApiSearchTermIngestGateResult,
+  type AdsApiSearchTermIngestGateSinkSummary,
   type AdsApiTargetIngestGateResult,
   type AdsApiTargetIngestGateSinkSummary,
   type AdsApiTokenResult,

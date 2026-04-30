@@ -139,6 +139,46 @@ export type SpStisDailyFactRow = SpStisRawRow & {
 export type SpStisFactRow = SpStisDailyFactRow;
 export type SpStisAutoTargetBridge = Map<string, string[]>;
 
+export type SpSearchTermRawRow = {
+  date: string;
+  portfolio_name_raw: string | null;
+  portfolio_name_norm: string | null;
+  campaign_name_raw: string;
+  campaign_name_norm: string;
+  ad_group_name_raw: string;
+  ad_group_name_norm: string;
+  targeting_raw: string;
+  targeting_norm: string;
+  match_type_raw: string | null;
+  match_type_norm: string | null;
+  keyword_type: string | null;
+  target_status: string | null;
+  search_term_raw: string;
+  search_term_norm: string;
+  impressions: number | null;
+  clicks: number | null;
+  spend: number | null;
+  sales: number | null;
+  orders: number | null;
+  units: number | null;
+  cpc: number | null;
+  ctr: number | null;
+  acos: number | null;
+  roas: number | null;
+  conversion_rate: number | null;
+};
+
+export type SpSearchTermDailyFactRow = SpSearchTermRawRow & {
+  upload_id: string;
+  account_id: string;
+  campaign_id: string;
+  ad_group_id: string;
+  target_id: string | null;
+  target_key: string;
+  exported_at: string;
+};
+export type SpSearchTermFactRow = SpSearchTermDailyFactRow;
+
 export type SpAdvertisedProductRawRow = {
   date: string;
   campaign_id: string;
@@ -646,6 +686,191 @@ export function mapSpStisRows(params: {
       customer_search_term_norm: row.customer_search_term_norm,
       search_term_impression_rank: row.search_term_impression_rank,
       search_term_impression_share: row.search_term_impression_share,
+      impressions: row.impressions,
+      clicks: row.clicks,
+      spend: row.spend,
+      sales: row.sales,
+      orders: row.orders,
+      units: row.units,
+      cpc: row.cpc,
+      ctr: row.ctr,
+      acos: row.acos,
+      roas: row.roas,
+      conversion_rate: row.conversion_rate,
+      campaign_id: campaignResult.id,
+      ad_group_id: adGroupResult.id,
+      target_id: targetId,
+      target_key: targetId ?? targetKeySignature,
+      exported_at: exportedAt,
+    });
+  }
+
+  for (const pending of pendingCampaignIssues) {
+    if (resolvedCampaignKeys.has(pending.key)) continue;
+    collector.addIssue(pending.issue);
+  }
+  for (const pending of pendingAdGroupIssues) {
+    if (resolvedAdGroupKeys.has(pending.key)) continue;
+    collector.addIssue(pending.issue);
+  }
+  for (const pending of pendingTargetIssues) {
+    if (resolvedTargetKeys.has(pending.key)) continue;
+    collector.addIssue(pending.issue);
+  }
+
+  return { facts, issues: collector.list() };
+}
+
+export function mapSpSearchTermRows(params: {
+  rows: SpSearchTermRawRow[];
+  lookup: BulkLookup;
+  uploadId: string;
+  accountId: string;
+  exportedAt: string;
+  referenceDate: string;
+  autoTargetBridge?: SpStisAutoTargetBridge;
+}): { facts: SpSearchTermFactRow[]; issues: MappingIssue[] } {
+  const {
+    rows,
+    lookup,
+    uploadId,
+    accountId,
+    exportedAt,
+    referenceDate,
+    autoTargetBridge,
+  } = params;
+  const facts: SpSearchTermFactRow[] = [];
+  const collector = createIssueCollector();
+  const resolvedCampaignKeys = new Set<string>();
+  const resolvedAdGroupKeys = new Set<string>();
+  const resolvedTargetKeys = new Set<string>();
+  const pendingCampaignIssues: { key: string; issue: PendingIssue }[] = [];
+  const pendingAdGroupIssues: { key: string; issue: PendingIssue }[] = [];
+  const pendingTargetIssues: { key: string; issue: PendingIssue }[] = [];
+
+  for (const row of rows) {
+    const hasSearchTerm = !!row.search_term_norm && row.search_term_norm.trim() !== "";
+    const campaignKey = JSON.stringify(issueKeyBase(row));
+    const campaignResult = resolveCampaignId({
+      campaignNameNorm: row.campaign_name_norm,
+      portfolioNameNorm: row.portfolio_name_norm,
+      referenceDate,
+      lookup,
+    });
+
+    if (campaignResult.status !== "ok") {
+      pendingCampaignIssues.push({
+        key: campaignKey,
+        issue: {
+          entity_level: "campaign",
+          issue_type: campaignResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+          key_json: issueKeyBase(row),
+          candidates_json: campaignResult.status === "ambiguous" ? campaignResult.candidates : null,
+        },
+      });
+      continue;
+    }
+
+    resolvedCampaignKeys.add(campaignKey);
+    const adGroupKeyObj = {
+      ...issueKeyBase(row),
+      ad_group_name_norm: row.ad_group_name_norm,
+    };
+    const adGroupKey = JSON.stringify(adGroupKeyObj);
+    const adGroupResult = resolveAdGroupId({
+      campaignId: campaignResult.id,
+      adGroupNameNorm: row.ad_group_name_norm,
+      referenceDate,
+      lookup,
+    });
+
+    if (adGroupResult.status !== "ok") {
+      pendingAdGroupIssues.push({
+        key: adGroupKey,
+        issue: {
+          entity_level: "ad_group",
+          issue_type: adGroupResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+          key_json: adGroupKeyObj,
+          candidates_json: adGroupResult.status === "ambiguous" ? adGroupResult.candidates : null,
+        },
+      });
+      continue;
+    }
+
+    resolvedAdGroupKeys.add(adGroupKey);
+    const targetKeySignature = JSON.stringify({
+      ...issueKeyBase(row),
+      ad_group_name_norm: row.ad_group_name_norm,
+      targeting_norm: row.targeting_norm,
+      match_type_norm: row.match_type_norm,
+      is_negative: inferIsNegative(row.match_type_raw),
+    });
+    let targetId: string | null = null;
+    if (row.targeting_norm.trim() !== "*") {
+      const targetResult = resolveTargetId({
+        adGroupId: adGroupResult.id,
+        expressionNorm: row.targeting_norm,
+        matchTypeNorm: row.match_type_norm,
+        matchTypeRaw: row.match_type_raw,
+        isNegative: inferIsNegative(row.match_type_raw),
+        referenceDate,
+        lookup,
+      });
+
+      if (targetResult.status !== "ok") {
+        if (!hasSearchTerm) {
+          const targetKeyObj = {
+            ...issueKeyBase(row),
+            ad_group_name_norm: row.ad_group_name_norm,
+            targeting_norm: row.targeting_norm,
+            match_type_norm: row.match_type_norm,
+            is_negative: inferIsNegative(row.match_type_raw),
+          };
+          pendingTargetIssues.push({
+            key: JSON.stringify(targetKeyObj),
+            issue: {
+              entity_level: "target",
+              issue_type: targetResult.status === "ambiguous" ? "ambiguous" : "unmapped",
+              key_json: targetKeyObj,
+              candidates_json: targetResult.status === "ambiguous" ? targetResult.candidates : null,
+            },
+          });
+          continue;
+        }
+      } else {
+        targetId = targetResult.id;
+        resolvedTargetKeys.add(targetKeySignature);
+      }
+    } else {
+      const bridgeKey = buildSpStisAutoTargetBridgeKey({
+        date: row.date,
+        campaignId: campaignResult.id,
+        adGroupId: adGroupResult.id,
+      });
+      const candidates = autoTargetBridge?.get(bridgeKey) ?? [];
+      if (candidates.length === 1) {
+        targetId = candidates[0] ?? null;
+      }
+    }
+
+    facts.push({
+      upload_id: uploadId,
+      account_id: accountId,
+      date: row.date,
+      portfolio_name_raw: row.portfolio_name_raw,
+      portfolio_name_norm: row.portfolio_name_norm,
+      campaign_name_raw: row.campaign_name_raw,
+      campaign_name_norm: row.campaign_name_norm,
+      ad_group_name_raw: row.ad_group_name_raw,
+      ad_group_name_norm: row.ad_group_name_norm,
+      targeting_raw: row.targeting_raw,
+      targeting_norm: row.targeting_norm,
+      match_type_raw: row.match_type_raw,
+      match_type_norm: row.match_type_norm,
+      keyword_type: row.keyword_type,
+      target_status: row.target_status,
+      search_term_raw: row.search_term_raw,
+      search_term_norm: row.search_term_norm,
       impressions: row.impressions,
       clicks: row.clicks,
       spend: row.spend,

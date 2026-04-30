@@ -514,6 +514,131 @@ export type AdsApiSpAdvertisedProductDailyCreateRequest = {
   };
 };
 
+export type AdsApiSpSearchTermDailyCreateRequest = {
+  name: string;
+  startDate: string;
+  endDate: string;
+  configuration: {
+    adProduct: 'SPONSORED_PRODUCTS';
+    groupBy: ['searchTerm'];
+    columns: string[];
+    reportTypeId: 'spSearchTerm';
+    timeUnit: 'DAILY';
+    format: 'GZIP_JSON';
+  };
+};
+
+export type AdsApiSpSearchTermDailyReportMetadata = {
+  reportId: string;
+  status: string | null;
+  statusDetails: string | null;
+  location: string | null;
+  fileSize: number | null;
+};
+
+export type AdsApiSpSearchTermDailyRawPayload = {
+  format: 'json' | 'csv';
+  rows: Array<Record<string, unknown>>;
+};
+
+export type AdsApiSpSearchTermDailyRawArtifact = {
+  schemaVersion: 'ads-api-sp-search-term-daily-raw/v1';
+  generatedAt: string;
+  appAccountId: string;
+  appMarketplace: string;
+  adsApiBaseUrl: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  reportMetadata: Omit<AdsApiSpSearchTermDailyReportMetadata, 'location'> & {
+    downloadUrlPresent: boolean;
+  };
+  rawRowsPayload: AdsApiSpSearchTermDailyRawPayload;
+};
+
+export type AdsApiSpSearchTermDailyNormalizedRow = {
+  appAccountId: string;
+  appMarketplace: string;
+  profileId: string;
+  campaignId: string;
+  campaignName: string;
+  campaignStatus: string | null;
+  adGroupId: string;
+  adGroupName: string;
+  targetId: string | null;
+  targetingExpression: string;
+  matchType: string | null;
+  keywordType: string | null;
+  targetStatus: string | null;
+  searchTerm: string;
+  date: string;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  costPerClick: number | null;
+  clickThroughRate: number | null;
+  attributedSales14d: number;
+  attributedConversions14d: number;
+  attributedUnitsOrdered14d: number;
+  roasClicks14d: number | null;
+  acosClicks14d: number | null;
+  purchaseClickRate14d: number | null;
+  currencyCode: string | null;
+};
+
+export type AdsApiSpSearchTermDailyNormalizedArtifact = {
+  schemaVersion: 'ads-api-sp-search-term-daily-normalized/v1';
+  generatedAt: string;
+  appAccountId: string;
+  appMarketplace: string;
+  adsApiBaseUrl: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  rowCount: number;
+  normalizedSearchTermRows: AdsApiSpSearchTermDailyNormalizedRow[];
+};
+
+export class AdsApiSpSearchTermDailyError extends Error {
+  readonly code:
+    | 'invalid_date'
+    | 'profile_sync_artifact_missing'
+    | 'profile_sync_artifact_invalid'
+    | 'profile_sync_artifact_mismatch'
+    | 'pending_report_not_found'
+    | 'transport_error'
+    | 'report_request_failed'
+    | 'invalid_response'
+    | 'report_timeout'
+    | 'pending_timeout'
+    | 'report_failed'
+    | 'download_failed';
+  readonly status?: number;
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'invalid_date'
+      | 'profile_sync_artifact_missing'
+      | 'profile_sync_artifact_invalid'
+      | 'profile_sync_artifact_mismatch'
+      | 'pending_report_not_found'
+      | 'transport_error'
+      | 'report_request_failed'
+      | 'invalid_response'
+      | 'report_timeout'
+      | 'pending_timeout'
+      | 'report_failed'
+      | 'download_failed',
+    message: string,
+    options: { status?: number; details?: unknown } = {}
+  ) {
+    super(message);
+    this.name = 'AdsApiSpSearchTermDailyError';
+    this.code = code;
+    this.status = options.status;
+    this.details = options.details;
+  }
+}
+
 export type AdsApiSpAdvertisedProductDailyReportMetadata = {
   reportId: string;
   status: string | null;
@@ -924,6 +1049,53 @@ export class AdsApiAdvertisedProductIngestGateError extends Error {
   ) {
     super(message);
     this.name = 'AdsApiAdvertisedProductIngestGateError';
+    this.code = code;
+    this.details = options.details;
+  }
+}
+
+export type AdsApiSearchTermIngestGateSinkSummary = {
+  ingestStatus: 'ok' | 'already ingested';
+  mapStatus: 'ok' | 'missing_snapshot';
+  uploadId: string;
+  rawRowCount: number | null;
+  factRows: number;
+  issueRows: number;
+  coverageStart: string | null;
+  coverageEnd: string | null;
+  tempCsvPath: string;
+};
+
+export type AdsApiSearchTermIngestGateResult = {
+  appAccountId: string;
+  appMarketplace: string;
+  profileId: string;
+  requestedDateRange: AdsApiDateRange;
+  searchTermRowCount: number;
+  sinkResult: AdsApiSearchTermIngestGateSinkSummary;
+};
+
+export class AdsApiSearchTermIngestGateError extends Error {
+  readonly code:
+    | 'artifact_missing'
+    | 'artifact_invalid'
+    | 'artifact_mismatch'
+    | 'invalid_rows'
+    | 'sink_failed';
+  readonly details?: unknown;
+
+  constructor(
+    code:
+      | 'artifact_missing'
+      | 'artifact_invalid'
+      | 'artifact_mismatch'
+      | 'invalid_rows'
+      | 'sink_failed',
+    message: string,
+    options: { details?: unknown } = {}
+  ) {
+    super(message);
+    this.name = 'AdsApiSearchTermIngestGateError';
     this.code = code;
     this.details = options.details;
   }

@@ -41,6 +41,11 @@ const IMPLEMENTED_LOOP_SOURCES = [
     tableName: 'sp_advertised_product_daily_fact',
     label: 'SP advertised product daily',
   },
+  {
+    sourceType: 'ads_api_sp_search_term_daily',
+    tableName: 'sp_search_term_daily_fact',
+    label: 'SP search term daily',
+  },
 ] as const;
 
 const WARN_ONLY_NOT_IMPLEMENTED = [

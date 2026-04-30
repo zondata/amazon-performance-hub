@@ -30,6 +30,11 @@ export const ADS_PENDING_IMPORT_TARGETS = {
     importedNote:
       'Imported into sp_advertised_product_daily_fact by the V3 Ads sync batch.',
   },
+  ads_api_sp_search_term_daily: {
+    tableName: 'sp_search_term_daily_fact',
+    importedNote:
+      'Imported into sp_search_term_daily_fact by the V3 Ads sync batch.',
+  },
 } as const;
 export const ACTIVE_PENDING_REQUEST_STATUSES = [
   'created',

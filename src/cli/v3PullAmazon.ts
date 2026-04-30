@@ -133,6 +133,7 @@ type AdsCoverageSourceKey =
   | 'sp_campaign_hourly'
   | 'sp_targeting_daily'
   | 'sp_placement_daily'
+  | 'sp_search_term_daily'
   | 'sp_advertised_product_daily';
 
 type AdsCoverageDescriptor = {
@@ -146,6 +147,7 @@ const ADS_IMPLEMENTED_COVERAGE_TABLES = new Set([
   'sp_campaign_hourly',
   'sp_targeting_daily',
   'sp_placement_daily',
+  'sp_search_term_daily',
   'sp_advertised_product_daily',
 ]);
 
@@ -177,6 +179,15 @@ const ADS_COVERAGE_DESCRIPTORS: Record<AdsCoverageSourceKey, AdsCoverageDescript
     relevantSteps: [
       'adsapi:pull-sp-placement-daily',
       'adsapi:ingest-sp-placement-daily',
+    ],
+  },
+  sp_search_term_daily: {
+    sourceName: 'sp_search_term_daily',
+    label: 'SP Search Term Daily',
+    successStep: 'adsapi:ingest-sp-search-term-daily',
+    relevantSteps: [
+      'adsapi:pull-sp-search-term-daily',
+      'adsapi:ingest-sp-search-term-daily',
     ],
   },
   sp_advertised_product_daily: {
@@ -299,6 +310,18 @@ const COVERAGE_SPECS: CoverageSpec[] = [
     sourceType: 'ads_api_sp_advertised_product_daily',
     sourceName: 'sp_advertised_product_daily',
     tableName: 'sp_advertised_product_daily_fact',
+    granularity: 'daily',
+    periodStartExpr: 'date::timestamptz',
+    periodEndExpr: 'date::timestamptz',
+    expectedDelayHours: 72,
+    hasMarketplace: false,
+    tableStatusDefault: 'success',
+  },
+  {
+    source: 'ads',
+    sourceType: 'ads_api_sp_search_term_daily',
+    sourceName: 'sp_search_term_daily',
+    tableName: 'sp_search_term_daily_fact',
     granularity: 'daily',
     periodStartExpr: 'date::timestamptz',
     periodEndExpr: 'date::timestamptz',
@@ -615,6 +638,10 @@ const stepLabel = (name: string): string => {
       return 'SP Advertised Product Daily pull';
     case 'adsapi:ingest-sp-advertised-product-daily':
       return 'SP Advertised Product Daily ingest';
+    case 'adsapi:pull-sp-search-term-daily':
+      return 'SP Search Term Daily pull';
+    case 'adsapi:ingest-sp-search-term-daily':
+      return 'SP Search Term Daily ingest';
     default:
       return name;
   }
@@ -1195,6 +1222,9 @@ export const extractImportedAdsSourceTypesFromSteps = (
     if (step.name === 'adsapi:ingest-sp-advertised-product-daily') {
       imported.add('ads_api_sp_advertised_product_daily');
     }
+    if (step.name === 'adsapi:ingest-sp-search-term-daily') {
+      imported.add('ads_api_sp_search_term_daily');
+    }
   }
   return [...imported];
 };
@@ -1221,6 +1251,8 @@ const markAdsPendingRequestsImportedForSourceTypes = async (
             then 'Imported into sp_targeting_daily_fact by the V3 Ads sync batch.'
           when request.source_type = 'ads_api_sp_placement_daily'
             then 'Imported into sp_placement_daily_fact by the V3 Ads sync batch.'
+          when request.source_type = 'ads_api_sp_search_term_daily'
+            then 'Imported into sp_search_term_daily_fact by the V3 Ads sync batch.'
           else request.notes
         end,
         completed_at = coalesce(request.completed_at, now()),

@@ -12,12 +12,14 @@ import {
   mapSpCampaignRows,
   mapSpPlacementRows,
   mapSpAdvertisedProductRows,
+  mapSpSearchTermRows,
   mapSpTargetingRows,
   mapSpStisRows,
   SpStisAutoTargetBridge,
   SpAdvertisedProductRawRow,
   SpCampaignRawRow,
   SpPlacementRawRow,
+  SpSearchTermRawRow,
   SpTargetingRawRow,
   SpStisRawRow,
 } from "./mappers";
@@ -99,11 +101,13 @@ function getRawTableForReportType(
     | "sp_placement"
     | "sp_targeting"
     | "sp_stis"
+    | "sp_search_term"
     | "sp_advertised_product"
 ) {
   if (reportType === "sp_campaign") return "sp_campaign_daily_raw";
   if (reportType === "sp_placement") return "sp_placement_daily_raw";
   if (reportType === "sp_targeting") return "sp_targeting_daily_raw";
+  if (reportType === "sp_search_term") return "sp_search_term_daily_raw";
   if (reportType === "sp_advertised_product") return "sp_advertised_product_daily_fact";
   return "sp_stis_daily_raw";
 }
@@ -115,6 +119,7 @@ async function fetchDistinctCampaignNameNorms(
       | "sp_placement"
       | "sp_targeting"
       | "sp_stis"
+      | "sp_search_term"
       | "sp_advertised_product";
     uploadId: string;
     accountId: string;
@@ -194,6 +199,7 @@ async function pickBestBulkSnapshotForUpload(params: {
     | "sp_placement"
     | "sp_targeting"
     | "sp_stis"
+    | "sp_search_term"
     | "sp_advertised_product";
   exportedAtDate: string;
   exportedAt: string;
@@ -440,6 +446,7 @@ async function persistMapStatus(params: {
     | "sp_placement"
     | "sp_targeting"
     | "sp_stis"
+    | "sp_search_term"
     | "sp_advertised_product";
   mapStatus: "ok" | "missing_snapshot" | "error";
   factRows?: number | null;
@@ -778,6 +785,7 @@ export async function mapUpload(
     | "sp_placement"
     | "sp_targeting"
     | "sp_stis"
+    | "sp_search_term"
     | "sp_advertised_product"
 ) {
   const upload = await fetchUpload(uploadId);
@@ -942,6 +950,45 @@ export async function mapUpload(
         referenceDate,
       });
       await insertChunked("sp_targeting_daily_fact", facts);
+      await insertIssues(upload.account_id, uploadId, reportType, issues);
+      await persistMapStatus({
+        upload,
+        reportType,
+        mapStatus: "ok",
+        factRows: facts.length,
+        issueRows: issues.length,
+      });
+      return { status: "ok" as const, factRows: facts.length, issueRows: issues.length };
+    }
+
+    if (reportType === "sp_search_term") {
+      const rows = await fetchAllRows<SpSearchTermRawRow>(
+        "sp_search_term_daily_raw",
+        "date,portfolio_name_raw,portfolio_name_norm,campaign_name_raw,campaign_name_norm,ad_group_name_raw,ad_group_name_norm,targeting_raw,targeting_norm,match_type_raw,match_type_norm,keyword_type,target_status,search_term_raw,search_term_norm,impressions,clicks,spend,sales,orders,units,cpc,ctr,acos,roas,conversion_rate",
+        { upload_id: uploadId }
+      );
+      const autoTargetBridge = await fetchSpStisAutoTargetBridge({
+        accountId: upload.account_id,
+        coverageStart: upload.coverage_start,
+        coverageEnd: upload.coverage_end,
+        stisRows: rows.map((row) => ({
+          ...row,
+          customer_search_term_raw: row.search_term_raw,
+          customer_search_term_norm: row.search_term_norm,
+          search_term_impression_rank: null,
+          search_term_impression_share: null,
+        })),
+      });
+      const { facts, issues } = mapSpSearchTermRows({
+        rows,
+        lookup,
+        uploadId,
+        accountId: upload.account_id,
+        exportedAt,
+        referenceDate,
+        autoTargetBridge,
+      });
+      await insertChunked("sp_search_term_daily_fact", facts);
       await insertIssues(upload.account_id, uploadId, reportType, issues);
       await persistMapStatus({
         upload,

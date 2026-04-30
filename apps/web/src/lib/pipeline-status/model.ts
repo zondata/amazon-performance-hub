@@ -123,6 +123,13 @@ export const PIPELINE_STATUS_SPECS: PipelineStatusSpec[] = [
     pendingSourceType: 'ads_api_sp_advertised_product_daily',
   },
   {
+    sourceGroup: 'SP search term daily',
+    sourceType: 'ads_api_sp_search_term_daily',
+    targetTable: 'sp_search_term_daily_fact',
+    implementationStatus: 'implemented',
+    pendingSourceType: 'ads_api_sp_search_term_daily',
+  },
+  {
     sourceGroup: 'SB campaign daily',
     sourceType: 'ads_api_sb_campaign_daily',
     targetTable: 'sb_campaign_daily_fact_gold',
@@ -272,6 +279,8 @@ const technicalDetailsForRun = (
         ? 'adsapi:ingest-sp-target-daily'
         : spec.sourceType === 'ads_api_sp_placement_daily'
           ? 'adsapi:ingest-sp-placement-daily'
+          : spec.sourceType === 'ads_api_sp_search_term_daily'
+            ? 'adsapi:ingest-sp-search-term-daily'
           : spec.sourceType === 'ads_api_sp_advertised_product_daily'
             ? 'adsapi:ingest-sp-advertised-product-daily'
         : null;
