@@ -12,6 +12,7 @@ alter table uploads add constraint uploads_source_type_chk check (source_type in
   'sb_campaign_placement',
   'sb_keyword',
   'sb_stis',
+  'sb_attributed_purchases',
   'sd_campaign',
   'sd_advertised_product',
   'sd_targeting',
@@ -19,6 +20,7 @@ alter table uploads add constraint uploads_source_type_chk check (source_type in
   'sd_purchased_product',
   'si_sales_trend',
   'sqp',
+  'search_terms',
   'h10_keyword_tracker'
 ));
 
