@@ -26,4 +26,15 @@ describe('pipeline status UI wiring', () => {
     expect(source).toContain('Disabled');
     expect(source).toContain('row.implementationStatus === \'implemented\'');
   });
+
+  it('gates manual run buttons on backend availability and shows missing-config guidance', () => {
+    const source = fs.readFileSync(pagePath, 'utf-8');
+
+    expect(source).toContain('describePipelineManualRunBackend');
+    expect(source).toContain('supportsAnyPipelineManualRun()');
+    expect(source).toContain("Manual runs are not configured");
+    expect(source).toContain('Missing env vars:');
+    expect(source).toContain("Manual run backend is not configured.");
+    expect(source).toContain('Unavailable');
+  });
 });

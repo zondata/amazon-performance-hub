@@ -308,6 +308,51 @@ export const supportsAnyPipelineManualRun = (
   rawEnv: NodeJS.ProcessEnv = process.env
 ): boolean => hasGitHubDispatchConfig(rawEnv) || rawEnv.ENABLE_BULKGEN_SPAWN === '1';
 
+export const describePipelineManualRunBackend = (
+  rawEnv: NodeJS.ProcessEnv = process.env
+):
+  | {
+      available: true;
+      backend: 'github_actions' | 'local_spawn';
+      missingEnvKeys: [];
+    }
+  | {
+      available: false;
+      backend: null;
+      missingEnvKeys: string[];
+    } => {
+  if (hasGitHubDispatchConfig(rawEnv)) {
+    return {
+      available: true,
+      backend: 'github_actions',
+      missingEnvKeys: [],
+    };
+  }
+
+  if (rawEnv.ENABLE_BULKGEN_SPAWN === '1') {
+    return {
+      available: true,
+      backend: 'local_spawn',
+      missingEnvKeys: [],
+    };
+  }
+
+  const missingEnvKeys = [
+    'GITHUB_ACTIONS_DISPATCH_TOKEN',
+    'GITHUB_ACTIONS_REPO_OWNER',
+    'GITHUB_ACTIONS_REPO_NAME',
+  ].filter((key) => {
+    const value = rawEnv[key];
+    return typeof value !== 'string' || value.trim().length === 0;
+  });
+
+  return {
+    available: false,
+    backend: null,
+    missingEnvKeys,
+  };
+};
+
 const getGitHubDispatchConfig = async (): Promise<GitHubDispatchConfig | null> => {
   const { env } = await import('@/lib/env');
   if (

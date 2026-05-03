@@ -5,7 +5,9 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error';
 
 import { getPipelineStatus } from '@/lib/pipeline-status/getPipelineStatus';
 import {
+  describePipelineManualRunBackend,
   runPipelineManualSource,
+  supportsAnyPipelineManualRun,
   supportsPipelineManualRun,
 } from '@/lib/pipeline-status/manualRun';
 
@@ -129,6 +131,8 @@ export default async function PipelineStatusPage({
   };
 
   const { rows, batchSummary } = await getPipelineStatus();
+  const manualRunBackend = describePipelineManualRunBackend();
+  const manualRunEnabled = supportsAnyPipelineManualRun();
   const totalSources = rows.length;
   const implementedSources = rows.filter(
     (row) => row.implementationStatus === 'implemented'
@@ -215,6 +219,20 @@ export default async function PipelineStatusPage({
               </pre>
             </details>
           ) : null}
+        </section>
+      ) : null}
+
+      {!manualRunBackend.available ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm">
+          <div className="text-sm font-semibold">Manual runs are not configured</div>
+          <p className="mt-1 text-sm">
+            Pipeline Summary can only launch runs when a manual-run backend is configured.
+            Add GitHub dispatch env vars on Vercel, or enable local spawn for local-only
+            testing.
+          </p>
+          <p className="mt-2 text-sm">
+            Missing env vars: {manualRunBackend.missingEnvKeys.join(', ')}
+          </p>
         </section>
       ) : null}
 
@@ -321,7 +339,8 @@ export default async function PipelineStatusPage({
                   </td>
                   <td className="px-4 py-3 align-top text-muted">
                     {row.implementationStatus === 'implemented' &&
-                    supportsPipelineManualRun(row.sourceType) ? (
+                    supportsPipelineManualRun(row.sourceType) &&
+                    manualRunEnabled ? (
                       <form action={runSourceGroup}>
                         <input type="hidden" name="source_type" value={row.sourceType} />
                         <button
@@ -336,9 +355,17 @@ export default async function PipelineStatusPage({
                         type="button"
                         className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs font-semibold text-muted disabled:cursor-not-allowed disabled:opacity-80"
                         disabled
-                        title="Manual source run is not wired yet."
+                        title={
+                          row.implementationStatus === 'implemented' &&
+                          supportsPipelineManualRun(row.sourceType)
+                            ? 'Manual run backend is not configured.'
+                            : 'Manual source run is not wired yet.'
+                        }
                       >
-                        Disabled
+                        {row.implementationStatus === 'implemented' &&
+                        supportsPipelineManualRun(row.sourceType)
+                          ? 'Unavailable'
+                          : 'Disabled'}
                       </button>
                     )}
                   </td>
