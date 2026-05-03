@@ -51,6 +51,13 @@ jobs:
           node-version: '22'
           cache: npm
 
+      - name: Print workflow ref diagnostics
+        run: |
+          echo "Workflow: ${{ github.workflow }}"
+          echo "GitHub ref: ${{ github.ref }}"
+          echo "GitHub ref name: ${{ github.ref_name }}"
+          echo "GitHub SHA: ${{ github.sha }}"
+
       - run: npm ci
 
       - run: npm run build

@@ -222,9 +222,15 @@ const readCoverageRows = async (
       from public.data_coverage_status
       where account_id = $1
         and marketplace = $2
-        and table_name = any($3::text[])
+        and source_type = any($3::text[])
+        and table_name = any($4::text[])
     `,
-    [args.accountId, args.marketplace, IMPLEMENTED_LOOP_SOURCES.map((row) => row.tableName)]
+    [
+      args.accountId,
+      args.marketplace,
+      IMPLEMENTED_LOOP_SOURCES.map((row) => row.sourceType),
+      IMPLEMENTED_LOOP_SOURCES.map((row) => row.tableName),
+    ]
   );
 
   return result.rows.map((row) => ({
@@ -317,11 +323,11 @@ export const evaluateAdsLoopVerification = (args: {
     );
   }
 
-  const coverageByTable = new Map(
-    args.coverageRows.map((row) => [row.tableName, row] as const)
+  const coverageBySourceType = new Map(
+    args.coverageRows.map((row) => [row.sourceType, row] as const)
   );
   const implementedCoverage = IMPLEMENTED_LOOP_SOURCES.map((source) => {
-    const coverage = coverageByTable.get(source.tableName) ?? null;
+    const coverage = coverageBySourceType.get(source.sourceType) ?? null;
     const hasActiveRecovery = health.activeRows.some(
       (row) => row.sourceType === source.sourceType
     );
