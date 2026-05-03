@@ -311,6 +311,23 @@ describe('classifyRetailPendingFailure', () => {
   });
 });
 
+describe('sales warehouse write wiring', () => {
+  it('routes successful sales syncs through the retail warehouse ingest path', () => {
+    const source = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/cli/v3PullAmazon.ts'),
+      'utf8'
+    );
+
+    expect(source).toContain('runFirstSalesTrafficRetailIngest');
+    expect(source).toContain('new PostgresIngestionJobRepository(pool)');
+    expect(source).toContain('new PostgresFirstSalesTrafficWarehouseSink(pool)');
+    expect(source).toContain('warehouseReadyArtifactPath');
+    expect(source).toContain('insert into public.amazon_sales_traffic_timeseries');
+    expect(source).toContain("target_table: 'amazon_sales_traffic_timeseries'");
+    expect(source).toContain('Imported into amazon_sales_traffic_timeseries by the V3 retail sync batch.');
+  });
+});
+
 describe('v3ResumeAmazon helpers', () => {
   it('parses the pending-resume command and its max-age control', () => {
     const args = parseResumeAmazonArgs([

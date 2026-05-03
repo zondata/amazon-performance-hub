@@ -13,7 +13,12 @@ import {
   type DailyBatchGateRequest,
   type DailyBatchStepResult,
 } from '../ingestion/dailyBatchGate';
-import { createPostgresPool } from '../ingestion/postgresIngestionJobRepository';
+import {
+  PostgresIngestionJobRepository,
+  createPostgresPool,
+} from '../ingestion/postgresIngestionJobRepository';
+import { runFirstSalesTrafficRetailIngest } from '../ingestion/firstSalesTrafficRetailIngest';
+import { PostgresFirstSalesTrafficWarehouseSink } from '../warehouse';
 
 type PullSource = 'ads' | 'sales' | 'settings' | 'sqp';
 type PullMode = 'manual' | 'scheduled' | 'backfill' | 'gap-fill' | 'dry-run';
@@ -2184,11 +2189,358 @@ const runSalesSource = async (pool: Pool, options: CliOptions): Promise<{
     }
     throw error;
   }
-  if (typeof result.metadata.report_id === 'string' && result.metadata.report_id.trim()) {
+  const reportId =
+    typeof result.metadata.report_id === 'string' && result.metadata.report_id.trim()
+      ? result.metadata.report_id.trim()
+      : null;
+  const warehouseReadyArtifactPath =
+    typeof result.metadata.terminal_artifact === 'string' &&
+    result.metadata.terminal_artifact.trim()
+      ? result.metadata.terminal_artifact.trim()
+      : null;
+
+  if (!reportId || !warehouseReadyArtifactPath) {
+    throw new Error(
+      'Retail Sales & Traffic batch completed without report_id or warehouse-ready artifact path.'
+    );
+  }
+
+  const ingestResult = await runFirstSalesTrafficRetailIngest({
+    request: {
+      accountId: options.accountId,
+      marketplace: options.marketplace,
+      startDate: options.from,
+      endDate: options.to,
+      reportId,
+      warehouseReadyArtifactPath,
+      applySchema: false,
+    },
+    repository: new PostgresIngestionJobRepository(pool),
+    sink: new PostgresFirstSalesTrafficWarehouseSink(pool),
+  });
+
+  if (!ingestResult.ok || !ingestResult.writeSummary) {
+    throw new Error(
+      ingestResult.error?.message ??
+        'Retail Sales & Traffic warehouse write did not complete successfully.'
+    );
+  }
+
+  const promoteRetailReportIntoTimeseries = async (): Promise<number> => {
+    const byDateResult = await pool.query(
+      `
+        insert into public.amazon_sales_traffic_timeseries (
+          account_id,
+          marketplace,
+          ingestion_job_id,
+          source,
+          report_type,
+          report_id,
+          report_family,
+          granularity,
+          asin_granularity,
+          period_start,
+          period_end,
+          date,
+          ordered_product_sales,
+          ordered_product_sales_currency,
+          units_ordered,
+          total_order_items,
+          sessions,
+          page_views,
+          buy_box_percentage,
+          unit_session_percentage,
+          data_status,
+          is_final,
+          final_after_at,
+          finalized_at,
+          last_refreshed_at,
+          raw_json,
+          source_metadata,
+          canonical_record_id,
+          source_record_index,
+          exported_at,
+          ingested_at
+        )
+        select
+          r.account_id,
+          r.marketplace,
+          r.ingestion_job_id,
+          'sp-api-sales-and-traffic',
+          r.report_type,
+          r.report_id,
+          r.report_family,
+          'daily',
+          'date',
+          r.report_window_start,
+          r.report_window_end,
+          r.date,
+          r.ordered_product_sales_amount,
+          r.ordered_product_sales_currency,
+          r.units_ordered,
+          r.total_order_items,
+          r.sessions,
+          r.page_views,
+          r.buy_box_percentage,
+          r.unit_session_percentage,
+          case
+            when r.date <= current_date - 30 then 'final'
+            else 'preliminary'
+          end,
+          r.date <= current_date - 30,
+          (r.date::timestamptz + interval '30 days'),
+          case when r.date <= current_date - 30 then r.exported_at else null end,
+          r.ingested_at,
+          r.row_values,
+          r.source_metadata,
+          r.canonical_record_id,
+          r.source_record_index,
+          r.exported_at,
+          r.ingested_at
+        from (
+          select distinct on (
+            account_id,
+            marketplace,
+            report_type,
+            report_window_start,
+            report_window_end,
+            date
+          )
+            *
+          from public.spapi_sales_and_traffic_by_date_report_rows
+          where account_id = $1
+            and marketplace = $2
+            and report_id = $3
+          order by
+            account_id,
+            marketplace,
+            report_type,
+            report_window_start,
+            report_window_end,
+            date,
+            exported_at desc,
+            ingested_at desc,
+            report_id desc
+        ) r
+        on conflict (
+          account_id,
+          marketplace,
+          source,
+          report_type,
+          granularity,
+          asin_granularity,
+          period_start,
+          period_end,
+          date,
+          coalesce(asin, ''),
+          coalesce(sku, '')
+        )
+        do update set
+          ingestion_job_id = excluded.ingestion_job_id,
+          report_id = excluded.report_id,
+          report_family = excluded.report_family,
+          ordered_product_sales = excluded.ordered_product_sales,
+          ordered_product_sales_currency = excluded.ordered_product_sales_currency,
+          units_ordered = excluded.units_ordered,
+          total_order_items = excluded.total_order_items,
+          sessions = excluded.sessions,
+          page_views = excluded.page_views,
+          buy_box_percentage = excluded.buy_box_percentage,
+          unit_session_percentage = excluded.unit_session_percentage,
+          data_status = excluded.data_status,
+          is_final = excluded.is_final,
+          final_after_at = excluded.final_after_at,
+          finalized_at = excluded.finalized_at,
+          last_refreshed_at = excluded.last_refreshed_at,
+          raw_json = excluded.raw_json,
+          source_metadata = excluded.source_metadata,
+          canonical_record_id = excluded.canonical_record_id,
+          source_record_index = excluded.source_record_index,
+          exported_at = excluded.exported_at,
+          ingested_at = excluded.ingested_at
+      `,
+      [options.accountId, options.marketplace, reportId]
+    );
+
+    const byAsinResult = await pool.query(
+      `
+        insert into public.amazon_sales_traffic_timeseries (
+          account_id,
+          marketplace,
+          ingestion_job_id,
+          source,
+          report_type,
+          report_id,
+          report_family,
+          granularity,
+          asin_granularity,
+          period_start,
+          period_end,
+          date,
+          parent_asin,
+          child_asin,
+          asin,
+          sku,
+          ordered_product_sales,
+          ordered_product_sales_currency,
+          units_ordered,
+          total_order_items,
+          sessions,
+          page_views,
+          buy_box_percentage,
+          unit_session_percentage,
+          data_status,
+          is_final,
+          final_after_at,
+          finalized_at,
+          last_refreshed_at,
+          raw_json,
+          source_metadata,
+          canonical_record_id,
+          source_record_index,
+          exported_at,
+          ingested_at
+        )
+        select
+          r.account_id,
+          r.marketplace,
+          r.ingestion_job_id,
+          'sp-api-sales-and-traffic',
+          r.report_type,
+          r.report_id,
+          r.report_family,
+          'daily',
+          case
+            when r.sku is not null then 'sku'
+            when r.child_asin is not null then 'child_asin'
+            when r.parent_asin is not null then 'parent_asin'
+            else 'child_asin'
+          end,
+          r.report_window_start,
+          r.report_window_end,
+          coalesce(r.date, r.report_window_end),
+          r.parent_asin,
+          r.child_asin,
+          coalesce(r.asin, r.child_asin, r.parent_asin),
+          r.sku,
+          r.ordered_product_sales_amount,
+          r.ordered_product_sales_currency,
+          r.units_ordered,
+          r.total_order_items,
+          r.sessions,
+          r.page_views,
+          r.buy_box_percentage,
+          r.unit_session_percentage,
+          case
+            when coalesce(r.date, r.report_window_end) <= current_date - 30 then 'final'
+            else 'preliminary'
+          end,
+          coalesce(r.date, r.report_window_end) <= current_date - 30,
+          (coalesce(r.date, r.report_window_end)::timestamptz + interval '30 days'),
+          case
+            when coalesce(r.date, r.report_window_end) <= current_date - 30 then r.exported_at
+            else null
+          end,
+          r.ingested_at,
+          r.row_values,
+          r.source_metadata,
+          r.canonical_record_id,
+          r.source_record_index,
+          r.exported_at,
+          r.ingested_at
+        from (
+          select distinct on (
+            account_id,
+            marketplace,
+            report_type,
+            report_window_start,
+            report_window_end,
+            coalesce(date, report_window_end),
+            case
+              when sku is not null then 'sku'
+              when child_asin is not null then 'child_asin'
+              when parent_asin is not null then 'parent_asin'
+              else 'child_asin'
+            end,
+            coalesce(asin, child_asin, parent_asin, ''),
+            coalesce(sku, '')
+          )
+            *
+          from public.spapi_sales_and_traffic_by_asin_report_rows
+          where account_id = $1
+            and marketplace = $2
+            and report_id = $3
+          order by
+            account_id,
+            marketplace,
+            report_type,
+            report_window_start,
+            report_window_end,
+            coalesce(date, report_window_end),
+            case
+              when sku is not null then 'sku'
+              when child_asin is not null then 'child_asin'
+              when parent_asin is not null then 'parent_asin'
+              else 'child_asin'
+            end,
+            coalesce(asin, child_asin, parent_asin, ''),
+            coalesce(sku, ''),
+            exported_at desc,
+            ingested_at desc,
+            report_id desc
+        ) r
+        on conflict (
+          account_id,
+          marketplace,
+          source,
+          report_type,
+          granularity,
+          asin_granularity,
+          period_start,
+          period_end,
+          date,
+          coalesce(asin, ''),
+          coalesce(sku, '')
+        )
+        do update set
+          ingestion_job_id = excluded.ingestion_job_id,
+          report_id = excluded.report_id,
+          report_family = excluded.report_family,
+          parent_asin = excluded.parent_asin,
+          child_asin = excluded.child_asin,
+          ordered_product_sales = excluded.ordered_product_sales,
+          ordered_product_sales_currency = excluded.ordered_product_sales_currency,
+          units_ordered = excluded.units_ordered,
+          total_order_items = excluded.total_order_items,
+          sessions = excluded.sessions,
+          page_views = excluded.page_views,
+          buy_box_percentage = excluded.buy_box_percentage,
+          unit_session_percentage = excluded.unit_session_percentage,
+          data_status = excluded.data_status,
+          is_final = excluded.is_final,
+          final_after_at = excluded.final_after_at,
+          finalized_at = excluded.finalized_at,
+          last_refreshed_at = excluded.last_refreshed_at,
+          raw_json = excluded.raw_json,
+          source_metadata = excluded.source_metadata,
+          canonical_record_id = excluded.canonical_record_id,
+          source_record_index = excluded.source_record_index,
+          exported_at = excluded.exported_at,
+          ingested_at = excluded.ingested_at
+      `,
+      [options.accountId, options.marketplace, reportId]
+    );
+
+    return (byDateResult.rowCount ?? 0) + (byAsinResult.rowCount ?? 0);
+  };
+
+  const promotedRowCount = await promoteRetailReportIntoTimeseries();
+
+  if (reportId) {
     await upsertRetailPendingRequest({
       pool,
       options,
-      reportId: result.metadata.report_id.trim(),
+      reportId,
       status: 'imported',
       statusDetails: 'DONE',
       completedAt: new Date().toISOString(),
@@ -2200,16 +2552,28 @@ const runSalesSource = async (pool: Pool, options: CliOptions): Promise<{
   return {
     status: 'success',
     rowsRead: countStepRows(result.steps),
-    rowsWritten: result.rowCount,
+    rowsWritten: promotedRowCount,
     latestAvailableDate: options.to,
     missingRanges: [],
     blockers: [],
     warnings: [],
     notes: [],
     details: {
-      row_count: result.rowCount,
+      row_count: promotedRowCount,
       steps,
-      metadata: result.metadata,
+      metadata: {
+        ...result.metadata,
+        timeseries_promotion: {
+          promoted_row_count: promotedRowCount,
+          target_table: 'amazon_sales_traffic_timeseries',
+        },
+        warehouse_write_summary: ingestResult.writeSummary as unknown as JsonValue,
+        ingestion_job: {
+          id: ingestResult.job.id,
+          result: ingestResult.jobResult,
+          status: ingestResult.job.processing_status,
+        },
+      },
     },
   };
 };
