@@ -85,7 +85,31 @@ export interface DailyBatchGateOptions {
   createJobId?: () => string;
   realExecutorOptions?: {
     retailReportId?: string | null;
+    resumePendingReport?: boolean;
   };
+}
+
+interface RetailPendingCallbacks {
+  onRequested?: (args: {
+    reportId: string;
+    request: DailyBatchGateRequest;
+  }) => Promise<void>;
+  onPending?: (args: {
+    reportId: string;
+    request: DailyBatchGateRequest;
+    processingStatus: string | null;
+    reportDocumentId: string | null;
+  }) => Promise<void>;
+  onCompleted?: (args: {
+    reportId: string;
+    request: DailyBatchGateRequest;
+    reportDocumentId: string | null;
+  }) => Promise<void>;
+  onFailed?: (args: {
+    reportId: string;
+    request: DailyBatchGateRequest;
+    processingStatus: string | null;
+  }) => Promise<void>;
 }
 
 interface CommandResult {
@@ -167,7 +191,13 @@ const normalizeRequest = (request: DailyBatchGateRequest): DailyBatchGateRequest
     );
   }
 
-  return { accountId, marketplace, startDate, endDate };
+  return {
+    accountId,
+    marketplace,
+    startDate,
+    endDate,
+    resumePending: request.resumePending === true,
+  };
 };
 
 const scopeKey = (request: DailyBatchGateRequest): string =>
@@ -430,11 +460,21 @@ export const runRealRetailDailyBatch: DailyBatchSourceExecutor = async (
 
 export const runRealRetailDailyBatchWithOptions = async (
   request: DailyBatchGateRequest,
-  options: { retailReportId?: string | null }
+  options: {
+    retailReportId?: string | null;
+    resumePendingReport?: boolean;
+    pendingCallbacks?: RetailPendingCallbacks;
+  }
 ): Promise<DailyBatchSourceExecutionSuccess> => {
   const steps: DailyBatchStepResult[] = [];
   let reportId = options.retailReportId?.trim() ?? '';
-  const usingOperatorReportId = reportId.length > 0;
+  const reusingPendingReport =
+    reportId.length > 0 && options.resumePendingReport === true;
+  const usingOperatorReportId = reportId.length > 0 && !reusingPendingReport;
+  const isRetailPendingStatus = (status: string | null) =>
+    status === 'IN_PROGRESS' || status === 'IN_QUEUE';
+  const isRetailTerminalFailureStatus = (status: string | null) =>
+    status === 'CANCELLED' || status === 'FATAL' || status === 'DONE_NO_DATA';
 
   const recordStep = (name: string, result: CommandResult, extra: JsonObject = {}) => {
     steps.push(buildCommandStep(name, result, extra));
@@ -452,12 +492,15 @@ export const runRealRetailDailyBatchWithOptions = async (
         });
       }
       recordStep('spapi:first-report-request', requestResult, { report_id: reportId });
+      await options.pendingCallbacks?.onRequested?.({ reportId, request });
     } else {
       steps.push({
         name: 'spapi:first-report-request',
         status: 'skipped',
         summary: {
-          reason: 'operator_supplied_report_id',
+          reason: reusingPendingReport
+            ? 'reused_pending_report_id'
+            : 'operator_supplied_report_id',
           report_id: reportId,
         },
       });
@@ -490,18 +533,75 @@ export const runRealRetailDailyBatchWithOptions = async (
         statusResult.stdout,
         'Processing status'
       );
+      const reportDocumentId = parseLineValue(
+        statusResult.stdout,
+        'Report document ID'
+      );
       recordStep('spapi:poll-first-report', statusResult, {
+        report_id: reportId,
         processing_status: processingStatus,
-        report_document_id: parseLineValue(statusResult.stdout, 'Report document ID'),
+        report_document_id: reportDocumentId,
       });
 
-      if (processingStatus !== 'DONE') {
+      if (isRetailPendingStatus(processingStatus)) {
+        await options.pendingCallbacks?.onPending?.({
+          reportId,
+          request,
+          processingStatus,
+          reportDocumentId,
+        });
         throw new DailyBatchGateError({
-          code: 'retail_report_not_done',
-          message: `SP-API first report did not reach DONE. Status: ${processingStatus ?? 'unknown'}`,
+          code: 'retail_report_pending',
+          message: `SP-API first report is still pending. Status: ${processingStatus ?? 'unknown'}`,
+          metadata: {
+            report_id: reportId,
+            processing_status: processingStatus,
+            report_document_id: reportDocumentId,
+          },
           steps,
         });
       }
+
+      if (isRetailTerminalFailureStatus(processingStatus)) {
+        await options.pendingCallbacks?.onFailed?.({
+          reportId,
+          request,
+          processingStatus,
+        });
+        throw new DailyBatchGateError({
+          code: 'retail_report_failed',
+          message: `SP-API first report reached terminal status ${processingStatus ?? 'unknown'}.`,
+          metadata: {
+            report_id: reportId,
+            processing_status: processingStatus,
+            report_document_id: reportDocumentId,
+          },
+          steps,
+        });
+      }
+
+      if (processingStatus !== 'DONE') {
+        await options.pendingCallbacks?.onFailed?.({
+          reportId,
+          request,
+          processingStatus,
+        });
+        throw new DailyBatchGateError({
+          code: 'retail_report_not_done',
+          message: `SP-API first report did not reach DONE. Status: ${processingStatus ?? 'unknown'}`,
+          metadata: {
+            report_id: reportId,
+            processing_status: processingStatus,
+            report_document_id: reportDocumentId,
+          },
+          steps,
+        });
+      }
+      await options.pendingCallbacks?.onCompleted?.({
+        reportId,
+        request,
+        reportDocumentId,
+      });
 
       const documentResult = await runNpmScript(
         'spapi:get-first-report-document',
@@ -1204,6 +1304,7 @@ export async function runDailyBatchGate(
     ((gateRequest) =>
       runRealRetailDailyBatchWithOptions(gateRequest, {
         retailReportId: options.realExecutorOptions?.retailReportId,
+        resumePendingReport: options.realExecutorOptions?.resumePendingReport,
       }));
   const adsExecutor = options.adsExecutor ?? runRealAdsDailyBatch;
 

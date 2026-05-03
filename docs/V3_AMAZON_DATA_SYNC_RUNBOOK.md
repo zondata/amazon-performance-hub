@@ -4,6 +4,10 @@
 
 This runbook covers the Phase 9 manual and scheduled Amazon data pull system for V3.
 
+Deployment and branch policy:
+
+- `docs/DEPLOYMENT_BRANCH_AND_WORKFLOW_POLICY.md`
+
 ## WSL manual pull
 
 Run from the repo root:

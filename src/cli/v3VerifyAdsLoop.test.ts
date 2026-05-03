@@ -221,4 +221,76 @@ describe('evaluateAdsLoopVerification', () => {
     expect(result.status).toBe('FAIL');
     expect(result.failures.join(' ')).toContain('SP campaign daily coverage is not healthy');
   });
+
+  it('uses source-specific coverage rows instead of stale generic rows for the same table', () => {
+    const result = evaluateAdsLoopVerification({
+      nowIso,
+      lookbackHours: 36,
+      maxPendingAgeHours: 72,
+      pendingRows: [],
+      coverageRows: [
+        {
+          sourceType: 'ads_api',
+          tableName: 'sp_advertised_product_daily_fact',
+          lastStatus: 'blocked',
+          freshnessStatus: 'blocked',
+          latestPeriodEnd: '2026-04-04T00:00:00.000Z',
+          lastSuccessfulRunAt: null,
+          notes:
+            '[sp_advertised_product_daily] SP advertised product automation is not implemented by the current Ads API pullers.',
+        },
+        {
+          sourceType: 'ads_api_sp_advertised_product_daily',
+          tableName: 'sp_advertised_product_daily_fact',
+          lastStatus: 'success',
+          freshnessStatus: 'fresh',
+          latestPeriodEnd: '2026-04-29T00:00:00.000Z',
+          lastSuccessfulRunAt: '2026-04-29T11:05:00.000Z',
+          notes: '[sp_advertised_product_daily] SP Advertised Product Daily ingested successfully.',
+        },
+        {
+          sourceType: 'ads_api_sp_campaign_daily',
+          tableName: 'sp_campaign_hourly_fact_gold',
+          lastStatus: 'success',
+          freshnessStatus: 'fresh',
+          latestPeriodEnd: '2026-04-28T23:59:59.000Z',
+          lastSuccessfulRunAt: '2026-04-29T11:30:00.000Z',
+          notes: null,
+        },
+        {
+          sourceType: 'ads_api_sp_target_daily',
+          tableName: 'sp_targeting_daily_fact',
+          lastStatus: 'success',
+          freshnessStatus: 'fresh',
+          latestPeriodEnd: '2026-04-28T23:59:59.000Z',
+          lastSuccessfulRunAt: '2026-04-29T11:15:00.000Z',
+          notes: null,
+        },
+        {
+          sourceType: 'ads_api_sp_placement_daily',
+          tableName: 'sp_placement_daily_fact',
+          lastStatus: 'success',
+          freshnessStatus: 'fresh',
+          latestPeriodEnd: '2026-04-28T23:59:59.000Z',
+          lastSuccessfulRunAt: '2026-04-29T11:10:00.000Z',
+          notes: null,
+        },
+        {
+          sourceType: 'ads_api_sp_search_term_daily',
+          tableName: 'sp_search_term_daily_fact',
+          lastStatus: 'success',
+          freshnessStatus: 'fresh',
+          latestPeriodEnd: '2026-04-28T23:59:59.000Z',
+          lastSuccessfulRunAt: '2026-04-29T11:00:00.000Z',
+          notes: null,
+        },
+      ],
+    });
+
+    expect(result.failures.join(' ')).not.toContain('SP advertised product daily coverage is not healthy');
+    const advertisedCoverage = result.implementedCoverage.find(
+      (row) => row.sourceType === 'ads_api_sp_advertised_product_daily'
+    );
+    expect(advertisedCoverage?.coverageStatus).toBe('success/fresh');
+  });
 });

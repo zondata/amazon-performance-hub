@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   classifyAdsPendingFailure,
+  classifyRetailPendingFailure,
   deriveAdsImplementedCoverageResult,
   deriveCoverageSourceResult,
   extractImportedAdsSourceTypesFromSteps,
@@ -12,6 +13,7 @@ import {
 } from './v3PullAmazon';
 import {
   ACTIVE_PENDING_REQUEST_STATUSES,
+  ADS_PENDING_IMPORT_SOURCE_TYPES,
   classifyPendingRequestAge,
   classifyPendingRequestAgeByClock,
   parseResumeAmazonArgs,
@@ -143,8 +145,13 @@ describe('v3-amazon-data-sync workflow', () => {
     expect(workflow).toContain('workflow_dispatch:');
     expect(workflow).toContain('schedule:');
     expect(workflow).toContain('concurrency:');
+    expect(workflow).toContain('source_type:');
+    expect(workflow).toContain('resume_pending:');
     expect(workflow).toContain('npm run v3:resume:amazon --');
     expect(workflow).toContain('npm run v3:pull:amazon --');
+    expect(workflow).toContain('Run manual source group');
+    expect(workflow).toContain('adsapi:pull-sp-campaign-daily');
+    expect(workflow).toContain('adsapi:pull-sp-placement-daily');
     expect(workflow).toContain('--sources');
     expect(workflow).toContain('--resume-pending');
     expect(workflow).toContain("--soft-pending-exit");
@@ -265,6 +272,68 @@ describe('classifyAdsPendingFailure', () => {
   });
 });
 
+describe('classifyRetailPendingFailure', () => {
+  const buildBaseArgs = (mode: 'manual' | 'scheduled') =>
+    parseV3PullAmazonArgs([
+      '--account-id=sourbear',
+      '--marketplace=US',
+      '--from=2026-04-21',
+      '--to=2026-04-21',
+      '--sources=sales',
+      `--mode=${mode}`,
+    ]);
+
+  it('keeps manual retail runs blocked but recoverable when Amazon is still processing', () => {
+    const error = Object.assign(new Error('retail pending'), {
+      code: 'retail_report_pending',
+      metadata: {
+        report_id: 'retail-report-123',
+        processing_status: 'IN_PROGRESS',
+      },
+      steps: [],
+    });
+
+    const result = classifyRetailPendingFailure(error, buildBaseArgs('manual'));
+
+    expect(result?.status).toBe('blocked');
+    expect(result?.blockers[0]).toContain('retail-report-123');
+    expect(result?.notes.join(' ')).toContain('reuse the saved report id');
+  });
+
+  it('treats scheduled retail runs as pending instead of a hard failure', () => {
+    const error = Object.assign(new Error('retail pending'), {
+      code: 'retail_report_pending',
+      metadata: {
+        report_id: 'retail-report-123',
+        processing_status: 'IN_PROGRESS',
+      },
+      steps: [],
+    });
+
+    const result = classifyRetailPendingFailure(error, buildBaseArgs('scheduled'));
+
+    expect(result?.status).toBe('pending');
+    expect(result?.details.processing_status).toBe('IN_PROGRESS');
+  });
+});
+
+describe('sales warehouse write wiring', () => {
+  it('routes successful sales syncs through the retail warehouse ingest path', () => {
+    const source = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/cli/v3PullAmazon.ts'),
+      'utf8'
+    );
+
+    expect(source).toContain('runFirstSalesTrafficRetailIngest');
+    expect(source).toContain('new PostgresIngestionJobRepository(pool)');
+    expect(source).toContain('new PostgresFirstSalesTrafficWarehouseSink(pool)');
+    expect(source).toContain('warehouseReadyArtifactPath');
+    expect(source).toContain('insert into public.amazon_sales_traffic_timeseries');
+    expect(source).toContain("target_table: 'amazon_sales_traffic_timeseries'");
+    expect(source).toContain('Imported into amazon_sales_traffic_timeseries by the V3 retail sync batch.');
+  });
+});
+
 describe('v3ResumeAmazon helpers', () => {
   it('parses the pending-resume command and its max-age control', () => {
     const args = parseResumeAmazonArgs([
@@ -289,6 +358,16 @@ describe('v3ResumeAmazon helpers', () => {
       'pending',
       'polling',
       'pending_timeout',
+    ]);
+  });
+
+  it('tracks all implemented Ads pending source types for resume and reconciliation', () => {
+    expect(ADS_PENDING_IMPORT_SOURCE_TYPES).toEqual([
+      'ads_api_sp_campaign_daily',
+      'ads_api_sp_target_daily',
+      'ads_api_sp_placement_daily',
+      'ads_api_sp_advertised_product_daily',
+      'ads_api_sp_search_term_daily',
     ]);
   });
 
@@ -459,6 +538,45 @@ describe('v3CheckAdsPendingHealth helpers', () => {
 
     expect(summary.exitCode).toBe(1);
     expect(summary.unhealthyRows[0].status).toBe('stale_expired');
+  });
+
+  it('treats stale_expired rows as recovered when a newer replacement request exists', () => {
+    const summary = classifyPendingHealthRows({
+      rows: [
+        {
+          id: '1',
+          sourceType: 'ads_api_sp_placement_daily',
+          reportId: 'old',
+          status: 'stale_expired',
+          startDate: '2026-04-01',
+          endDate: '2026-04-30',
+          createdAt: '2026-04-30T06:04:58.518705+00:00',
+          updatedAt: '2026-05-03T09:09:02.406198+00:00',
+          completedAt: null,
+          retryAfterAt: null,
+          notes: 'Exceeded pending-report SLA.',
+        },
+        {
+          id: '2',
+          sourceType: 'ads_api_sp_placement_daily',
+          reportId: 'newer',
+          status: 'pending_timeout',
+          startDate: '2026-04-02',
+          endDate: '2026-05-01',
+          createdAt: '2026-05-01T08:25:27.926107+00:00',
+          updatedAt: '2026-05-01T09:59:47.570931+00:00',
+          completedAt: null,
+          retryAfterAt: null,
+          notes: 'Timed out after 3 attempts.',
+        },
+      ],
+      nowIso: '2026-05-03T12:00:00.000Z',
+      maxPendingAgeHours: 72,
+      completedGraceMinutes: 30,
+    });
+
+    expect(summary.exitCode).toBe(0);
+    expect(summary.unhealthyRows).toHaveLength(0);
   });
 
   it('classifies completed older than grace and not imported as unhealthy', () => {
