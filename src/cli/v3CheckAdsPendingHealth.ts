@@ -74,6 +74,23 @@ export type PendingHealthSummary = {
   nextAction: string;
 };
 
+const hasSupersedingRecoveryRow = (args: {
+  row: PendingHealthRow;
+  rows: PendingHealthRow[];
+}): boolean =>
+  args.rows.some((candidate) => {
+    if (candidate.id === args.row.id) return false;
+    if (candidate.sourceType !== args.row.sourceType) return false;
+    if (
+      candidate.status !== 'imported' &&
+      candidate.status !== 'completed' &&
+      !ACTIVE_PENDING_REQUEST_STATUSES.includes(candidate.status as ActiveStatus)
+    ) {
+      return false;
+    }
+    return candidate.endDate > args.row.endDate;
+  });
+
 const REPORT_PATH = path.resolve(
   process.cwd(),
   'out/v3_ads_pending_resume_report.md'
@@ -224,7 +241,9 @@ export const classifyPendingHealthRows = (args: {
     if (row.status === 'failed') {
       unhealthyReason = 'Amazon returned a terminal failure for this saved report id.';
     } else if (row.status === 'stale_expired') {
-      unhealthyReason = 'The pending request exceeded the configured SLA and can no longer remain in automatic recovery.';
+      unhealthyReason = hasSupersedingRecoveryRow({ row, rows: args.rows })
+        ? null
+        : 'The pending request exceeded the configured SLA and no newer recovery request is present.';
     } else if (
       isCompletedPastGrace({
         status: row.status,
@@ -245,6 +264,11 @@ export const classifyPendingHealthRows = (args: {
     let nextAction = 'No action required.';
     if (unhealthyReason) {
       nextAction = 'Investigate the saved pending request and repair the downstream import or replace the request.';
+    } else if (
+      row.status === 'stale_expired' &&
+      hasSupersedingRecoveryRow({ row, rows: args.rows })
+    ) {
+      nextAction = 'A newer replacement request exists for this source window. No manual action is required for the expired row.';
     } else if (waitingForRetryAfter) {
       nextAction = 'Waiting until retry_after_at before polling again.';
     } else if (isActive) {

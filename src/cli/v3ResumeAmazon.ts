@@ -36,6 +36,10 @@ export const ADS_PENDING_IMPORT_TARGETS = {
       'Imported into sp_search_term_daily_fact by the V3 Ads sync batch.',
   },
 } as const;
+type AdsPendingImportSourceType = keyof typeof ADS_PENDING_IMPORT_TARGETS;
+export const ADS_PENDING_IMPORT_SOURCE_TYPES = Object.keys(
+  ADS_PENDING_IMPORT_TARGETS
+) as AdsPendingImportSourceType[];
 export const ACTIVE_PENDING_REQUEST_STATUSES = [
   'created',
   'requested',
@@ -87,7 +91,29 @@ type ResumeQueueResult = {
   notes: string[];
 };
 
-type AdsPendingImportSourceType = keyof typeof ADS_PENDING_IMPORT_TARGETS;
+const hasSupersedingRequest = (args: {
+  sourceType: string;
+  currentRowId: string;
+  endDate: string;
+  rows: Array<{
+    id: string;
+    sourceType: string;
+    status: string;
+    endDate: string;
+  }>;
+}): boolean =>
+  args.rows.some((row) => {
+    if (row.id === args.currentRowId) return false;
+    if (row.sourceType !== args.sourceType) return false;
+    if (
+      row.status !== 'imported' &&
+      row.status !== 'completed' &&
+      !ACTIVE_PENDING_REQUEST_STATUSES.includes(row.status as (typeof ACTIVE_PENDING_REQUEST_STATUSES)[number])
+    ) {
+      return false;
+    }
+    return row.endDate > args.endDate;
+  });
 
 const REPORT_PATH = path.resolve(
   process.cwd(),
@@ -283,11 +309,16 @@ export const listPendingRequests = async (
       from public.ads_api_report_requests
       where account_id = $1
         and marketplace = $2
-        and source_type in ('ads_api_sp_campaign_daily', 'ads_api_sp_target_daily')
-        and status = any($3::text[])
+        and source_type = any($3::text[])
+        and status = any($4::text[])
       order by source_type asc, start_date asc, end_date asc, updated_at desc
     `,
-    [args.accountId, args.marketplace, [...ACTIVE_PENDING_REQUEST_STATUSES]]
+    [
+      args.accountId,
+      args.marketplace,
+      ADS_PENDING_IMPORT_SOURCE_TYPES,
+      [...ACTIVE_PENDING_REQUEST_STATUSES],
+    ]
   );
 
   return result.rows.map((row) => ({
@@ -336,11 +367,11 @@ export const listCompletedPendingRequests = async (
       from public.ads_api_report_requests
       where account_id = $1
         and marketplace = $2
-        and source_type in ('ads_api_sp_campaign_daily', 'ads_api_sp_target_daily')
+        and source_type = any($3::text[])
         and status = 'completed'
       order by source_type asc, start_date asc, end_date asc, updated_at desc
     `,
-    [args.accountId, args.marketplace]
+    [args.accountId, args.marketplace, ADS_PENDING_IMPORT_SOURCE_TYPES]
   );
 
   return result.rows.map((row) => ({
@@ -684,8 +715,21 @@ async function main(): Promise<void> {
 
   const unresolvedWithoutRecovery = results.some(
     (row) => {
-      if (row.currentStatus === 'failed' || row.currentStatus === 'stale_expired') {
+      if (row.currentStatus === 'failed') {
         return true;
+      }
+      if (row.currentStatus === 'stale_expired') {
+        return !hasSupersedingRequest({
+          sourceType: row.sourceType,
+          currentRowId: row.reportId,
+          endDate: row.endDate,
+          rows: results.map((result) => ({
+            id: result.reportId,
+            sourceType: result.sourceType,
+            status: result.currentStatus,
+            endDate: result.endDate,
+          })),
+        });
       }
       if (row.currentStatus !== 'completed') {
         return false;

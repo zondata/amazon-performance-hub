@@ -355,6 +355,16 @@ describe('v3ResumeAmazon helpers', () => {
     ]);
   });
 
+  it('tracks all implemented Ads pending source types for resume and reconciliation', () => {
+    expect(ADS_PENDING_IMPORT_SOURCE_TYPES).toEqual([
+      'ads_api_sp_campaign_daily',
+      'ads_api_sp_target_daily',
+      'ads_api_sp_placement_daily',
+      'ads_api_sp_advertised_product_daily',
+      'ads_api_sp_search_term_daily',
+    ]);
+  });
+
   it('marks over-age pending requests as stale', () => {
     expect(
       classifyPendingRequestAge({
@@ -522,6 +532,45 @@ describe('v3CheckAdsPendingHealth helpers', () => {
 
     expect(summary.exitCode).toBe(1);
     expect(summary.unhealthyRows[0].status).toBe('stale_expired');
+  });
+
+  it('treats stale_expired rows as recovered when a newer replacement request exists', () => {
+    const summary = classifyPendingHealthRows({
+      rows: [
+        {
+          id: '1',
+          sourceType: 'ads_api_sp_placement_daily',
+          reportId: 'old',
+          status: 'stale_expired',
+          startDate: '2026-04-01',
+          endDate: '2026-04-30',
+          createdAt: '2026-04-30T06:04:58.518705+00:00',
+          updatedAt: '2026-05-03T09:09:02.406198+00:00',
+          completedAt: null,
+          retryAfterAt: null,
+          notes: 'Exceeded pending-report SLA.',
+        },
+        {
+          id: '2',
+          sourceType: 'ads_api_sp_placement_daily',
+          reportId: 'newer',
+          status: 'pending_timeout',
+          startDate: '2026-04-02',
+          endDate: '2026-05-01',
+          createdAt: '2026-05-01T08:25:27.926107+00:00',
+          updatedAt: '2026-05-01T09:59:47.570931+00:00',
+          completedAt: null,
+          retryAfterAt: null,
+          notes: 'Timed out after 3 attempts.',
+        },
+      ],
+      nowIso: '2026-05-03T12:00:00.000Z',
+      maxPendingAgeHours: 72,
+      completedGraceMinutes: 30,
+    });
+
+    expect(summary.exitCode).toBe(0);
+    expect(summary.unhealthyRows).toHaveLength(0);
   });
 
   it('classifies completed older than grace and not imported as unhealthy', () => {
