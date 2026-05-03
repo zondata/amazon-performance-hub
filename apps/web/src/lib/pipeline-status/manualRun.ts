@@ -201,7 +201,7 @@ export type ManualRunOutcome =
   | {
       status: 'success';
       sourceLabel: string;
-      sourceType: ManualRunSourceType;
+      sourceType: ManualRunSourceType | 'ads_batch' | 'sales_batch';
       window: ManualRunWindow;
       resumedPending: boolean;
       summary: string;
@@ -209,11 +209,13 @@ export type ManualRunOutcome =
   | {
       status: 'pending';
       sourceLabel: string;
-      sourceType: ManualRunSourceType;
+      sourceType: ManualRunSourceType | 'ads_batch' | 'sales_batch';
       window: ManualRunWindow;
       resumedPending: boolean;
       summary: string;
     };
+
+export type ManualRunGroup = 'ads' | 'sales';
 
 type PendingWindowRow = {
   startDate: string;
@@ -559,6 +561,136 @@ export const runPipelineManualSource = async (
         resumedPending
           ? `Amazon still has the saved report pending. ${summary}`
           : `Amazon accepted the request but it is still pending. ${summary}`,
+    };
+  }
+
+  throw new Error(summary);
+};
+
+export const runPipelineManualGroup = async (
+  group: ManualRunGroup
+): Promise<ManualRunOutcome> => {
+  const window = deriveRecentManualRunWindow();
+  const githubDispatchConfig = await getGitHubDispatchConfig();
+
+  if (githubDispatchConfig) {
+    const [{ env }, config] = await Promise.all([
+      import('@/lib/env'),
+      getGitHubDispatchConfig(),
+    ]);
+
+    if (!config) {
+      throw new Error(
+        'GitHub Actions dispatch is not configured. Set GITHUB_ACTIONS_DISPATCH_TOKEN, GITHUB_ACTIONS_REPO_OWNER, and GITHUB_ACTIONS_REPO_NAME.'
+      );
+    }
+
+    const workflowUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/actions/workflows/${encodeURIComponent(
+      config.workflowFile
+    )}/dispatches`;
+    const inputs = {
+      account_id: env.accountId,
+      marketplace: env.marketplace,
+      dry_run: 'false',
+      sources: group,
+      from_date: window.from,
+      to_date: window.to,
+      mode: 'manual',
+      recent_days: String(RECENT_WINDOW_DAYS),
+      resume_pending: 'true',
+    };
+
+    const response = await fetch(workflowUrl, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'amazon-performance-hub-pipeline-status',
+      },
+      body: JSON.stringify({
+        ref: config.workflowRef,
+        inputs,
+      }),
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      const details = trimSingleLine(await response.text());
+      throw new Error(
+        `GitHub Actions dispatch failed (${response.status}). ${
+          details || 'Check the token scope and workflow name.'
+        }`
+      );
+    }
+
+    const actionsUrl = `https://github.com/${config.owner}/${config.repo}/actions/workflows/${config.workflowFile}`;
+    return {
+      status: 'success',
+      sourceLabel: group === 'ads' ? 'Ads batch' : 'Sales & Traffic',
+      sourceType: group === 'ads' ? 'ads_batch' : 'sales_batch',
+      window,
+      resumedPending: true,
+      summary:
+        group === 'ads'
+          ? `GitHub Actions accepted the manual run for the Ads batch. Check ${actionsUrl} on ref ${config.workflowRef}.`
+          : `GitHub Actions accepted the manual run for Sales & Traffic. Check ${actionsUrl} on ref ${config.workflowRef}.`,
+    };
+  }
+
+  const args =
+    group === 'ads'
+      ? [
+          'run',
+          'v3:pull:amazon',
+          '--',
+          '--sources',
+          'ads',
+          '--from',
+          window.from,
+          '--to',
+          window.to,
+          '--mode',
+          'manual',
+          '--resume-pending',
+        ]
+      : [
+          'run',
+          'v3:pull:amazon',
+          '--',
+          '--sources',
+          'sales',
+          '--from',
+          window.from,
+          '--to',
+          window.to,
+          '--mode',
+          'manual',
+          '--resume-pending',
+        ];
+
+  const result = await runCommand(args);
+  const summary = summarizeManualRunOutput(result.stdout, result.stderr);
+
+  if (result.code === 0) {
+    return {
+      status: 'success',
+      sourceLabel: group === 'ads' ? 'Ads batch' : 'Sales & Traffic',
+      sourceType: group === 'ads' ? 'ads_batch' : 'sales_batch',
+      window,
+      resumedPending: true,
+      summary,
+    };
+  }
+
+  if (classifyManualRunFailure(result.stdout, result.stderr) === 'pending') {
+    return {
+      status: 'pending',
+      sourceLabel: group === 'ads' ? 'Ads batch' : 'Sales & Traffic',
+      sourceType: group === 'ads' ? 'ads_batch' : 'sales_batch',
+      window,
+      resumedPending: true,
+      summary: `Amazon accepted the request but it is still pending. ${summary}`,
     };
   }
 

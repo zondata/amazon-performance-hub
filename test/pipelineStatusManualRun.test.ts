@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   classifyManualRunFailure,
   describePipelineManualRunBackend,
   deriveRecentManualRunWindow,
   hasGitHubDispatchConfig,
+  runPipelineManualGroup,
   summarizeManualRunOutput,
   supportsAnyPipelineManualRun,
   supportsPipelineManualRun,
@@ -57,6 +58,39 @@ describe('pipeline status manual run helpers', () => {
         'GITHUB_ACTIONS_REPO_NAME',
       ],
     });
+  });
+
+  it('dispatches full sales and ads manual groups through GitHub Actions', async () => {
+    const originalFetch = global.fetch;
+    const originalEnv = process.env;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => '',
+    });
+
+    global.fetch = fetchMock as typeof fetch;
+    process.env = {
+      ...process.env,
+      SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_SERVICE_ROLE_KEY: 'service-role',
+      APP_ACCOUNT_ID: 'sourbear',
+      APP_MARKETPLACE: 'US',
+      GITHUB_ACTIONS_DISPATCH_TOKEN: 'token',
+      GITHUB_ACTIONS_REPO_OWNER: 'zondata',
+      GITHUB_ACTIONS_REPO_NAME: 'amazon-performance-hub',
+    };
+
+    try {
+      const salesResult = await runPipelineManualGroup('sales');
+      const adsResult = await runPipelineManualGroup('ads');
+
+      expect(salesResult.sourceLabel).toBe('Sales & Traffic');
+      expect(adsResult.sourceLabel).toBe('Ads batch');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      global.fetch = originalFetch;
+      process.env = originalEnv;
+    }
   });
 
   it('builds a recent 30 day window ending on the provided day', () => {

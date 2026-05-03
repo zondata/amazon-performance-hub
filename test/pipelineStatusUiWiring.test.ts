@@ -19,12 +19,13 @@ describe('pipeline status UI wiring', () => {
     expect(source).toContain('throw error;');
   });
 
-  it('renders a disabled manual run state for not implemented sources', () => {
+  it('renders top-level Run sales and Run ads controls', () => {
     const source = fs.readFileSync(pagePath, 'utf-8');
 
-    expect(source).toContain('Manual source run is not wired yet.');
-    expect(source).toContain('Disabled');
-    expect(source).toContain('row.implementationStatus === \'implemented\'');
+    expect(source).toContain('Run sales');
+    expect(source).toContain('Run ads');
+    expect(source).toContain('runPipelineManualGroup');
+    expect(source).toContain('Run the full Sales sync or the full Ads batch');
   });
 
   it('gates manual run buttons on backend availability and shows missing-config guidance', () => {
@@ -35,6 +36,5 @@ describe('pipeline status UI wiring', () => {
     expect(source).toContain("Manual runs are not configured");
     expect(source).toContain('Missing env vars:');
     expect(source).toContain("Manual run backend is not configured.");
-    expect(source).toContain('Unavailable');
   });
 });

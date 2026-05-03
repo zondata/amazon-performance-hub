@@ -6,9 +6,8 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import { getPipelineStatus } from '@/lib/pipeline-status/getPipelineStatus';
 import {
   describePipelineManualRunBackend,
-  runPipelineManualSource,
+  runPipelineManualGroup,
   supportsAnyPipelineManualRun,
-  supportsPipelineManualRun,
 } from '@/lib/pipeline-status/manualRun';
 
 const badgeClassName = (
@@ -92,22 +91,20 @@ export default async function PipelineStatusPage({
   const runWindow = paramValue(params, 'run_window');
   const runSummary = paramValue(params, 'run_summary');
 
-  const runSourceGroup = async (formData: FormData) => {
+  const runPipelineGroup = async (formData: FormData) => {
     'use server';
 
-    const sourceType = String(formData.get('source_type') ?? '').trim();
-    if (!supportsPipelineManualRun(sourceType)) {
+    const group = String(formData.get('run_group') ?? '').trim();
+    if (group !== 'ads' && group !== 'sales') {
       redirect(
         `/pipeline-status?run_status=error&run_source=${encodeURIComponent(
-          sourceType || 'unknown'
-        )}&run_summary=${encodeURIComponent(
-          'Manual run is not supported for this source group.'
-        )}`
+          group || 'unknown'
+        )}&run_summary=${encodeURIComponent('Manual run group is not supported.')}`
       );
     }
 
     try {
-      const result = await runPipelineManualSource(sourceType);
+      const result = await runPipelineManualGroup(group);
       revalidatePath('/pipeline-status');
       redirect(
         `/pipeline-status?run_status=${encodeURIComponent(
@@ -124,7 +121,7 @@ export default async function PipelineStatusPage({
       revalidatePath('/pipeline-status');
       redirect(
         `/pipeline-status?run_status=error&run_source=${encodeURIComponent(
-          sourceType
+          group
         )}&run_summary=${encodeURIComponent(message)}`
       );
     }
@@ -269,6 +266,45 @@ export default async function PipelineStatusPage({
       </section>
 
       <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-semibold text-foreground">Manual runs</div>
+            <p className="mt-1 text-sm text-muted">
+              Run the full Sales sync or the full Ads batch for the recent 30-day window.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <form action={runPipelineGroup}>
+              <input type="hidden" name="run_group" value="sales" />
+              <button
+                type="submit"
+                disabled={!manualRunEnabled}
+                title={
+                  manualRunEnabled ? 'Run Sales & Traffic sync.' : 'Manual run backend is not configured.'
+                }
+                className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted"
+              >
+                Run sales
+              </button>
+            </form>
+            <form action={runPipelineGroup}>
+              <input type="hidden" name="run_group" value="ads" />
+              <button
+                type="submit"
+                disabled={!manualRunEnabled}
+                title={
+                  manualRunEnabled ? 'Run the full Ads batch.' : 'Manual run backend is not configured.'
+                }
+                className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted"
+              >
+                Run ads
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div
           data-aph-hscroll
           data-aph-hscroll-axis="x"
@@ -294,9 +330,6 @@ export default async function PipelineStatusPage({
                 </th>
                 <th className="sticky top-0 z-10 w-[10rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
                   Amazon/API state
-                </th>
-                <th className="sticky top-0 z-10 w-[9rem] border-b border-border bg-surface px-4 py-3 shadow-sm">
-                  Manual run
                 </th>
               </tr>
             </thead>
@@ -336,38 +369,6 @@ export default async function PipelineStatusPage({
                     >
                       {row.amazonApiState}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 align-top text-muted">
-                    {row.implementationStatus === 'implemented' &&
-                    supportsPipelineManualRun(row.sourceType) &&
-                    manualRunEnabled ? (
-                      <form action={runSourceGroup}>
-                        <input type="hidden" name="source_type" value={row.sourceType} />
-                        <button
-                          type="submit"
-                          className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground"
-                        >
-                          Run
-                        </button>
-                      </form>
-                    ) : (
-                      <button
-                        type="button"
-                        className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs font-semibold text-muted disabled:cursor-not-allowed disabled:opacity-80"
-                        disabled
-                        title={
-                          row.implementationStatus === 'implemented' &&
-                          supportsPipelineManualRun(row.sourceType)
-                            ? 'Manual run backend is not configured.'
-                            : 'Manual source run is not wired yet.'
-                        }
-                      >
-                        {row.implementationStatus === 'implemented' &&
-                        supportsPipelineManualRun(row.sourceType)
-                          ? 'Unavailable'
-                          : 'Disabled'}
-                      </button>
-                    )}
                   </td>
                 </tr>
               ))}
