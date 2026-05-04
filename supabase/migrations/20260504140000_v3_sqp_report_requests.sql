@@ -47,6 +47,8 @@ create table if not exists public.sp_api_sqp_report_requests (
     check (raw_json is null or jsonb_typeof(raw_json) = 'object')
 );
 
+alter table public.sp_api_sqp_report_requests enable row level security;
+
 create index if not exists sp_api_sqp_report_requests_scope_idx
   on public.sp_api_sqp_report_requests (
     account_id,
