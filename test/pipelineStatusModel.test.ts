@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildPipelineStatusRows,
   PIPELINE_STATUS_SPECS,
+  isMissingSqpReportRequestTableError,
   type PipelineCoverageRow,
   type PipelinePendingRow,
   type PipelineStatusSpec,
@@ -222,6 +223,27 @@ describe('buildPipelineStatusRows', () => {
         }),
       ])
     );
+  });
+
+  it('detects only missing SQP report request table errors as deployment-order safe', () => {
+    expect(
+      isMissingSqpReportRequestTableError({
+        code: '42P01',
+        message: 'relation "public.sp_api_sqp_report_requests" does not exist',
+      })
+    ).toBe(true);
+    expect(
+      isMissingSqpReportRequestTableError({
+        code: '42501',
+        message: 'permission denied for table sp_api_sqp_report_requests',
+      })
+    ).toBe(false);
+    expect(
+      isMissingSqpReportRequestTableError({
+        code: '42P01',
+        message: 'relation "public.ads_api_report_requests" does not exist',
+      })
+    ).toBe(false);
   });
 
   it('maps oldest_period_start to earliestReportDay as YYYY-MM-DD', () => {

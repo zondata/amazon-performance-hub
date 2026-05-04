@@ -287,7 +287,7 @@ export const buildWeeklyCatchupWindows = (args: {
   if (args.from) {
     start = startOfWeekSunday(parseDateOnly(args.from, '--from'));
   } else if (args.latestExistingWeekEnd) {
-    start = addDays(args.latestExistingWeekEnd, 1);
+    start = startOfWeekSunday(args.latestExistingWeekEnd);
   } else {
     return {
       windows: [],
@@ -320,7 +320,7 @@ export const buildMonthlyCatchupWindows = (args: {
   const start = args.from
     ? startOfMonth(parseDateOnly(args.from, '--from'))
     : args.latestExistingPeriodEnd
-      ? addMonths(startOfMonth(args.latestExistingPeriodEnd), 1)
+      ? startOfMonth(args.latestExistingPeriodEnd)
       : startOfMonth(parseDateOnly(args.monthlyBackfillStart, '--monthly-backfill-start'));
   if (compareDate(start, cappedTo) > 0) return [];
   const windows: SqpWindow[] = [];

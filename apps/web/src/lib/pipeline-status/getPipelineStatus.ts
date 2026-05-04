@@ -4,6 +4,7 @@ import { env } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import {
   buildPipelineStatusRows,
+  isMissingSqpReportRequestTableError,
   PIPELINE_STATUS_SPECS,
   type PipelineCoverageRow,
   type PipelinePendingRow,
@@ -66,7 +67,10 @@ export const getPipelineStatus = async (): Promise<PipelineStatusPageData> => {
   if (adsPendingResult.error) {
     throw new Error(`Failed to load ads_api_report_requests: ${adsPendingResult.error.message}`);
   }
-  if (sqpPendingResult.error) {
+  if (
+    sqpPendingResult.error &&
+    !isMissingSqpReportRequestTableError(sqpPendingResult.error)
+  ) {
     throw new Error(`Failed to load sp_api_sqp_report_requests: ${sqpPendingResult.error.message}`);
   }
   if (adsBatchResult.error) {
@@ -93,7 +97,7 @@ export const getPipelineStatus = async (): Promise<PipelineStatusPageData> => {
 
   const pendingRows: PipelinePendingRow[] = [
     ...(adsPendingResult.data ?? []),
-    ...(sqpPendingResult.data ?? []),
+    ...(sqpPendingResult.error ? [] : (sqpPendingResult.data ?? [])),
   ].map((row) => ({
     sourceType: String(row.source_type),
     status: String(row.status),

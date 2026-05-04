@@ -206,7 +206,7 @@ describe('V3 SQP window helpers', () => {
     });
   });
 
-  it('continues weekly from max week_end and does not massive-backfill without --from', () => {
+  it('includes the latest existing weekly window and does not massive-backfill without --from', () => {
     expect(
       buildWeeklyCatchupWindows({
         latestExistingWeekEnd: '2026-04-18',
@@ -216,7 +216,10 @@ describe('V3 SQP window helpers', () => {
         releaseTimezone: 'America/Los_Angeles',
         maxWindows: 2,
       }).windows
-    ).toEqual([{ startDate: '2026-04-19', endDate: '2026-04-25' }]);
+    ).toEqual([
+      { startDate: '2026-04-12', endDate: '2026-04-18' },
+      { startDate: '2026-04-19', endDate: '2026-04-25' },
+    ]);
     expect(
       buildWeeklyCatchupWindows({
         latestExistingWeekEnd: null,
@@ -229,7 +232,7 @@ describe('V3 SQP window helpers', () => {
     ).toContain('Provide --from');
   });
 
-  it('starts monthly at 2024-01-01 with no data and continues from next month with data', () => {
+  it('starts monthly at 2024-01-01 with no data and includes the latest month with data', () => {
     expect(
       buildMonthlyCatchupWindows({
         latestExistingPeriodEnd: null,
@@ -251,7 +254,7 @@ describe('V3 SQP window helpers', () => {
         releaseTimezone: 'America/Los_Angeles',
         maxWindows: 1,
       })
-    ).toEqual([{ startDate: '2024-02-01', endDate: '2024-02-29' }]);
+    ).toEqual([{ startDate: '2024-01-01', endDate: '2024-01-31' }]);
   });
 });
 
@@ -331,13 +334,98 @@ describe('V3 SQP pending and coverage behavior', () => {
     );
   });
 
+  it('does not skip a partially complete latest monthly raw window', async () => {
+    const asins = Array.from({ length: 12 }, (_, index) =>
+      `B${String(index + 1).padStart(9, '0')}`
+    );
+    const db = new FakeDb();
+    db.asins = asins;
+    db.latestMonthlyEnd = '2024-01-31';
+    for (const asin of asins.slice(0, 5)) {
+      db.rawScopes.add(scope('sp_api_sqp_monthly', asin, '2024-01-01', '2024-01-31'));
+    }
+    await runV3SqpSync(
+      {
+        ...baseOptions,
+        source: 'monthly',
+        mode: 'backfill',
+        maxAsinsPerRun: 5,
+      },
+      {
+        db,
+        now: new Date('2024-03-01T08:00:00.000Z'),
+        reportRunner: {
+          createReport: async () => ({ reportId: 'report-monthly' }),
+          pollReport: async ({ reportId }) => ({
+            reportId,
+            reportType: null,
+            processingStatus: 'IN_PROGRESS',
+            terminalReached: false,
+            maxAttemptsReached: true,
+            attemptCount: 1,
+            reportDocumentId: null,
+          }),
+        },
+        writeReport: async () => {},
+      }
+    );
+    expect(db.insertedRequests.map((request) => request.asin)).toEqual(asins.slice(5, 10));
+    expect(new Set(db.insertedRequests.map((request) => request.startDate))).toEqual(
+      new Set(['2024-01-01'])
+    );
+  });
+
+  it('advances monthly when the latest raw window is complete for all ASINs', async () => {
+    const asins = Array.from({ length: 12 }, (_, index) =>
+      `B${String(index + 1).padStart(9, '0')}`
+    );
+    const db = new FakeDb();
+    db.asins = asins;
+    db.latestMonthlyEnd = '2024-01-31';
+    for (const asin of asins) {
+      db.rawScopes.add(scope('sp_api_sqp_monthly', asin, '2024-01-01', '2024-01-31'));
+    }
+    await runV3SqpSync(
+      {
+        ...baseOptions,
+        source: 'monthly',
+        mode: 'backfill',
+        maxAsinsPerRun: 5,
+      },
+      {
+        db,
+        now: new Date('2024-03-01T08:00:00.000Z'),
+        reportRunner: {
+          createReport: async () => ({ reportId: 'report-monthly-next' }),
+          pollReport: async ({ reportId }) => ({
+            reportId,
+            reportType: null,
+            processingStatus: 'IN_PROGRESS',
+            terminalReached: false,
+            maxAttemptsReached: true,
+            attemptCount: 1,
+            reportDocumentId: null,
+          }),
+        },
+        writeReport: async () => {},
+      }
+    );
+    expect(db.insertedRequests.map((request) => request.asin)).toEqual(asins.slice(0, 5));
+    expect(new Set(db.insertedRequests.map((request) => request.startDate))).toEqual(
+      new Set(['2024-02-01'])
+    );
+    expect(new Set(db.insertedRequests.map((request) => request.endDate))).toEqual(
+      new Set(['2024-02-29'])
+    );
+  });
+
   it('batches missing weekly ASINs for the current week before advancing', async () => {
     const asins = Array.from({ length: 12 }, (_, index) =>
       `B${String(index + 1).padStart(9, '0')}`
     );
     const db = new FakeDb();
     db.asins = asins;
-    db.latestWeeklyEnd = '2026-04-18';
+    db.latestWeeklyEnd = '2026-04-25';
     for (const asin of asins.slice(0, 5)) {
       db.rawScopes.add(scope('sp_api_sqp_weekly', asin, '2026-04-19', '2026-04-25'));
     }
@@ -368,6 +456,89 @@ describe('V3 SQP pending and coverage behavior', () => {
     expect(db.insertedRequests.map((request) => request.asin)).toEqual(asins.slice(5, 10));
     expect(new Set(db.insertedRequests.map((request) => request.startDate))).toEqual(
       new Set(['2026-04-19'])
+    );
+  });
+
+  it('does not skip a partially complete latest weekly raw window', async () => {
+    const asins = Array.from({ length: 12 }, (_, index) =>
+      `B${String(index + 1).padStart(9, '0')}`
+    );
+    const db = new FakeDb();
+    db.asins = asins;
+    db.latestWeeklyEnd = '2026-04-25';
+    for (const asin of asins.slice(0, 5)) {
+      db.rawScopes.add(scope('sp_api_sqp_weekly', asin, '2026-04-19', '2026-04-25'));
+    }
+    await runV3SqpSync(
+      {
+        ...baseOptions,
+        source: 'weekly',
+        maxAsinsPerRun: 5,
+      },
+      {
+        db,
+        now: new Date('2026-05-11T07:00:00.000Z'),
+        reportRunner: {
+          createReport: async () => ({ reportId: 'report-weekly-partial' }),
+          pollReport: async ({ reportId }) => ({
+            reportId,
+            reportType: null,
+            processingStatus: 'IN_PROGRESS',
+            terminalReached: false,
+            maxAttemptsReached: true,
+            attemptCount: 1,
+            reportDocumentId: null,
+          }),
+        },
+        writeReport: async () => {},
+      }
+    );
+    expect(db.insertedRequests.map((request) => request.asin)).toEqual(asins.slice(5, 10));
+    expect(new Set(db.insertedRequests.map((request) => request.startDate))).toEqual(
+      new Set(['2026-04-19'])
+    );
+  });
+
+  it('advances weekly when the latest raw window is complete for all ASINs', async () => {
+    const asins = Array.from({ length: 12 }, (_, index) =>
+      `B${String(index + 1).padStart(9, '0')}`
+    );
+    const db = new FakeDb();
+    db.asins = asins;
+    db.latestWeeklyEnd = '2026-04-25';
+    for (const asin of asins) {
+      db.completedScopes.add(scope('sp_api_sqp_weekly', asin, '2026-04-19', '2026-04-25'));
+    }
+    await runV3SqpSync(
+      {
+        ...baseOptions,
+        source: 'weekly',
+        maxAsinsPerRun: 5,
+      },
+      {
+        db,
+        now: new Date('2026-05-11T07:00:00.000Z'),
+        reportRunner: {
+          createReport: async () => ({ reportId: 'report-weekly-next' }),
+          pollReport: async ({ reportId }) => ({
+            reportId,
+            reportType: null,
+            processingStatus: 'IN_PROGRESS',
+            terminalReached: false,
+            maxAttemptsReached: true,
+            attemptCount: 1,
+            reportDocumentId: null,
+          }),
+        },
+        writeReport: async () => {},
+      }
+    );
+    expect(db.insertedRequests.map((request) => request.asin)).toEqual(asins.slice(0, 5));
+    expect(new Set(db.insertedRequests.map((request) => request.startDate))).toEqual(
+      new Set(['2026-04-26'])
+    );
+    expect(new Set(db.insertedRequests.map((request) => request.endDate))).toEqual(
+      new Set(['2026-05-02'])
     );
   });
 
