@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildPipelineStatusRows,
+  PIPELINE_STATUS_SPECS,
   type PipelineCoverageRow,
   type PipelinePendingRow,
   type PipelineStatusSpec,
@@ -204,6 +205,23 @@ describe('buildPipelineStatusRows', () => {
     });
 
     expect(rows[0].dataCompleteness).toBe('No Data');
+  });
+
+  it('includes source-specific weekly and monthly SQP rows', () => {
+    expect(PIPELINE_STATUS_SPECS).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: 'sp_api_sqp_weekly',
+          targetTable: 'sqp_weekly_raw',
+          pendingSourceType: 'sp_api_sqp_weekly',
+        }),
+        expect.objectContaining({
+          sourceType: 'sp_api_sqp_monthly',
+          targetTable: 'sqp_monthly_raw',
+          pendingSourceType: 'sp_api_sqp_monthly',
+        }),
+      ])
+    );
   });
 
   it('maps oldest_period_start to earliestReportDay as YYYY-MM-DD', () => {

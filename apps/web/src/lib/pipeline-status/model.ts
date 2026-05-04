@@ -208,8 +208,16 @@ export const PIPELINE_STATUS_SPECS: PipelineStatusSpec[] = [
   {
     sourceGroup: 'SQP',
     sourceType: 'sp_api_sqp_weekly',
-    targetTable: 'sqp_weekly_latest',
+    targetTable: 'sqp_weekly_raw',
     implementationStatus: 'implemented',
+    pendingSourceType: 'sp_api_sqp_weekly',
+  },
+  {
+    sourceGroup: 'SQP monthly',
+    sourceType: 'sp_api_sqp_monthly',
+    targetTable: 'sqp_monthly_raw',
+    implementationStatus: 'implemented',
+    pendingSourceType: 'sp_api_sqp_monthly',
   },
 ];
 

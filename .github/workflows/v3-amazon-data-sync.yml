@@ -194,7 +194,10 @@ jobs:
               npm run v3:pull:amazon -- --account-id "${APP_ACCOUNT_ID}" --marketplace "${APP_MARKETPLACE}" --sources sales --from "$FROM_DATE" --to "$TO_DATE" --mode "${RUN_MODE:-manual}" --resume-pending
               ;;
             sp_api_sqp_weekly)
-              npm run v3:pull:amazon -- --account-id "${APP_ACCOUNT_ID}" --marketplace "${APP_MARKETPLACE}" --sources sqp --from "$FROM_DATE" --to "$TO_DATE" --mode "${RUN_MODE:-manual}" --resume-pending
+              npm run v3:sync:sqp -- --account-id "${APP_ACCOUNT_ID}" --marketplace "${APP_MARKETPLACE}" --source weekly --from "$FROM_DATE" --to "$TO_DATE" --mode "${RUN_MODE:-manual}" --resume-pending --soft-unavailable-exit
+              ;;
+            sp_api_sqp_monthly)
+              npm run v3:sync:sqp -- --account-id "${APP_ACCOUNT_ID}" --marketplace "${APP_MARKETPLACE}" --source monthly --from "$FROM_DATE" --to "$TO_DATE" --mode "${RUN_MODE:-manual}" --resume-pending --soft-unavailable-exit
               ;;
             *)
               echo "Unsupported manual source_type: $MANUAL_SOURCE_TYPE"

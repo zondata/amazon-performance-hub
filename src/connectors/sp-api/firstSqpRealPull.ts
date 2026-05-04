@@ -34,23 +34,23 @@ export type SqpReportPeriod = 'WEEK' | 'MONTH';
 export const DEFAULT_FIRST_SQP_STATUS_MAX_ATTEMPTS = 120;
 export const DEFAULT_FIRST_SQP_STATUS_POLL_INTERVAL_MS = 5000;
 
-type SpApiDownloadTransportRequest = {
+export type SpApiDownloadTransportRequest = {
   url: string;
   method: 'GET';
   headers?: Record<string, string>;
 };
 
-type SpApiDownloadTransportResponse = {
+export type SpApiDownloadTransportResponse = {
   status: number;
   body: Buffer;
   headers: Record<string, string>;
 };
 
-type SpApiDownloadTransport = (
+export type SpApiDownloadTransport = (
   request: SpApiDownloadTransportRequest
 ) => Promise<SpApiDownloadTransportResponse>;
 
-type FirstSqpReportStatusSummary = {
+export type FirstSqpReportStatusSummary = {
   reportId: string;
   reportType: typeof FIRST_SQP_REPORT_TYPE | null;
   processingStatus: SpApiReportProcessingStatus;
@@ -489,7 +489,7 @@ export const pollFirstSqpReportStatus = async (args: {
   );
 };
 
-const requireFirstSqpReportDocumentId = (summary: FirstSqpReportStatusSummary) => {
+export const requireFirstSqpReportDocumentId = (summary: FirstSqpReportStatusSummary) => {
   if (!summary.terminalReached || summary.maxAttemptsReached) {
     throw new SpApiRequestError(
       'api_response_error',
@@ -515,7 +515,7 @@ const requireFirstSqpReportDocumentId = (summary: FirstSqpReportStatusSummary) =
   return reportDocumentId;
 };
 
-const buildFirstSqpReportDocumentMetadataRequest = (args: {
+export const buildFirstSqpReportDocumentMetadataRequest = (args: {
   region: SpApiRegion;
   accessToken: string;
   reportDocumentId: string;
@@ -549,7 +549,7 @@ const buildFirstSqpReportDocumentMetadataRequest = (args: {
   };
 };
 
-const buildFirstSqpDocumentDownloadRequest = (documentUrl: string): SpApiDownloadTransportRequest => {
+export const buildFirstSqpDocumentDownloadRequest = (documentUrl: string): SpApiDownloadTransportRequest => {
   const url = documentUrl.trim();
   if (!url) {
     throw new SpApiRequestError(
@@ -611,7 +611,7 @@ const buildFirstSqpRawArtifactPath = (args: {
   return path.resolve(outputRoot, `report-${reportId}.sqp.raw${extension}${gzipSuffix}`);
 };
 
-const writeFirstSqpRawArtifact = async (args: {
+export const writeFirstSqpRawArtifact = async (args: {
   reportId: string;
   compressionAlgorithm: string | null;
   contentType: string | null;
@@ -645,60 +645,24 @@ type FirstSqpParseIngestImpl = (args: {
   env?: NodeJS.ProcessEnv;
 }) => Promise<SpApiSqpParseIngestSummary>;
 
-export const summarizeFirstSqpRealPull = (args: {
-  reportId: string;
-  reportDocumentId: string;
-  rawArtifactPath: string;
-  parseSummary: SpApiSqpParseIngestSummary;
-}): SpApiSqpRealPullSummary => ({
-  endpoint: 'spApiSqpFirstRealPullAndIngest',
-  reportId: args.reportId,
-  reportDocumentId: args.reportDocumentId,
-  rawArtifactPath: path.resolve(args.rawArtifactPath),
-  scopeType: args.parseSummary.scopeType,
-  scopeValue: args.parseSummary.scopeValue,
-  coverageStart: args.parseSummary.coverageStart,
-  coverageEnd: args.parseSummary.coverageEnd,
-  rowCount: args.parseSummary.rowCount,
-  uploadId: args.parseSummary.uploadId,
-  warningsCount: args.parseSummary.warningsCount,
-});
-
-export const runFirstSpApiSqpRealPullAndIngest = async (args: {
+export const createFirstSqpReport = async (args: {
   asin: string;
   startDate: string;
   endDate: string;
   reportPeriod?: SqpReportPeriod;
-  maxAttempts?: number;
-  pollIntervalMs?: number;
   envSource?: SpApiEnvSource;
   tokenTransport?: SpApiTransport;
   requestApiTransport?: SpApiTransport;
-  statusApiTransport?: SpApiTransport;
-  metadataApiTransport?: SpApiTransport;
-  downloadTransport?: SpApiDownloadTransport;
-  wait?: (ms: number) => Promise<void>;
-  outputRoot?: string;
-  csvOutputRoot?: string;
-  env?: NodeJS.ProcessEnv;
-  parseIngestImpl?: FirstSqpParseIngestImpl;
-}): Promise<SpApiSqpRealPullSummary> => {
+}): Promise<{ reportId: string }> => {
   const validatedWindow = validateFirstSqpAsinWindow({
     asin: args.asin,
     startDate: args.startDate,
     endDate: args.endDate,
     reportPeriod: args.reportPeriod,
   });
-
   const config = loadSpApiEnv(args.envSource);
   const tokenTransport = args.tokenTransport ?? createJsonFetchTransport();
   const requestApiTransport = args.requestApiTransport ?? createJsonFetchTransport();
-  const statusApiTransport = args.statusApiTransport ?? createJsonFetchTransport();
-  const metadataApiTransport =
-    args.metadataApiTransport ?? createJsonFetchTransport();
-  const downloadTransport =
-    args.downloadTransport ?? createDownloadFetchTransport();
-
   const tokenResult = await refreshSpApiAccessToken({
     config,
     transport: tokenTransport,
@@ -746,22 +710,41 @@ export const runFirstSpApiSqpRealPullAndIngest = async (args: {
     );
   }
 
-  const statusSummary = await pollFirstSqpReportStatus({
-    reportId: createdReport.reportId,
-    maxAttempts: args.maxAttempts,
-    pollIntervalMs: args.pollIntervalMs,
-    envSource: args.envSource,
-    tokenTransport,
-    apiTransport: statusApiTransport,
-    wait: args.wait,
+  return createdReport;
+};
+
+export const downloadAndIngestFirstSqpReport = async (args: {
+  reportId: string;
+  reportDocumentId: string;
+  envSource?: SpApiEnvSource;
+  tokenTransport?: SpApiTransport;
+  metadataApiTransport?: SpApiTransport;
+  downloadTransport?: SpApiDownloadTransport;
+  outputRoot?: string;
+  csvOutputRoot?: string;
+  env?: NodeJS.ProcessEnv;
+  parseIngestImpl?: FirstSqpParseIngestImpl;
+}): Promise<SpApiSqpRealPullSummary> => {
+  const config = loadSpApiEnv(args.envSource);
+  const tokenTransport = args.tokenTransport ?? createJsonFetchTransport();
+  const metadataApiTransport =
+    args.metadataApiTransport ?? createJsonFetchTransport();
+  const downloadTransport =
+    args.downloadTransport ?? createDownloadFetchTransport();
+
+  const tokenResult = await refreshSpApiAccessToken({
+    config,
+    transport: tokenTransport,
   });
 
-  const reportDocumentId = requireFirstSqpReportDocumentId(statusSummary);
+  if (!tokenResult.ok) {
+    throw tokenResult.error;
+  }
 
   const metadataRequest = buildFirstSqpReportDocumentMetadataRequest({
     region: config.region,
     accessToken: tokenResult.accessToken,
-    reportDocumentId,
+    reportDocumentId: args.reportDocumentId,
   });
 
   let metadataResponse: SpApiTransportResponse;
@@ -815,7 +798,7 @@ export const runFirstSpApiSqpRealPullAndIngest = async (args: {
 
   const contentType = normalizeContentType(downloadResponse.headers['content-type']);
   const artifact = await writeFirstSqpRawArtifact({
-    reportId: createdReport.reportId,
+    reportId: args.reportId,
     compressionAlgorithm: metadata.compressionAlgorithm,
     contentType,
     bytes: downloadResponse.body,
@@ -824,7 +807,7 @@ export const runFirstSpApiSqpRealPullAndIngest = async (args: {
 
   const parseIngestImpl = args.parseIngestImpl ?? runFirstSpApiSqpParseIngest;
   const parseSummary = await parseIngestImpl({
-    reportId: createdReport.reportId,
+    reportId: args.reportId,
     rawFilePath: artifact.outputFilePath,
     rawOutputRoot: args.outputRoot,
     csvOutputRoot: args.csvOutputRoot,
@@ -832,9 +815,90 @@ export const runFirstSpApiSqpRealPullAndIngest = async (args: {
   });
 
   return summarizeFirstSqpRealPull({
-    reportId: createdReport.reportId,
-    reportDocumentId,
+    reportId: args.reportId,
+    reportDocumentId: args.reportDocumentId,
     rawArtifactPath: artifact.outputFilePath,
     parseSummary,
+  });
+};
+
+export const summarizeFirstSqpRealPull = (args: {
+  reportId: string;
+  reportDocumentId: string;
+  rawArtifactPath: string;
+  parseSummary: SpApiSqpParseIngestSummary;
+}): SpApiSqpRealPullSummary => ({
+  endpoint: 'spApiSqpFirstRealPullAndIngest',
+  reportId: args.reportId,
+  reportDocumentId: args.reportDocumentId,
+  rawArtifactPath: path.resolve(args.rawArtifactPath),
+  scopeType: args.parseSummary.scopeType,
+  scopeValue: args.parseSummary.scopeValue,
+  coverageStart: args.parseSummary.coverageStart,
+  coverageEnd: args.parseSummary.coverageEnd,
+  rowCount: args.parseSummary.rowCount,
+  uploadId: args.parseSummary.uploadId,
+  warningsCount: args.parseSummary.warningsCount,
+});
+
+export const runFirstSpApiSqpRealPullAndIngest = async (args: {
+  asin: string;
+  startDate: string;
+  endDate: string;
+  reportPeriod?: SqpReportPeriod;
+  maxAttempts?: number;
+  pollIntervalMs?: number;
+  envSource?: SpApiEnvSource;
+  tokenTransport?: SpApiTransport;
+  requestApiTransport?: SpApiTransport;
+  statusApiTransport?: SpApiTransport;
+  metadataApiTransport?: SpApiTransport;
+  downloadTransport?: SpApiDownloadTransport;
+  wait?: (ms: number) => Promise<void>;
+  outputRoot?: string;
+  csvOutputRoot?: string;
+  env?: NodeJS.ProcessEnv;
+  parseIngestImpl?: FirstSqpParseIngestImpl;
+}): Promise<SpApiSqpRealPullSummary> => {
+  const validatedWindow = validateFirstSqpAsinWindow({
+    asin: args.asin,
+    startDate: args.startDate,
+    endDate: args.endDate,
+    reportPeriod: args.reportPeriod,
+  });
+
+  const tokenTransport = args.tokenTransport ?? createJsonFetchTransport();
+  const statusApiTransport = args.statusApiTransport ?? createJsonFetchTransport();
+  const createdReport = await createFirstSqpReport({
+    asin: validatedWindow.asin,
+    startDate: validatedWindow.startDate,
+    endDate: validatedWindow.endDate,
+    reportPeriod: args.reportPeriod,
+    envSource: args.envSource,
+    tokenTransport,
+    requestApiTransport: args.requestApiTransport,
+  });
+
+  const statusSummary = await pollFirstSqpReportStatus({
+    reportId: createdReport.reportId,
+    maxAttempts: args.maxAttempts,
+    pollIntervalMs: args.pollIntervalMs,
+    envSource: args.envSource,
+    tokenTransport,
+    apiTransport: statusApiTransport,
+    wait: args.wait,
+  });
+
+  return downloadAndIngestFirstSqpReport({
+    reportId: createdReport.reportId,
+    reportDocumentId: requireFirstSqpReportDocumentId(statusSummary),
+    envSource: args.envSource,
+    tokenTransport,
+    metadataApiTransport: args.metadataApiTransport,
+    downloadTransport: args.downloadTransport,
+    outputRoot: args.outputRoot,
+    csvOutputRoot: args.csvOutputRoot,
+    env: args.env,
+    parseIngestImpl: args.parseIngestImpl,
   });
 };

@@ -475,7 +475,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'sqp',
-    sourceType: 'sp_api',
+    sourceType: 'sp_api_sqp_weekly',
     sourceName: 'sqp_weekly',
     tableName: 'sqp_weekly_raw',
     granularity: 'weekly',
@@ -488,7 +488,7 @@ const COVERAGE_SPECS: CoverageSpec[] = [
   },
   {
     source: 'sqp',
-    sourceType: 'sp_api',
+    sourceType: 'sp_api_sqp_monthly',
     sourceName: 'sqp_monthly',
     tableName: 'sqp_monthly_raw',
     granularity: 'monthly',
