@@ -31,6 +31,7 @@ create table if not exists public.sp_api_sqp_report_requests (
         'pending_timeout',
         'completed',
         'imported',
+        'no_data',
         'unavailable',
         'failed',
         'stale_expired'

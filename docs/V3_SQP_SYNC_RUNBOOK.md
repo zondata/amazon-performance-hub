@@ -96,3 +96,5 @@ order by source_type;
 ```
 
 Expected delayed periods should show `freshness_status = 'delayed_expected'`, not `failed`.
+
+Old eligible windows where Amazon returns `DONE_NO_DATA` or an empty report after the release grace period are saved as `status = 'no_data'` in `public.sp_api_sqp_report_requests`. `imported` and `no_data` both count as complete for ASIN/window planning, so later runs can move through the remaining ASINs and then advance to the next week or month.

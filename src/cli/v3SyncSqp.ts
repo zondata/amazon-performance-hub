@@ -41,6 +41,7 @@ export type SqpRequestStatus =
   | 'pending_timeout'
   | 'completed'
   | 'imported'
+  | 'no_data'
   | 'unavailable'
   | 'failed'
   | 'stale_expired';
@@ -132,8 +133,11 @@ const ACTIVE_STATUSES: SqpRequestStatus[] = [
   'completed',
 ];
 
+const COMPLETE_STATUSES: SqpRequestStatus[] = ['imported', 'no_data'];
+
 const DELAY_NOTE =
   'Amazon has not published this SQP period yet; the next scheduled run will retry.';
+const MAX_CANDIDATE_WINDOWS_PER_SOURCE = 260;
 
 const SOURCE_META: Record<SqpSource, {
   sourceType: string;
@@ -342,26 +346,87 @@ const normalizeRequestRow = (row: Record<string, unknown>): SqpPendingRequest =>
   attemptCount: Number(row.attempt_count ?? 0),
 });
 
-export const selectSqpAsins = async (
-  db: Queryable,
-  accountId: string,
-  marketplace: string,
-  maxAsins: number
-): Promise<string[]> => {
-  const result = await db.query(
+export const selectMissingSqpAsinsForWindow = async (args: {
+  db: Queryable;
+  accountId: string;
+  marketplace: string;
+  source: SqpSource;
+  window: SqpWindow;
+  maxAsins: number;
+}): Promise<{ selectedAsins: string[]; missingCount: number; activeCount: number }> => {
+  const meta = SOURCE_META[args.source];
+  const rawTable = args.source === 'weekly' ? 'sqp_weekly_raw' : 'sqp_monthly_raw';
+  const startColumn = args.source === 'weekly' ? 'week_start' : 'period_start';
+  const endColumn = args.source === 'weekly' ? 'week_end' : 'period_end';
+  const result = await args.db.query(
     `
-      select asin
-      from public.products
-      where account_id = $1
-        and marketplace = $2
-      order by asin asc
+      with valid_products as (
+        select distinct upper(trim(asin)) as asin
+        from public.products
+        where account_id = $1
+          and marketplace = $2
+          and upper(trim(asin)) ~ '^[A-Z0-9]{10}$'
+      ),
+      incomplete as (
+        select p.asin
+        from valid_products p
+        where not exists (
+          select 1
+          from public.${rawTable} raw
+          where raw.account_id = $1
+            and raw.marketplace = $2
+            and raw.scope_type = 'asin'
+            and upper(trim(raw.scope_value)) = p.asin
+            and raw.${startColumn} = $3::date
+            and raw.${endColumn} = $4::date
+        )
+        and not exists (
+          select 1
+          from public.sp_api_sqp_report_requests done
+          where done.account_id = $1
+            and done.marketplace = $2
+            and done.asin = p.asin
+            and done.source_type = $5
+            and done.start_date = $3::date
+            and done.end_date = $4::date
+            and done.status = any($6::text[])
+        )
+      )
+      select
+        i.asin,
+        exists (
+          select 1
+          from public.sp_api_sqp_report_requests active
+          where active.account_id = $1
+            and active.marketplace = $2
+            and active.asin = i.asin
+            and active.source_type = $5
+            and active.start_date = $3::date
+            and active.end_date = $4::date
+            and active.status = any($7::text[])
+        ) as has_active_request
+      from incomplete i
+      order by i.asin asc
     `,
-    [accountId, marketplace]
+    [
+      args.accountId,
+      args.marketplace,
+      args.window.startDate,
+      args.window.endDate,
+      meta.sourceType,
+      COMPLETE_STATUSES,
+      ACTIVE_STATUSES,
+    ]
   );
-  return result.rows
+  const actionable = result.rows
+    .filter((row) => row.has_active_request !== true)
     .map((row) => String(row.asin ?? '').trim().toUpperCase())
-    .filter((asin) => VALID_ASIN_RE.test(asin))
-    .slice(0, maxAsins);
+    .filter((asin) => VALID_ASIN_RE.test(asin));
+  return {
+    selectedAsins: actionable.slice(0, args.maxAsins),
+    missingCount: result.rows.length,
+    activeCount: result.rows.filter((row) => row.has_active_request === true).length,
+  };
 };
 
 const getLatestExistingEnd = async (
@@ -506,8 +571,8 @@ const updateRequestStatus = async (args: {
         notes = $5,
         raw_json = coalesce($6::jsonb, raw_json),
         attempt_count = attempt_count + 1,
-        last_polled_at = case when $2 in ('polling', 'pending_timeout', 'completed', 'imported', 'failed') then now() else last_polled_at end,
-        completed_at = case when $2 in ('completed', 'imported') then now() else completed_at end,
+        last_polled_at = case when $2 in ('polling', 'pending_timeout', 'completed', 'imported', 'no_data', 'failed') then now() else last_polled_at end,
+        completed_at = case when $2 in ('completed', 'imported', 'no_data') then now() else completed_at end,
         imported_at = case when $2 = 'imported' then now() else imported_at end,
         failed_at = case when $2 in ('failed', 'unavailable') then now() else failed_at end,
         retry_after_at = case when $2 in ('pending_timeout', 'unavailable') then now() + interval '1 hour' else retry_after_at end
@@ -724,6 +789,34 @@ const handleUnavailable = async (args: {
   if (!args.soft) args.report.exitCode = 1;
 };
 
+const handleNoData = async (args: {
+  db: Queryable;
+  report: SqpSyncReport;
+  request: SqpPendingRequest;
+  source: SqpSource;
+  note: string;
+}): Promise<void> => {
+  await updateRequestStatus({
+    db: args.db,
+    id: args.request.id,
+    status: 'no_data',
+    statusDetails: args.note,
+    notes: args.note,
+  });
+  await upsertCoverage({
+    db: args.db,
+    accountId: args.report.accountId,
+    marketplace: args.report.marketplace,
+    source: args.source,
+    lastStatus: 'no_data',
+    freshnessStatus: 'no_data',
+    note: args.note,
+  });
+  args.report.importedWindows.push(
+    `${args.source}:${args.request.asin}:${args.request.startDate}->${args.request.endDate}:no_data`
+  );
+};
+
 const resumeRequest = async (args: {
   request: SqpPendingRequest;
   source: SqpSource;
@@ -791,15 +884,26 @@ const resumeRequest = async (args: {
   }
 
   if (statusSummary.processingStatus === 'DONE_NO_DATA') {
-    await handleUnavailable({
-      db: args.db,
-      report: args.report,
-      request: args.request,
-      source: args.source,
-      asin: args.request.asin,
-      window: { startDate: args.request.startDate, endDate: args.request.endDate },
-      soft: args.options.softUnavailableExit,
-    });
+    const window = { startDate: args.request.startDate, endDate: args.request.endDate };
+    if (isOldEnoughForHardNoData(args.source, window, args.now, args.options.releaseTimezone)) {
+      await handleNoData({
+        db: args.db,
+        report: args.report,
+        request: args.request,
+        source: args.source,
+        note: 'Amazon returned DONE_NO_DATA for an old eligible SQP period; marking this ASIN/window complete with no data.',
+      });
+    } else {
+      await handleUnavailable({
+        db: args.db,
+        report: args.report,
+        request: args.request,
+        source: args.source,
+        asin: args.request.asin,
+        window,
+        soft: args.options.softUnavailableExit,
+      });
+    }
     return;
   }
 
@@ -856,17 +960,24 @@ const resumeRequest = async (args: {
       `${args.source}:${args.request.asin}:${args.request.startDate}->${args.request.endDate}`
     );
   } catch (error) {
-    const softNoData =
-      isExpectedSqpUnavailableError(error) ||
-      (!isOldEnoughForHardNoData(
-        args.source,
-        { startDate: args.request.startDate, endDate: args.request.endDate },
-        args.now,
-        args.options.releaseTimezone
-      ) &&
-        error instanceof Error &&
-        /zero SQP rows|no data/i.test(error.message));
-    if (softNoData) {
+    const zeroRows = error instanceof Error && /zero SQP rows|no data/i.test(error.message);
+    const oldEnoughForNoData = isOldEnoughForHardNoData(
+      args.source,
+      { startDate: args.request.startDate, endDate: args.request.endDate },
+      args.now,
+      args.options.releaseTimezone
+    );
+    if (zeroRows && oldEnoughForNoData) {
+      await handleNoData({
+        db: args.db,
+        report: args.report,
+        request: args.request,
+        source: args.source,
+        note: 'Amazon returned an empty SQP report for an old eligible period; marking this ASIN/window complete with no data.',
+      });
+      return;
+    }
+    if (isExpectedSqpUnavailableError(error) || (zeroRows && !oldEnoughForNoData)) {
       await handleUnavailable({
         db: args.db,
         report: args.report,
@@ -1051,10 +1162,7 @@ export const runV3SqpSync = async (
       deps.reportRunner?.downloadAndIngest ?? downloadAndIngestFirstSqpReport,
   };
 
-  const asins = options.resumePendingOnly
-    ? []
-    : await selectSqpAsins(deps.db, options.accountId, options.marketplace, options.maxAsinsPerRun);
-  report.selectedAsinCount = asins.length;
+  let selectedAsinTotal = 0;
   const resumedScopeKeys = new Set<string>();
 
   if (options.resumePending || options.resumePendingOnly) {
@@ -1101,7 +1209,7 @@ export const runV3SqpSync = async (
           to: options.to,
           now,
           releaseTimezone: options.releaseTimezone,
-          maxWindows: options.maxWindowsPerRun,
+          maxWindows: MAX_CANDIDATE_WINDOWS_PER_SOURCE,
         });
         selectedWindows.weekly = built.windows;
         if (built.note) report.notes.push(built.note);
@@ -1113,12 +1221,32 @@ export const runV3SqpSync = async (
           monthlyBackfillStart: options.monthlyBackfillStart,
           now,
           releaseTimezone: options.releaseTimezone,
-          maxWindows: options.maxWindowsPerRun,
+          maxWindows: MAX_CANDIDATE_WINDOWS_PER_SOURCE,
         });
       }
 
+      const windowsWithMissingAsins: SqpWindow[] = [];
       for (const window of selectedWindows[source]) {
-        for (const asin of asins) {
+        const missing = await selectMissingSqpAsinsForWindow({
+          db: deps.db,
+          accountId: options.accountId,
+          marketplace: options.marketplace,
+          source,
+          window,
+          maxAsins: options.maxAsinsPerRun,
+        });
+        if (missing.missingCount === 0) {
+          continue;
+        }
+        windowsWithMissingAsins.push(window);
+        selectedAsinTotal += missing.selectedAsins.length;
+        if (missing.selectedAsins.length === 0 && missing.activeCount > 0) {
+          report.pendingWindows.push(
+            `${source}:${window.startDate}->${window.endDate}:active_requests_pending`
+          );
+          break;
+        }
+        for (const asin of missing.selectedAsins) {
           const scopeKey = requestScopeKey({
             sourceType: SOURCE_META[source].sourceType,
             asin,
@@ -1139,9 +1267,15 @@ export const runV3SqpSync = async (
             now,
           });
         }
+        if (windowsWithMissingAsins.length >= options.maxWindowsPerRun) {
+          break;
+        }
+        break;
       }
+      selectedWindows[source] = windowsWithMissingAsins;
     }
   }
+  report.selectedAsinCount = selectedAsinTotal;
 
   if (report.failures.length > 0) {
     report.nextAction = 'Review failures, fix hard errors, then rerun the same command.';

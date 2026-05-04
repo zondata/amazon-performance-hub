@@ -16,16 +16,34 @@ import {
 class FakeDb {
   readonly updates: Array<{ status: string; params: unknown[] }> = [];
   readonly coverageWrites: unknown[][] = [];
+  readonly insertedRequests: Array<{ asin: string; sourceType: string; startDate: string; endDate: string }> = [];
   activeRequest: SqpPendingRequest | null = null;
   pendingRequests: SqpPendingRequest[] = [];
   latestWeeklyEnd: string | null = '2026-04-18';
   latestMonthlyEnd: string | null = null;
   asins = ['B000000001'];
+  completedScopes = new Set<string>();
+  activeScopes = new Set<string>();
+  rawScopes = new Set<string>();
   inserted = 0;
 
   async query(sql: string, params: unknown[] = []) {
-    if (sql.includes('from public.products')) {
-      return { rows: this.asins.map((asin) => ({ asin })) };
+    if (sql.includes('with valid_products')) {
+      const sourceType = String(params[4]);
+      const startDate = String(params[2]);
+      const endDate = String(params[3]);
+      return {
+        rows: this.asins
+          .map((asin) => asin.trim().toUpperCase())
+          .filter((asin) => /^[A-Z0-9]{10}$/.test(asin))
+          .filter((asin) => !this.rawScopes.has(scope(sourceType, asin, startDate, endDate)))
+          .filter((asin) => !this.completedScopes.has(scope(sourceType, asin, startDate, endDate)))
+          .sort()
+          .map((asin) => ({
+            asin,
+            has_active_request: this.activeScopes.has(scope(sourceType, asin, startDate, endDate)),
+          })),
+      };
     }
     if (sql.includes('max(week_end)')) {
       return { rows: [{ latest_end: this.latestWeeklyEnd }] };
@@ -34,13 +52,37 @@ class FakeDb {
       return { rows: [{ latest_end: this.latestMonthlyEnd }] };
     }
     if (sql.includes('from public.sp_api_sqp_report_requests') && sql.includes('limit 1')) {
-      return { rows: this.activeRequest ? [toRow(this.activeRequest)] : [] };
+      if (this.activeRequest) return { rows: [toRow(this.activeRequest)] };
+      const asin = String(params[2]);
+      const sourceType = String(params[3]);
+      const startDate = String(params[4]);
+      const endDate = String(params[5]);
+      if (this.activeScopes.has(scope(sourceType, asin, startDate, endDate))) {
+        return {
+          rows: [
+            toRow(pending({
+              asin,
+              sourceType,
+              reportPeriod: sourceType === 'sp_api_sqp_monthly' ? 'MONTH' : 'WEEK',
+              startDate,
+              endDate,
+            })),
+          ],
+        };
+      }
+      return { rows: [] };
     }
     if (sql.includes('from public.sp_api_sqp_report_requests') && sql.includes('order by updated_at')) {
       return { rows: this.pendingRequests.map(toRow) };
     }
     if (sql.includes('insert into public.sp_api_sqp_report_requests')) {
       this.inserted += 1;
+      this.insertedRequests.push({
+        asin: String(params[2]),
+        sourceType: String(params[3]),
+        startDate: String(params[6]),
+        endDate: String(params[7]),
+      });
       return {
         rows: [
           {
@@ -76,6 +118,9 @@ class FakeDb {
     throw new Error(`Unexpected query: ${sql}`);
   }
 }
+
+const scope = (sourceType: string, asin: string, startDate: string, endDate: string) =>
+  `${sourceType}:${asin}:${startDate}:${endDate}`;
 
 const toRow = (request: SqpPendingRequest) => ({
   id: request.id,
@@ -211,6 +256,165 @@ describe('V3 SQP window helpers', () => {
 });
 
 describe('V3 SQP pending and coverage behavior', () => {
+  it('batches missing monthly ASINs for the current month before advancing', async () => {
+    const asins = Array.from({ length: 12 }, (_, index) =>
+      `B${String(index + 1).padStart(9, '0')}`
+    );
+    const db = new FakeDb();
+    db.asins = asins;
+    db.latestMonthlyEnd = null;
+    const createReport = vi.fn(async () => ({ reportId: `report-${createReport.mock.calls.length}` }));
+    await runV3SqpSync(
+      {
+        ...baseOptions,
+        source: 'monthly',
+        mode: 'backfill',
+        maxAsinsPerRun: 5,
+      },
+      {
+        db,
+        now: new Date('2024-03-01T08:00:00.000Z'),
+        reportRunner: {
+          createReport,
+          pollReport: async ({ reportId }) => ({
+            reportId,
+            reportType: null,
+            processingStatus: 'IN_PROGRESS',
+            terminalReached: false,
+            maxAttemptsReached: true,
+            attemptCount: 1,
+            reportDocumentId: null,
+          }),
+        },
+        writeReport: async () => {},
+      }
+    );
+    expect(db.insertedRequests.map((request) => request.asin)).toEqual(asins.slice(0, 5));
+    expect(new Set(db.insertedRequests.map((request) => request.startDate))).toEqual(
+      new Set(['2024-01-01'])
+    );
+
+    const nextDb = new FakeDb();
+    nextDb.asins = asins;
+    nextDb.latestMonthlyEnd = null;
+    for (const asin of asins.slice(0, 5)) {
+      nextDb.completedScopes.add(scope('sp_api_sqp_monthly', asin, '2024-01-01', '2024-01-31'));
+    }
+    await runV3SqpSync(
+      {
+        ...baseOptions,
+        source: 'monthly',
+        mode: 'backfill',
+        maxAsinsPerRun: 5,
+      },
+      {
+        db: nextDb,
+        now: new Date('2024-03-01T08:00:00.000Z'),
+        reportRunner: {
+          createReport: async () => ({ reportId: 'report-next' }),
+          pollReport: async ({ reportId }) => ({
+            reportId,
+            reportType: null,
+            processingStatus: 'IN_PROGRESS',
+            terminalReached: false,
+            maxAttemptsReached: true,
+            attemptCount: 1,
+            reportDocumentId: null,
+          }),
+        },
+        writeReport: async () => {},
+      }
+    );
+    expect(nextDb.insertedRequests.map((request) => request.asin)).toEqual(asins.slice(5, 10));
+    expect(new Set(nextDb.insertedRequests.map((request) => request.startDate))).toEqual(
+      new Set(['2024-01-01'])
+    );
+  });
+
+  it('batches missing weekly ASINs for the current week before advancing', async () => {
+    const asins = Array.from({ length: 12 }, (_, index) =>
+      `B${String(index + 1).padStart(9, '0')}`
+    );
+    const db = new FakeDb();
+    db.asins = asins;
+    db.latestWeeklyEnd = '2026-04-18';
+    for (const asin of asins.slice(0, 5)) {
+      db.rawScopes.add(scope('sp_api_sqp_weekly', asin, '2026-04-19', '2026-04-25'));
+    }
+    await runV3SqpSync(
+      {
+        ...baseOptions,
+        source: 'weekly',
+        maxAsinsPerRun: 5,
+      },
+      {
+        db,
+        now: new Date('2026-05-04T07:00:00.000Z'),
+        reportRunner: {
+          createReport: async () => ({ reportId: 'report-weekly' }),
+          pollReport: async ({ reportId }) => ({
+            reportId,
+            reportType: null,
+            processingStatus: 'IN_PROGRESS',
+            terminalReached: false,
+            maxAttemptsReached: true,
+            attemptCount: 1,
+            reportDocumentId: null,
+          }),
+        },
+        writeReport: async () => {},
+      }
+    );
+    expect(db.insertedRequests.map((request) => request.asin)).toEqual(asins.slice(5, 10));
+    expect(new Set(db.insertedRequests.map((request) => request.startDate))).toEqual(
+      new Set(['2026-04-19'])
+    );
+  });
+
+  it('keeps DONE_NO_DATA retryable during release grace and marks old windows no_data', async () => {
+    const recentDb = new FakeDb();
+    recentDb.pendingRequests = [pending()];
+    await runV3SqpSync({ ...baseOptions, resumePending: true, resumePendingOnly: true }, {
+      db: recentDb,
+      now: new Date('2026-04-27T07:00:00.000Z'),
+      reportRunner: {
+        pollReport: async () => ({
+          reportId: 'report-1',
+          reportType: null,
+          processingStatus: 'DONE_NO_DATA',
+          terminalReached: true,
+          maxAttemptsReached: false,
+          attemptCount: 1,
+          reportDocumentId: null,
+        }),
+      },
+      writeReport: async () => {},
+    });
+    expect(recentDb.updates.map((update) => update.status)).toContain('unavailable');
+    expect(recentDb.coverageWrites[0]).toContain('delayed_expected');
+
+    const oldDb = new FakeDb();
+    oldDb.pendingRequests = [pending()];
+    await runV3SqpSync({ ...baseOptions, resumePending: true, resumePendingOnly: true }, {
+      db: oldDb,
+      now: new Date('2026-05-10T07:00:00.000Z'),
+      reportRunner: {
+        pollReport: async () => ({
+          reportId: 'report-1',
+          reportType: null,
+          processingStatus: 'DONE_NO_DATA',
+          terminalReached: true,
+          maxAttemptsReached: false,
+          attemptCount: 1,
+          reportDocumentId: null,
+        }),
+      },
+      writeReport: async () => {},
+    });
+    expect(oldDb.updates.map((update) => update.status)).toContain('no_data');
+    expect(oldDb.coverageWrites[0]).toContain('no_data');
+  });
+
   it('does not create a duplicate active request for the same SQP scope', async () => {
     const db = new FakeDb();
     db.activeRequest = pending();
