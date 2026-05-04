@@ -4,6 +4,7 @@ import { env } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import {
   buildPipelineStatusRows,
+  isMissingSqpReportRequestTableError,
   PIPELINE_STATUS_SPECS,
   type PipelineCoverageRow,
   type PipelinePendingRow,
@@ -25,7 +26,7 @@ const toObjectRecord = (value: unknown): Record<string, unknown> =>
     : {};
 
 export const getPipelineStatus = async (): Promise<PipelineStatusPageData> => {
-  const [coverageResult, pendingResult, adsBatchResult] = await Promise.all([
+  const [coverageResult, adsPendingResult, sqpPendingResult, adsBatchResult] = await Promise.all([
     supabaseAdmin
       .from('data_coverage_status')
       .select(
@@ -36,6 +37,12 @@ export const getPipelineStatus = async (): Promise<PipelineStatusPageData> => {
       .in('source_type', COVERAGE_SOURCE_TYPES),
     supabaseAdmin
       .from('ads_api_report_requests')
+      .select('source_type,status,created_at,retry_after_at')
+      .eq('account_id', env.accountId)
+      .eq('marketplace', env.marketplace)
+      .in('source_type', PENDING_SOURCE_TYPES),
+    supabaseAdmin
+      .from('sp_api_sqp_report_requests')
       .select('source_type,status,created_at,retry_after_at')
       .eq('account_id', env.accountId)
       .eq('marketplace', env.marketplace)
@@ -57,8 +64,14 @@ export const getPipelineStatus = async (): Promise<PipelineStatusPageData> => {
   if (coverageResult.error) {
     throw new Error(`Failed to load data_coverage_status: ${coverageResult.error.message}`);
   }
-  if (pendingResult.error) {
-    throw new Error(`Failed to load ads_api_report_requests: ${pendingResult.error.message}`);
+  if (adsPendingResult.error) {
+    throw new Error(`Failed to load ads_api_report_requests: ${adsPendingResult.error.message}`);
+  }
+  if (
+    sqpPendingResult.error &&
+    !isMissingSqpReportRequestTableError(sqpPendingResult.error)
+  ) {
+    throw new Error(`Failed to load sp_api_sqp_report_requests: ${sqpPendingResult.error.message}`);
   }
   if (adsBatchResult.error) {
     throw new Error(`Failed to load latest ads batch sync run: ${adsBatchResult.error.message}`);
@@ -82,7 +95,10 @@ export const getPipelineStatus = async (): Promise<PipelineStatusPageData> => {
     notes: typeof row.notes === 'string' ? row.notes : null,
   }));
 
-  const pendingRows: PipelinePendingRow[] = (pendingResult.data ?? []).map((row) => ({
+  const pendingRows: PipelinePendingRow[] = [
+    ...(adsPendingResult.data ?? []),
+    ...(sqpPendingResult.error ? [] : (sqpPendingResult.data ?? [])),
+  ].map((row) => ({
     sourceType: String(row.source_type),
     status: String(row.status),
     createdAt: typeof row.created_at === 'string' ? row.created_at : null,

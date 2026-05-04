@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildPipelineStatusRows,
+  PIPELINE_STATUS_SPECS,
+  isMissingSqpReportRequestTableError,
   type PipelineCoverageRow,
   type PipelinePendingRow,
   type PipelineStatusSpec,
@@ -204,6 +206,44 @@ describe('buildPipelineStatusRows', () => {
     });
 
     expect(rows[0].dataCompleteness).toBe('No Data');
+  });
+
+  it('includes source-specific weekly and monthly SQP rows', () => {
+    expect(PIPELINE_STATUS_SPECS).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: 'sp_api_sqp_weekly',
+          targetTable: 'sqp_weekly_raw',
+          pendingSourceType: 'sp_api_sqp_weekly',
+        }),
+        expect.objectContaining({
+          sourceType: 'sp_api_sqp_monthly',
+          targetTable: 'sqp_monthly_raw',
+          pendingSourceType: 'sp_api_sqp_monthly',
+        }),
+      ])
+    );
+  });
+
+  it('detects only missing SQP report request table errors as deployment-order safe', () => {
+    expect(
+      isMissingSqpReportRequestTableError({
+        code: '42P01',
+        message: 'relation "public.sp_api_sqp_report_requests" does not exist',
+      })
+    ).toBe(true);
+    expect(
+      isMissingSqpReportRequestTableError({
+        code: '42501',
+        message: 'permission denied for table sp_api_sqp_report_requests',
+      })
+    ).toBe(false);
+    expect(
+      isMissingSqpReportRequestTableError({
+        code: '42P01',
+        message: 'relation "public.ads_api_report_requests" does not exist',
+      })
+    ).toBe(false);
   });
 
   it('maps oldest_period_start to earliestReportDay as YYYY-MM-DD', () => {

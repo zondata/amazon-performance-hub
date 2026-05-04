@@ -97,6 +97,19 @@ export type PipelineStatusPageData = {
   batchSummary: PipelineBatchSummary;
 };
 
+export const isMissingSqpReportRequestTableError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown; message?: unknown; details?: unknown };
+  const text = [candidate.message, candidate.details]
+    .filter((value): value is string => typeof value === 'string')
+    .join('\n');
+  return (
+    candidate.code === '42P01' &&
+    text.includes('sp_api_sqp_report_requests') &&
+    /relation .* does not exist|table .* does not exist/i.test(text)
+  );
+};
+
 export const PIPELINE_STATUS_SPECS: PipelineStatusSpec[] = [
   {
     sourceGroup: 'Sales & Traffic',
@@ -208,8 +221,16 @@ export const PIPELINE_STATUS_SPECS: PipelineStatusSpec[] = [
   {
     sourceGroup: 'SQP',
     sourceType: 'sp_api_sqp_weekly',
-    targetTable: 'sqp_weekly_latest',
+    targetTable: 'sqp_weekly_raw',
     implementationStatus: 'implemented',
+    pendingSourceType: 'sp_api_sqp_weekly',
+  },
+  {
+    sourceGroup: 'SQP monthly',
+    sourceType: 'sp_api_sqp_monthly',
+    targetTable: 'sqp_monthly_raw',
+    implementationStatus: 'implemented',
+    pendingSourceType: 'sp_api_sqp_monthly',
   },
 ];
 

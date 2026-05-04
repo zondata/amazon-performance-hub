@@ -1,0 +1,145 @@
+name: V3 SQP Sync
+
+on:
+  schedule:
+    - cron: '11 9 * * *'
+  workflow_dispatch:
+    inputs:
+      account_id:
+        description: Account slug
+        required: false
+        default: ''
+        type: string
+      marketplace:
+        description: Marketplace code
+        required: false
+        default: ''
+        type: string
+      source:
+        description: SQP source
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - weekly
+          - monthly
+      from_date:
+        description: Start date YYYY-MM-DD
+        required: false
+        default: ''
+        type: string
+      to_date:
+        description: End date YYYY-MM-DD
+        required: false
+        default: ''
+        type: string
+      mode:
+        description: Sync mode
+        required: false
+        default: scheduled
+        type: choice
+        options:
+          - scheduled
+          - manual
+          - backfill
+      max_windows_per_run:
+        description: Maximum windows per source
+        required: false
+        default: '2'
+        type: string
+      max_asins_per_run:
+        description: Maximum ASINs per run
+        required: false
+        default: '5'
+        type: string
+      dry_run:
+        description: Skip external report creation
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: v3-sqp-sync-${{ github.repository }}-${{ github.ref_name || 'default' }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SP_API_LWA_CLIENT_ID: ${{ secrets.SP_API_LWA_CLIENT_ID }}
+      SP_API_LWA_CLIENT_SECRET: ${{ secrets.SP_API_LWA_CLIENT_SECRET }}
+      SP_API_REFRESH_TOKEN: ${{ secrets.SP_API_REFRESH_TOKEN }}
+      SP_API_REGION: ${{ secrets.SP_API_REGION }}
+      SP_API_MARKETPLACE_ID: ${{ secrets.SP_API_MARKETPLACE_ID }}
+      APP_ACCOUNT_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.account_id || secrets.APP_ACCOUNT_ID }}
+      APP_MARKETPLACE: ${{ github.event_name == 'workflow_dispatch' && inputs.marketplace || secrets.APP_MARKETPLACE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Print workflow ref diagnostics
+        run: |
+          echo "Workflow: ${{ github.workflow }}"
+          echo "GitHub ref: ${{ github.ref }}"
+          echo "GitHub ref name: ${{ github.ref_name }}"
+          echo "GitHub SHA: ${{ github.sha }}"
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Validate required secrets
+        run: |
+          missing=0
+          for name in \
+            DATABASE_URL \
+            SUPABASE_URL \
+            SUPABASE_SERVICE_ROLE_KEY \
+            SP_API_LWA_CLIENT_ID \
+            SP_API_LWA_CLIENT_SECRET \
+            SP_API_REFRESH_TOKEN \
+            SP_API_REGION \
+            SP_API_MARKETPLACE_ID \
+            APP_ACCOUNT_ID \
+            APP_MARKETPLACE
+          do
+            eval "value=\${$name}"
+            if [ -z "$value" ]; then
+              echo "Missing required secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Run V3 SQP sync
+        run: >
+          npm run v3:sync:sqp --
+          --account-id "${APP_ACCOUNT_ID}"
+          --marketplace "${APP_MARKETPLACE}"
+          --source "${{ github.event_name == 'workflow_dispatch' && inputs.source || 'all' }}"
+          --mode "${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'scheduled' }}"
+          --resume-pending
+          --soft-unavailable-exit
+          --max-windows-per-run "${{ github.event_name == 'workflow_dispatch' && inputs.max_windows_per_run || '1' }}"
+          --max-asins-per-run "${{ github.event_name == 'workflow_dispatch' && inputs.max_asins_per_run || '5' }}"
+          ${{ github.event_name == 'workflow_dispatch' && inputs.from_date != '' && format('--from {0}', inputs.from_date) || '' }}
+          ${{ github.event_name == 'workflow_dispatch' && inputs.to_date != '' && format('--to {0}', inputs.to_date) || '' }}
+          ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Upload out artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v3-sqp-sync-out
+          path: out/
+          if-no-files-found: ignore

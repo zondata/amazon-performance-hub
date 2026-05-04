@@ -1,0 +1,58 @@
+name: V3 SQP Pending Resume
+
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: v3-sqp-pending-resume-${{ github.repository }}-${{ github.ref_name || 'default' }}
+  cancel-in-progress: false
+
+jobs:
+  resume:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SP_API_LWA_CLIENT_ID: ${{ secrets.SP_API_LWA_CLIENT_ID }}
+      SP_API_LWA_CLIENT_SECRET: ${{ secrets.SP_API_LWA_CLIENT_SECRET }}
+      SP_API_REFRESH_TOKEN: ${{ secrets.SP_API_REFRESH_TOKEN }}
+      SP_API_REGION: ${{ secrets.SP_API_REGION }}
+      SP_API_MARKETPLACE_ID: ${{ secrets.SP_API_MARKETPLACE_ID }}
+      APP_ACCOUNT_ID: ${{ secrets.APP_ACCOUNT_ID }}
+      APP_MARKETPLACE: ${{ secrets.APP_MARKETPLACE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Print workflow ref diagnostics
+        run: |
+          echo "Workflow: ${{ github.workflow }}"
+          echo "GitHub ref: ${{ github.ref }}"
+          echo "GitHub ref name: ${{ github.ref_name }}"
+          echo "GitHub SHA: ${{ github.sha }}"
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Run V3 SQP pending resume
+        run: >
+          npm run v3:resume:sqp --
+          --account-id "${APP_ACCOUNT_ID}"
+          --marketplace "${APP_MARKETPLACE}"
+          --soft-unavailable-exit
+
+      - name: Upload out artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v3-sqp-pending-resume-out
+          path: out/
+          if-no-files-found: ignore
