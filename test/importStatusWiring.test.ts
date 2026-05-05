@@ -15,6 +15,10 @@ const h10UploadClientPath = path.join(
   process.cwd(),
   'apps/web/src/components/imports/H10KeywordRankingUploadForm.tsx'
 );
+const h10UploadServerPath = path.join(
+  process.cwd(),
+  'apps/web/src/lib/imports/h10KeywordRankingUpload.ts'
+);
 
 describe('import status wiring', () => {
   it('links imports health to the H10 keyword ranking upload page', () => {
@@ -44,5 +48,14 @@ describe('import status wiring', () => {
     expect(source).not.toContain('SUPABASE_SERVICE_ROLE_KEY');
     expect(source).not.toContain('ingestHelium10KeywordTrackerRaw');
     expect(source).not.toContain('manualHelium10RankImport');
+  });
+
+  it('keeps the server upload path on shared ingest instead of child_process shell-out', () => {
+    const source = fs.readFileSync(h10UploadServerPath, 'utf8');
+
+    expect(source).toContain('ingestHelium10KeywordTrackerRawWithClient');
+    expect(source).not.toContain('node:child_process');
+    expect(source).not.toContain('execFile');
+    expect(source).not.toContain('ts-node');
   });
 });

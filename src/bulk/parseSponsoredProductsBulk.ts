@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { normText } from "../../shared/textNormalize";
 
 export type CampaignRow = {
   campaignId: string | null;
@@ -68,12 +69,7 @@ export function cleanId(value: unknown): string | null {
   return raw.endsWith(".0") ? raw.slice(0, -2) : raw;
 }
 
-export function normText(value: unknown): string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-}
+export { normText };
 
 function parseNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;

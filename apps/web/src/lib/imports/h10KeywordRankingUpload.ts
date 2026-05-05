@@ -1,11 +1,8 @@
 import 'server-only';
 
-import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 
 import { env } from '@/lib/env';
 import {
@@ -13,8 +10,10 @@ import {
   type H10KeywordRankingUploadState,
 } from '@/lib/imports/h10KeywordRankingUploadShared';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-
-const execFileAsync = promisify(execFile);
+import {
+  ingestHelium10KeywordTrackerRawWithClient,
+  type Helium10KeywordTrackerIngestResult,
+} from '../../../../../shared/helium10KeywordTrackerIngestCore';
 
 const CSV_CONTENT_TYPES = new Set([
   '',
@@ -24,16 +23,6 @@ const CSV_CONTENT_TYPES = new Set([
   'text/plain',
 ]);
 
-type H10CliImportResult = {
-  status: 'ok' | 'already ingested';
-  uploadId?: string;
-  rowCount?: number;
-  coverageStart?: string | null;
-  coverageEnd?: string | null;
-  asin?: string;
-  marketplaceDomainRaw?: string | null;
-};
-
 export type H10KeywordRankingStatus = {
   latestObservedDate: string | null;
   rowCount: number | null;
@@ -41,13 +30,7 @@ export type H10KeywordRankingStatus = {
   statusMessage: string | null;
 };
 
-type H10CliRuntime = {
-  repoRoot: string;
-  tsNodeBin: string;
-  ingestCliPath: string;
-};
-
-const buildSummary = (result: H10CliImportResult) => {
+const buildSummary = (result: Helium10KeywordTrackerIngestResult) => {
   const parts: string[] = [];
   if (result.asin) parts.push(`ASIN ${result.asin}`);
   if (typeof result.rowCount === 'number') {
@@ -77,51 +60,6 @@ const isCsvUpload = (fileName: string, contentType: string): string | null => {
   return null;
 };
 
-const resolveCliRuntime = (): H10CliRuntime => {
-  const candidates = [process.cwd(), path.resolve(process.cwd(), '..', '..')];
-  for (const candidate of candidates) {
-    const tsNodeBin = path.join(candidate, 'node_modules', '.bin', 'ts-node');
-    const ingestCliPath = path.join(candidate, 'src', 'cli', 'ingestHelium10KeywordTracker.ts');
-    if (existsSync(tsNodeBin) && existsSync(ingestCliPath)) {
-      return {
-        repoRoot: candidate,
-        tsNodeBin,
-        ingestCliPath,
-      };
-    }
-  }
-
-  throw new Error(
-    'Unable to resolve the existing H10 ingest CLI. Expected repo root with node_modules/.bin/ts-node and src/cli/ingestHelium10KeywordTracker.ts.'
-  );
-};
-
-const runH10ImportCli = async (
-  tempPath: string,
-  originalFileName: string
-): Promise<H10CliImportResult> => {
-  const runtime = resolveCliRuntime();
-  const args = [
-    runtime.ingestCliPath,
-    '--account-id',
-    env.accountId,
-    '--marketplace',
-    env.marketplace,
-    '--original-filename',
-    originalFileName,
-    '--json',
-    tempPath,
-  ];
-  const { stdout } = await execFileAsync(runtime.tsNodeBin, args, {
-    cwd: runtime.repoRoot,
-    env: process.env,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-
-  const parsed = JSON.parse(stdout.trim()) as H10CliImportResult;
-  return parsed;
-};
-
 export async function importH10KeywordRankingUpload(
   file: File
 ): Promise<H10KeywordRankingUploadState> {
@@ -143,7 +81,13 @@ export async function importH10KeywordRankingUpload(
     const arrayBuffer = await file.arrayBuffer();
     await fs.writeFile(tempPath, Buffer.from(arrayBuffer));
 
-    const ingestResult = await runH10ImportCli(tempPath, originalFileName);
+    const ingestResult = await ingestHelium10KeywordTrackerRawWithClient({
+      client: supabaseAdmin,
+      csvPath: tempPath,
+      accountId: env.accountId,
+      marketplace: env.marketplace,
+      originalFilenameOverride: originalFileName,
+    });
 
     return {
       ok: true,
