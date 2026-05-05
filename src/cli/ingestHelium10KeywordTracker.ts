@@ -15,10 +15,13 @@ function getArg(flag: string): string | undefined {
 function getPositionalArgs(): string[] {
   const args = process.argv.slice(2);
   const positionals: string[] = [];
+  const booleanFlags = new Set(["--json"]);
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg.startsWith("--")) {
-      i += 1;
+      if (!booleanFlags.has(arg) && !arg.includes("=")) {
+        i += 1;
+      }
       continue;
     }
     positionals.push(arg);
@@ -30,6 +33,8 @@ async function main() {
   const accountId = getArg("--account-id");
   const marketplace = getArg("--marketplace");
   const exportedAtArg = getArg("--exported-at");
+  const originalFilenameArg = getArg("--original-filename");
+  const json = process.argv.includes("--json");
   const positionals = getPositionalArgs();
   const csvPath = positionals[0];
 
@@ -38,7 +43,18 @@ async function main() {
     process.exit(1);
   }
 
-  const result = await ingestHelium10KeywordTrackerRaw(csvPath, accountId, marketplace, exportedAtArg);
+  const result = await ingestHelium10KeywordTrackerRaw(
+    csvPath,
+    accountId,
+    marketplace,
+    exportedAtArg,
+    originalFilenameArg
+  );
+  if (json) {
+    console.log(JSON.stringify(result));
+    return;
+  }
+
   if (result.status === "already ingested") {
     console.log("Already ingested (same account_id + file hash).");
     return;

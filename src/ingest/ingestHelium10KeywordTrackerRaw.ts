@@ -25,11 +25,15 @@ export async function ingestHelium10KeywordTrackerRaw(
   csvPath: string,
   accountId: string,
   marketplace: string,
-  exportedAtOverride?: string
+  exportedAtOverride?: string,
+  originalFilenameOverride?: string
 ): Promise<Helium10KeywordTrackerIngestResult> {
   const client = getSupabaseClient();
   const fileHash = hashFileSha256(csvPath);
-  const filename = path.basename(csvPath);
+  const normalizedOriginalFilename = originalFilenameOverride
+    ? path.basename(originalFilenameOverride.replace(/\\/g, "/").trim())
+    : null;
+  const filename = normalizedOriginalFilename || path.basename(csvPath);
 
   const { data: existingUpload, error: existingError } = await retryAsync(
     () =>

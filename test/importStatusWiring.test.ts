@@ -1,43 +1,48 @@
-import fs from "node:fs";
-import path from "node:path";
+import fs from 'node:fs';
+import path from 'node:path';
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from 'vitest';
 
-const cliPath = path.join(process.cwd(), "src/cli/importBatchFromManifest.ts");
-const uploaderPath = path.join(
+const importsHealthPagePath = path.join(
   process.cwd(),
-  "apps/web/src/components/imports/ImportBatchUploader.tsx"
+  'apps/web/src/app/imports-health/page.tsx'
 );
-const healthPath = path.join(
+const h10UploadPagePath = path.join(
   process.cwd(),
-  "apps/web/src/lib/health/getDataHealth.ts"
+  'apps/web/src/app/imports/h10-keyword-ranking/page.tsx'
+);
+const h10UploadClientPath = path.join(
+  process.cwd(),
+  'apps/web/src/components/imports/H10KeywordRankingUploadForm.tsx'
 );
 
-describe("import status visibility wiring", () => {
-  it("distinguishes not_required from skipped in the batch CLI and uploader", () => {
-    const cliSource = fs.readFileSync(cliPath, "utf-8");
-    const uploaderSource = fs.readFileSync(uploaderPath, "utf-8");
+describe('import status wiring', () => {
+  it('links imports health to the H10 keyword ranking upload page', () => {
+    const source = fs.readFileSync(importsHealthPagePath, 'utf8');
 
-    expect(cliSource).toContain('status: "ok" | "not_required" | "missing_snapshot" | "skipped" | "error"');
-    expect(cliSource).toContain('status: "not_required"');
-    expect(cliSource).toContain("No mapping step required for this source type.");
-    expect(cliSource).toContain(
-      "Mapping skipped because ingest status was already ingested and this flow did not remap the existing upload."
-    );
-    expect(cliSource).toContain("Mapping skipped because ingest failed.");
-    expect(cliSource).toContain("Mapping skipped because upload_id was not returned from ingest.");
-    expect(cliSource).toContain("await persistItemStatus({ accountId, item: summaryItem });");
-    expect(uploaderSource).toContain("Ingest OK");
-    expect(uploaderSource).toContain("No mapping required");
-    expect(uploaderSource).toContain("Map problems");
-    expect(uploaderSource).toContain("Ingest status");
-    expect(uploaderSource).toContain("Map status");
-    expect(uploaderSource).toContain("Details");
+    expect(source).toContain("href=\"/imports/h10-keyword-ranking\"");
+    expect(source).toContain('Helium 10 Keyword Ranking Upload');
+    expect(source).toContain('Open H10 upload');
   });
 
-  it("includes sp_advertised_product in the SP mapping-issues summary", () => {
-    const healthSource = fs.readFileSync(healthPath, "utf-8");
+  it('renders the dedicated H10 upload route with operator navigation', () => {
+    const source = fs.readFileSync(h10UploadPagePath, 'utf8');
 
-    expect(healthSource).toContain("'sp_advertised_product'");
+    expect(source).toContain('Helium 10 Keyword Ranking Upload');
+    expect(source).toContain(
+      'Upload a Helium 10 Keyword Tracker CSV to update keyword ranking history.'
+    );
+    expect(source).toContain('Back to Imports &amp; Health');
+    expect(source).toContain('Open Pipeline Status');
+    expect(source).toContain('Current H10 status');
+  });
+
+  it('keeps the client upload form free of service-role and root import code', () => {
+    const source = fs.readFileSync(h10UploadClientPath, 'utf8');
+
+    expect(source).not.toContain('supabaseAdmin');
+    expect(source).not.toContain('SUPABASE_SERVICE_ROLE_KEY');
+    expect(source).not.toContain('ingestHelium10KeywordTrackerRaw');
+    expect(source).not.toContain('manualHelium10RankImport');
   });
 });
