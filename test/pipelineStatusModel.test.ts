@@ -197,7 +197,7 @@ describe('buildPipelineStatusRows', () => {
     const rows = buildRows({
       specs: [
         {
-          sourceGroup: 'SQP',
+          sourceGroup: 'SQP weekly',
           sourceType: 'sp_api_sqp_weekly',
           targetTable: 'sqp_weekly_latest',
           implementationStatus: 'implemented',
@@ -212,6 +212,7 @@ describe('buildPipelineStatusRows', () => {
     expect(PIPELINE_STATUS_SPECS).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          sourceGroup: 'SQP weekly',
           sourceType: 'sp_api_sqp_weekly',
           targetTable: 'sqp_weekly_raw',
           pendingSourceType: 'sp_api_sqp_weekly',
