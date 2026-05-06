@@ -19,6 +19,10 @@ const h10UploadServerPath = path.join(
   process.cwd(),
   'apps/web/src/lib/imports/h10KeywordRankingUpload.ts'
 );
+const h10StatusHelperPath = path.join(
+  process.cwd(),
+  'apps/web/src/lib/imports/importSourceStatus.ts'
+);
 
 describe('import status wiring', () => {
   it('links imports health to the H10 keyword ranking upload page', () => {
@@ -54,8 +58,23 @@ describe('import status wiring', () => {
     const source = fs.readFileSync(h10UploadServerPath, 'utf8');
 
     expect(source).toContain('ingestHelium10KeywordTrackerRawWithClient');
+    expect(source).toContain('upsertH10KeywordTrackerImportSourceStatus');
+    expect(source).not.toContain('../src/importStatus/db');
+    expect(source).not.toContain('../../../../../src/importStatus/db');
     expect(source).not.toContain('node:child_process');
     expect(source).not.toContain('execFile');
     expect(source).not.toContain('ts-node');
+  });
+
+  it('keeps import source status updates in a server-only helper', () => {
+    const helperSource = fs.readFileSync(h10StatusHelperPath, 'utf8');
+    const clientSource = fs.readFileSync(h10UploadClientPath, 'utf8');
+
+    expect(helperSource).toContain("import 'server-only';");
+    expect(helperSource).toContain("from('import_source_status')");
+    expect(helperSource).not.toContain('getSupabaseClient');
+    expect(helperSource).not.toContain('dotenv');
+    expect(clientSource).not.toContain('importSourceStatus');
+    expect(clientSource).not.toContain('upsertH10KeywordTrackerImportSourceStatus');
   });
 });
