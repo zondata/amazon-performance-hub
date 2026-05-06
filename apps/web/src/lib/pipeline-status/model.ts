@@ -219,7 +219,7 @@ export const PIPELINE_STATUS_SPECS: PipelineStatusSpec[] = [
     implementationStatus: 'not_implemented',
   },
   {
-    sourceGroup: 'SQP',
+    sourceGroup: 'SQP weekly',
     sourceType: 'sp_api_sqp_weekly',
     targetTable: 'sqp_weekly_raw',
     implementationStatus: 'implemented',
