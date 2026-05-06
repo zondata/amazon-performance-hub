@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 
 import CopyButton from '@/components/CopyButton';
 import ImportBatchUploader from '@/components/imports/ImportBatchUploader';
@@ -274,6 +275,28 @@ export default async function ImportsHealthPage({
         spawnEnabled={env.enableBulkgenSpawn}
         initialIgnoredSourceTypes={importSettings.ignored_source_types}
       />
+
+      <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="text-xs uppercase tracking-[0.3em] text-muted">
+              Manual ranking import
+            </div>
+            <div className="mt-2 text-lg font-semibold text-foreground">
+              Helium 10 Keyword Ranking Upload
+            </div>
+            <div className="mt-1 text-sm text-muted">
+              Upload one Helium 10 Keyword Tracker CSV using the existing server-side import path.
+            </div>
+          </div>
+          <Link
+            href="/imports/h10-keyword-ranking"
+            className="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-semibold text-foreground"
+          >
+            Open H10 upload
+          </Link>
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-border bg-surface/80 p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">

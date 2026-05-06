@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { normText } from '../bulk/parseSponsoredProductsBulk';
+import { normText } from '../../shared/textNormalize';
 import { normalizeHeader, parseIntSafe } from '../ads/sdReportUtils';
 import { hashFileSha256 } from '../ingest/utils';
 import {
