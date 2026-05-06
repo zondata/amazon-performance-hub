@@ -69,6 +69,21 @@ function addContextFilters(
   }
 }
 
+function addAdsContextFilters(
+  clauses: string[],
+  values: unknown[],
+  config: Pick<McpServerConfig, "accountId" | "marketplace">,
+): void {
+  if (config.accountId) {
+    values.push(config.accountId);
+    clauses.push(`account_id = $${values.length}`);
+  }
+  if (config.marketplace) {
+    values.push(config.marketplace);
+    clauses.push(`(marketplace = $${values.length} or marketplace is null)`);
+  }
+}
+
 function toJsonResult(payload: Record<string, unknown>): ToolResult {
   return {
     structuredContent: payload,
@@ -167,7 +182,7 @@ export function buildSpCampaignSummaryQuery(
 
   const values: unknown[] = [startDate, endDate, "sp", "campaign"];
   const clauses = ["date >= $1", "date <= $2", "channel = $3", "performance_level = $4"];
-  addContextFilters(clauses, values, config);
+  addAdsContextFilters(clauses, values, config);
   if (campaignId) {
     values.push(campaignId);
     clauses.push(`campaign_id = $${values.length}`);
@@ -220,7 +235,7 @@ export function buildSpTargetSummaryQuery(
 
   const values: unknown[] = [startDate, endDate, "sp", "target"];
   const clauses = ["date >= $1", "date <= $2", "channel = $3", "performance_level = $4"];
-  addContextFilters(clauses, values, config);
+  addAdsContextFilters(clauses, values, config);
   if (campaignId) {
     values.push(campaignId);
     clauses.push(`campaign_id = $${values.length}`);

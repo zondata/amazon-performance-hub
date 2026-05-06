@@ -7,6 +7,8 @@ import {
   buildCoverageQuery,
   buildH10KeywordRankingsQuery,
   buildSalesSummaryQuery,
+  buildSpCampaignSummaryQuery,
+  buildSpTargetSummaryQuery,
   createToolDefinitions,
   EXCLUDED_SQP_SOURCE_TYPES,
   MCP_TOOL_NAMES,
@@ -106,6 +108,46 @@ describe("read-only MCP v1", () => {
     const query = buildCoverageQuery(config, {});
     expect(query.values[0]).toEqual(EXCLUDED_SQP_SOURCE_TYPES);
     expect(query.text).toContain("source_type <> ALL($1::text[])");
+  });
+
+  it("does not exclude null marketplace ads rows in SP campaign summary", () => {
+    const query = buildSpCampaignSummaryQuery(config, {
+      start_date: "2026-01-01",
+      end_date: "2026-01-31",
+    });
+    expect(query.text).toContain("(marketplace = $6 or marketplace is null)");
+    expect(query.text).toContain("account_id = $5");
+  });
+
+  it("does not exclude null marketplace ads rows in SP target summary", () => {
+    const query = buildSpTargetSummaryQuery(config, {
+      start_date: "2026-01-01",
+      end_date: "2026-01-31",
+    });
+    expect(query.text).toContain("(marketplace = $6 or marketplace is null)");
+    expect(query.text).toContain("account_id = $5");
+  });
+
+  it("keeps strict marketplace filtering for sales, H10, and coverage", () => {
+    const salesQuery = buildSalesSummaryQuery(config, {
+      start_date: "2026-01-01",
+      end_date: "2026-01-31",
+    });
+    expect(salesQuery.text).toContain("marketplace = $4");
+
+    const h10Query = buildH10KeywordRankingsQuery(
+      config,
+      {
+        asin: "B0B2K57W5R",
+        start_date: "2026-01-01",
+        end_date: "2026-01-31",
+      },
+      new Date("2026-05-06T00:00:00Z"),
+    );
+    expect(h10Query.text).toContain("marketplace = $5");
+
+    const coverageQuery = buildCoverageQuery(config, {});
+    expect(coverageQuery.text).toContain("marketplace = $3");
   });
 
   it("uses parameterized queries instead of concatenating user SQL", () => {
