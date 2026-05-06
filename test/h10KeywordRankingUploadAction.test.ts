@@ -3,10 +3,17 @@ import path from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { ingestWithClientMock, mkdtempMock, rmMock, writeFileMock } = vi.hoisted(() => ({
+const {
+  ingestWithClientMock,
+  mkdtempMock,
+  rmMock,
+  statusUpdateMock,
+  writeFileMock,
+} = vi.hoisted(() => ({
   ingestWithClientMock: vi.fn(),
   mkdtempMock: vi.fn(),
   rmMock: vi.fn(),
+  statusUpdateMock: vi.fn(),
   writeFileMock: vi.fn(),
 }));
 
@@ -25,6 +32,11 @@ vi.mock('../shared/helium10KeywordTrackerIngestCore', () => ({
   ingestHelium10KeywordTrackerRawWithClient: ingestWithClientMock,
 }));
 
+vi.mock('../apps/web/src/lib/imports/importSourceStatus', () => ({
+  H10_ALREADY_INGESTED_MESSAGE: 'This CSV was already ingested. No new rows were imported.',
+  upsertH10KeywordTrackerImportSourceStatus: statusUpdateMock,
+}));
+
 vi.mock('../apps/web/src/lib/env', () => ({
   env: {
     accountId: 'sourbear',
@@ -38,6 +50,10 @@ vi.mock('../apps/web/src/lib/supabaseAdmin', () => ({
       throw new Error('supabaseAdmin should not be called in upload action tests');
     }),
   },
+}));
+
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
 }));
 
 import { parseIngestHelium10KeywordTrackerCliArgs } from '../src/cli/ingestHelium10KeywordTracker';
@@ -56,6 +72,7 @@ describe('H10 keyword ranking upload action', () => {
     mkdtempMock.mockResolvedValue('/tmp/aph-h10-keyword-ranking-123');
     writeFileMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
+    statusUpdateMock.mockResolvedValue(undefined);
     ingestWithClientMock.mockResolvedValue({
       status: 'ok',
       uploadId: 'upload-123',
@@ -97,6 +114,7 @@ describe('H10 keyword ranking upload action', () => {
     );
 
     expect(result.ok).toBe(true);
+    expect(result.tone).toBe('success');
     expect(writeFileMock).toHaveBeenCalledWith(
       '/tmp/aph-h10-keyword-ranking-123/upload.csv',
       expect.any(Buffer)
@@ -108,10 +126,71 @@ describe('H10 keyword ranking upload action', () => {
       marketplace: 'US',
       originalFilenameOverride: 'unsafe-name.csv',
     });
+    expect(statusUpdateMock).toHaveBeenCalledWith({
+      client: expect.any(Object),
+      accountId: 'sourbear',
+      originalFilename: 'unsafe-name.csv',
+      ingestResult: {
+        status: 'ok',
+        uploadId: 'upload-123',
+        rowCount: 3,
+        coverageStart: '2026-04-16',
+        coverageEnd: '2026-04-17',
+        asin: 'B0B2K57W5R',
+      },
+    });
     expect(rmMock).toHaveBeenCalledWith('/tmp/aph-h10-keyword-ranking-123', {
       recursive: true,
       force: true,
     });
+  });
+
+  it('upserts import source status for already-ingested uploads', async () => {
+    ingestWithClientMock.mockResolvedValue({
+      status: 'already ingested',
+      uploadId: 'upload-456',
+      rowCount: 0,
+      coverageStart: '2026-04-16',
+      coverageEnd: '2026-04-17',
+      asin: 'B0B2K57W5R',
+    });
+
+    const result = await importH10KeywordRankingUpload(
+      new File(['Title,ASIN\nx,B0B2K57W5R\n'], 'already.csv', { type: 'text/csv' })
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.tone).toBe('warning');
+    expect(result.message).toBe('This CSV was already ingested. No new rows were imported.');
+    expect(statusUpdateMock).toHaveBeenCalledWith({
+      client: expect.any(Object),
+      accountId: 'sourbear',
+      originalFilename: 'already.csv',
+      ingestResult: {
+        status: 'already ingested',
+        uploadId: 'upload-456',
+        rowCount: 0,
+        coverageStart: '2026-04-16',
+        coverageEnd: '2026-04-17',
+        asin: 'B0B2K57W5R',
+      },
+    });
+  });
+
+  it('returns a warning when status persistence fails after a successful ingest', async () => {
+    statusUpdateMock.mockRejectedValue(new Error('status table unavailable'));
+
+    const result = await importH10KeywordRankingUpload(
+      new File(['Title,ASIN\nx,B0B2K57W5R\n'], 'warning.csv', { type: 'text/csv' })
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.tone).toBe('warning');
+    expect(result.message).toBe('CSV imported successfully.');
+    expect(result.warningCount).toBe(1);
+    expect(result.summary).toContain(
+      'CSV imported, but import source status did not update: status table unavailable'
+    );
   });
 
   it('does not shell out through child_process or ts-node in the web upload path', () => {

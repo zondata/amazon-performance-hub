@@ -9,6 +9,10 @@ import {
   INITIAL_H10_KEYWORD_RANKING_UPLOAD_STATE,
   type H10KeywordRankingUploadState,
 } from '@/lib/imports/h10KeywordRankingUploadShared';
+import {
+  H10_ALREADY_INGESTED_MESSAGE,
+  upsertH10KeywordTrackerImportSourceStatus,
+} from '@/lib/imports/importSourceStatus';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import {
   ingestHelium10KeywordTrackerRawWithClient,
@@ -44,6 +48,9 @@ const buildSummary = (result: Helium10KeywordTrackerIngestResult) => {
   }
   return parts.length > 0 ? parts.join(' • ') : null;
 };
+
+const appendStatusWarning = (summary: string | null, warning: string) =>
+  summary ? `${summary} • ${warning}` : warning;
 
 const normalizeOriginalFilename = (rawName: string): string => {
   const base = path.basename(rawName.replace(/\\/g, '/').trim());
@@ -89,14 +96,44 @@ export async function importH10KeywordRankingUpload(
       originalFilenameOverride: originalFileName,
     });
 
+    const message =
+      ingestResult.status === 'already ingested'
+        ? H10_ALREADY_INGESTED_MESSAGE
+        : 'CSV imported successfully.';
+    const summary = buildSummary(ingestResult);
+
+    try {
+      await upsertH10KeywordTrackerImportSourceStatus({
+        client: supabaseAdmin,
+        accountId: env.accountId,
+        originalFilename: originalFileName,
+        ingestResult,
+      });
+    } catch (error) {
+      const statusWarning = `CSV imported, but import source status did not update: ${
+        error instanceof Error ? error.message : 'Unknown error.'
+      }`;
+
+      return {
+        ok: true,
+        tone: 'warning',
+        message,
+        summary: appendStatusWarning(summary, statusWarning),
+        fileName: originalFileName,
+        asin: ingestResult.asin ?? null,
+        rowCount: ingestResult.rowCount ?? null,
+        warningCount: 1,
+        coverageStart: ingestResult.coverageStart ?? null,
+        coverageEnd: ingestResult.coverageEnd ?? null,
+        uploadId: ingestResult.uploadId ?? null,
+      };
+    }
+
     return {
       ok: true,
       tone: ingestResult.status === 'already ingested' ? 'warning' : 'success',
-      message:
-        ingestResult.status === 'already ingested'
-          ? 'This CSV was already ingested. No new rows were imported.'
-          : 'CSV imported successfully.',
-      summary: buildSummary(ingestResult),
+      message,
+      summary,
       fileName: originalFileName,
       asin: ingestResult.asin ?? null,
       rowCount: ingestResult.rowCount ?? null,
