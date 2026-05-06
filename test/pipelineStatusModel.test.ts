@@ -193,6 +193,72 @@ describe('buildPipelineStatusRows', () => {
     expect(rows[0].amazonApiState).toBe('failed');
   });
 
+  it('does not let ignored SQP request rows override imported monthly coverage', () => {
+    const rows = buildRows({
+      specs: [
+        {
+          sourceGroup: 'SQP monthly',
+          sourceType: 'sp_api_sqp_monthly',
+          targetTable: 'sqp_monthly_raw',
+          implementationStatus: 'implemented',
+          pendingSourceType: 'sp_api_sqp_monthly',
+        },
+      ],
+      coverageRows: [
+        {
+          sourceType: 'sp_api_sqp_monthly',
+          tableName: 'sqp_monthly_raw',
+          lastStatus: 'success',
+          freshnessStatus: 'fresh',
+          oldestPeriodStart: '2025-12-01',
+          latestPeriodEnd: '2026-03-31',
+          lastSuccessfulRunAt: '2026-05-05T16:58:33.839Z',
+          lastSyncRunId: null,
+          notes: null,
+        },
+      ],
+      pendingRows: [
+        {
+          sourceType: 'sp_api_sqp_monthly',
+          status: 'ignored',
+          createdAt: '2026-05-05T09:23:45.892Z',
+          retryAfterAt: null,
+        },
+      ],
+    });
+
+    expect(rows[0].amazonApiState).toBe('imported');
+    expect(rows[0].sourceGroupStatus).toBe('success');
+    expect(rows[0].failedOrStaleCount).toBe(0);
+    expect(rows[0].activePendingCount).toBe(0);
+  });
+
+  it('still shows failed when pending rows are stale_expired', () => {
+    const rows = buildRows({
+      specs: [
+        {
+          sourceGroup: 'SQP monthly',
+          sourceType: 'sp_api_sqp_monthly',
+          targetTable: 'sqp_monthly_raw',
+          implementationStatus: 'implemented',
+          pendingSourceType: 'sp_api_sqp_monthly',
+        },
+      ],
+      pendingRows: [
+        {
+          sourceType: 'sp_api_sqp_monthly',
+          status: 'stale_expired',
+          createdAt: '2026-05-05T09:23:45.892Z',
+          retryAfterAt: null,
+        },
+      ],
+    });
+
+    expect(rows[0].amazonApiState).toBe('stale_expired');
+    expect(rows[0].sourceGroupStatus).toBe('no_coverage');
+    expect(rows[0].failedOrStaleCount).toBe(1);
+  });
+
   it('shows No Data when coverage is missing', () => {
     const rows = buildRows({
       specs: [
