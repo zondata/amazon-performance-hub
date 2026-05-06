@@ -149,7 +149,10 @@
     "spapi:ingest-sales-traffic-retail": "ts-node src/ingestion/firstSalesTrafficRetailIngestCli.ts",
     "web:dev": "npm --prefix apps/web run dev",
     "web:build": "bash -lc 'cd apps/web && node ../../scripts/webBuildWithEnv.cjs'",
-    "web:lint": "npm --prefix apps/web run lint"
+    "web:lint": "npm --prefix apps/web run lint",
+    "mcp:build": "npm --prefix apps/mcp run build",
+    "mcp:start": "npm --prefix apps/mcp run start",
+    "mcp:test": "vitest run test/mcpReadOnlyServer.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
