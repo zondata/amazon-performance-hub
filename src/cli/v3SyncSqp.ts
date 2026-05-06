@@ -44,7 +44,8 @@ export type SqpRequestStatus =
   | 'no_data'
   | 'unavailable'
   | 'failed'
-  | 'stale_expired';
+  | 'stale_expired'
+  | 'ignored';
 
 export type SqpWindow = {
   startDate: string;
