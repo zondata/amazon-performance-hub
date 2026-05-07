@@ -5,6 +5,8 @@
   "type": "commonjs",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "mcp:build": "npm --prefix apps/mcp run build",
+    "mcp:http:start": "npm --prefix apps/mcp run http:start",
     "dryrun": "ts-node src/cli/dryRunParse.ts",
     "bulk:parse": "ts-node src/cli/bulkParse.ts",
     "bulk:diff": "ts-node src/cli/bulkDiff.ts",
@@ -96,9 +98,6 @@
     "v3:pull:ads": "ts-node src/cli/v3PullAmazon.ts --preset ads",
     "v3:pull:sales": "ts-node src/cli/v3PullAmazon.ts --preset sales",
     "v3:pull:sqp": "ts-node src/cli/v3PullAmazon.ts --preset sqp",
-    "v3:sync:sqp": "ts-node src/cli/v3SyncSqp.ts",
-    "v3:resume:sqp": "ts-node src/cli/v3SyncSqp.ts --resume-pending-only",
-    "v3:backfill:sqp": "ts-node src/cli/v3SyncSqp.ts --mode backfill",
     "v3:resume:amazon": "ts-node src/cli/v3ResumeAmazon.ts",
     "v3:check:ads-freshness": "ts-node src/cli/v3CheckAdsFreshness.ts",
     "v3:check:ads-pending-health": "ts-node src/cli/v3CheckAdsPendingHealth.ts",
@@ -149,23 +148,24 @@
     "spapi:ingest-sales-traffic-retail": "ts-node src/ingestion/firstSalesTrafficRetailIngestCli.ts",
     "web:dev": "npm --prefix apps/web run dev",
     "web:build": "bash -lc 'cd apps/web && node ../../scripts/webBuildWithEnv.cjs'",
-    "web:lint": "npm --prefix apps/web run lint",
-    "mcp:build": "npm --prefix apps/mcp run build",
-    "mcp:start": "npm --prefix apps/mcp run start",
-    "mcp:test": "vitest run test/mcpReadOnlyServer.test.ts"
+    "web:lint": "npm --prefix apps/web run lint"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
+    "express": "^4.21.2",
     "pg": "^8.18.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/express": "^5.0.3",
     "@types/node": "^22.13.4",
     "@types/pg": "^8.16.0",
     "dotenv": "^17.2.4",
     "supabase": "^2.76.7",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "zod": "^3.25.76"
   }
 }
