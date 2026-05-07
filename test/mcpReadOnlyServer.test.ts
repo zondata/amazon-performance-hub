@@ -34,14 +34,14 @@ describe("APH read-only MCP server", () => {
     ).toThrow("MCP_DATABASE_URL is required");
   });
 
-  it("requires MCP_REMOTE_BEARER_TOKEN for remote mode", () => {
+  it("requires OAuth remote server configuration for remote mode", () => {
     expect(() =>
       loadRuntimeConfig("http", {
         MCP_DATABASE_URL: "postgres://readonly:readonly@127.0.0.1:5432/aph",
         MCP_ACCOUNT_ID: "sourbear",
         MCP_MARKETPLACE: "US",
       }),
-    ).toThrow("MCP_REMOTE_BEARER_TOKEN is required");
+    ).toThrow("MCP_PUBLIC_BASE_URL is required");
   });
 
   it("creates the database adapter lazily", async () => {

@@ -19,6 +19,9 @@ export const MAX_TARGET_ROWS = 500;
 export const MAX_H10_ROWS = 200;
 export const MAX_DATE_RANGE_DAYS = 366;
 export const REQUEST_BODY_LIMIT_BYTES = 1024 * 1024;
+export const MCP_OAUTH_SCOPE = "mcp:tools";
+export const MCP_ACCESS_TOKEN_TTL_SECONDS = 60 * 60;
+export const MCP_REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 export const MCP_INSTRUCTIONS = [
   "Read-only Amazon Performance Hub MCP server.",

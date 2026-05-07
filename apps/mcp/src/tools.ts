@@ -70,9 +70,10 @@ export const buildToolRegistration = (context: ToolContext): RegisteredReadOnlyT
             "No arbitrary SQL",
             "No service-role access",
           ],
-          remote_auth: "Remote HTTP mode requires Authorization: Bearer <token>.",
+          remote_auth:
+            "Remote HTTP mode uses MCP-spec OAuth. Claude custom connector users add the /mcp URL, then complete the OAuth connect flow.",
           oauth_note:
-            "Some hosted MCP clients may require OAuth instead of static bearer auth. If Bearer auth is not accepted by the client, add an OAuth wrapper in a follow-up deployment.",
+            "Dynamic client registration is enabled for the remote OAuth flow. OAuth Client ID and OAuth Client Secret can be left blank in Claude's custom connector UI unless your deployment intentionally switches to pre-provisioned clients.",
         }),
     },
     {

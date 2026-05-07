@@ -152,11 +152,13 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
+    "express": "^4.21.2",
     "pg": "^8.18.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/express": "^5.0.3",
     "@types/node": "^22.13.4",
     "@types/pg": "^8.16.0",
     "dotenv": "^17.2.4",

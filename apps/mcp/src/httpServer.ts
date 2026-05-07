@@ -1,12 +1,18 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
-import http, { type IncomingMessage, type ServerResponse } from "node:http";
-import { URL } from "node:url";
+import { randomUUID } from "node:crypto";
+import type http from "node:http";
+import express, { type Request, type Response } from "express";
+import {
+  getOAuthProtectedResourceMetadataUrl,
+  mcpAuthRouter,
+} from "@modelcontextprotocol/sdk/server/auth/router.js";
+import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { loadRuntimeConfig, type RuntimeConfig } from "./config";
 import { REQUEST_BODY_LIMIT_BYTES } from "./constants";
 import { createReadOnlyDb } from "./db";
 import { defaultLogger, type Logger } from "./logging";
 import { createAphMcpServer } from "./mcpServer";
+import { ApprovalOAuthProvider, DynamicClientStore } from "./oauthProvider";
 
 type SessionEntry = {
   transport: StreamableHTTPServerTransport;
@@ -20,53 +26,11 @@ export type StartedHttpServer = {
 };
 
 const sendJson = (
-  res: ServerResponse,
+  res: Response,
   statusCode: number,
   payload: Record<string, unknown>,
 ): void => {
-  const body = JSON.stringify(payload);
-  res.statusCode = statusCode;
-  res.setHeader("content-type", "application/json; charset=utf-8");
-  res.setHeader("content-length", Buffer.byteLength(body));
-  res.end(body);
-};
-
-const readBody = async (req: IncomingMessage): Promise<unknown> => {
-  const chunks: Buffer[] = [];
-  let total = 0;
-
-  for await (const chunk of req) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    total += buffer.length;
-    if (total > REQUEST_BODY_LIMIT_BYTES) {
-      throw new Error("Request body too large");
-    }
-    chunks.push(buffer);
-  }
-
-  if (chunks.length === 0) {
-    return undefined;
-  }
-
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-};
-
-const constantTimeBearerMatch = (provided: string, expected: string): boolean => {
-  const providedBuffer = Buffer.from(provided);
-  const expectedBuffer = Buffer.from(expected);
-  if (providedBuffer.length !== expectedBuffer.length) {
-    return false;
-  }
-  return timingSafeEqual(providedBuffer, expectedBuffer);
-};
-
-const isAuthorized = (req: IncomingMessage, expectedToken: string): boolean => {
-  const header = req.headers.authorization;
-  if (!header || !header.startsWith("Bearer ")) {
-    return false;
-  }
-  const provided = header.slice("Bearer ".length);
-  return constantTimeBearerMatch(provided, expectedToken);
+  res.status(statusCode).json(payload);
 };
 
 const isInitializeRequest = (body: unknown): boolean => {
@@ -74,8 +38,15 @@ const isInitializeRequest = (body: unknown): boolean => {
     return false;
   }
 
-  const maybeMethod = (body as { method?: unknown }).method;
-  return maybeMethod === "initialize";
+  return (body as { method?: unknown }).method === "initialize";
+};
+
+const resolveRuntimeBaseUrl = (configuredBaseUrl: string, actualPort: number): URL => {
+  const url = new URL(configuredBaseUrl);
+  if (url.port === "0") {
+    url.port = String(actualPort);
+  }
+  return url;
 };
 
 export const startHttpServer = async (
@@ -83,107 +54,26 @@ export const startHttpServer = async (
   logger: Logger = defaultLogger,
 ): Promise<StartedHttpServer> => {
   const sessions = new Map<string, SessionEntry>();
+  const app = express();
 
-  const server = http.createServer(async (req, res) => {
-    try {
-      const requestUrl = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
-      if (requestUrl.pathname !== config.httpPath) {
-        sendJson(res, 404, { error: "Not found" });
-        return;
-      }
+  app.disable("x-powered-by");
+  app.use(
+    express.json({
+      limit: REQUEST_BODY_LIMIT_BYTES,
+    }),
+  );
+  app.use(
+    express.urlencoded({
+      extended: false,
+      limit: REQUEST_BODY_LIMIT_BYTES,
+    }),
+  );
 
-      if (!isAuthorized(req, config.remoteBearerToken ?? "")) {
-        sendJson(res, 401, { error: "Unauthorized" });
-        return;
-      }
-
-      if (req.method === "POST") {
-        const parsedBody = await readBody(req);
-        const sessionIdHeader = req.headers["mcp-session-id"];
-        const sessionId =
-          typeof sessionIdHeader === "string" && sessionIdHeader.trim()
-            ? sessionIdHeader
-            : undefined;
-
-        if (sessionId) {
-          const existing = sessions.get(sessionId);
-          if (!existing) {
-            sendJson(res, 404, { error: "Unknown MCP session" });
-            return;
-          }
-          await existing.transport.handleRequest(req, res, parsedBody);
-          return;
-        }
-
-        if (!isInitializeRequest(parsedBody)) {
-          sendJson(res, 400, { error: "Missing MCP session id" });
-          return;
-        }
-
-        const db = createReadOnlyDb(config);
-        const mcpServer = createAphMcpServer(config, db);
-        const transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => randomUUID(),
-          onsessioninitialized: (newSessionId) => {
-            sessions.set(newSessionId, {
-              transport,
-              close: async () => {
-                await Promise.allSettled([mcpServer.close(), db.close(), transport.close()]);
-              },
-            });
-          },
-          onsessionclosed: (closedSessionId) => {
-            sessions.delete(closedSessionId);
-          },
-        });
-
-        await mcpServer.connect(transport);
-        await transport.handleRequest(req, res, parsedBody);
-        return;
-      }
-
-      if (req.method === "GET" || req.method === "DELETE") {
-        const sessionIdHeader = req.headers["mcp-session-id"];
-        const sessionId =
-          typeof sessionIdHeader === "string" && sessionIdHeader.trim()
-            ? sessionIdHeader
-            : undefined;
-
-        if (!sessionId) {
-          sendJson(res, 400, { error: "Missing MCP session id" });
-          return;
-        }
-
-        const existing = sessions.get(sessionId);
-        if (!existing) {
-          sendJson(res, 404, { error: "Unknown MCP session" });
-          return;
-        }
-
-        await existing.transport.handleRequest(req, res);
-        if (req.method === "DELETE") {
-          await existing.close();
-          sessions.delete(sessionId);
-        }
-        return;
-      }
-
-      sendJson(res, 405, { error: "Method not allowed" });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const statusCode = message === "Request body too large" ? 413 : 500;
-      sendJson(res, statusCode, {
-        error: statusCode === 413 ? "Request body too large" : "Internal server error",
-      });
-      logger.error(
-        `[aph-mcp] request failed with ${statusCode === 413 ? "payload_too_large" : "internal_error"}`,
-      );
-    }
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(config.httpPort, config.httpHost, () => resolve());
+  const server = await new Promise<http.Server>((resolve, reject) => {
+    const listeningServer = app.listen(config.httpPort, config.httpHost, () =>
+      resolve(listeningServer),
+    );
+    listeningServer.once("error", reject);
   });
 
   const address = server.address();
@@ -191,9 +81,123 @@ export const startHttpServer = async (
     throw new Error("Unable to determine MCP HTTP listen address");
   }
 
-  logger.info(
-    `[aph-mcp] remote MCP listening on http://${config.httpHost}:${address.port}${config.httpPath}`,
+  const runtimeBaseUrl = resolveRuntimeBaseUrl(config.publicBaseUrl!, address.port);
+  const oauthIssuerUrl = new URL(config.oauthIssuer!);
+  if (oauthIssuerUrl.port === "0") {
+    oauthIssuerUrl.port = String(address.port);
+  }
+  const mcpServerUrl = new URL(config.httpPath, runtimeBaseUrl);
+
+  const clientsStore = new DynamicClientStore();
+  const authProvider = new ApprovalOAuthProvider({
+    clientsStore,
+    approvalToken: config.oauthApprovalToken!,
+    resourceServerUrl: mcpServerUrl,
+  });
+
+  app.use(
+    mcpAuthRouter({
+      provider: authProvider,
+      issuerUrl: oauthIssuerUrl,
+      baseUrl: runtimeBaseUrl,
+      resourceServerUrl: mcpServerUrl,
+      scopesSupported: ["mcp:tools"],
+      resourceName: "Amazon Performance Hub Read-Only MCP",
+    }),
   );
+
+  const authMiddleware = requireBearerAuth({
+    verifier: authProvider,
+    requiredScopes: [],
+    resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpServerUrl),
+  });
+
+  const handleMcpRequest = async (req: Request, res: Response): Promise<void> => {
+    if (req.method === "POST") {
+      const sessionIdHeader = req.headers["mcp-session-id"];
+      const sessionId =
+        typeof sessionIdHeader === "string" && sessionIdHeader.trim()
+          ? sessionIdHeader
+          : undefined;
+
+      if (sessionId) {
+        const existing = sessions.get(sessionId);
+        if (!existing) {
+          sendJson(res, 404, { error: "Unknown MCP session" });
+          return;
+        }
+        await existing.transport.handleRequest(req, res, req.body);
+        return;
+      }
+
+      if (!isInitializeRequest(req.body)) {
+        sendJson(res, 400, { error: "Missing MCP session id" });
+        return;
+      }
+
+      const db = createReadOnlyDb(config);
+      const mcpServer = createAphMcpServer(config, db);
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (newSessionId) => {
+          sessions.set(newSessionId, {
+            transport,
+            close: async () => {
+              await Promise.allSettled([mcpServer.close(), db.close(), transport.close()]);
+            },
+          });
+        },
+        onsessionclosed: (closedSessionId) => {
+          sessions.delete(closedSessionId);
+        },
+      });
+
+      await mcpServer.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+      return;
+    }
+
+    if (req.method === "GET" || req.method === "DELETE") {
+      const sessionIdHeader = req.headers["mcp-session-id"];
+      const sessionId =
+        typeof sessionIdHeader === "string" && sessionIdHeader.trim()
+          ? sessionIdHeader
+          : undefined;
+
+      if (!sessionId) {
+        sendJson(res, 400, { error: "Missing MCP session id" });
+        return;
+      }
+
+      const existing = sessions.get(sessionId);
+      if (!existing) {
+        sendJson(res, 404, { error: "Unknown MCP session" });
+        return;
+      }
+
+      await existing.transport.handleRequest(req, res);
+      if (req.method === "DELETE") {
+        await existing.close();
+        sessions.delete(sessionId);
+      }
+      return;
+    }
+
+    sendJson(res, 405, { error: "Method not allowed" });
+  };
+
+  app.all(config.httpPath, authMiddleware, async (req: Request, res: Response) => {
+    try {
+      await handleMcpRequest(req, res);
+    } catch {
+      if (!res.headersSent) {
+        sendJson(res, 500, { error: "Internal server error" });
+      }
+      logger.error("[aph-mcp] request failed with internal_error");
+    }
+  });
+
+  logger.info(`[aph-mcp] remote MCP listening on ${mcpServerUrl.toString()}`);
 
   return {
     server,

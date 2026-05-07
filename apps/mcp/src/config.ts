@@ -4,10 +4,12 @@ export type RuntimeConfig = {
   databaseUrl: string;
   accountId: string;
   marketplace: string;
-  remoteBearerToken: string | null;
   httpHost: string;
   httpPort: number;
   httpPath: string;
+  publicBaseUrl: string | null;
+  oauthIssuer: string | null;
+  oauthApprovalToken: string | null;
 };
 
 const requireEnv = (env: NodeJS.ProcessEnv, name: string): string => {
@@ -32,6 +34,29 @@ const normalizeHttpPath = (raw: string | undefined): string => {
   return value.startsWith("/") ? value : `/${value}`;
 };
 
+const normalizeUrl = (raw: string, name: string): string => {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(`${name} must be a valid absolute URL`);
+  }
+
+  if (!/^https?:$/.test(parsed.protocol)) {
+    throw new Error(`${name} must use http or https`);
+  }
+
+  if (parsed.search || parsed.hash) {
+    throw new Error(`${name} must not include query or fragment components`);
+  }
+
+  if (!parsed.pathname || parsed.pathname === "/") {
+    parsed.pathname = "/";
+  }
+
+  return parsed.toString().replace(/\/$/, "");
+};
+
 export const loadRuntimeConfig = (
   mode: ServerMode,
   env: NodeJS.ProcessEnv = process.env,
@@ -39,16 +64,26 @@ export const loadRuntimeConfig = (
   const databaseUrl = requireEnv(env, "MCP_DATABASE_URL");
   const accountId = requireEnv(env, "MCP_ACCOUNT_ID");
   const marketplace = requireEnv(env, "MCP_MARKETPLACE");
-  const remoteBearerToken =
-    mode === "http" ? requireEnv(env, "MCP_REMOTE_BEARER_TOKEN") : null;
+  const publicBaseUrl =
+    mode === "http"
+      ? normalizeUrl(requireEnv(env, "MCP_PUBLIC_BASE_URL"), "MCP_PUBLIC_BASE_URL")
+      : null;
+  const oauthIssuer =
+    mode === "http"
+      ? normalizeUrl(env.MCP_OAUTH_ISSUER?.trim() || publicBaseUrl!, "MCP_OAUTH_ISSUER")
+      : null;
+  const oauthApprovalToken =
+    mode === "http" ? requireEnv(env, "MCP_OAUTH_APPROVAL_TOKEN") : null;
 
   return {
     databaseUrl,
     accountId,
     marketplace,
-    remoteBearerToken,
     httpHost: env.MCP_HTTP_HOST?.trim() || "0.0.0.0",
     httpPort: parsePort(env.MCP_HTTP_PORT ?? env.PORT),
     httpPath: normalizeHttpPath(env.MCP_HTTP_PATH),
+    publicBaseUrl,
+    oauthIssuer,
+    oauthApprovalToken,
   };
 };
