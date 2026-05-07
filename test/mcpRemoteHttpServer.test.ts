@@ -10,9 +10,9 @@ const APPROVAL_TOKEN = "test-oauth-approval-token";
 const base64UrlEncode = (value: Buffer): string =>
   value
     .toString("base64")
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replaceAll("=", "");
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
 
 const toCodeChallenge = (codeVerifier: string): string =>
   base64UrlEncode(createHash("sha256").update(codeVerifier).digest());
@@ -51,10 +51,14 @@ describe("APH remote MCP HTTP server", () => {
     };
   };
 
-  const registerClient = async (baseUrl: string): Promise<{
+  const registerClient = async (
+    baseUrl: string,
+    authMethod: "client_secret_post" | "none" = "client_secret_post",
+  ): Promise<{
     clientId: string;
-    clientSecret: string;
+    clientSecret?: string;
     redirectUri: string;
+    authMethod: "client_secret_post" | "none";
   }> => {
     const redirectUri = "http://127.0.0.1:43123/callback";
     const response = await fetch(`${baseUrl}/register`, {
@@ -64,7 +68,7 @@ describe("APH remote MCP HTTP server", () => {
       },
       body: JSON.stringify({
         redirect_uris: [redirectUri],
-        token_endpoint_auth_method: "client_secret_post",
+        token_endpoint_auth_method: authMethod,
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
         client_name: "vitest client",
@@ -79,17 +83,25 @@ describe("APH remote MCP HTTP server", () => {
     };
 
     expect(payload.client_id).toBeTruthy();
-    expect(payload.client_secret).toBeTruthy();
+    if (authMethod === "client_secret_post") {
+      expect(payload.client_secret).toBeTruthy();
+    } else {
+      expect(payload.client_secret).toBeFalsy();
+    }
 
     return {
       clientId: payload.client_id,
       clientSecret: payload.client_secret,
       redirectUri,
+      authMethod,
     };
   };
 
-  const authorizeAndExchange = async (baseUrl: string): Promise<string> => {
-    const { clientId, clientSecret, redirectUri } = await registerClient(baseUrl);
+  const authorizeAndExchange = async (
+    baseUrl: string,
+    authMethod: "client_secret_post" | "none" = "client_secret_post",
+  ): Promise<string> => {
+    const { clientId, clientSecret, redirectUri } = await registerClient(baseUrl, authMethod);
     const codeVerifier = "vitest-code-verifier-1234567890";
     const codeChallenge = toCodeChallenge(codeVerifier);
     const resource = `${baseUrl}/mcp`;
@@ -130,24 +142,28 @@ describe("APH remote MCP HTTP server", () => {
     const code = redirected.searchParams.get("code");
     expect(code).toBeTruthy();
 
-    const tokenResponse = await fetch(`${baseUrl}/token`, {
+    const tokenBody = new URLSearchParams({
+      client_id: clientId,
+      grant_type: "authorization_code",
+      code: code!,
+      code_verifier: codeVerifier,
+      redirect_uri: redirectUri,
+      resource,
+    });
+    if (clientSecret) {
+      tokenBody.set("client_secret", clientSecret);
+    }
+
+    const tokenResponse2 = await fetch(`${baseUrl}/token`, {
       method: "POST",
       headers: {
         "content-type": "application/x-www-form-urlencoded",
       },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: "authorization_code",
-        code: code!,
-        code_verifier: codeVerifier,
-        redirect_uri: redirectUri,
-        resource,
-      }),
+      body: tokenBody,
     });
 
-    expect(tokenResponse.status).toBe(200);
-    const tokenPayload = (await tokenResponse.json()) as { access_token: string };
+    expect(tokenResponse2.status).toBe(200);
+    const tokenPayload = (await tokenResponse2.json()) as { access_token: string };
     expect(tokenPayload.access_token).toBeTruthy();
     return tokenPayload.access_token;
   };
@@ -249,6 +265,45 @@ describe("APH remote MCP HTTP server", () => {
     const guideText = JSON.stringify(guideResult);
     expect(guideText).toContain("Dynamic client registration is enabled");
     expect(guideText).toContain("No SQP tools in MCP v1");
+
+    const toolNames = toolsResult.tools.map((tool) => tool.name).join(" ");
+    expect(toolNames).not.toContain("sqp");
+    expect(toolNames).not.toContain("write");
+    expect(logs.join("\n")).not.toContain(APPROVAL_TOKEN);
+    expect(logs.join("\n")).not.toContain(accessToken);
+
+    await transport.terminateSession();
+    await client.close();
+  });
+
+  it("supports public PKCE clients for dynamic registration and token exchange", async () => {
+    const logs: string[] = [];
+    const { baseUrl, mcpUrl } = await boot(logs);
+    const accessToken = await authorizeAndExchange(baseUrl, "none");
+
+    const client = new Client({
+      name: "mcp-http-test-public-client",
+      version: "1.0.0",
+    });
+    const transport = new StreamableHTTPClientTransport(new URL(mcpUrl), {
+      requestInit: {
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+      },
+    });
+
+    await client.connect(transport);
+    const toolsResult = await client.listTools();
+
+    expect(toolsResult.tools.map((tool) => tool.name).sort()).toEqual([
+      "get_data_coverage_status",
+      "get_h10_keyword_rankings",
+      "get_mcp_guide",
+      "get_sales_summary",
+      "get_sp_campaign_summary",
+      "get_sp_target_summary",
+    ]);
 
     const toolNames = toolsResult.tools.map((tool) => tool.name).join(" ");
     expect(toolNames).not.toContain("sqp");

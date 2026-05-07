@@ -126,14 +126,25 @@ export class DynamicClientStore implements OAuthRegisteredClientsStore {
   async registerClient(
     client: Omit<OAuthClientInformationFull, "client_id" | "client_id_issued_at">,
   ): Promise<OAuthClientInformationFull> {
-    if (client.token_endpoint_auth_method === "none") {
-      throw new AccessDeniedError("Public OAuth clients are not supported by this server");
+    const authMethod = client.token_endpoint_auth_method ?? "none";
+    if (authMethod !== "none" && authMethod !== "client_secret_post") {
+      throw new AccessDeniedError("Unsupported token endpoint auth method");
+    }
+
+    const grantTypes = client.grant_types ?? [];
+    if (grantTypes.length > 0 && !grantTypes.every((grantType) => grantType === "authorization_code" || grantType === "refresh_token")) {
+      throw new AccessDeniedError("Only authorization_code and refresh_token grants are supported");
+    }
+
+    const responseTypes = client.response_types ?? [];
+    if (responseTypes.length > 0 && !responseTypes.every((responseType) => responseType === "code")) {
+      throw new AccessDeniedError("Only response_type=code is supported");
     }
 
     const now = Math.floor(Date.now() / 1000);
     const registeredClient: OAuthClientInformationFull = {
       ...client,
-      token_endpoint_auth_method: "client_secret_post",
+      token_endpoint_auth_method: authMethod,
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       client_id: randomUUID(),
