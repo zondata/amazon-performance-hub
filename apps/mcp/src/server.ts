@@ -1,53 +1,32 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { loadRuntimeConfig } from "./config";
+import { createReadOnlyDb } from "./db";
+import { createAphMcpServer } from "./mcpServer";
 
-import { PgQueryExecutor } from "./db.js";
-import { resolveMcpConfig } from "./config.js";
-import { createToolDefinitions } from "./tools.js";
-import type { McpServerConfig, QueryExecutor } from "./types.js";
-
-export function buildMcpServer(config: McpServerConfig, executor: QueryExecutor): McpServer {
-  const server = new McpServer({
-    name: "amazon-performance-hub-v3-read-only",
-    version: "1.0.0",
-  });
-
-  for (const tool of createToolDefinitions(config, executor)) {
-    server.registerTool(
-      tool.name,
-      {
-        title: tool.title,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-        annotations: {
-          readOnlyHint: true,
-          openWorldHint: false,
-        },
-      },
-      tool.handler,
-    );
-  }
-
-  return server;
-}
-
-export async function startStdioServer(): Promise<void> {
-  const config = resolveMcpConfig(process.env);
-  const executor = new PgQueryExecutor(config.databaseUrl);
-  const server = buildMcpServer(config, executor);
+export const startStdioServer = async (): Promise<void> => {
+  const config = loadRuntimeConfig("stdio");
+  const db = createReadOnlyDb(config);
+  const server = createAphMcpServer(config, db);
   const transport = new StdioServerTransport();
 
-  process.on("SIGINT", async () => {
-    await executor.close();
-    await server.close();
-    process.exit(0);
-  });
+  try {
+    await server.connect(transport);
+  } catch (error) {
+    await db.close().catch(() => undefined);
+    throw error;
+  }
 
-  process.on("SIGTERM", async () => {
-    await executor.close();
-    await server.close();
-    process.exit(0);
-  });
+  const shutdown = async () => {
+    await Promise.allSettled([server.close(), db.close()]);
+  };
 
-  await server.connect(transport);
+  process.once("SIGINT", () => void shutdown().finally(() => process.exit(0)));
+  process.once("SIGTERM", () => void shutdown().finally(() => process.exit(0)));
+};
+
+if (require.main === module) {
+  startStdioServer().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  });
 }
